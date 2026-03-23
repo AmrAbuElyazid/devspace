@@ -3,6 +3,8 @@ import { useWorkspaceStore } from './store/workspace-store'
 import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import TabBar from './components/TabBar'
+import SplitLayout from './components/SplitLayout'
+import 'allotment/dist/style.css'
 
 export default function App(): React.JSX.Element {
   const workspaces = useWorkspaceStore((s) => s.workspaces)
@@ -19,13 +21,20 @@ export default function App(): React.JSX.Element {
         <div className="flex flex-1 flex-col overflow-hidden">
           <TabBar />
           <div className="flex-1 overflow-hidden">
-            {/* Content area — placeholder for SplitLayout (Task 5) */}
-            <div
-              className="h-full flex items-center justify-center text-sm"
-              style={{ color: 'var(--muted-foreground)' }}
-            >
-              {activeTab ? `Tab: ${activeTab.name}` : 'No tab selected'}
-            </div>
+            {activeTab ? (
+              <SplitLayout
+                node={activeTab.root}
+                workspaceId={activeWorkspace!.id}
+                tabId={activeTab.id}
+              />
+            ) : (
+              <div
+                className="h-full flex items-center justify-center text-sm"
+                style={{ color: 'var(--muted-foreground)' }}
+              >
+                No tab selected
+              </div>
+            )}
           </div>
         </div>
       </div>
