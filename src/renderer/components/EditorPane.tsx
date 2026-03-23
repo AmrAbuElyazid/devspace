@@ -2,6 +2,8 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { FolderOpen, Save, FileCode } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
+import { useSettingsStore } from '../store/settings-store'
+import { THEME_CHANGE_EVENT } from '../hooks/useTheme'
 import { toast } from '../hooks/useToast'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
@@ -61,12 +63,18 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): JSX.Ele
   const [language, setLanguage] = useState(config.language || 'plaintext')
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
 
+  const [scopedFolder, setScopedFolder] = useState(config.scopedFolder || '')
   const [isDark, setIsDark] = useState(
     document.documentElement.classList.contains('dark')
   )
 
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle)
+
+  const editorFontSize = useSettingsStore((s) => s.fontSize)
+  const editorWordWrap = useSettingsStore((s) => s.editorWordWrap)
+  const editorMinimap = useSettingsStore((s) => s.editorMinimap)
+  const editorTabSize = useSettingsStore((s) => s.editorTabSize)
 
   const isDirty = content !== savedContent
 
@@ -75,8 +83,8 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): JSX.Ele
       const detail = (e as CustomEvent).detail
       setIsDark(detail?.theme === 'dark')
     }
-    window.addEventListener('devspace:theme-changed', handleThemeChange)
-    return () => window.removeEventListener('devspace:theme-changed', handleThemeChange)
+    window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange)
+    return () => window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange)
   }, [])
 
   // Use ref to always have the latest save function available to Monaco's command
@@ -98,8 +106,15 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): JSX.Ele
     handleSaveRef.current = handleSave
   }, [handleSave])
 
+  const handleOpenFolder = useCallback(async () => {
+    const result = await window.api.dialog.openFolder()
+    if (!result) return
+    setScopedFolder(result)
+    updatePaneConfig(paneId, { scopedFolder: result })
+  }, [paneId, updatePaneConfig])
+
   const handleOpenFile = useCallback(async () => {
-    const result = await window.api.dialog.openFile()
+    const result = await window.api.dialog.openFile(scopedFolder || undefined)
     if (!result) return
 
     const detectedLang = detectLanguage(result.path)
@@ -116,7 +131,7 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): JSX.Ele
       language: detectedLang,
     })
     updatePaneTitle(paneId, fileName)
-  }, [paneId, updatePaneConfig, updatePaneTitle])
+  }, [paneId, scopedFolder, updatePaneConfig, updatePaneTitle])
 
   const handleEditorDidMount: OnMount = useCallback(
     (editor, monacoInstance) => {
@@ -147,10 +162,16 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): JSX.Ele
         <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
           Open a file to start editing
         </p>
-        <Button onClick={handleOpenFile}>
-          <FolderOpen size={14} />
-          Open File
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleOpenFile}>
+            <FolderOpen size={14} />
+            Open File
+          </Button>
+          <Button variant="outline" onClick={handleOpenFolder}>
+            <FolderOpen size={14} />
+            Open Folder
+          </Button>
+        </div>
       </div>
     )
   }
@@ -174,6 +195,19 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): JSX.Ele
       >
         {/* Left: file path + dirty indicator */}
         <div className="flex items-center gap-1.5 min-w-0">
+          {scopedFolder && (
+            <span
+              className="text-xs shrink-0"
+              style={{
+                color: 'var(--foreground-faint)',
+                fontFamily: "'SF Mono', 'Fira Code', Menlo, Monaco, monospace",
+                fontSize: 10,
+              }}
+              title={scopedFolder}
+            >
+              {scopedFolder.split('/').pop()}/
+            </span>
+          )}
           <span
             className="text-xs truncate"
             style={{
@@ -236,10 +270,11 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): JSX.Ele
           onChange={handleChange}
           onMount={handleEditorDidMount}
           options={{
-            minimap: { enabled: true },
-            fontSize: 13,
+            minimap: { enabled: editorMinimap },
+            fontSize: editorFontSize,
             fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, Monaco, monospace",
-            wordWrap: 'on',
+            wordWrap: editorWordWrap ? 'on' : 'off',
+            tabSize: editorTabSize,
             scrollBeyondLastLine: false,
             smoothScrolling: true,
             cursorBlinking: 'smooth',

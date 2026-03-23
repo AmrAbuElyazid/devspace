@@ -116,10 +116,10 @@ export function registerIpcHandlers(
 
   safeHandle(
     'dialog:openFile',
-    async (_event, options?: { filters?: { name: string; extensions: string[] }[] }) => {
+    async (_event, defaultPath?: string) => {
       const result = await dialog.showOpenDialog(mainWindow, {
         properties: ['openFile'],
-        filters: options?.filters
+        defaultPath: typeof defaultPath === 'string' ? defaultPath : undefined,
       })
 
       if (result.canceled || result.filePaths.length === 0) {

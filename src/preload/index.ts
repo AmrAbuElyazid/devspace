@@ -50,7 +50,7 @@ const bridge: DevspaceBridge = {
   },
 
   dialog: {
-    openFile: (options) => ipcRenderer.invoke('dialog:openFile', options),
+    openFile: (defaultPath) => ipcRenderer.invoke('dialog:openFile', defaultPath),
     openFolder: () => ipcRenderer.invoke('dialog:openFolder')
   },
 
