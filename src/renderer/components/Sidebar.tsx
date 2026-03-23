@@ -1,17 +1,13 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
-import { Plus, X, Sun, Monitor, Moon } from 'lucide-react'
+import { useState, useCallback } from 'react'
+import { Plus, Settings, ChevronDown, ChevronRight, FolderClosed } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { useSettingsStore } from '../store/settings-store'
-import { useTheme } from '../hooks/useTheme'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
 import { ScrollArea } from './ui/scroll-area'
 import { AlertDialog } from './ui/alert-dialog'
-
-interface EditingState {
-  id: string
-  value: string
-}
+import { InlineRenameInput } from './ui/InlineRenameInput'
+import { Menu, MenuContent, MenuItem, MenuSeparator } from './ui/menu'
 
 export default function Sidebar(): JSX.Element {
   const workspaces = useWorkspaceStore((s) => s.workspaces)
@@ -20,34 +16,136 @@ export default function Sidebar(): JSX.Element {
   const removeWorkspace = useWorkspaceStore((s) => s.removeWorkspace)
   const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace)
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace)
+  const folders = useWorkspaceStore((s) => s.folders)
+  const addFolder = useWorkspaceStore((s) => s.addFolder)
+  const removeFolder = useWorkspaceStore((s) => s.removeFolder)
+  const renameFolder = useWorkspaceStore((s) => s.renameFolder)
+  const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed)
+  const moveWorkspaceToFolder = useWorkspaceStore((s) => s.moveWorkspaceToFolder)
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen)
-  const { theme, setTheme } = useTheme()
 
-  const [editing, setEditing] = useState<EditingState | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editingType, setEditingType] = useState<'workspace' | 'folder' | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    if (editing && inputRef.current) {
-      inputRef.current.focus()
-      inputRef.current.select()
-    }
-  }, [editing])
+  // Context menu state for workspaces
+  const [wsMenuOpen, setWsMenuOpen] = useState<string | null>(null)
+  // Context menu state for folders
+  const [folderMenuOpen, setFolderMenuOpen] = useState<string | null>(null)
 
-  const commitRename = useCallback(() => {
-    if (!editing) return
-    const trimmed = editing.value.trim()
-    if (trimmed && trimmed !== workspaces.find((w) => w.id === editing.id)?.name) {
-      renameWorkspace(editing.id, trimmed)
-    }
-    setEditing(null)
-  }, [editing, workspaces, renameWorkspace])
+  const startEditingWorkspace = useCallback((id: string) => {
+    setEditingId(id)
+    setEditingType('workspace')
+  }, [])
 
-  const themeOptions = [
-    { value: 'light' as const, icon: Sun, title: 'Light' },
-    { value: 'system' as const, icon: Monitor, title: 'System' },
-    { value: 'dark' as const, icon: Moon, title: 'Dark' },
-  ] as const
+  const startEditingFolder = useCallback((id: string) => {
+    setEditingId(id)
+    setEditingType('folder')
+  }, [])
+
+  const stopEditing = useCallback(() => {
+    setEditingId(null)
+    setEditingType(null)
+  }, [])
+
+  // Group workspaces by folder
+  const ungroupedWorkspaces = workspaces.filter((ws) => ws.folderId === null)
+
+  const renderWorkspaceItem = (ws: (typeof workspaces)[0]) => {
+    const isActive = ws.id === activeWorkspaceId
+    const isEditing = editingId === ws.id && editingType === 'workspace'
+    const isMenuOpen = wsMenuOpen === ws.id
+
+    return (
+      <Menu key={ws.id} open={isMenuOpen} onOpenChange={(open) => setWsMenuOpen(open ? ws.id : null)}>
+        <div
+          className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''}`}
+          onClick={() => { if (!isEditing) setActiveWorkspace(ws.id) }}
+          onDoubleClick={() => startEditingWorkspace(ws.id)}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            setWsMenuOpen(ws.id)
+          }}
+        >
+          {/* Amber dot */}
+          <span
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: '50%',
+              background: isActive ? 'var(--accent)' : 'var(--foreground-faint)',
+              flexShrink: 0,
+            }}
+          />
+
+          {isEditing ? (
+            <InlineRenameInput
+              initialValue={ws.name}
+              onCommit={(name) => {
+                renameWorkspace(ws.id, name)
+                stopEditing()
+              }}
+              onCancel={stopEditing}
+              className="text-[13px]"
+            />
+          ) : (
+            <span className="flex-1 truncate">{ws.name}</span>
+          )}
+        </div>
+
+        {/* Context menu */}
+        <MenuContent side="right" align="start">
+          <MenuItem onClick={() => { setWsMenuOpen(null); startEditingWorkspace(ws.id) }}>
+            Rename
+          </MenuItem>
+          <MenuSeparator />
+          {/* Move to Folder options */}
+          {folders.map((folder) => (
+            <MenuItem
+              key={folder.id}
+              onClick={() => {
+                moveWorkspaceToFolder(ws.id, folder.id)
+                setWsMenuOpen(null)
+              }}
+            >
+              → {folder.name}
+            </MenuItem>
+          ))}
+          <MenuItem
+            onClick={() => {
+              const fid = addFolder('New Folder')
+              moveWorkspaceToFolder(ws.id, fid)
+              setWsMenuOpen(null)
+            }}
+          >
+            New Folder...
+          </MenuItem>
+          {ws.folderId !== null && (
+            <MenuItem
+              onClick={() => {
+                moveWorkspaceToFolder(ws.id, null)
+                setWsMenuOpen(null)
+              }}
+            >
+              No Folder
+            </MenuItem>
+          )}
+          <MenuSeparator />
+          {workspaces.length > 1 && (
+            <MenuItem
+              onClick={() => {
+                setDeleteTarget(ws.id)
+                setWsMenuOpen(null)
+              }}
+              destructive
+            >
+              Delete
+            </MenuItem>
+          )}
+        </MenuContent>
+      </Menu>
+    )
+  }
 
   return (
     <div className={`sidebar ${!sidebarOpen ? 'sidebar-collapsed' : ''}`}>
@@ -71,54 +169,89 @@ export default function Sidebar(): JSX.Element {
         </Tooltip>
       </div>
 
-      {/* Workspace list */}
+      {/* Workspace list with folders */}
       <ScrollArea className="ws-list">
-        {workspaces.map((ws) => {
-          const isActive = ws.id === activeWorkspaceId
-          const isEditing = editing?.id === ws.id
+        {/* Folders first */}
+        {folders.map((folder) => {
+          const folderWorkspaces = workspaces.filter((ws) => ws.folderId === folder.id)
+          const isFolderEditing = editingId === folder.id && editingType === 'folder'
+          const isFolderMenuOpen = folderMenuOpen === folder.id
 
           return (
-            <div
-              key={ws.id}
-              className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''}`}
-              onClick={() => { if (!isEditing) setActiveWorkspace(ws.id) }}
-              onDoubleClick={() => setEditing({ id: ws.id, value: ws.name })}
-            >
-              {isEditing ? (
-                <input
-                  ref={inputRef}
-                  className="flex-1 bg-transparent text-[13px] outline-none"
-                  style={{ color: 'var(--foreground)' }}
-                  value={editing!.value}
-                  onChange={(e) => setEditing({ ...editing!, value: e.target.value })}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') commitRename()
-                    if (e.key === 'Escape') setEditing(null)
+            <div key={folder.id}>
+              <Menu
+                open={isFolderMenuOpen}
+                onOpenChange={(open) => setFolderMenuOpen(open ? folder.id : null)}
+              >
+                <div
+                  className="folder-header no-drag"
+                  onClick={() => toggleFolderCollapsed(folder.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setFolderMenuOpen(folder.id)
                   }}
-                  onBlur={commitRename}
-                  onClick={(e) => e.stopPropagation()}
-                  onDoubleClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <>
-                  <span className="flex-1 truncate">{ws.name}</span>
-                  {workspaces.length > 1 && (
-                    <Tooltip content="Delete workspace">
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        className="ws-delete"
-                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(ws.id) }}
-                      >
-                        <X size={12} />
-                      </Button>
-                    </Tooltip>
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '4px 12px',
+                    fontSize: 12,
+                    color: 'var(--foreground-muted)',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                  }}
+                >
+                  {folder.collapsed ? (
+                    <ChevronRight size={10} />
+                  ) : (
+                    <ChevronDown size={10} />
                   )}
-                </>
-              )}
+                  <FolderClosed size={12} style={{ opacity: 0.6 }} />
+                  {isFolderEditing ? (
+                    <InlineRenameInput
+                      initialValue={folder.name}
+                      onCommit={(name) => {
+                        renameFolder(folder.id, name)
+                        stopEditing()
+                      }}
+                      onCancel={stopEditing}
+                      className="text-[12px]"
+                    />
+                  ) : (
+                    <span className="flex-1 truncate">{folder.name}</span>
+                  )}
+                </div>
+
+                {/* Folder context menu */}
+                <MenuContent side="right" align="start">
+                  <MenuItem
+                    onClick={() => {
+                      setFolderMenuOpen(null)
+                      startEditingFolder(folder.id)
+                    }}
+                  >
+                    Rename Folder
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      removeFolder(folder.id)
+                      setFolderMenuOpen(null)
+                    }}
+                    destructive
+                  >
+                    Delete Folder
+                  </MenuItem>
+                </MenuContent>
+              </Menu>
+
+              {/* Workspaces inside this folder */}
+              {!folder.collapsed && folderWorkspaces.map((ws) => renderWorkspaceItem(ws))}
             </div>
           )
         })}
+
+        {/* Ungrouped workspaces */}
+        {ungroupedWorkspaces.map((ws) => renderWorkspaceItem(ws))}
       </ScrollArea>
 
       {/* Delete confirmation dialog */}
@@ -135,24 +268,21 @@ export default function Sidebar(): JSX.Element {
         variant="destructive"
       />
 
-      {/* Footer — theme toggle */}
-      <div className="sidebar-footer">
-        <div className="theme-pill-group">
-          {themeOptions.map((opt) => {
-            const Icon = opt.icon
-            const isActive = theme === opt.value
-            return (
-              <button
-                key={opt.value}
-                onClick={() => setTheme(opt.value)}
-                className={`no-drag theme-pill ${isActive ? 'theme-pill-active' : ''}`}
-                title={opt.title}
-              >
-                <Icon size={13} />
-              </button>
-            )
-          })}
-        </div>
+      {/* Footer — gear icon */}
+      <div
+        className="sidebar-footer"
+        style={{ padding: '8px 12px', borderTop: '1px solid var(--border)' }}
+      >
+        <button
+          onClick={() => useSettingsStore.getState().toggleSettings()}
+          className="no-drag flex items-center justify-center rounded-md p-1 transition-colors"
+          style={{ color: 'var(--foreground-faint)' }}
+          onMouseEnter={(e) => { (e.currentTarget.style.color = 'var(--foreground-muted)') }}
+          onMouseLeave={(e) => { (e.currentTarget.style.color = 'var(--foreground-faint)') }}
+          title="Settings (⌘,)"
+        >
+          <Settings size={15} />
+        </button>
       </div>
     </div>
   )
