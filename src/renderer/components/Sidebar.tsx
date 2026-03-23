@@ -80,7 +80,8 @@ function SortableWorkspaceItem({
     opacity: isDragging ? 0.4 : undefined,
   }
 
-  const showDropTarget = isTabOver && activeDrag?.type === 'tab'
+  // Only show drop target highlight when dragging a tab from a DIFFERENT workspace
+  const showDropTarget = isTabOver && activeDrag?.type === 'tab' && activeDrag.workspaceId !== workspaceId
 
   return (
     <div
@@ -244,7 +245,6 @@ function SortableFolderItem({
           onContextMenuFolder={onContextMenuFolder}
           onContextMenuWorkspace={onContextMenuWorkspace}
           onSelectWorkspace={onSelectWorkspace}
-          onToggleFolder={onToggle}
           activeWorkspaceId={activeWorkspaceId}
           deleteTarget={deleteTarget}
           setDeleteTarget={setDeleteTarget}
@@ -272,7 +272,6 @@ function SidebarTreeLevel({
   onContextMenuFolder,
   onContextMenuWorkspace,
   onSelectWorkspace,
-  onToggleFolder,
   activeWorkspaceId,
   deleteTarget,
   setDeleteTarget,
@@ -290,7 +289,6 @@ function SidebarTreeLevel({
   onContextMenuFolder: (e: React.MouseEvent, folderId: string) => void
   onContextMenuWorkspace: (e: React.MouseEvent, workspaceId: string) => void
   onSelectWorkspace: (id: string) => void
-  onToggleFolder: () => void
   activeWorkspaceId: string
   deleteTarget: string | null
   setDeleteTarget: (id: string | null) => void
@@ -464,7 +462,6 @@ export default function Sidebar(): JSX.Element {
           onContextMenuFolder={handleFolderContextMenu}
           onContextMenuWorkspace={handleWorkspaceContextMenu}
           onSelectWorkspace={(id) => setActiveWorkspace(id)}
-          onToggleFolder={() => {}}
           activeWorkspaceId={activeWorkspaceId}
           deleteTarget={deleteTarget}
           setDeleteTarget={setDeleteTarget}

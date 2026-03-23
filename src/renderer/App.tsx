@@ -11,6 +11,7 @@ import SettingsPage from './components/SettingsPage'
 import type { SplitNode } from './types/workspace'
 import { ToastViewport } from './components/ui/toast'
 import { FolderClosed } from 'lucide-react'
+import { findFolder } from './lib/sidebar-tree'
 
 function findFirstLeaf(node: SplitNode): string | null {
   if (node.type === 'leaf') return node.paneId
@@ -25,15 +26,8 @@ export default function App(): JSX.Element {
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const settingsOpen = useSettingsStore((s) => s.settingsOpen)
 
-  const {
-    sensors,
-    collisionDetection,
-    activeDrag,
-    onDragStart,
-    onDragOver,
-    onDragEnd,
-    onDragCancel,
-  } = useDragAndDrop()
+  const dnd = useDragAndDrop()
+  const { activeDrag } = dnd
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId)
   const activeTab = activeWorkspace?.tabs.find((t) => t.id === activeWorkspace.activeTabId)
@@ -117,12 +111,12 @@ export default function App(): JSX.Element {
   // The sidebar header and tab bar both act as the window chrome.
   return (
     <DndContext
-      sensors={sensors}
-      collisionDetection={collisionDetection}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragEnd={onDragEnd}
-      onDragCancel={onDragCancel}
+      sensors={dnd.sensors}
+      collisionDetection={dnd.collisionDetection}
+      onDragStart={dnd.onDragStart}
+      onDragOver={dnd.onDragOver}
+      onDragEnd={dnd.onDragEnd}
+      onDragCancel={dnd.onDragCancel}
     >
       <DragContext.Provider value={activeDrag}>
         <div className="app-shell" data-dragging={activeDrag ? 'true' : undefined}>
@@ -164,33 +158,24 @@ export default function App(): JSX.Element {
           {activeDrag?.type === 'sidebar-workspace' && (() => {
             const ws = workspaces.find((w) => w.id === activeDrag.workspaceId)
             return ws ? (
-              <div className="ws-item" style={{ opacity: 0.8, width: 200 }}>
-                <span
-                  style={{
-                    width: 7,
-                    height: 7,
-                    borderRadius: '50%',
-                    background: 'var(--accent)',
-                    flexShrink: 0,
-                  }}
-                />
-                <span className="truncate">{ws.name}</span>
-              </div>
+              <div className="drag-overlay-workspace">{ws.name}</div>
             ) : null
           })()}
-          {activeDrag?.type === 'sidebar-folder' && (
-            <div className="folder-header" style={{ opacity: 0.8, width: 200, display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', fontSize: 11, fontWeight: 600 }}>
-              <FolderClosed size={12} />
-              <span>Folder</span>
-            </div>
-          )}
+          {activeDrag?.type === 'sidebar-folder' && (() => {
+            const sidebarTree = useWorkspaceStore.getState().sidebarTree
+            const folder = findFolder(sidebarTree, activeDrag.folderId)
+            return (
+              <div className="drag-overlay-folder">
+                <FolderClosed size={12} />
+                <span>{folder?.name ?? 'Folder'}</span>
+              </div>
+            )
+          })()}
           {activeDrag?.type === 'tab' && (() => {
             const ws = workspaces.find((w) => w.id === activeDrag.workspaceId)
             const tab = ws?.tabs.find((t) => t.id === activeDrag.tabId)
             return tab ? (
-              <div className="tab tab-active" style={{ opacity: 0.8 }}>
-                <span className="truncate">{tab.name}</span>
-              </div>
+              <div className="drag-overlay-tab">{tab.name}</div>
             ) : null
           })()}
         </DragOverlay>

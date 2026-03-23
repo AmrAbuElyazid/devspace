@@ -92,13 +92,6 @@
     white-space: nowrap;
   }
 
-  .sidebar-drop-indicator {
-    height: 2px;
-    background: var(--amber);
-    border-radius: 1px;
-    margin: 0 8px;
-    pointer-events: none;
-  }
 
   .sidebar-item-drag-over-folder {
     background: rgba(250, 204, 21, 0.1) !important;
