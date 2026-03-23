@@ -25,6 +25,28 @@ function findPrimaryPaneId(tab: Tab): string | null {
   return node.type === 'leaf' ? node.paneId : null
 }
 
+function deriveBrowserTabTitle(runtimeTitle: string | undefined, pane: Pane, tab: Tab): string {
+  const pageTitle = runtimeTitle?.trim()
+  if (pageTitle) {
+    return pageTitle
+  }
+
+  const browserUrl = typeof pane.config === 'object' && pane.config !== null && 'url' in pane.config
+    ? String(pane.config.url ?? '')
+    : ''
+
+  if (!browserUrl) {
+    return tab.name || 'Browser'
+  }
+
+  try {
+    const parsed = new URL(browserUrl)
+    return parsed.host || parsed.hostname || browserUrl
+  } catch {
+    return browserUrl
+  }
+}
+
 function getTabChrome(tab: Tab, panes: Record<string, Pane>, runtimeByPaneId: BrowserStoreState['runtimeByPaneId']): {
   title: string
   faviconUrl: string | null
@@ -40,7 +62,7 @@ function getTabChrome(tab: Tab, panes: Record<string, Pane>, runtimeByPaneId: Br
   }
 
   const runtime = runtimeByPaneId[primaryPaneId]
-  const browserTitle = runtime?.title?.trim() || pane.title || tab.name
+  const browserTitle = deriveBrowserTabTitle(runtime?.title, pane, tab)
 
   return {
     title: browserTitle,

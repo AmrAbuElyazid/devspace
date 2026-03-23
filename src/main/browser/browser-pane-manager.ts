@@ -394,7 +394,6 @@ export class BrowserPaneManager implements BrowserPaneController {
 
       this.syncNavigationState(pane)
       this.applyRuntimePatch(pane.runtimeState.paneId, {
-        url: validatedURL || pane.runtimeState.url,
         title: errorDescription || 'Navigation failed',
         faviconUrl: null,
         isLoading: false,

@@ -105,3 +105,27 @@ test('navigate keeps persisted runtime url unchanged until navigation commits', 
   assert.deepEqual(loadCalls, ['https://example.com', 'https://next.example.com'])
   assert.equal(manager.getRuntimeState('pane-1')?.url, 'https://example.com')
 })
+
+test('failed navigation does not replace the committed runtime url', () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>()
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        on: (event: string, listener: (...args: unknown[]) => void) => {
+          listeners.set(event, listener)
+        },
+        loadURL: () => Promise.resolve(),
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  listeners.get('did-fail-load')?.({}, -105, 'NAME_NOT_RESOLVED', 'https://bad.example', true)
+
+  const runtimeState = manager.getRuntimeState('pane-1')
+  assert.equal(runtimeState?.url, 'https://example.com')
+  assert.equal(runtimeState?.title, 'NAME_NOT_RESOLVED')
+})
