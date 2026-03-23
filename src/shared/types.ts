@@ -23,9 +23,7 @@ export interface DevspaceBridge {
     onMaximizeChange: (callback: (maximized: boolean) => void) => () => void
   }
   dialog: {
-    openFile: (
-      options?: { filters?: { name: string; extensions: string[] }[] }
-    ) => Promise<{ path: string; content: string } | null>
+    openFile: (defaultPath?: string) => Promise<{ path: string; content: string } | null>
     openFolder: () => Promise<string | null>
   }
   fs: {
