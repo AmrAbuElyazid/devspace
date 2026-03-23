@@ -51,6 +51,20 @@ function createWindow(): void {
     getSession: () => browserSessionManager.getSession(),
   })
 
+  browserSessionManager.installHandlers({
+    resolvePaneIdForWebContents: (webContentsId) => browserPaneManager.resolvePaneIdForWebContents(webContentsId),
+    reportCertificateError: (paneId, url) => {
+      browserPaneManager.applyRuntimePatch(paneId, {
+        url,
+        title: 'Certificate error',
+        faviconUrl: null,
+        isLoading: false,
+        isSecure: false,
+        securityLabel: 'Certificate error',
+      })
+    },
+  })
+
   registerIpcHandlers(mainWindow, ptyManager, browserPaneManager)
 
   mainWindow.on('ready-to-show', () => {
@@ -65,7 +79,6 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  browserSessionManager.installHandlers()
   createWindow()
 
   app.on('activate', () => {

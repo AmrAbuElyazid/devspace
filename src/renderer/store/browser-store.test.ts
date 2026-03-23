@@ -32,3 +32,19 @@ test('tracks and clears pending permission requests', () => {
   store.getState().clearPendingPermissionRequest()
   assert.equal(store.getState().pendingPermissionRequest, null)
 })
+
+test('handles runtime state changes and only persists changed urls', () => {
+  const store = createBrowserStore()
+  const persisted: Array<{ paneId: string; url: string }> = []
+  const runtimeState = { paneId: 'pane-1', url: 'https://a.com', title: 'A', faviconUrl: null, isLoading: false, canGoBack: false, canGoForward: false, isSecure: true, securityLabel: 'Secure', currentZoom: 1, find: null } as const
+
+  store.getState().handleRuntimeStateChange(runtimeState, (paneId, url) => {
+    persisted.push({ paneId, url })
+  })
+  store.getState().handleRuntimeStateChange(runtimeState, (paneId, url) => {
+    persisted.push({ paneId, url })
+  })
+
+  assert.deepEqual(persisted, [{ paneId: 'pane-1', url: 'https://a.com' }])
+  assert.equal(store.getState().runtimeByPaneId['pane-1']?.title, 'A')
+})

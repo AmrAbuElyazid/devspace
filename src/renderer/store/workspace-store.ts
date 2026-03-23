@@ -513,10 +513,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const pane = panes[paneId]
         if (!pane) return
 
+        const nextConfig = { ...pane.config, ...updates }
+        const keys = Object.keys(updates) as Array<keyof typeof nextConfig>
+        const hasChange = keys.some((key) => pane.config[key] !== nextConfig[key])
+        if (!hasChange) return
+
         set({
           panes: {
             ...panes,
-            [paneId]: { ...pane, config: { ...pane.config, ...updates } },
+            [paneId]: { ...pane, config: nextConfig },
           },
         })
       },

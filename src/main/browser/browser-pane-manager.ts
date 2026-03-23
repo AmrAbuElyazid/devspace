@@ -5,7 +5,7 @@ import type {
   BrowserRuntimeState,
   BrowserStopFindAction,
 } from '../../shared/browser'
-import type { BrowserPaneController, BrowserPaneManagerDeps, BrowserPaneRecord } from './browser-types'
+import type { BrowserPaneController, BrowserPaneManagerDeps, BrowserPaneRecord, BrowserRuntimePatch } from './browser-types'
 
 function createElectronView(options: Electron.WebContentsViewConstructorOptions): Electron.WebContentsView {
   const { WebContentsView } = require('electron') as typeof import('electron')
@@ -56,6 +56,7 @@ type WebContentsEventEmitter = {
 
 export class BrowserPaneManager implements BrowserPaneController {
   private readonly panes = new Map<string, BrowserPaneRecord>()
+  private readonly paneIdByWebContentsId = new Map<number, string>()
   private readonly createView: NonNullable<BrowserPaneManagerDeps['createView']>
 
   constructor(private readonly deps: BrowserPaneManagerDeps) {
@@ -77,6 +78,10 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     this.panes.set(paneId, pane)
+    const webContentsId = pane.view.webContents?.id
+    if (typeof webContentsId === 'number') {
+      this.paneIdByWebContentsId.set(webContentsId, paneId)
+    }
     this.registerWebContentsListeners(pane)
     this.navigate(paneId, initialUrl)
   }
@@ -89,6 +94,10 @@ export class BrowserPaneManager implements BrowserPaneController {
 
     this.hidePane(paneId)
     this.panes.delete(paneId)
+    const webContentsId = pane.view.webContents?.id
+    if (typeof webContentsId === 'number') {
+      this.paneIdByWebContentsId.delete(webContentsId)
+    }
 
     const close = (pane.view.webContents as { close?: () => void }).close
     if (typeof close === 'function') {
@@ -308,6 +317,23 @@ export class BrowserPaneManager implements BrowserPaneController {
     return pane ? cloneRuntimeState(pane.runtimeState) : undefined
   }
 
+  applyRuntimePatch(paneId: string, patch: BrowserRuntimePatch): void {
+    const pane = this.panes.get(paneId)
+    if (!pane) {
+      return
+    }
+
+    Object.assign(pane.runtimeState, patch)
+    if (patch.url !== undefined) {
+      Object.assign(pane.runtimeState, getSecurityState(patch.url))
+    }
+    this.emitStateChange(pane)
+  }
+
+  resolvePaneIdForWebContents(webContentsId: number): string | undefined {
+    return this.paneIdByWebContentsId.get(webContentsId)
+  }
+
   private emitStateChange(pane: BrowserPaneRecord): void {
     this.deps.sendToRenderer('browser:stateChanged', cloneRuntimeState(pane.runtimeState))
   }
@@ -319,38 +345,64 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     webContents.on('did-start-loading', () => {
-      pane.runtimeState.isLoading = true
-      this.emitStateChange(pane)
+      this.applyRuntimePatch(pane.runtimeState.paneId, { isLoading: true })
     })
 
     webContents.on('did-stop-loading', () => {
-      pane.runtimeState.isLoading = false
       this.syncNavigationState(pane)
-      this.emitStateChange(pane)
+      this.applyRuntimePatch(pane.runtimeState.paneId, {
+        isLoading: false,
+        canGoBack: pane.runtimeState.canGoBack,
+        canGoForward: pane.runtimeState.canGoForward,
+      })
     })
 
     webContents.on('did-navigate', (_event: unknown, url: string) => {
-      pane.runtimeState.url = url
-      Object.assign(pane.runtimeState, getSecurityState(url))
       this.syncNavigationState(pane)
-      this.emitStateChange(pane)
+      this.applyRuntimePatch(pane.runtimeState.paneId, {
+        url,
+        canGoBack: pane.runtimeState.canGoBack,
+        canGoForward: pane.runtimeState.canGoForward,
+        isLoading: false,
+      })
     })
 
     webContents.on('did-navigate-in-page', (_event: unknown, url: string) => {
-      pane.runtimeState.url = url
-      Object.assign(pane.runtimeState, getSecurityState(url))
       this.syncNavigationState(pane)
-      this.emitStateChange(pane)
+      this.applyRuntimePatch(pane.runtimeState.paneId, {
+        url,
+        canGoBack: pane.runtimeState.canGoBack,
+        canGoForward: pane.runtimeState.canGoForward,
+      })
     })
 
     webContents.on('page-title-updated', (_event: unknown, title: string) => {
-      pane.runtimeState.title = title || 'Browser'
-      this.emitStateChange(pane)
+      this.applyRuntimePatch(pane.runtimeState.paneId, { title: title || 'Browser' })
     })
 
     webContents.on('page-favicon-updated', (_event: unknown, favicons: string[]) => {
-      pane.runtimeState.faviconUrl = favicons[0] ?? null
-      this.emitStateChange(pane)
+      this.applyRuntimePatch(pane.runtimeState.paneId, { faviconUrl: favicons[0] ?? null })
+    })
+
+    webContents.on('did-fail-load', (_event: unknown, errorCode: number, errorDescription: string, validatedURL: string, isMainFrame?: boolean) => {
+      if (isMainFrame === false) {
+        return
+      }
+
+      const securityPatch = errorCode <= -200 && errorCode >= -299
+        ? { isSecure: false, securityLabel: 'Certificate error' as const }
+        : {}
+
+      this.syncNavigationState(pane)
+      this.applyRuntimePatch(pane.runtimeState.paneId, {
+        url: validatedURL || pane.runtimeState.url,
+        title: errorDescription || 'Navigation failed',
+        faviconUrl: null,
+        isLoading: false,
+        canGoBack: pane.runtimeState.canGoBack,
+        canGoForward: pane.runtimeState.canGoForward,
+        ...securityPatch,
+      })
     })
   }
 

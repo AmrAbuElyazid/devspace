@@ -6,13 +6,17 @@ interface BrowserStoreState {
   runtimeByPaneId: Record<string, BrowserRuntimeState>
   pendingPermissionRequest: BrowserPermissionRequest | null
   upsertRuntimeState: (state: BrowserRuntimeState) => void
+  handleRuntimeStateChange: (
+    state: BrowserRuntimeState,
+    persistUrlChange: (paneId: string, url: string) => void,
+  ) => void
   clearRuntimeState: (paneId: string) => void
   setPendingPermissionRequest: (request: BrowserPermissionRequest) => void
   clearPendingPermissionRequest: () => void
 }
 
 export function createBrowserStore() {
-  return createStore<BrowserStoreState>()((set) => ({
+  return createStore<BrowserStoreState>()((set, get) => ({
     runtimeByPaneId: {},
     pendingPermissionRequest: null,
     upsertRuntimeState: (runtimeState) => {
@@ -22,6 +26,18 @@ export function createBrowserStore() {
           [runtimeState.paneId]: runtimeState,
         },
       }))
+    },
+    handleRuntimeStateChange: (runtimeState, persistUrlChange) => {
+      const previousUrl = get().runtimeByPaneId[runtimeState.paneId]?.url
+      set((state) => ({
+        runtimeByPaneId: {
+          ...state.runtimeByPaneId,
+          [runtimeState.paneId]: runtimeState,
+        },
+      }))
+      if (previousUrl !== runtimeState.url) {
+        persistUrlChange(runtimeState.paneId, runtimeState.url)
+      }
     },
     clearRuntimeState: (paneId) => {
       set((state) => {

@@ -21,6 +21,22 @@ export interface BrowserPaneRecord {
   isVisible: boolean
 }
 
+export type BrowserRuntimePatch = Partial<
+  Pick<
+    BrowserRuntimeState,
+    | 'url'
+    | 'title'
+    | 'faviconUrl'
+    | 'isLoading'
+    | 'canGoBack'
+    | 'canGoForward'
+    | 'isSecure'
+    | 'securityLabel'
+    | 'currentZoom'
+    | 'find'
+  >
+>
+
 export interface BrowserPaneController {
   createPane(paneId: string, initialUrl: string): void
   destroyPane(paneId: string): void
@@ -28,6 +44,8 @@ export interface BrowserPaneController {
   hidePane(paneId: string): void
   isPaneVisible(paneId: string): boolean
   getRuntimeState(paneId: string): BrowserRuntimeState | undefined
+  applyRuntimePatch(paneId: string, patch: BrowserRuntimePatch): void
+  resolvePaneIdForWebContents(webContentsId: number): string | undefined
   navigate(paneId: string, url: string): void
   back(paneId: string): void
   forward(paneId: string): void
