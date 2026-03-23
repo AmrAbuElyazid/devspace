@@ -8,10 +8,10 @@ import type { TerminalConfig } from '../types/workspace'
 function getTerminalTheme() {
   const isDark = document.documentElement.classList.contains('dark')
   return {
-    background: isDark ? '#0c0d10' : '#f8f9fa',
-    foreground: isDark ? '#e0e4ec' : '#111318',
-    cursor: isDark ? 'rgb(180, 203, 255)' : '#111318',
-    cursorAccent: isDark ? '#0c0d10' : '#f8f9fa',
+    background: isDark ? '#161618' : '#f5f5f7',
+    foreground: isDark ? '#e5e5e7' : '#1d1d1f',
+    cursor: isDark ? 'rgb(180, 203, 255)' : '#1d1d1f',
+    cursorAccent: isDark ? '#161618' : '#f5f5f7',
     selectionBackground: isDark ? 'rgba(180, 203, 255, 0.25)' : 'rgba(0, 0, 0, 0.12)',
     selectionForeground: undefined,
     // t3code-inspired ANSI colors
