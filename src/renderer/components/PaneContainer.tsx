@@ -60,6 +60,17 @@ export default function PaneContainer({
   const paneRef = useRef<HTMLDivElement>(null)
   const [dropSide, setDropSide] = useState<DropSide | null>(null)
 
+  // Only enable pane zone drop targets for the VISIBLE tab.
+  // All tabs are rendered stacked (visibility:hidden for inactive ones),
+  // so hidden PaneContainers have the same bounding rect as visible ones.
+  // Without this check, pointerWithin matches hidden pane zones, causing
+  // the overlay to render on invisible elements and merges into wrong tabs.
+  const isVisibleTab = workspaceId === activeWorkspaceId && tabId === activeWs?.activeTabId
+  const canAcceptTabDrop =
+    activeDrag?.type === 'tab' &&
+    isVisibleTab &&
+    activeDrag.tabId !== tabId // prevent self-merge (dragging active tab onto its own pane)
+
   // Don't include `side` in droppable data — it creates a stale-state problem.
   // The hook computes the side at drop time from pointer position + pane rect.
   // `side` is only used here for the visual overlay.
@@ -74,7 +85,7 @@ export default function PaneContainer({
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `pane-zone-${paneId}`,
     data: droppableData,
-    disabled: activeDrag?.type !== 'tab',
+    disabled: !canAcceptTabDrop,
   })
 
   useEffect(() => {

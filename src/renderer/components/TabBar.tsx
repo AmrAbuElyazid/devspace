@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Plus, X } from 'lucide-react'
 import { SortableContext, useSortable, horizontalListSortingStrategy } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
 import { InlineRenameInput } from './ui/InlineRenameInput'
+import { useInsertionIndicator } from '../hooks/useInsertionIndicator'
+import { useDragContext } from '../hooks/useDragAndDrop'
 import type { DragItemData } from '../types/dnd'
 import type { Tab } from '../types/workspace'
 
@@ -34,28 +35,38 @@ function SortableTab({
   onStopEditing: () => void
   onClose: () => void
 }): JSX.Element {
+  const tabRef = useRef<HTMLDivElement | null>(null)
+
   const {
     attributes,
     listeners,
     setNodeRef,
-    transform,
-    transition,
     isDragging,
+    isOver,
   } = useSortable({
     id: `tab-${tab.id}`,
     data: { type: 'tab', workspaceId, tabId: tab.id } satisfies DragItemData,
   })
 
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    transition,
-  }
+  const setRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      tabRef.current = el
+      setNodeRef(el)
+    },
+    [setNodeRef],
+  )
+
+  // Insertion line indicator — tabs stay in place, line shows where drop will go
+  const activeDrag = useDragContext()
+  const isTabDrag = activeDrag?.type === 'tab'
+  const insertPosition = useInsertionIndicator(isOver && !isDragging && isTabDrag, false, tabRef, 'horizontal')
+  const insertClass = insertPosition === 'before' ? 'tab-insert-before' : insertPosition === 'after' ? 'tab-insert-after' : ''
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      className={`tab no-drag cursor-grab ${isActive ? 'tab-active' : ''} ${isDragging ? 'tab-dragging' : ''}`}
+      ref={setRef}
+      data-sortable-id={`tab-${tab.id}`}
+      className={`tab no-drag cursor-grab ${isActive ? 'tab-active' : ''} ${isDragging ? 'tab-dragging' : ''} ${insertClass}`}
       onClick={() => { if (!isEditing) onSelect() }}
       onDoubleClick={onStartEditing}
       onMouseDown={(e) => {
