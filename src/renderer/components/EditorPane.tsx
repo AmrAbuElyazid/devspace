@@ -2,6 +2,8 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { FolderOpen, Save, FileCode } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
+import { Button } from './ui/button'
+import { Tooltip } from './ui/tooltip'
 import type { EditorConfig } from '../types/workspace'
 import type * as monaco from 'monaco-editor'
 
@@ -142,18 +144,10 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): React.J
         <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
           Open a file to start editing
         </p>
-        <button
-          onClick={handleOpenFile}
-          className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors"
-          style={{
-            backgroundColor: 'var(--primary)',
-            color: 'var(--primary-foreground)',
-            cursor: 'pointer',
-          }}
-        >
+        <Button onClick={handleOpenFile}>
           <FolderOpen size={14} />
           Open File
-        </button>
+        </Button>
       </div>
     )
   }
@@ -205,24 +199,26 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): React.J
 
         {/* Right: actions */}
         <div className="flex items-center gap-1">
-          <button
-            onClick={handleOpenFile}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-[var(--accent)]"
-            style={{ color: 'var(--muted-foreground)', cursor: 'pointer' }}
-            title="Open File"
-          >
-            <FolderOpen size={12} />
-            <span>Open</span>
-          </button>
-          {isDirty && filePath && (
-            <button
-              onClick={handleSave}
-              className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-[var(--accent)]"
-              style={{ color: 'var(--muted-foreground)', cursor: 'pointer' }}
-              title="Save (Cmd+S)"
+          <Tooltip content="Open File" shortcut="⌘O">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleOpenFile}
             >
-              <Save size={12} />
-            </button>
+              <FolderOpen size={12} />
+              <span>Open</span>
+            </Button>
+          </Tooltip>
+          {isDirty && filePath && (
+            <Tooltip content="Save" shortcut="⌘S">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleSave}
+              >
+                <Save size={12} />
+              </Button>
+            </Tooltip>
           )}
         </div>
       </div>

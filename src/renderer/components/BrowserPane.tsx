@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { ArrowLeft, ArrowRight, RotateCw, X, Search } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
+import { Button } from './ui/button'
+import { Tooltip } from './ui/tooltip'
 import type { BrowserConfig } from '../types/workspace'
 
 interface BrowserPaneProps {
@@ -200,33 +202,42 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
       {/* Toolbar */}
       <div className="browser-toolbar flex items-center gap-1 shrink-0 px-1">
         {/* Back */}
-        <button
-          onClick={handleBack}
-          disabled={!canGoBack}
-          className="browser-nav-btn flex items-center justify-center rounded hover:bg-[var(--accent)]"
-          title="Back"
-        >
-          <ArrowLeft size={16} />
-        </button>
+        <Tooltip content="Back" shortcut="⌘[">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleBack}
+            disabled={!canGoBack}
+            className="browser-nav-btn"
+          >
+            <ArrowLeft size={16} />
+          </Button>
+        </Tooltip>
 
         {/* Forward */}
-        <button
-          onClick={handleForward}
-          disabled={!canGoForward}
-          className="browser-nav-btn flex items-center justify-center rounded hover:bg-[var(--accent)]"
-          title="Forward"
-        >
-          <ArrowRight size={16} />
-        </button>
+        <Tooltip content="Forward" shortcut="⌘]">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleForward}
+            disabled={!canGoForward}
+            className="browser-nav-btn"
+          >
+            <ArrowRight size={16} />
+          </Button>
+        </Tooltip>
 
         {/* Reload / Stop */}
-        <button
-          onClick={handleReloadOrStop}
-          className="browser-nav-btn flex items-center justify-center rounded hover:bg-[var(--accent)]"
-          title={isLoading ? 'Stop' : 'Reload'}
-        >
-          {isLoading ? <X size={16} /> : <RotateCw size={14} />}
-        </button>
+        <Tooltip content={isLoading ? 'Stop' : 'Reload'} shortcut="⌘R">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={handleReloadOrStop}
+            className="browser-nav-btn"
+          >
+            {isLoading ? <X size={16} /> : <RotateCw size={14} />}
+          </Button>
+        </Tooltip>
 
         {/* URL Input */}
         <input
@@ -242,13 +253,16 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
         />
 
         {/* Go / Search */}
-        <button
-          onClick={() => handleNavigate(inputUrl)}
-          className="browser-nav-btn flex items-center justify-center rounded hover:bg-[var(--accent)]"
-          title="Go"
-        >
-          <Search size={14} />
-        </button>
+        <Tooltip content="Go">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => handleNavigate(inputUrl)}
+            className="browser-nav-btn"
+          >
+            <Search size={14} />
+          </Button>
+        </Tooltip>
       </div>
 
       {/* Loading indicator */}

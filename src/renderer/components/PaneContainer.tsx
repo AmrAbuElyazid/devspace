@@ -1,10 +1,13 @@
-import React from 'react'
+import React, { useCallback, useState } from 'react'
 import { Terminal, FileCode, Globe, Square, Columns2, Rows2, X } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import EmptyPane from './EmptyPane'
 import TerminalPane from './TerminalPane'
 import EditorPane from './EditorPane'
 import BrowserPane from './BrowserPane'
+import { Button } from './ui/button'
+import { Tooltip } from './ui/tooltip'
+import { Menu, MenuContent, MenuItem, MenuSeparator } from './ui/menu'
 import type { PaneType, TerminalConfig, EditorConfig, BrowserConfig } from '../types/workspace'
 
 interface PaneContainerProps {
@@ -42,6 +45,12 @@ export default function PaneContainer({
   const splitPane = useWorkspaceStore((s) => s.splitPane)
   const closePane = useWorkspaceStore((s) => s.closePane)
 
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  const handleSplitH = useCallback(() => splitPane(workspaceId, tabId, paneId, 'horizontal'), [splitPane, workspaceId, tabId, paneId])
+  const handleSplitV = useCallback(() => splitPane(workspaceId, tabId, paneId, 'vertical'), [splitPane, workspaceId, tabId, paneId])
+  const handleClose = useCallback(() => closePane(workspaceId, tabId, paneId), [closePane, workspaceId, tabId, paneId])
+
   if (!pane) {
     return (
       <div className="h-full w-full flex items-center justify-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
@@ -63,35 +72,58 @@ export default function PaneContainer({
 
   return (
     <div className="h-full w-full flex flex-col group/pane">
-      <div className="pane-toolbar">
-        <div className="pane-toolbar-title">
-          <TypeIcon size={12} style={{ opacity: 0.6 }} />
-          <span>{pane.title}</span>
+      <Menu open={menuOpen} onOpenChange={setMenuOpen}>
+        <div
+          className="pane-toolbar"
+          onContextMenu={(e) => {
+            e.preventDefault()
+            setMenuOpen(true)
+          }}
+        >
+          <div className="pane-toolbar-title">
+            <TypeIcon size={12} style={{ opacity: 0.6 }} />
+            <span>{pane.title}</span>
+          </div>
+          <div className="pane-actions">
+            <Tooltip content="Split Right" shortcut="⌘D">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="pane-action"
+                onClick={handleSplitH}
+              >
+                <Columns2 size={12} />
+              </Button>
+            </Tooltip>
+            <Tooltip content="Split Down" shortcut="⌘⇧D">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="pane-action"
+                onClick={handleSplitV}
+              >
+                <Rows2 size={12} />
+              </Button>
+            </Tooltip>
+            <Tooltip content="Close Pane">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="pane-action pane-action-close"
+                onClick={handleClose}
+              >
+                <X size={12} />
+              </Button>
+            </Tooltip>
+          </div>
         </div>
-        <div className="pane-actions">
-          <button
-            onClick={() => splitPane(workspaceId, tabId, paneId, 'horizontal')}
-            className="pane-action"
-            title="Split Right"
-          >
-            <Columns2 size={12} />
-          </button>
-          <button
-            onClick={() => splitPane(workspaceId, tabId, paneId, 'vertical')}
-            className="pane-action"
-            title="Split Down"
-          >
-            <Rows2 size={12} />
-          </button>
-          <button
-            onClick={() => closePane(workspaceId, tabId, paneId)}
-            className="pane-action pane-action-close"
-            title="Close"
-          >
-            <X size={12} />
-          </button>
-        </div>
-      </div>
+        <MenuContent side="bottom" align="start">
+          <MenuItem onClick={handleSplitH} shortcut="⌘D">Split Horizontal</MenuItem>
+          <MenuItem onClick={handleSplitV} shortcut="⌘⇧D">Split Vertical</MenuItem>
+          <MenuSeparator />
+          <MenuItem onClick={handleClose} destructive>Close Pane</MenuItem>
+        </MenuContent>
+      </Menu>
       <div className="flex-1 overflow-hidden">
         <PaneContent paneId={paneId} pane={pane} />
       </div>
