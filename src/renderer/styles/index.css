@@ -91,3 +91,17 @@ body {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* Smooth transitions for interactive elements */
+.transition-colors-fast {
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+/* Allotment sash (resize handle) styling */
+.split-view-view .sash-container .sash {
+  background: var(--border);
+  transition: background 150ms ease;
+}
+.split-view-view .sash-container .sash:hover {
+  background: var(--primary);
+}
