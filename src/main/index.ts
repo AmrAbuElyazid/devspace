@@ -1,5 +1,13 @@
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
+import { syncShellEnvironment } from './shell-env'
+import { PtyManager } from './pty-manager'
+import { registerIpcHandlers } from './ipc-handlers'
+
+// Sync shell environment before app is ready (macOS GUI apps don't inherit login shell env)
+syncShellEnvironment()
+
+const ptyManager = new PtyManager()
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -18,6 +26,8 @@ function createWindow(): void {
       webviewTag: true
     }
   })
+
+  registerIpcHandlers(mainWindow, ptyManager)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
@@ -44,4 +54,8 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('before-quit', () => {
+  ptyManager.destroyAll()
 })
