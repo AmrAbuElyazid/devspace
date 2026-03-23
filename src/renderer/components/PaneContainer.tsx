@@ -4,7 +4,8 @@ import { useWorkspaceStore } from '../store/workspace-store'
 import EmptyPane from './EmptyPane'
 import TerminalPane from './TerminalPane'
 import EditorPane from './EditorPane'
-import type { PaneType, TerminalConfig, EditorConfig } from '../types/workspace'
+import BrowserPane from './BrowserPane'
+import type { PaneType, TerminalConfig, EditorConfig, BrowserConfig } from '../types/workspace'
 
 interface PaneContainerProps {
   paneId: string
@@ -28,11 +29,7 @@ function PaneContent({ paneId, pane }: { paneId: string; pane: { type: PaneType;
     case 'editor':
       return <EditorPane paneId={paneId} config={(pane.config ?? {}) as EditorConfig} />
     case 'browser':
-      return (
-        <div className="h-full flex items-center justify-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
-          Browser: {paneId}
-        </div>
-      )
+      return <BrowserPane paneId={paneId} config={(pane.config ?? { url: 'https://www.google.com' }) as BrowserConfig} />
   }
 }
 
