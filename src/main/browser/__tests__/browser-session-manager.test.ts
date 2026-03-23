@@ -185,3 +185,36 @@ test('certificate errors are blocked and routed to the owning pane', () => {
   assert.equal(trusted, false)
   assert.deepEqual(reported, [{ paneId: 'pane-7', url: 'https://expired.badssl.com/' }])
 })
+
+test('installHandlers does not accumulate duplicate global certificate listeners', () => {
+  const listeners: CertificateErrorListener[] = []
+
+  const manager = new BrowserSessionManager({
+    fromPartition: () => ({
+      setPermissionCheckHandler: () => {},
+      setCertificateVerifyProc: () => {},
+    }) as never,
+  })
+
+  const appModule = {
+    on: (_event: 'certificate-error', listener: CertificateErrorListener) => {
+      listeners.push(listener)
+    },
+  }
+
+  manager.installHandlers({
+    resolvePaneIdForWebContents: () => undefined,
+    reportCertificateError: () => {},
+    appModule,
+    log: () => {},
+  })
+
+  manager.installHandlers({
+    resolvePaneIdForWebContents: () => undefined,
+    reportCertificateError: () => {},
+    appModule,
+    log: () => {},
+  })
+
+  assert.equal(listeners.length, 1)
+})

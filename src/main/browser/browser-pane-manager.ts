@@ -323,7 +323,8 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     Object.assign(pane.runtimeState, patch)
-    if (patch.url !== undefined) {
+    const hasExplicitSecurityState = patch.isSecure !== undefined || patch.securityLabel !== undefined
+    if (patch.url !== undefined && !hasExplicitSecurityState) {
       Object.assign(pane.runtimeState, getSecurityState(patch.url))
     }
     this.emitStateChange(pane)

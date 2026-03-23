@@ -41,6 +41,8 @@ function getElectronApp(): NonNullable<BrowserSessionManagerDeps['appModule']> {
 }
 
 export class BrowserSessionManager {
+  private certificateErrorListenerRegistered = false
+
   constructor(private readonly sessionModule: BrowserSessionModule = getElectronSession()) {}
 
   getSession(): Session {
@@ -113,34 +115,37 @@ export class BrowserSessionManager {
       })
     }
 
-    const appModule = deps?.appModule ?? getElectronApp()
-    appModule.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
-      event.preventDefault()
+    if (!this.certificateErrorListenerRegistered) {
+      this.certificateErrorListenerRegistered = true
+      const appModule = deps?.appModule ?? getElectronApp()
+      appModule.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
+        event.preventDefault()
 
-      if (!webContents) {
-        log('[browser] missing webContents for certificate error; denying by default', {
-          url,
-          error,
-          certificate,
-        })
+        if (!webContents) {
+          log('[browser] missing webContents for certificate error; denying by default', {
+            url,
+            error,
+            certificate,
+          })
+          callback(false)
+          return
+        }
+
+        const paneId = deps?.resolvePaneIdForWebContents(webContents.id)
+        if (!paneId) {
+          log('[browser] unresolved browser certificate error; denying by default', {
+            webContentsId: webContents.id,
+            url,
+            error,
+            certificate,
+          })
+          callback(false)
+          return
+        }
+
+        deps?.reportCertificateError(paneId, url)
         callback(false)
-        return
-      }
-
-      const paneId = deps?.resolvePaneIdForWebContents(webContents.id)
-      if (!paneId) {
-        log('[browser] unresolved browser certificate error; denying by default', {
-          webContentsId: webContents.id,
-          url,
-          error,
-          certificate,
-        })
-        callback(false)
-        return
-      }
-
-      deps?.reportCertificateError(paneId, url)
-      callback(false)
-    })
+      })
+    }
   }
 }
