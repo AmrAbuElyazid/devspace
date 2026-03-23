@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { nanoid } from 'nanoid'
 import type {
   Workspace,
+  WorkspaceFolder,
   Tab,
   Pane,
   PaneType,
@@ -152,6 +153,7 @@ function createDefaultTab(name: string, pane: Pane): Tab {
     id: nanoid(),
     name,
     root: { type: 'leaf', paneId: pane.id },
+    focusedPaneId: null,
   }
 }
 
@@ -164,6 +166,7 @@ function createDefaultWorkspace(
     name,
     tabs: [tab],
     activeTabId: tab.id,
+    folderId: null,
   }
 }
 
@@ -186,12 +189,23 @@ interface WorkspaceState {
   workspaces: Workspace[]
   activeWorkspaceId: string
   panes: Record<string, Pane>
+  folders: WorkspaceFolder[]
 
   // Workspace CRUD
   addWorkspace: (name?: string) => void
   removeWorkspace: (id: string) => void
   renameWorkspace: (id: string, name: string) => void
   setActiveWorkspace: (id: string) => void
+
+  // Folder CRUD
+  addFolder: (name: string) => string
+  removeFolder: (folderId: string) => void
+  renameFolder: (folderId: string, name: string) => void
+  toggleFolderCollapsed: (folderId: string) => void
+  moveWorkspaceToFolder: (workspaceId: string, folderId: string | null) => void
+
+  // Focus
+  setFocusedPane: (workspaceId: string, tabId: string, paneId: string) => void
 
   // Tab CRUD
   addTab: (workspaceId: string, name?: string) => void
@@ -230,24 +244,31 @@ interface WorkspaceState {
 const PERSIST_KEY = 'devspace-workspaces'
 const PERSIST_DEBOUNCE_MS = 500
 
-function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes'> | null {
+function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'folders'> | null {
   try {
     const raw = localStorage.getItem(PERSIST_KEY)
     if (!raw) return null
-    return JSON.parse(raw)
+    const persisted = JSON.parse(raw)
+    return {
+      workspaces: persisted.workspaces,
+      activeWorkspaceId: persisted.activeWorkspaceId,
+      panes: persisted.panes ?? {},
+      folders: persisted.folders ?? [],
+    }
   } catch {
     return null
   }
 }
 
 // Build initial state — hydrate from localStorage or create defaults
-function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes'> {
+function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'folders'> {
   const persisted = loadPersistedState()
   if (persisted && persisted.workspaces && persisted.workspaces.length > 0) {
     return {
       workspaces: persisted.workspaces,
       activeWorkspaceId: persisted.activeWorkspaceId,
       panes: persisted.panes ?? {},
+      folders: persisted.folders ?? [],
     }
   }
 
@@ -259,6 +280,7 @@ function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspa
     workspaces: [workspace],
     activeWorkspaceId: workspace.id,
     panes: { [pane.id]: pane } as Record<string, Pane>,
+    folders: [],
   }
 }
 
@@ -626,6 +648,69 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           ),
         })
       },
+
+      // -------------------------------------------------------------------
+      // Folder CRUD
+      // -------------------------------------------------------------------
+
+      addFolder(name) {
+        const id = nanoid()
+        const folder: WorkspaceFolder = { id, name, collapsed: false }
+        set({ folders: [...get().folders, folder] })
+        return id
+      },
+
+      removeFolder(folderId) {
+        set({
+          folders: get().folders.filter((f) => f.id !== folderId),
+          workspaces: get().workspaces.map((w) =>
+            w.folderId === folderId ? { ...w, folderId: null } : w,
+          ),
+        })
+      },
+
+      renameFolder(folderId, name) {
+        set({
+          folders: get().folders.map((f) =>
+            f.id === folderId ? { ...f, name } : f,
+          ),
+        })
+      },
+
+      toggleFolderCollapsed(folderId) {
+        set({
+          folders: get().folders.map((f) =>
+            f.id === folderId ? { ...f, collapsed: !f.collapsed } : f,
+          ),
+        })
+      },
+
+      moveWorkspaceToFolder(workspaceId, folderId) {
+        set({
+          workspaces: get().workspaces.map((w) =>
+            w.id === workspaceId ? { ...w, folderId } : w,
+          ),
+        })
+      },
+
+      // -------------------------------------------------------------------
+      // Focus
+      // -------------------------------------------------------------------
+
+      setFocusedPane(workspaceId, tabId, paneId) {
+        set({
+          workspaces: get().workspaces.map((w) =>
+            w.id === workspaceId
+              ? {
+                  ...w,
+                  tabs: w.tabs.map((t) =>
+                    t.id === tabId ? { ...t, focusedPaneId: paneId } : t,
+                  ),
+                }
+              : w,
+          ),
+        })
+      },
     }),
 )
 
@@ -639,6 +724,7 @@ function persistState(state: WorkspaceState): void {
   const data = {
     workspaces: state.workspaces,
     activeWorkspaceId: state.activeWorkspaceId,
+    folders: state.folders,
     panes: Object.fromEntries(
       Object.entries(state.panes).map(([id, pane]) => {
         if (pane.type === 'terminal') {

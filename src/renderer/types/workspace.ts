@@ -14,9 +14,16 @@ export interface EditorConfig {
   filePath?: string
   language?: string
   content?: string
+  scopedFolder?: string
 }
 
 export interface EmptyConfig {}
+
+export interface WorkspaceFolder {
+  id: string
+  name: string
+  collapsed: boolean
+}
 
 export type PaneConfig = TerminalConfig | BrowserConfig | EditorConfig | EmptyConfig
 
@@ -37,6 +44,7 @@ export interface Tab {
   id: string
   name: string
   root: SplitNode
+  focusedPaneId: string | null
 }
 
 export interface Workspace {
@@ -44,4 +52,5 @@ export interface Workspace {
   name: string
   tabs: Tab[]
   activeTabId: string
+  folderId: string | null
 }
