@@ -54,6 +54,9 @@ export interface DevspaceBridge {
 export interface BrowserBridge {
   create: (paneId: string, url: string) => Promise<void>
   destroy: (paneId: string) => Promise<void>
+  showPane: (paneId: string) => Promise<void>
+  hidePane: (paneId: string) => Promise<void>
+  getRuntimeState: (paneId: string) => Promise<BrowserRuntimeState | undefined>
   loadURL: (paneId: string, url: string) => Promise<void>
   goBack: (paneId: string) => Promise<void>
   goForward: (paneId: string) => Promise<void>
