@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState, useMemo, type ElementType } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, useMemo, type ElementType, type ReactElement } from 'react'
 import { Terminal, FileCode, Globe, Square, Columns2, Rows2, X } from 'lucide-react'
 import { useDroppable } from '@dnd-kit/core'
 import { useWorkspaceStore } from '../store/workspace-store'
@@ -40,7 +40,7 @@ const PaneContent = memo(function PaneContent({
   tabId: string
   isVisible: boolean
   hideNativeView: boolean
-}): JSX.Element {
+}): ReactElement {
   switch (pane.type) {
     case 'empty':
       return <EmptyPane paneId={paneId} workspaceId={workspaceId} tabId={tabId} />
@@ -64,7 +64,7 @@ export default function PaneContainer({
   paneId,
   workspaceId,
   tabId,
-}: PaneContainerProps): JSX.Element | null {
+}: PaneContainerProps): ReactElement | null {
   const pane = useWorkspaceStore((s) => s.panes[paneId])
   const splitPane = useWorkspaceStore((s) => s.splitPane)
   const closePane = useWorkspaceStore((s) => s.closePane)

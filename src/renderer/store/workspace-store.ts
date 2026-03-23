@@ -194,7 +194,9 @@ function destroyBrowserForPane(panes: Record<string, Pane>, paneId: string): voi
   const pane = panes[paneId]
   if (pane?.type === 'browser') {
     void window.api.browser.destroy(paneId)
-    useBrowserStore.getState().clearRuntimeState(paneId)
+    const browserState = useBrowserStore.getState()
+    browserState.clearRuntimeState(paneId)
+    browserState.markPaneDestroyed(paneId)
   }
 }
 
