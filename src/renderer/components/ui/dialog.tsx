@@ -52,7 +52,7 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
         className={cn(
           'fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
           'w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl',
-          'text-foreground outline-none',
+          'text-foreground',
           'transition-all duration-150',
           'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
           'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
