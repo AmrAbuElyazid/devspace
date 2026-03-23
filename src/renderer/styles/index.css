@@ -544,6 +544,12 @@
   background: var(--card);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  position: relative;
+  z-index: 3;
+}
+
+.pane-content-frame {
+  position: relative;
 }
 
 .pane-toolbar-title {
@@ -679,6 +685,33 @@
   height: 36px;
   background-color: var(--card);
   border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 2;
+}
+
+.browser-pane-shell {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  position: relative;
+}
+
+.browser-shell-viewport {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.browser-native-view-slot {
+  position: absolute;
+  inset: 0;
+  background: var(--background);
+}
+
+.browser-native-view-slot[data-native-view-hidden='true'] {
+  visibility: hidden;
 }
 
 .browser-nav-btn {

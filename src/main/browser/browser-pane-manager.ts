@@ -109,6 +109,12 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     this.deps.addChildView(pane.view)
+    if (pane.bounds) {
+      const setBounds = pane.view.setBounds
+      if (typeof setBounds === 'function') {
+        setBounds.call(pane.view, pane.bounds)
+      }
+    }
     pane.isVisible = true
   }
 
@@ -120,6 +126,10 @@ export class BrowserPaneManager implements BrowserPaneController {
 
     this.deps.removeChildView(pane.view)
     pane.isVisible = false
+  }
+
+  isPaneVisible(paneId: string): boolean {
+    return this.panes.get(paneId)?.isVisible ?? false
   }
 
   setBounds(paneId: string, bounds: BrowserBounds): void {

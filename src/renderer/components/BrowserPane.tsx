@@ -1,5 +1,8 @@
-import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react'
-import { ArrowLeft, ArrowRight, RotateCw, X, Search } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, useCallback, type KeyboardEvent } from 'react'
+import { ArrowLeft, ArrowRight, RotateCw, Search, X } from 'lucide-react'
+import { normalizeBrowserInput } from '../lib/browser-url'
+import { useBrowserBounds } from '../hooks/useBrowserBounds'
+import { useBrowserStore } from '../store/browser-store'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
@@ -8,205 +11,114 @@ import type { BrowserConfig } from '../types/workspace'
 interface BrowserPaneProps {
   paneId: string
   config: BrowserConfig
+  isVisible: boolean
+  hideNativeView: boolean
 }
 
-function normalizeUrl(input: string): string {
-  let url = input.trim()
-  if (!url) return 'about:blank'
-  // If it looks like a domain (has a dot, no spaces)
-  if (!url.includes('://') && url.includes('.') && !url.includes(' ')) {
-    url = 'https://' + url
-  }
-  // If it doesn't look like a URL at all, search with Google
-  if (!url.includes('://') && !url.includes('.')) {
-    url = `https://www.google.com/search?q=${encodeURIComponent(url)}`
-  }
-  return url
-}
+const createdPaneIds = new Set<string>()
 
-export default function BrowserPane({ paneId, config }: BrowserPaneProps): JSX.Element {
-  const initialUrl = config.url || 'about:blank'
-  const [currentUrl, setCurrentUrl] = useState(initialUrl)
-  const [inputUrl, setInputUrl] = useState(initialUrl)
-  const [isLoading, setIsLoading] = useState(false)
-  const [canGoBack, setCanGoBack] = useState(false)
-  const [canGoForward, setCanGoForward] = useState(false)
-
-  const webviewRef = useRef<Electron.WebviewTag | null>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
+export default function BrowserPane({
+  paneId,
+  config,
+  isVisible,
+  hideNativeView,
+}: BrowserPaneProps): JSX.Element {
+  const placeholderRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const initedRef = useRef(false)
-
+  const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId])
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle)
+  const initialUrl = useMemo(() => normalizeBrowserInput(config.url || 'about:blank'), [config.url])
+  const [inputUrl, setInputUrl] = useState(initialUrl)
 
-  const getWebview = useCallback((): Electron.WebviewTag | null => {
-    return webviewRef.current
-  }, [])
+  useBrowserBounds({
+    paneId,
+    enabled: isVisible && !hideNativeView,
+    ref: placeholderRef,
+  })
 
-  const updateNavState = useCallback(() => {
-    const wv = getWebview()
-    if (!wv) return
-    try {
-      setCanGoBack(wv.canGoBack())
-      setCanGoForward(wv.canGoForward())
-    } catch {
-      // webview may not be ready
-    }
-  }, [getWebview])
-
-  // Set up webview event listeners after DOM is ready
   useEffect(() => {
-    if (initedRef.current) return
-    const container = containerRef.current
-    if (!container) return
+    let cancelled = false
 
-    // Create webview element imperatively to have full control over attributes
-    const wv = document.createElement('webview') as unknown as Electron.WebviewTag
-    wv.setAttribute('src', normalizeUrl(initialUrl))
-    wv.setAttribute('style', 'width: 100%; height: 100%;')
-
-    container.appendChild(wv as unknown as Node)
-    webviewRef.current = wv
-
-    initedRef.current = true
-
-    const handleDidNavigate = (e: Electron.DidNavigateEvent): void => {
-      setCurrentUrl(e.url)
-      setInputUrl(e.url)
-      updatePaneConfig(paneId, { url: e.url })
-      updateNavState()
-    }
-
-    const handleDidNavigateInPage = (e: Electron.DidNavigateInPageEvent): void => {
-      setCurrentUrl(e.url)
-      setInputUrl(e.url)
-      updatePaneConfig(paneId, { url: e.url })
-      updateNavState()
-    }
-
-    const handleStartLoading = (): void => {
-      setIsLoading(true)
-    }
-
-    const handleStopLoading = (): void => {
-      setIsLoading(false)
-      updateNavState()
-    }
-
-    const handleTitleUpdated = (e: Electron.PageTitleUpdatedEvent): void => {
-      updatePaneTitle(paneId, e.title)
-    }
-
-    const handleNewWindow = (e: Electron.NewWindowEvent): void => {
-      // Load new windows in the same webview
-      const webview = getWebview()
-      if (webview) {
-        webview.loadURL((e as unknown as { url: string }).url)
+    if (createdPaneIds.has(paneId)) {
+      return () => {
+        cancelled = true
       }
     }
 
-    // Wait for dom-ready before attaching navigation-dependent listeners
-    const handleDomReady = (): void => {
-      updateNavState()
-    }
-
-    wv.addEventListener('did-navigate', handleDidNavigate as unknown as EventListener)
-    wv.addEventListener('did-navigate-in-page', handleDidNavigateInPage as unknown as EventListener)
-    wv.addEventListener('did-start-loading', handleStartLoading)
-    wv.addEventListener('did-stop-loading', handleStopLoading)
-    wv.addEventListener('page-title-updated', handleTitleUpdated as unknown as EventListener)
-    wv.addEventListener('new-window', handleNewWindow as unknown as EventListener)
-    wv.addEventListener('dom-ready', handleDomReady)
+    createdPaneIds.add(paneId)
+    void window.api.browser.create(paneId, initialUrl).catch(() => {
+      if (!cancelled) {
+        createdPaneIds.delete(paneId)
+      }
+    })
 
     return () => {
-      wv.removeEventListener('did-navigate', handleDidNavigate as unknown as EventListener)
-      wv.removeEventListener('did-navigate-in-page', handleDidNavigateInPage as unknown as EventListener)
-      wv.removeEventListener('did-start-loading', handleStartLoading)
-      wv.removeEventListener('did-stop-loading', handleStopLoading)
-      wv.removeEventListener('page-title-updated', handleTitleUpdated as unknown as EventListener)
-      wv.removeEventListener('new-window', handleNewWindow as unknown as EventListener)
-      wv.removeEventListener('dom-ready', handleDomReady)
-
-      if (container.contains(wv as unknown as Node)) {
-        container.removeChild(wv as unknown as Node)
-      }
-      webviewRef.current = null
-      initedRef.current = false
+      cancelled = true
     }
-  }, [paneId, initialUrl, getWebview, updateNavState, updatePaneConfig, updatePaneTitle])
+  }, [initialUrl, paneId])
 
-  const handleNavigate = useCallback(
-    (url: string) => {
-      const normalized = normalizeUrl(url)
-      setInputUrl(normalized)
-      setCurrentUrl(normalized)
-      const wv = getWebview()
-      if (wv) {
-        wv.loadURL(normalized)
-      }
-    },
-    [getWebview],
-  )
-
-  const handleBack = useCallback(() => {
-    const wv = getWebview()
-    if (wv && wv.canGoBack()) {
-      wv.goBack()
+  useEffect(() => {
+    if (runtimeState?.url) {
+      setInputUrl(runtimeState.url)
+      updatePaneConfig(paneId, { url: runtimeState.url })
     }
-  }, [getWebview])
+  }, [paneId, runtimeState?.url, updatePaneConfig])
 
-  const handleForward = useCallback(() => {
-    const wv = getWebview()
-    if (wv && wv.canGoForward()) {
-      wv.goForward()
+  useEffect(() => {
+    if (runtimeState?.title) {
+      updatePaneTitle(paneId, runtimeState.title)
     }
-  }, [getWebview])
+  }, [paneId, runtimeState?.title, updatePaneTitle])
+
+  useEffect(() => {
+    const nextVisible = isVisible && !hideNativeView
+    const action = nextVisible ? window.api.browser.show : window.api.browser.hide
+    void action(paneId)
+  }, [hideNativeView, isVisible, paneId])
+
+  const currentUrl = runtimeState?.url ?? initialUrl
+  const isLoading = runtimeState?.isLoading ?? false
+  const canGoBack = runtimeState?.canGoBack ?? false
+  const canGoForward = runtimeState?.canGoForward ?? false
+
+  const handleNavigate = useCallback((value: string) => {
+    const normalized = normalizeBrowserInput(value)
+    setInputUrl(normalized)
+    void window.api.browser.navigate(paneId, normalized)
+  }, [paneId])
 
   const handleReloadOrStop = useCallback(() => {
-    const wv = getWebview()
-    if (!wv) return
     if (isLoading) {
-      wv.stop()
-    } else {
-      wv.reload()
+      void window.api.browser.stop(paneId)
+      return
     }
-  }, [getWebview, isLoading])
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        handleNavigate(inputUrl)
-        inputRef.current?.blur()
-      } else if (e.key === 'Escape') {
-        setInputUrl(currentUrl)
-        inputRef.current?.blur()
-      }
-    },
-    [inputUrl, currentUrl, handleNavigate],
-  )
+    void window.api.browser.reload(paneId)
+  }, [isLoading, paneId])
 
-  const handleBlur = useCallback(() => {
-    // Revert to current URL if user didn't press Enter
-    setInputUrl(currentUrl)
-  }, [currentUrl])
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      handleNavigate(inputUrl)
+      inputRef.current?.blur()
+      return
+    }
 
-  const handleFocus = useCallback(() => {
-    // Select all text on focus for easy replacement
-    inputRef.current?.select()
-  }, [])
+    if (event.key === 'Escape') {
+      setInputUrl(currentUrl)
+      inputRef.current?.blur()
+    }
+  }, [currentUrl, handleNavigate, inputUrl])
 
   return (
-    <div className="h-full w-full flex flex-col bg-[var(--background)]">
-      {/* Toolbar */}
+    <div className="browser-pane-shell">
       <div className="browser-toolbar flex items-center gap-1 shrink-0 px-1">
-        {/* Back */}
         <Tooltip content="Back" shortcut="⌘[">
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={handleBack}
+            onClick={() => void window.api.browser.back(paneId)}
             disabled={!canGoBack}
             className="browser-nav-btn"
           >
@@ -214,12 +126,11 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): JSX.E
           </Button>
         </Tooltip>
 
-        {/* Forward */}
         <Tooltip content="Forward" shortcut="⌘]">
           <Button
             variant="ghost"
             size="icon-sm"
-            onClick={handleForward}
+            onClick={() => void window.api.browser.forward(paneId)}
             disabled={!canGoForward}
             className="browser-nav-btn"
           >
@@ -227,7 +138,6 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): JSX.E
           </Button>
         </Tooltip>
 
-        {/* Reload / Stop */}
         <Tooltip content={isLoading ? 'Stop' : 'Reload'} shortcut="⌘R">
           <Button
             variant="ghost"
@@ -239,20 +149,18 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): JSX.E
           </Button>
         </Tooltip>
 
-        {/* URL Input */}
         <input
           ref={inputRef}
           type="text"
           value={inputUrl}
-          onChange={(e) => setInputUrl(e.target.value)}
+          onChange={(event) => setInputUrl(event.target.value)}
           onKeyDown={handleKeyDown}
-          onBlur={handleBlur}
-          onFocus={handleFocus}
+          onBlur={() => setInputUrl(currentUrl)}
+          onFocus={() => inputRef.current?.select()}
           className="browser-url-input flex-1 min-w-0 rounded px-2 text-xs outline-none"
           placeholder="Enter URL or search..."
         />
 
-        {/* Go / Search */}
         <Tooltip content="Go">
           <Button
             variant="ghost"
@@ -265,11 +173,15 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): JSX.E
         </Tooltip>
       </div>
 
-      {/* Loading indicator */}
       {isLoading && <div className="browser-loading-bar" />}
 
-      {/* Webview container */}
-      <div ref={containerRef} className="flex-1 overflow-hidden" />
+      <div className="browser-shell-viewport">
+        <div
+          ref={placeholderRef}
+          className="browser-native-view-slot"
+          data-native-view-hidden={!isVisible || hideNativeView ? 'true' : undefined}
+        />
+      </div>
     </div>
   )
 }

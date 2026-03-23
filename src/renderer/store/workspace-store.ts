@@ -7,6 +7,7 @@ import type {
   Pane,
   PaneType,
   PaneConfig,
+  TerminalConfig,
   SplitNode,
   SplitDirection,
 } from '../types/workspace'
@@ -20,6 +21,7 @@ import {
   removeFolderPromoteChildren,
   collectWorkspaceIds,
 } from '../lib/sidebar-tree'
+import { useBrowserStore } from './browser-store'
 
 // ---------------------------------------------------------------------------
 // Tree helper functions (pure)
@@ -182,9 +184,23 @@ function createDefaultWorkspace(name: string, tab: Tab): Workspace {
 
 function destroyPtyForPane(panes: Record<string, Pane>, paneId: string): void {
   const pane = panes[paneId]
-  if (pane && pane.type === 'terminal' && pane.config?.ptyId) {
-    window.api.pty.destroy(pane.config.ptyId as string)
+  const config = pane?.type === 'terminal' ? pane.config as TerminalConfig : null
+  if (config?.ptyId) {
+    window.api.pty.destroy(config.ptyId)
   }
+}
+
+function destroyBrowserForPane(panes: Record<string, Pane>, paneId: string): void {
+  const pane = panes[paneId]
+  if (pane?.type === 'browser') {
+    void window.api.browser.destroy(paneId)
+    useBrowserStore.getState().clearRuntimeState(paneId)
+  }
+}
+
+function cleanupPaneResources(panes: Record<string, Pane>, paneId: string): void {
+  destroyPtyForPane(panes, paneId)
+  destroyBrowserForPane(panes, paneId)
 }
 
 // ---------------------------------------------------------------------------
@@ -329,7 +345,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           paneIdsToDestroy.push(...collectPaneIds(tab.root))
         }
         for (const paneId of paneIdsToDestroy) {
-          destroyPtyForPane(state.panes, paneId)
+          cleanupPaneResources(state.panes, paneId)
         }
         const newPanes = { ...state.panes }
         for (const paneId of paneIdsToDestroy) {
@@ -415,7 +431,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         // Destroy PTYs and clean up panes
         const paneIdsToRemove = collectPaneIds(tab.root)
         for (const pid of paneIdsToRemove) {
-          destroyPtyForPane(panes, pid)
+          cleanupPaneResources(panes, pid)
         }
         const newPanes = { ...panes }
         for (const pid of paneIdsToRemove) {
@@ -497,7 +513,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       removePane(paneId) {
         const { panes } = get()
-        destroyPtyForPane(panes, paneId)
+        cleanupPaneResources(panes, paneId)
         const newPanes = { ...panes }
         delete newPanes[paneId]
         set({ panes: newPanes })
@@ -531,9 +547,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const pane = panes[paneId]
         if (!pane) return
 
-        // Destroy PTY if changing away from terminal
-        if (pane.type === 'terminal' && type !== 'terminal') {
-          destroyPtyForPane(panes, paneId)
+        if (pane.type !== type) {
+          cleanupPaneResources(panes, paneId)
         }
 
         set({
@@ -619,8 +634,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           }
         }
 
-        // Destroy PTY before removing pane
-        destroyPtyForPane(panes, paneId)
+        cleanupPaneResources(panes, paneId)
 
         const newPanes = { ...panes }
         delete newPanes[paneId]

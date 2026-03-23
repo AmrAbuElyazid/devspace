@@ -26,6 +26,7 @@ export interface BrowserPaneController {
   destroyPane(paneId: string): void
   showPane(paneId: string): void
   hidePane(paneId: string): void
+  isPaneVisible(paneId: string): boolean
   getRuntimeState(paneId: string): BrowserRuntimeState | undefined
   navigate(paneId: string, url: string): void
   back(paneId: string): void
