@@ -3,9 +3,11 @@
 @custom-variant dark (&:is(.dark, .dark *));
 
 /* ─── Register tokens with Tailwind v4 ──────────────────────────────── */
+/* Pattern: @theme inline maps semantic names to bare CSS custom properties.
+   The actual values live in :root / @variant dark below.
+   Reference: t3code apps/web/src/index.css */
 
 @theme inline {
-  /* Colors — map semantic tokens to Tailwind utility namespace */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -21,6 +23,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-info: var(--info);
   --color-success: var(--success);
   --color-warning: var(--warning);
@@ -29,98 +32,94 @@
   --color-ring: var(--ring);
   --color-sidebar-bg: var(--sidebar-bg);
 
-  /* Radius — use distinct names to avoid circular reference with :root vars */
-  --radius-sm: calc(0.625rem - 4px);
-  --radius-md: calc(0.625rem - 2px);
-  --radius-lg: 0.625rem;
-  --radius-xl: calc(0.625rem + 4px);
-  --radius-2xl: calc(0.625rem + 8px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+}
+
+/* ─── Base Layer ─────────────────────────────────────────────────────── */
+/* Must be in @layer base so Tailwind utilities can override these defaults */
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  html, body, #root {
+    overflow-y: hidden;
+    overscroll-behavior-y: none;
+  }
 }
 
 /* ─── Design Tokens ──────────────────────────────────────────────────── */
 
 :root {
-  --background: #f5f5f7;
-  --foreground: #1d1d1f;
-  --card: #ffffff;
-  --card-foreground: #1d1d1f;
-  --popover: var(--card);
-  --popover-foreground: var(--card-foreground);
+  color-scheme: light;
+  --radius: 0.625rem;
+
+  --background: var(--color-white);
+  --foreground: var(--color-neutral-800, #1d1d1f);
+  --card: var(--color-white);
+  --card-foreground: var(--color-neutral-800, #1d1d1f);
+  --popover: var(--color-white);
+  --popover-foreground: var(--color-neutral-800, #1d1d1f);
   --primary: oklch(0.488 0.217 264);
-  --primary-foreground: #ffffff;
+  --primary-foreground: var(--color-white);
   --secondary: #ededf0;
-  --secondary-foreground: #1d1d1f;
+  --secondary-foreground: var(--color-neutral-800, #1d1d1f);
   --muted: #ededf0;
   --muted-foreground: #86868b;
   --accent: #e8e8ed;
-  --accent-foreground: #1d1d1f;
-  --destructive: #ef4444;
+  --accent-foreground: var(--color-neutral-800, #1d1d1f);
+  --destructive: var(--color-red-500, #ef4444);
+  --destructive-foreground: var(--color-red-700, #b91c1c);
   --info: var(--color-blue-500, #3b82f6);
   --success: var(--color-emerald-500, #10b981);
   --warning: var(--color-amber-500, #f59e0b);
   --border: rgba(0, 0, 0, 0.12);
-  --input: #d2d2d7;
+  --input: rgba(0, 0, 0, 0.10);
   --ring: oklch(0.488 0.217 264);
   --sidebar-bg: #ebebf0;
   --sidebar-width: 220px;
 
-  /* Radius base (used by @theme inline) */
-  --radius: 0.625rem;
+  @variant dark {
+    color-scheme: dark;
+    --background: color-mix(in srgb, var(--color-neutral-950, #0a0a0a) 95%, var(--color-white));
+    --foreground: var(--color-neutral-100, #e5e5e7);
+    --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
+    --card-foreground: var(--color-neutral-100, #e5e5e7);
+    --popover: color-mix(in srgb, var(--background) 98%, var(--color-white));
+    --popover-foreground: var(--color-neutral-100, #e5e5e7);
+    --primary: oklch(0.588 0.217 264);
+    --primary-foreground: var(--color-white);
+    --secondary: #232326;
+    --secondary-foreground: var(--color-neutral-100, #e5e5e7);
+    --muted: #232326;
+    --muted-foreground: #78788a;
+    --accent: #2c2c2e;
+    --accent-foreground: var(--color-neutral-100, #e5e5e7);
+    --destructive: color-mix(in srgb, var(--color-red-500, #ef4444) 90%, var(--color-white));
+    --destructive-foreground: var(--color-red-400, #f87171);
+    --info: var(--color-blue-500, #60a5fa);
+    --success: var(--color-emerald-500, #34d399);
+    --warning: var(--color-amber-500, #fbbf24);
+    --border: rgba(255, 255, 255, 0.08);
+    --input: rgba(255, 255, 255, 0.08);
+    --ring: oklch(0.588 0.217 264);
+    --sidebar-bg: #1c1c1e;
+  }
 }
 
-.dark {
-  --background: #161618;
-  --foreground: #e5e5e7;
-  --card: color-mix(in srgb, #161618 98%, white);
-  --card-foreground: #e5e5e7;
-  --popover: var(--card);
-  --popover-foreground: var(--card-foreground);
-  --primary: oklch(0.588 0.217 264);
-  --primary-foreground: #0f0f11;
-  --secondary: #232326;
-  --secondary-foreground: #e5e5e7;
-  --muted: #232326;
-  --muted-foreground: #78788a;
-  --accent: #2c2c2e;
-  --accent-foreground: #e5e5e7;
-  --destructive: #f87171;
-  --info: var(--color-blue-500, #60a5fa);
-  --success: var(--color-emerald-500, #34d399);
-  --warning: var(--color-amber-500, #fbbf24);
-  --border: rgba(255, 255, 255, 0.10);
-  --input: #38383d;
-  --ring: oklch(0.588 0.217 264);
-  --sidebar-bg: #1c1c1e;
-}
-
-/* ─── Reset & Base ───────────────────────────────────────────────────── */
-
-*, *::before, *::after {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-html, body, #root {
-  overflow-y: hidden;
-  overscroll-behavior-y: none;
-}
-
-html {
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
-  font-size: 13px;
-  line-height: 1.5;
-  overflow: hidden;
-  background: var(--background);
-  color: var(--foreground);
-}
-
-/* Noise overlay for subtle texture */
+/* ─── Noise overlay for subtle texture ───────────────────────────────── */
 body::after {
   content: '';
   position: fixed;
@@ -132,7 +131,6 @@ body::after {
 }
 
 /* ─── Frameless Window ───────────────────────────────────────────────── */
-
 .drag-region { -webkit-app-region: drag; }
 .no-drag { -webkit-app-region: no-drag; }
 
@@ -523,24 +521,17 @@ body::after {
   border-radius: 3px;
   background: rgba(0,0,0,0.12);
 }
-.dark ::-webkit-scrollbar-thumb,
-:is(.dark) ::-webkit-scrollbar-thumb {
+.dark ::-webkit-scrollbar-thumb {
   background: rgba(255,255,255,0.08);
 }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.2); }
-.dark ::-webkit-scrollbar-thumb:hover,
-:is(.dark) ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
 ::-webkit-scrollbar-corner { background: transparent; }
 
 /* ─── Selection ──────────────────────────────────────────────────────── */
 ::selection {
   background: color-mix(in srgb, var(--primary) 25%, transparent);
 }
-
-/* ─── Focus ──────────────────────────────────────────────────────────── */
-/* Note: Focus styles are handled per-component via Tailwind utilities
-   (focus-visible:ring-2 focus-visible:ring-ring). A global rule here
-   would override Tailwind utilities because unlayered CSS beats @layer. */
 
 /* ─── Theme Transition Suppression ───────────────────────────────────── */
 .no-transitions, .no-transitions *, .no-transitions *::before, .no-transitions *::after {
@@ -603,7 +594,6 @@ body::after {
 }
 
 /* ─── Button Depth ───────────────────────────────────────────────────── */
-/* Subtle inner edge highlights for a 3D feel */
 
 .btn-depth {
   position: relative;
@@ -615,18 +605,14 @@ body::after {
   border-radius: inherit;
   pointer-events: none;
 }
-/* Light mode: subtle top shadow */
 :root .btn-depth::before {
   box-shadow: 0 1px rgba(0, 0, 0, 0.04);
 }
-/* Dark mode: subtle bottom highlight */
 .dark .btn-depth::before {
   box-shadow: 0 -1px rgba(255, 255, 255, 0.06);
 }
 
 /* ─── Elevated Surface ───────────────────────────────────────────────── */
-/* Prevent background from bleeding under semi-transparent borders.
-   Apply to: dialog content, menu content, popover content, card surfaces. */
 
 .surface-elevated {
   background-clip: padding-box;
