@@ -3,7 +3,8 @@ import { Terminal, FileCode, Globe, Square, Columns2, Rows2, X } from 'lucide-re
 import { useWorkspaceStore } from '../store/workspace-store'
 import EmptyPane from './EmptyPane'
 import TerminalPane from './TerminalPane'
-import type { PaneType, TerminalConfig } from '../types/workspace'
+import EditorPane from './EditorPane'
+import type { PaneType, TerminalConfig, EditorConfig } from '../types/workspace'
 
 interface PaneContainerProps {
   paneId: string
@@ -25,11 +26,7 @@ function PaneContent({ paneId, pane }: { paneId: string; pane: { type: PaneType;
     case 'terminal':
       return <TerminalPane paneId={paneId} config={(pane.config ?? {}) as TerminalConfig} />
     case 'editor':
-      return (
-        <div className="h-full flex items-center justify-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
-          Editor: {paneId}
-        </div>
-      )
+      return <EditorPane paneId={paneId} config={(pane.config ?? {}) as EditorConfig} />
     case 'browser':
       return (
         <div className="h-full flex items-center justify-center text-sm" style={{ color: 'var(--muted-foreground)' }}>
