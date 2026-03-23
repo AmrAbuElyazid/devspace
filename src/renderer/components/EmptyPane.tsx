@@ -20,17 +20,24 @@ export default function EmptyPane({ paneId }: EmptyPaneProps): React.JSX.Element
     <div className="empty-pane">
       <div style={{ textAlign: 'center' }}>
         <div className="empty-pane-label">Add a pane</div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div className="flex gap-2.5">
           {options.map(({ type, label, desc, icon: Icon, defaultConfig }) => (
             <button
               key={type}
+              type="button"
               onClick={() => changePaneType(paneId, type, defaultConfig)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  changePaneType(paneId, type, defaultConfig)
+                }
+              }}
               className="empty-pane-card"
             >
-              <Icon size={22} style={{ color: 'var(--muted-foreground)' }} />
+              <Icon size={22} className="text-muted-foreground" />
               <div>
-                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--foreground)' }}>{label}</div>
-                <div style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>{desc}</div>
+                <div className="text-xs font-medium text-foreground">{label}</div>
+                <div className="text-[10px] text-muted-foreground">{desc}</div>
               </div>
             </button>
           ))}

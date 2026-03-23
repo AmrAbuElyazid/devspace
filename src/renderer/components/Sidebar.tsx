@@ -3,6 +3,10 @@ import { Plus, X, Sun, Monitor, Moon } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { useSettingsStore } from '../store/settings-store'
 import { useTheme } from '../hooks/useTheme'
+import { Button } from './ui/button'
+import { Tooltip } from './ui/tooltip'
+import { ScrollArea } from './ui/scroll-area'
+import { AlertDialog } from './ui/alert-dialog'
 
 interface EditingState {
   id: string
@@ -20,6 +24,7 @@ export default function Sidebar(): React.JSX.Element {
   const { theme, setTheme } = useTheme()
 
   const [editing, setEditing] = useState<EditingState | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -54,17 +59,20 @@ export default function Sidebar(): React.JSX.Element {
       {/* Section label + add button */}
       <div className="flex items-center justify-between px-4 pb-1 shrink-0">
         <span className="sidebar-label" style={{ fontSize: 10 }}>Workspaces</span>
-        <button
-          onClick={() => addWorkspace()}
-          className="no-drag pane-action"
-          title="New workspace"
-        >
-          <Plus size={13} />
-        </button>
+        <Tooltip content="New workspace" shortcut="⌘N">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => addWorkspace()}
+            className="no-drag"
+          >
+            <Plus size={13} />
+          </Button>
+        </Tooltip>
       </div>
 
       {/* Workspace list */}
-      <div className="ws-list">
+      <ScrollArea className="ws-list">
         {workspaces.map((ws) => {
           const isActive = ws.id === activeWorkspaceId
           const isEditing = editing?.id === ws.id
@@ -95,21 +103,37 @@ export default function Sidebar(): React.JSX.Element {
                 <>
                   <span className="flex-1 truncate">{ws.name}</span>
                   {workspaces.length > 1 && (
-                    <button
-                      className="ws-delete flex items-center justify-center rounded p-0.5"
-                      style={{ color: 'var(--muted-foreground)' }}
-                      onClick={(e) => { e.stopPropagation(); removeWorkspace(ws.id) }}
-                      title="Delete"
-                    >
-                      <X size={12} />
-                    </button>
+                    <Tooltip content="Delete workspace">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="ws-delete"
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(ws.id) }}
+                      >
+                        <X size={12} />
+                      </Button>
+                    </Tooltip>
                   )}
                 </>
               )}
             </div>
           )
         })}
-      </div>
+      </ScrollArea>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+        title="Delete workspace?"
+        description="This workspace and all its tabs will be permanently removed. This action cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          if (deleteTarget) removeWorkspace(deleteTarget)
+        }}
+        variant="destructive"
+      />
 
       {/* Footer — theme toggle */}
       <div className="sidebar-footer">

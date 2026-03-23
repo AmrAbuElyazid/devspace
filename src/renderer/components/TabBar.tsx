@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
+import { Button } from './ui/button'
+import { Tooltip } from './ui/tooltip'
 
 interface EditingState {
   tabId: string
@@ -78,26 +80,32 @@ export default function TabBar(): React.JSX.Element {
             ) : (
               <>
                 <span className="truncate">{tab.name}</span>
-                <button
-                  className="tab-close no-drag"
-                  onClick={(e) => { e.stopPropagation(); removeTab(activeWorkspaceId, tab.id) }}
-                  title="Close tab"
-                >
-                  <X size={11} />
-                </button>
+                <Tooltip content="Close tab" shortcut="⌘W">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    className="tab-close no-drag"
+                    onClick={(e) => { e.stopPropagation(); removeTab(activeWorkspaceId, tab.id) }}
+                  >
+                    <X size={11} />
+                  </Button>
+                </Tooltip>
               </>
             )}
           </div>
         )
       })}
 
-      <button
-        onClick={() => addTab(activeWorkspaceId)}
-        className="tab-add no-drag"
-        title="New tab"
-      >
-        <Plus size={13} />
-      </button>
+      <Tooltip content="New tab" shortcut="⌘T">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={() => addTab(activeWorkspaceId)}
+          className="tab-add no-drag"
+        >
+          <Plus size={13} />
+        </Button>
+      </Tooltip>
     </div>
   )
 }
