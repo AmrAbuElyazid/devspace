@@ -149,6 +149,8 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): Rea
     const themeObserver = new MutationObserver(() => {
       if (terminalRef.current) {
         terminalRef.current.options.theme = getTerminalTheme()
+        // Force repaint of all visible rows — xterm doesn't repaint on theme change alone
+        terminalRef.current.refresh(0, terminalRef.current.rows - 1)
       }
     })
     themeObserver.observe(document.documentElement, {
