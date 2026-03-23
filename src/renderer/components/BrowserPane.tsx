@@ -8,7 +8,6 @@ import {
 } from '../lib/browser-pane-session'
 import { useBrowserBounds } from '../hooks/useBrowserBounds'
 import { useBrowserStore } from '../store/browser-store'
-import { useWorkspaceStore } from '../store/workspace-store'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
 import BrowserSecurityIndicator from './browser/BrowserSecurityIndicator'
@@ -31,13 +30,14 @@ export default function BrowserPane({
   const placeholderRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId])
-  const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle)
   const initialUrl = useMemo(() => normalizeBrowserInput(config.url || 'about:blank'), [config.url])
   const [inputUrl, setInputUrl] = useState(initialUrl)
+  const hasCertificateError = runtimeState?.securityLabel === 'Certificate error'
+  const shouldHideNativeView = hideNativeView || hasCertificateError
 
   useBrowserBounds({
     paneId,
-    enabled: isVisible && !hideNativeView,
+    enabled: isVisible && !shouldHideNativeView,
     ref: placeholderRef,
   })
 
@@ -69,16 +69,10 @@ export default function BrowserPane({
   }, [runtimeState?.url])
 
   useEffect(() => {
-    if (runtimeState?.title) {
-      updatePaneTitle(paneId, runtimeState.title)
-    }
-  }, [paneId, runtimeState?.title, updatePaneTitle])
-
-  useEffect(() => {
-    const nextVisible = isVisible && !hideNativeView
+    const nextVisible = isVisible && !shouldHideNativeView
     const action = nextVisible ? window.api.browser.show : window.api.browser.hide
     void action(paneId)
-  }, [hideNativeView, isVisible, paneId])
+  }, [isVisible, paneId, shouldHideNativeView])
 
   const currentUrl = runtimeState?.url ?? initialUrl
   const currentTitle = runtimeState?.title ?? 'Browser'
@@ -87,7 +81,6 @@ export default function BrowserPane({
   const canGoForward = runtimeState?.canGoForward ?? false
   const isSecure = runtimeState?.isSecure ?? false
   const securityLabel = runtimeState?.securityLabel ?? null
-  const hasCertificateError = securityLabel === 'Certificate error'
 
   const handleNavigate = useCallback((value: string) => {
     const normalized = normalizeBrowserInput(value)
@@ -204,7 +197,7 @@ export default function BrowserPane({
         <div
           ref={placeholderRef}
           className="browser-native-view-slot"
-          data-native-view-hidden={!isVisible || hideNativeView || hasCertificateError ? 'true' : undefined}
+          data-native-view-hidden={!isVisible || shouldHideNativeView ? 'true' : undefined}
         />
       </div>
     </div>

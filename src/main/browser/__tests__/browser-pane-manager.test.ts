@@ -129,3 +129,18 @@ test('failed navigation does not replace the committed runtime url', () => {
   assert.equal(runtimeState?.url, 'https://example.com')
   assert.equal(runtimeState?.title, 'NAME_NOT_RESOLVED')
 })
+
+test('explicit certificate error security state is preserved on runtime patch', () => {
+  const manager = makeManager()
+
+  manager.createPane('pane-1', 'https://example.com')
+  manager.applyRuntimePatch('pane-1', {
+    url: 'https://expired.badssl.com/',
+    isSecure: false,
+    securityLabel: 'Certificate error',
+  })
+
+  const runtimeState = manager.getRuntimeState('pane-1')
+  assert.equal(runtimeState?.isSecure, false)
+  assert.equal(runtimeState?.securityLabel, 'Certificate error')
+})
