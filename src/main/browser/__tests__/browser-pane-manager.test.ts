@@ -2,6 +2,15 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { BrowserPaneManager } from '../browser-pane-manager'
 
+function makeManager(): BrowserPaneManager {
+  return new BrowserPaneManager({
+    createView: () => ({ webContents: {} }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+}
+
 test('tracks pane lifecycle bookkeeping across create show hide and destroy', () => {
   const childViews: unknown[] = []
   const rendererMessages: Array<{ channel: string; payload: unknown }> = []
@@ -52,4 +61,15 @@ test('tracks pane lifecycle bookkeeping across create show hide and destroy', ()
   assert.deepEqual(childViews, [])
   assert.equal(destroyed, true)
   assert.equal(manager.getRuntimeState('pane-1'), undefined)
+})
+
+test('hidePane preserves runtime state and visibility bookkeeping', () => {
+  const manager = makeManager()
+
+  manager.createPane('pane-1', 'https://example.com')
+  manager.showPane('pane-1')
+  manager.hidePane('pane-1')
+
+  assert.equal(manager.getRuntimeState('pane-1')?.url, 'https://example.com')
+  assert.equal(manager.isPaneVisible('pane-1'), false)
 })

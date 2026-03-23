@@ -26,7 +26,21 @@ const paneTypeIcons: Record<PaneType, ElementType> = {
   empty: Square,
 }
 
-const PaneContent = memo(function PaneContent({ paneId, pane, workspaceId, tabId }: { paneId: string; pane: { type: PaneType; config: unknown }; workspaceId: string; tabId: string }): JSX.Element {
+const PaneContent = memo(function PaneContent({
+  paneId,
+  pane,
+  workspaceId,
+  tabId,
+  isVisible,
+  hideNativeView,
+}: {
+  paneId: string
+  pane: { type: PaneType; config: unknown }
+  workspaceId: string
+  tabId: string
+  isVisible: boolean
+  hideNativeView: boolean
+}): JSX.Element {
   switch (pane.type) {
     case 'empty':
       return <EmptyPane paneId={paneId} workspaceId={workspaceId} tabId={tabId} />
@@ -35,7 +49,14 @@ const PaneContent = memo(function PaneContent({ paneId, pane, workspaceId, tabId
     case 'editor':
       return <EditorPane paneId={paneId} config={(pane.config ?? {}) as EditorConfig} />
     case 'browser':
-      return <BrowserPane paneId={paneId} config={(pane.config ?? { url: 'https://www.google.com' }) as BrowserConfig} />
+      return (
+        <BrowserPane
+          paneId={paneId}
+          config={(pane.config ?? { url: 'https://www.google.com' }) as BrowserConfig}
+          isVisible={isVisible}
+          hideNativeView={hideNativeView}
+        />
+      )
   }
 })
 
@@ -66,6 +87,7 @@ export default function PaneContainer({
   // Without this check, pointerWithin matches hidden pane zones, causing
   // the overlay to render on invisible elements and merges into wrong tabs.
   const isVisibleTab = workspaceId === activeWorkspaceId && tabId === activeWs?.activeTabId
+  const shouldHideBrowserNativeView = activeDrag?.type === 'tab' && isVisibleTab
   const canAcceptTabDrop =
     activeDrag?.type === 'tab' &&
     isVisibleTab &&
@@ -160,7 +182,14 @@ export default function PaneContainer({
         style={{ position: 'relative' }}
         onMouseDown={handleFocus}
       >
-        <PaneContent paneId={paneId} pane={pane} workspaceId={workspaceId} tabId={tabId} />
+        <PaneContent
+          paneId={paneId}
+          pane={pane}
+          workspaceId={workspaceId}
+          tabId={tabId}
+          isVisible={isVisibleTab}
+          hideNativeView={Boolean(shouldHideBrowserNativeView)}
+        />
         {dropOverlay}
       </div>
     )
@@ -226,8 +255,15 @@ export default function PaneContainer({
           </Tooltip>
         </div>
       </div>
-      <div className="flex-1 overflow-hidden">
-        <PaneContent paneId={paneId} pane={pane} workspaceId={workspaceId} tabId={tabId} />
+      <div className="pane-content-frame flex-1 overflow-hidden">
+        <PaneContent
+          paneId={paneId}
+          pane={pane}
+          workspaceId={workspaceId}
+          tabId={tabId}
+          isVisible={isVisibleTab}
+          hideNativeView={Boolean(shouldHideBrowserNativeView)}
+        />
       </div>
       {dropOverlay}
     </div>
