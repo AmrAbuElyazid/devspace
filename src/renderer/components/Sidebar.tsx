@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Plus, X, Sun, Monitor, Moon } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { useSettingsStore } from '../store/settings-store'
@@ -13,7 +13,7 @@ interface EditingState {
   value: string
 }
 
-export default function Sidebar(): React.JSX.Element {
+export default function Sidebar(): JSX.Element {
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const addWorkspace = useWorkspaceStore((s) => s.addWorkspace)

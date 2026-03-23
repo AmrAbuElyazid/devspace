@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react'
 import { ArrowLeft, ArrowRight, RotateCw, X, Search } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { Button } from './ui/button'
@@ -24,7 +24,7 @@ function normalizeUrl(input: string): string {
   return url
 }
 
-export default function BrowserPane({ paneId, config }: BrowserPaneProps): React.JSX.Element {
+export default function BrowserPane({ paneId, config }: BrowserPaneProps): JSX.Element {
   const initialUrl = config.url || 'about:blank'
   const [currentUrl, setCurrentUrl] = useState(initialUrl)
   const [inputUrl, setInputUrl] = useState(initialUrl)
@@ -174,7 +174,7 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
   }, [getWebview, isLoading])
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
+    (e: KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
         e.preventDefault()
         handleNavigate(inputUrl)

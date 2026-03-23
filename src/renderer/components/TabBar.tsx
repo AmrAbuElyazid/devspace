@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Plus, X } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { Button } from './ui/button'
@@ -9,7 +9,7 @@ interface EditingState {
   value: string
 }
 
-export default function TabBar(): React.JSX.Element {
+export default function TabBar(): JSX.Element {
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const addTab = useWorkspaceStore((s) => s.addTab)

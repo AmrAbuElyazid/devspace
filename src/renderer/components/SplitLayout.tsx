@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
 import { useWorkspaceStore } from '../store/workspace-store'
@@ -17,7 +17,7 @@ export default function SplitLayout({
   workspaceId,
   tabId,
   path = [],
-}: SplitLayoutProps): React.JSX.Element {
+}: SplitLayoutProps): JSX.Element {
   const updateSplitSizes = useWorkspaceStore((s) => s.updateSplitSizes)
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null)
 

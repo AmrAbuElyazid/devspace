@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { FolderOpen, Save, FileCode } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
@@ -54,7 +54,7 @@ function detectLanguage(filePath: string): string {
   return map[ext || ''] || 'plaintext'
 }
 
-export default function EditorPane({ paneId, config }: EditorPaneProps): React.JSX.Element {
+export default function EditorPane({ paneId, config }: EditorPaneProps): JSX.Element {
   const [content, setContent] = useState(config.content || '')
   const [savedContent, setSavedContent] = useState(config.content || '')
   const [filePath, setFilePath] = useState(config.filePath || '')

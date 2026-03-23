@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { useWorkspaceStore } from './store/workspace-store'
 import { useSettingsStore } from './store/settings-store'
 import { useTheme } from './hooks/useTheme'
@@ -7,7 +7,6 @@ import TabBar from './components/TabBar'
 import SplitLayout from './components/SplitLayout'
 import type { SplitNode } from './types/workspace'
 import { ToastViewport } from './components/ui/toast'
-import 'allotment/dist/style.css'
 
 function findFirstLeaf(node: SplitNode): string | null {
   if (node.type === 'leaf') return node.paneId
@@ -15,7 +14,7 @@ function findFirstLeaf(node: SplitNode): string | null {
   return null
 }
 
-export default function App(): React.JSX.Element {
+export default function App(): JSX.Element {
   useTheme()
 
   const workspaces = useWorkspaceStore((s) => s.workspaces)

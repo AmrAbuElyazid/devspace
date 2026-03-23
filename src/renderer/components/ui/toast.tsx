@@ -1,4 +1,4 @@
-import React from 'react'
+import { type ComponentType } from 'react'
 import { useToastStore } from '../../hooks/useToast'
 import { cn } from '../../lib/utils'
 import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react'
@@ -10,7 +10,7 @@ const variantStyles: Record<string, string> = {
   warning: 'border-l-[var(--warning)]',
 }
 
-const variantIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+const variantIcons: Record<string, ComponentType<{ className?: string }>> = {
   default: Info,
   success: CheckCircle,
   error: AlertCircle,
@@ -25,7 +25,7 @@ function ToastItem({
   id: string
   message: string
   variant: string
-}): React.JSX.Element {
+}): JSX.Element {
   const removeToast = useToastStore((s) => s.removeToast)
   const Icon = variantIcons[variant] || Info
 
@@ -50,7 +50,7 @@ function ToastItem({
   )
 }
 
-export function ToastViewport(): React.JSX.Element | null {
+export function ToastViewport(): JSX.Element | null {
   const toasts = useToastStore((s) => s.toasts)
 
   if (toasts.length === 0) return null

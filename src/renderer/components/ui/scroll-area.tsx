@@ -1,8 +1,9 @@
+import { type ReactNode } from 'react'
 import { ScrollArea as ScrollAreaPrimitive } from '@base-ui-components/react/scroll-area'
 import { cn } from '../../lib/utils'
 
 interface ScrollAreaProps {
-  children: React.ReactNode
+  children: ReactNode
   className?: string
 }
 

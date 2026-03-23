@@ -1,4 +1,4 @@
-import React from 'react'
+import { type ElementType } from 'react'
 import { Terminal, FileCode, Globe } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import type { PaneType, PaneConfig } from '../types/workspace'
@@ -7,13 +7,13 @@ interface EmptyPaneProps {
   paneId: string
 }
 
-const options: { type: PaneType; label: string; desc: string; icon: React.ElementType; defaultConfig: PaneConfig }[] = [
+const options: { type: PaneType; label: string; desc: string; icon: ElementType; defaultConfig: PaneConfig }[] = [
   { type: 'terminal', label: 'Terminal', desc: 'Shell session', icon: Terminal, defaultConfig: { cwd: undefined } },
   { type: 'editor', label: 'Editor', desc: 'Code editor', icon: FileCode, defaultConfig: {} },
   { type: 'browser', label: 'Browser', desc: 'Web preview', icon: Globe, defaultConfig: { url: 'https://google.com' } },
 ]
 
-export default function EmptyPane({ paneId }: EmptyPaneProps): React.JSX.Element {
+export default function EmptyPane({ paneId }: EmptyPaneProps): JSX.Element {
   const changePaneType = useWorkspaceStore((s) => s.changePaneType)
 
   return (

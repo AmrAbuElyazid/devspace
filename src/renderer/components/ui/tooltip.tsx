@@ -1,9 +1,10 @@
+import { type ReactNode, type ReactElement } from 'react'
 import { Tooltip as TooltipPrimitive } from '@base-ui-components/react/tooltip'
 import { cn } from '../../lib/utils'
 
 interface TooltipProps {
-  content: React.ReactNode
-  children: React.ReactElement
+  content: ReactNode
+  children: ReactElement
   side?: 'top' | 'bottom' | 'left' | 'right'
   shortcut?: string
 }
