@@ -52,6 +52,13 @@ export interface DevspaceBridge {
   browser: BrowserBridge
 }
 
+export interface BrowserBridgeListeners {
+  onStateChange?: (state: BrowserRuntimeState) => void
+  onPermissionRequest?: (request: BrowserPermissionRequest) => void
+}
+
+export type BrowserBridgeUnsubscribe = () => void
+
 export interface BrowserBridge {
   create: (paneId: string, url: string) => Promise<void>
   destroy: (paneId: string) => Promise<void>
@@ -72,8 +79,8 @@ export interface BrowserBridge {
   toggleDevTools: (paneId: string) => Promise<void>
   showContextMenu: (paneId: string, position?: { x: number; y: number }) => Promise<void>
   resolvePermission: (requestToken: string, decision: BrowserPermissionDecision) => Promise<void>
-  onStateChange: (callback: (state: BrowserRuntimeState) => void) => () => void
-  onPermissionRequest: (callback: (request: BrowserPermissionRequest) => void) => () => void
+  onStateChange: (callback: (state: BrowserRuntimeState) => void) => BrowserBridgeUnsubscribe
+  onPermissionRequest: (callback: (request: BrowserPermissionRequest) => void) => BrowserBridgeUnsubscribe
 }
 
 export interface ContextMenuItem<T extends string = string> {
