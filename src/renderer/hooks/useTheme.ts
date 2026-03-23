@@ -28,7 +28,9 @@ export function useTheme() {
       // Use requestAnimationFrame to ensure the class change has been
       // committed to the DOM before listeners read it.
       requestAnimationFrame(() => {
-        window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT))
+        window.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, {
+          detail: { theme: dark ? 'dark' : 'light' },
+        }))
       })
     }
 

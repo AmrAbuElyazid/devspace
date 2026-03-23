@@ -496,6 +496,50 @@ body::after {
   animation-duration: 0s !important;
 }
 
+/* ─── Browser Pane ───────────────────────────────────────────────────── */
+
+.browser-toolbar {
+  height: 36px;
+  background-color: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.browser-nav-btn {
+  width: 28px;
+  height: 28px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+}
+
+.browser-nav-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.browser-url-input {
+  height: 26px;
+  background-color: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  font-family: 'SF Mono', 'Fira Code', Menlo, Monaco, monospace;
+  font-size: 11px;
+}
+
+@keyframes browser-loading {
+  0% { width: 0%; margin-left: 0; }
+  50% { width: 60%; margin-left: 20%; }
+  100% { width: 0%; margin-left: 100%; }
+}
+
+.browser-loading-bar {
+  height: 2px;
+  background-color: var(--primary);
+  animation: browser-loading 1.5s ease-in-out infinite;
+}
+
 /* ─── Allotment (Split Pane Sash) ────────────────────────────────────── */
 .split-view-view > .sash-container > .sash {
   background-color: var(--border) !important;

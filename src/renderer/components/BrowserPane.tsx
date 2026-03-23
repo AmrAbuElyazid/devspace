@@ -30,7 +30,7 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
   const [canGoBack, setCanGoBack] = useState(false)
   const [canGoForward, setCanGoForward] = useState(false)
 
-  const webviewRef = useRef<HTMLElement>(null)
+  const webviewRef = useRef<Electron.WebviewTag | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const initedRef = useRef(false)
@@ -39,7 +39,7 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle)
 
   const getWebview = useCallback((): Electron.WebviewTag | null => {
-    return webviewRef.current as unknown as Electron.WebviewTag | null
+    return webviewRef.current
   }, [])
 
   const updateNavState = useCallback(() => {
@@ -63,11 +63,9 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
     const wv = document.createElement('webview') as unknown as Electron.WebviewTag
     wv.setAttribute('src', normalizeUrl(initialUrl))
     wv.setAttribute('style', 'width: 100%; height: 100%;')
-    // Security: no node integration, no preload, no popups
-    wv.setAttribute('allowpopups', 'false')
 
     container.appendChild(wv as unknown as Node)
-    ;(webviewRef as React.MutableRefObject<HTMLElement | null>).current = wv as unknown as HTMLElement
+    webviewRef.current = wv
 
     initedRef.current = true
 
@@ -131,7 +129,7 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
       if (container.contains(wv as unknown as Node)) {
         container.removeChild(wv as unknown as Node)
       }
-      ;(webviewRef as React.MutableRefObject<HTMLElement | null>).current = null
+      webviewRef.current = null
       initedRef.current = false
     }
   }, [paneId, initialUrl, getWebview, updateNavState, updatePaneConfig, updatePaneTitle])
@@ -197,39 +195,15 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
     inputRef.current?.select()
   }, [])
 
-  const navButtonStyle: React.CSSProperties = {
-    width: 28,
-    height: 28,
-    color: 'var(--muted-foreground)',
-    cursor: 'pointer',
-    border: 'none',
-    background: 'none',
-    padding: 0,
-  }
-
-  const disabledStyle: React.CSSProperties = {
-    ...navButtonStyle,
-    opacity: 0.3,
-    cursor: 'default',
-  }
-
   return (
-    <div className="h-full w-full flex flex-col" style={{ backgroundColor: 'var(--background)' }}>
+    <div className="h-full w-full flex flex-col bg-[var(--background)]">
       {/* Toolbar */}
-      <div
-        className="flex items-center gap-1 shrink-0 px-1"
-        style={{
-          height: 36,
-          backgroundColor: 'var(--card)',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
+      <div className="browser-toolbar flex items-center gap-1 shrink-0 px-1">
         {/* Back */}
         <button
           onClick={handleBack}
           disabled={!canGoBack}
-          className="flex items-center justify-center rounded hover:bg-[var(--accent)]"
-          style={canGoBack ? navButtonStyle : disabledStyle}
+          className="browser-nav-btn flex items-center justify-center rounded hover:bg-[var(--accent)]"
           title="Back"
         >
           <ArrowLeft size={16} />
@@ -239,8 +213,7 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
         <button
           onClick={handleForward}
           disabled={!canGoForward}
-          className="flex items-center justify-center rounded hover:bg-[var(--accent)]"
-          style={canGoForward ? navButtonStyle : disabledStyle}
+          className="browser-nav-btn flex items-center justify-center rounded hover:bg-[var(--accent)]"
           title="Forward"
         >
           <ArrowRight size={16} />
@@ -249,8 +222,7 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
         {/* Reload / Stop */}
         <button
           onClick={handleReloadOrStop}
-          className="flex items-center justify-center rounded hover:bg-[var(--accent)]"
-          style={navButtonStyle}
+          className="browser-nav-btn flex items-center justify-center rounded hover:bg-[var(--accent)]"
           title={isLoading ? 'Stop' : 'Reload'}
         >
           {isLoading ? <X size={16} /> : <RotateCw size={14} />}
@@ -265,23 +237,14 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           onFocus={handleFocus}
-          className="flex-1 min-w-0 rounded px-2 text-xs outline-none"
-          style={{
-            height: 26,
-            backgroundColor: 'var(--background)',
-            color: 'var(--foreground)',
-            border: '1px solid var(--border)',
-            fontFamily: "'SF Mono', 'Fira Code', Menlo, Monaco, monospace",
-            fontSize: 11,
-          }}
+          className="browser-url-input flex-1 min-w-0 rounded px-2 text-xs outline-none"
           placeholder="Enter URL or search..."
         />
 
         {/* Go / Search */}
         <button
           onClick={() => handleNavigate(inputUrl)}
-          className="flex items-center justify-center rounded hover:bg-[var(--accent)]"
-          style={navButtonStyle}
+          className="browser-nav-btn flex items-center justify-center rounded hover:bg-[var(--accent)]"
           title="Go"
         >
           <Search size={14} />
@@ -289,27 +252,10 @@ export default function BrowserPane({ paneId, config }: BrowserPaneProps): React
       </div>
 
       {/* Loading indicator */}
-      {isLoading && (
-        <div
-          style={{
-            height: 2,
-            backgroundColor: 'var(--primary)',
-            animation: 'browser-loading 1.5s ease-in-out infinite',
-          }}
-        />
-      )}
+      {isLoading && <div className="browser-loading-bar" />}
 
       {/* Webview container */}
       <div ref={containerRef} className="flex-1 overflow-hidden" />
-
-      {/* Loading animation keyframes */}
-      <style>{`
-        @keyframes browser-loading {
-          0% { width: 0%; margin-left: 0; }
-          50% { width: 60%; margin-left: 20%; }
-          100% { width: 0%; margin-left: 100%; }
-        }
-      `}</style>
     </div>
   )
 }
