@@ -3,6 +3,7 @@ import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { useWorkspaceStore } from '../store/workspace-store'
+import { toast } from '../hooks/useToast'
 import { THEME_CHANGE_EVENT } from '../hooks/useTheme'
 import type { TerminalConfig } from '../types/workspace'
 
@@ -88,6 +89,7 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): Rea
       terminal.write(
         `\r\n\x1b[31m[Failed to create terminal: ${err instanceof Error ? err.message : String(err)}]\x1b[0m\r\n`,
       )
+      toast('Failed to create terminal', 'error')
       return
     }
 

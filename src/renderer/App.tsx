@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar'
 import TabBar from './components/TabBar'
 import SplitLayout from './components/SplitLayout'
 import type { SplitNode } from './types/workspace'
+import { ToastViewport } from './components/ui/toast'
 import 'allotment/dist/style.css'
 
 function findFirstLeaf(node: SplitNode): string | null {
@@ -113,6 +114,7 @@ export default function App(): React.JSX.Element {
           )}
         </div>
       </div>
+      <ToastViewport />
     </div>
   )
 }
