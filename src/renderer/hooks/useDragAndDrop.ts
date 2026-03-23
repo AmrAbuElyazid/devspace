@@ -7,8 +7,8 @@ import {
   type DragEndEvent,
   type DragOverEvent,
   type CollisionDetection,
-  closestCenter,
   pointerWithin,
+  closestCenter,
 } from '@dnd-kit/core'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { findFolder } from '../lib/sidebar-tree'
@@ -16,15 +16,29 @@ import type { DragItemData, DropSide } from '../types/dnd'
 import type { SidebarNode } from '../types/workspace'
 
 // React context to share activeDrag state without prop drilling
-// This avoids re-rendering every PaneContainer/SplitLayout when drag state changes
 export const DragContext = createContext<DragItemData | null>(null)
 export const useDragContext = () => useContext(DragContext)
 
+/**
+ * Compute which side of a rectangle the pointer is closest to.
+ * Used by onDragEnd to determine split direction for tab-to-pane drops.
+ */
+function computeDropSide(pointerX: number, pointerY: number, rect: DOMRect): DropSide {
+  const relX = (pointerX - rect.left) / rect.width
+  const relY = (pointerY - rect.top) / rect.height
+  const dL = relX
+  const dR = 1 - relX
+  const dT = relY
+  const dB = 1 - relY
+  const min = Math.min(dL, dR, dT, dB)
+  if (min === dL) return 'left'
+  if (min === dR) return 'right'
+  if (min === dT) return 'top'
+  return 'bottom'
+}
+
 export function useDragAndDrop() {
   const [activeDrag, setActiveDrag] = useState<DragItemData | null>(null)
-  const [dropSide, setDropSide] = useState<DropSide | null>(null)
-  const dragInProgressRef = useRef(false)
-  const suppressClickRef = useRef(false)
   const folderExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hoveredFolderIdRef = useRef<string | null>(null)
 
@@ -36,47 +50,18 @@ export function useDragAndDrop() {
     }),
   )
 
+  // Collision detection: pointerWithin-first, then closestCenter as fallback.
+  //
+  // pointerWithin only matches droppable rects that CONTAIN the pointer.
+  // This means:
+  //   - Tab sortable items match only when pointer is over the tab bar
+  //   - Pane zones match only when pointer is over the pane area
+  //   - Sidebar items match only when pointer is over the sidebar
+  // No filtering needed — geometry does the scoping naturally.
+  //
+  // closestCenter fallback handles the case where pointer is between
+  // sortable items (not inside any rect but close enough for reorder).
   const collisionDetection: CollisionDetection = useCallback((args) => {
-    const { active, droppableContainers } = args
-    const activeData = active.data.current as Record<string, unknown> | undefined
-
-    if (activeData?.type === 'tab') {
-      // For tab drags, prioritize: tab items > sidebar targets > pane zones
-      const tabContainers = droppableContainers.filter((container) => {
-        const data = container.data.current as Record<string, unknown> | undefined
-        return data?.type === 'tab'
-      })
-      const tabCollisions = closestCenter({ ...args, droppableContainers: tabContainers })
-      if (tabCollisions.length > 0) return tabCollisions
-
-      const sidebarContainers = droppableContainers.filter((container) => {
-        const data = container.data.current as Record<string, unknown> | undefined
-        return data?.type === 'sidebar-workspace-target'
-      })
-      const sidebarCollisions = pointerWithin({ ...args, droppableContainers: sidebarContainers })
-      if (sidebarCollisions.length > 0) return sidebarCollisions
-
-      const paneContainers = droppableContainers.filter((container) => {
-        const data = container.data.current as Record<string, unknown> | undefined
-        return data?.type === 'pane-zone'
-      })
-      const paneCollisions = pointerWithin({ ...args, droppableContainers: paneContainers })
-      if (paneCollisions.length > 0) return paneCollisions
-
-      return []
-    }
-
-    if (activeData?.type === 'sidebar-workspace' || activeData?.type === 'sidebar-folder') {
-      // For sidebar drags, only consider sidebar items
-      const sidebarContainers = droppableContainers.filter((container) => {
-        const data = container.data.current as Record<string, unknown> | undefined
-        return data?.type === 'sidebar-workspace' || data?.type === 'sidebar-folder' || data?.type === 'sidebar-workspace-target'
-      })
-      const collisions = closestCenter({ ...args, droppableContainers: sidebarContainers })
-      if (collisions.length > 0) return collisions
-    }
-
-    // Default fallback
     const pointerCollisions = pointerWithin(args)
     if (pointerCollisions.length > 0) return pointerCollisions
     return closestCenter(args)
@@ -93,22 +78,19 @@ export function useDragAndDrop() {
   const onDragStart = useCallback((event: DragStartEvent) => {
     const data = event.active.data.current as DragItemData
     setActiveDrag(data)
-    dragInProgressRef.current = true
-    suppressClickRef.current = true
   }, [])
 
   const onDragOver = useCallback((event: DragOverEvent) => {
     const { over } = event
     if (!over) {
       clearFolderExpandTimer()
-      setDropSide(null)
       return
     }
 
     const overData = over.data.current as Record<string, unknown> | undefined
     if (!overData) return
 
-    // Folder auto-expand
+    // Folder auto-expand on 500ms hover
     if (overData.type === 'sidebar-folder') {
       const folderId = overData.folderId as string
       if (hoveredFolderIdRef.current !== folderId) {
@@ -121,25 +103,12 @@ export function useDragAndDrop() {
     } else {
       clearFolderExpandTimer()
     }
-
-    // Pane zone side detection
-    if (overData.type === 'pane-zone') {
-      setDropSide((overData.side as DropSide) ?? null)
-    } else {
-      setDropSide(null)
-    }
   }, [clearFolderExpandTimer])
 
   const onDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event
     setActiveDrag(null)
-    setDropSide(null)
     clearFolderExpandTimer()
-    dragInProgressRef.current = false
-
-    requestAnimationFrame(() => {
-      suppressClickRef.current = false
-    })
 
     if (!over) return
 
@@ -150,7 +119,7 @@ export function useDragAndDrop() {
 
     const state = store.getState()
 
-    // === Sidebar item dropped on another sidebar item (reorder / cross-level move) ===
+    // ── Sidebar item → Sidebar item (reorder / move between levels / drop into folder) ──
     const isSidebarDrag = dragData.type === 'sidebar-workspace' || dragData.type === 'sidebar-folder'
     const isSidebarDrop = dropType === 'sidebar-workspace' || dropType === 'sidebar-folder'
 
@@ -159,15 +128,16 @@ export function useDragAndDrop() {
       const nodeType = dragData.type === 'sidebar-workspace' ? 'workspace' : 'folder'
 
       if (dropType === 'sidebar-folder') {
-        // Dropped ON a folder → insert as last child of that folder
+        // Dropped ON a folder → insert as last child
         const targetFolderId = dropData.folderId as string
-        // Don't drop a folder into itself
         if (nodeType === 'folder' && nodeId === targetFolderId) return
         const folder = findFolder(state.sidebarTree as SidebarNode[], targetFolderId)
         const index = folder ? folder.children.length : 0
         state.reorderSidebarNode(nodeId, nodeType, targetFolderId, index)
+        // Auto-expand the folder so user sees where the item went
+        state.expandFolder(targetFolderId)
       } else {
-        // Dropped ON a workspace → insert at the workspace's position in its parent
+        // Dropped ON a workspace → insert at its position
         const overParentFolderId = (dropData.parentFolderId as string | null) ?? null
         const overWsId = dropData.workspaceId as string
 
@@ -190,14 +160,13 @@ export function useDragAndDrop() {
       return
     }
 
-    // === Tab reorder within tab bar ===
-    // Note: useSortable data uses { type: 'tab', ... }, so dropType is 'tab' not 'tab-sortable'
+    // ── Tab → Tab (reorder within same workspace) ──
     if (dragData.type === 'tab' && dropType === 'tab') {
-      const ws = state.workspaces.find((w: any) => w.id === dragData.workspaceId)
-      if (!ws) return
       if (dragData.workspaceId === (dropData.workspaceId as string)) {
-        const fromIndex = ws.tabs.findIndex((t: any) => t.id === dragData.tabId)
-        const toIndex = ws.tabs.findIndex((t: any) => t.id === (dropData.tabId as string))
+        const ws = state.workspaces.find((w) => w.id === dragData.workspaceId)
+        if (!ws) return
+        const fromIndex = ws.tabs.findIndex((t) => t.id === dragData.tabId)
+        const toIndex = ws.tabs.findIndex((t) => t.id === (dropData.tabId as string))
         if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
           state.reorderTabs(dragData.workspaceId, fromIndex, toIndex)
         }
@@ -205,7 +174,7 @@ export function useDragAndDrop() {
       return
     }
 
-    // === Tab dropped on sidebar workspace (cross-workspace move) ===
+    // ── Tab → Sidebar workspace (cross-workspace move) ──
     if (dragData.type === 'tab' && dropType === 'sidebar-workspace-target') {
       const targetWsId = dropData.workspaceId as string
       if (dragData.workspaceId !== targetWsId) {
@@ -214,15 +183,37 @@ export function useDragAndDrop() {
       return
     }
 
-    // === Tab dropped on pane zone (merge into split) ===
+    // ── Tab → Pane zone (merge tab into split) ──
     if (dragData.type === 'tab' && dropType === 'pane-zone') {
+      // Compute split direction from pointer position relative to pane rect.
+      // This is the single source of truth — no dependency on stale React state.
+      const paneId = dropData.paneId as string
+      const paneEl = document.querySelector(`[data-pane-drop-id="${paneId}"]`)
+      let side: DropSide = 'right'
+      if (paneEl && event.activatorEvent instanceof PointerEvent) {
+        // Use the last known pointer coordinates from the drag event
+        const rect = paneEl.getBoundingClientRect()
+        // dnd-kit doesn't expose final pointer position in onDragEnd,
+        // but the activatorEvent has initial coordinates. For the final position,
+        // we use the delta from the active node's transform.
+        const coords = (event as any).delta
+          ? { x: (event.activatorEvent as PointerEvent).clientX + (event as any).delta.x,
+              y: (event.activatorEvent as PointerEvent).clientY + (event as any).delta.y }
+          : { x: (event.activatorEvent as PointerEvent).clientX,
+              y: (event.activatorEvent as PointerEvent).clientY }
+        side = computeDropSide(coords.x, coords.y, rect)
+      } else if (dropData.side) {
+        // Fallback: read the side tracked by PaneContainer's pointermove listener
+        side = dropData.side as DropSide
+      }
+
       state.mergeTabIntoSplit(
         dragData.workspaceId,
         dragData.tabId,
         dropData.workspaceId as string,
         dropData.tabId as string,
-        dropData.paneId as string,
-        dropData.side as 'left' | 'right' | 'top' | 'bottom',
+        paneId,
+        side,
       )
       return
     }
@@ -230,19 +221,13 @@ export function useDragAndDrop() {
 
   const onDragCancel = useCallback(() => {
     setActiveDrag(null)
-    setDropSide(null)
     clearFolderExpandTimer()
-    dragInProgressRef.current = false
-    suppressClickRef.current = false
   }, [clearFolderExpandTimer])
 
   return {
     sensors,
     collisionDetection,
     activeDrag,
-    dropSide,
-    dragInProgressRef,
-    suppressClickRef,
     onDragStart,
     onDragOver,
     onDragEnd,

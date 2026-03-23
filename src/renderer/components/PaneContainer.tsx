@@ -60,12 +60,15 @@ export default function PaneContainer({
   const paneRef = useRef<HTMLDivElement>(null)
   const [dropSide, setDropSide] = useState<DropSide | null>(null)
 
+  // Don't include `side` in droppable data — it creates a stale-state problem.
+  // The hook computes the side at drop time from pointer position + pane rect.
+  // `side` is only used here for the visual overlay.
   const droppableData = useMemo(() => ({
     type: 'pane-zone' as const,
     workspaceId,
     tabId,
     paneId,
-    side: dropSide,
+    side: dropSide, // read by hook as fallback only
   }), [workspaceId, tabId, paneId, dropSide])
 
   const { setNodeRef: setDropRef, isOver } = useDroppable({
@@ -141,6 +144,7 @@ export default function PaneContainer({
     return (
       <div
         ref={mergedRef}
+        data-pane-drop-id={paneId}
         className={`h-full w-full pane-focus-ring ${isFocused ? 'pane-focused' : ''}`}
         style={{ position: 'relative' }}
         onMouseDown={handleFocus}
@@ -154,6 +158,7 @@ export default function PaneContainer({
   return (
     <div
       ref={mergedRef}
+      data-pane-drop-id={paneId}
       className={`h-full w-full flex flex-col pane-focus-ring ${isFocused ? 'pane-focused' : ''}`}
       style={{ position: 'relative' }}
       onMouseDown={handleFocus}
