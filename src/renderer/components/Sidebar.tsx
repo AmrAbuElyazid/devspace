@@ -1,4 +1,7 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { useDroppable } from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
 import { Plus, Settings, ChevronDown, ChevronRight, FolderClosed } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { useSettingsStore } from '../store/settings-store'
@@ -8,6 +11,345 @@ import { ScrollArea } from './ui/scroll-area'
 import { AlertDialog } from './ui/alert-dialog'
 import { InlineRenameInput } from './ui/InlineRenameInput'
 import type { ContextMenuItem } from '../../shared/types'
+import type { SidebarNode } from '../types/workspace'
+import type { DragItemData } from '../types/dnd'
+import { useDragContext } from '../hooks/useDragAndDrop'
+
+// ---------------------------------------------------------------------------
+// SortableWorkspaceItem
+// ---------------------------------------------------------------------------
+
+function SortableWorkspaceItem({
+  workspaceId,
+  depth,
+  isActive,
+  isEditing,
+  name,
+  onSelect,
+  onStartEditing,
+  onRename,
+  onStopEditing,
+  onContextMenu,
+}: {
+  workspaceId: string
+  depth: number
+  isActive: boolean
+  isEditing: boolean
+  name: string
+  onSelect: () => void
+  onStartEditing: () => void
+  onRename: (name: string) => void
+  onStopEditing: () => void
+  onContextMenu: (e: React.MouseEvent) => void
+}): JSX.Element {
+  const activeDrag = useDragContext()
+  const mergedRef = useRef<HTMLDivElement | null>(null)
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setSortableRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: `ws-${workspaceId}`,
+    data: { type: 'sidebar-workspace', workspaceId } satisfies DragItemData,
+  })
+
+  const { setNodeRef: setDropRef, isOver: isTabOver } = useDroppable({
+    id: `ws-drop-${workspaceId}`,
+    data: { type: 'sidebar-workspace-target', workspaceId },
+    disabled: activeDrag?.type !== 'tab',
+  })
+
+  const setRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      mergedRef.current = el
+      setSortableRef(el)
+      setDropRef(el)
+    },
+    [setSortableRef, setDropRef],
+  )
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    paddingLeft: depth * 16,
+    opacity: isDragging ? 0.4 : undefined,
+  }
+
+  const showDropTarget = isTabOver && activeDrag?.type === 'tab'
+
+  return (
+    <div
+      ref={setRef}
+      style={style}
+      className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''} ${showDropTarget ? 'sidebar-workspace-drop-target' : ''}`}
+      onClick={() => { if (!isEditing) onSelect() }}
+      onDoubleClick={onStartEditing}
+      onContextMenu={onContextMenu}
+      {...attributes}
+      {...listeners}
+    >
+      <span
+        style={{
+          width: 7,
+          height: 7,
+          borderRadius: '50%',
+          background: isActive ? 'var(--accent)' : 'var(--foreground-faint)',
+          flexShrink: 0,
+        }}
+      />
+      {isEditing ? (
+        <InlineRenameInput
+          initialValue={name}
+          onCommit={(newName) => {
+            onRename(newName)
+            onStopEditing()
+          }}
+          onCancel={onStopEditing}
+          className="text-[13px]"
+        />
+      ) : (
+        <span className="flex-1 truncate">{name}</span>
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// SortableFolderItem
+// ---------------------------------------------------------------------------
+
+function SortableFolderItem({
+  folder,
+  depth,
+  isEditing,
+  editingId,
+  editingType,
+  onToggle,
+  onStartEditingFolder,
+  onStartEditingWorkspace,
+  onRenameFolder,
+  onRenameWorkspace,
+  onStopEditing,
+  onContextMenuFolder,
+  onContextMenuWorkspace,
+  onSelectWorkspace,
+  activeWorkspaceId,
+  deleteTarget,
+  setDeleteTarget,
+}: {
+  folder: SidebarNode & { type: 'folder' }
+  depth: number
+  isEditing: boolean
+  editingId: string | null
+  editingType: 'workspace' | 'folder' | null
+  onToggle: () => void
+  onStartEditingFolder: (id: string) => void
+  onStartEditingWorkspace: (id: string) => void
+  onRenameFolder: (id: string, name: string) => void
+  onRenameWorkspace: (id: string, name: string) => void
+  onStopEditing: () => void
+  onContextMenuFolder: (e: React.MouseEvent, folderId: string) => void
+  onContextMenuWorkspace: (e: React.MouseEvent, workspaceId: string) => void
+  onSelectWorkspace: (id: string) => void
+  activeWorkspaceId: string
+  deleteTarget: string | null
+  setDeleteTarget: (id: string | null) => void
+}): JSX.Element {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+    isOver,
+  } = useSortable({
+    id: `folder-${folder.id}`,
+    data: { type: 'sidebar-folder', folderId: folder.id } satisfies DragItemData,
+  })
+
+  const style = {
+    transform: CSS.Translate.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : undefined,
+  }
+
+  const showDragOver = isOver && !isDragging
+
+  return (
+    <div style={style}>
+      <div
+        ref={setNodeRef}
+        className={`folder-header no-drag ${showDragOver ? 'sidebar-item-drag-over-folder' : ''}`}
+        onClick={onToggle}
+        onContextMenu={(e) => onContextMenuFolder(e, folder.id)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '5px 10px',
+          paddingLeft: depth * 16 + 10,
+          fontSize: 11,
+          fontWeight: 600,
+          textTransform: 'uppercase' as const,
+          letterSpacing: '0.03em',
+          color: 'var(--foreground-faint)',
+          cursor: 'pointer',
+          userSelect: 'none',
+          marginTop: 4,
+        }}
+        {...attributes}
+        {...listeners}
+      >
+        {folder.collapsed ? (
+          <ChevronRight size={10} />
+        ) : (
+          <ChevronDown size={10} />
+        )}
+        <FolderClosed size={12} style={{ opacity: 0.6 }} />
+        {isEditing ? (
+          <InlineRenameInput
+            initialValue={folder.name}
+            onCommit={(name) => {
+              onRenameFolder(folder.id, name)
+              onStopEditing()
+            }}
+            onCancel={onStopEditing}
+            className="text-[12px]"
+          />
+        ) : (
+          <span className="flex-1 truncate">{folder.name}</span>
+        )}
+      </div>
+
+      {!folder.collapsed && (
+        <SidebarTreeLevel
+          nodes={folder.children}
+          depth={depth + 1}
+          editingId={editingId}
+          editingType={editingType}
+          onStartEditingFolder={onStartEditingFolder}
+          onStartEditingWorkspace={onStartEditingWorkspace}
+          onRenameFolder={onRenameFolder}
+          onRenameWorkspace={onRenameWorkspace}
+          onStopEditing={onStopEditing}
+          onContextMenuFolder={onContextMenuFolder}
+          onContextMenuWorkspace={onContextMenuWorkspace}
+          onSelectWorkspace={onSelectWorkspace}
+          onToggleFolder={onToggle}
+          activeWorkspaceId={activeWorkspaceId}
+          deleteTarget={deleteTarget}
+          setDeleteTarget={setDeleteTarget}
+        />
+      )}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// SidebarTreeLevel — recursive level renderer
+// ---------------------------------------------------------------------------
+
+function SidebarTreeLevel({
+  nodes,
+  depth,
+  editingId,
+  editingType,
+  onStartEditingFolder,
+  onStartEditingWorkspace,
+  onRenameFolder,
+  onRenameWorkspace,
+  onStopEditing,
+  onContextMenuFolder,
+  onContextMenuWorkspace,
+  onSelectWorkspace,
+  onToggleFolder,
+  activeWorkspaceId,
+  deleteTarget,
+  setDeleteTarget,
+}: {
+  nodes: SidebarNode[]
+  depth: number
+  editingId: string | null
+  editingType: 'workspace' | 'folder' | null
+  onStartEditingFolder: (id: string) => void
+  onStartEditingWorkspace: (id: string) => void
+  onRenameFolder: (id: string, name: string) => void
+  onRenameWorkspace: (id: string, name: string) => void
+  onStopEditing: () => void
+  onContextMenuFolder: (e: React.MouseEvent, folderId: string) => void
+  onContextMenuWorkspace: (e: React.MouseEvent, workspaceId: string) => void
+  onSelectWorkspace: (id: string) => void
+  onToggleFolder: () => void
+  activeWorkspaceId: string
+  deleteTarget: string | null
+  setDeleteTarget: (id: string | null) => void
+}): JSX.Element {
+  const workspaces = useWorkspaceStore((s) => s.workspaces)
+  const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed)
+
+  const sortableIds = nodes.map((n) =>
+    n.type === 'workspace' ? `ws-${n.workspaceId}` : `folder-${n.id}`,
+  )
+
+  return (
+    <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+      {nodes.map((node) => {
+        if (node.type === 'workspace') {
+          const ws = workspaces.find((w) => w.id === node.workspaceId)
+          if (!ws) return null
+          return (
+            <SortableWorkspaceItem
+              key={`ws-${ws.id}`}
+              workspaceId={ws.id}
+              depth={depth}
+              isActive={ws.id === activeWorkspaceId}
+              isEditing={editingId === ws.id && editingType === 'workspace'}
+              name={ws.name}
+              onSelect={() => onSelectWorkspace(ws.id)}
+              onStartEditing={() => onStartEditingWorkspace(ws.id)}
+              onRename={(name) => onRenameWorkspace(ws.id, name)}
+              onStopEditing={onStopEditing}
+              onContextMenu={(e) => onContextMenuWorkspace(e, ws.id)}
+            />
+          )
+        }
+
+        // folder node
+        return (
+          <SortableFolderItem
+            key={`folder-${node.id}`}
+            folder={node}
+            depth={depth}
+            isEditing={editingId === node.id && editingType === 'folder'}
+            editingId={editingId}
+            editingType={editingType}
+            onToggle={() => toggleFolderCollapsed(node.id)}
+            onStartEditingFolder={onStartEditingFolder}
+            onStartEditingWorkspace={onStartEditingWorkspace}
+            onRenameFolder={onRenameFolder}
+            onRenameWorkspace={onRenameWorkspace}
+            onStopEditing={onStopEditing}
+            onContextMenuFolder={onContextMenuFolder}
+            onContextMenuWorkspace={onContextMenuWorkspace}
+            onSelectWorkspace={onSelectWorkspace}
+            activeWorkspaceId={activeWorkspaceId}
+            deleteTarget={deleteTarget}
+            setDeleteTarget={setDeleteTarget}
+          />
+        )
+      })}
+    </SortableContext>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main Sidebar
+// ---------------------------------------------------------------------------
 
 export default function Sidebar(): JSX.Element {
   const workspaces = useWorkspaceStore((s) => s.workspaces)
@@ -16,19 +358,18 @@ export default function Sidebar(): JSX.Element {
   const removeWorkspace = useWorkspaceStore((s) => s.removeWorkspace)
   const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace)
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace)
-  const folders = useWorkspaceStore((s) => s.folders)
+  const sidebarTree = useWorkspaceStore((s) => s.sidebarTree)
   const addFolder = useWorkspaceStore((s) => s.addFolder)
   const removeFolder = useWorkspaceStore((s) => s.removeFolder)
   const renameFolder = useWorkspaceStore((s) => s.renameFolder)
   const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed)
-  const moveWorkspaceToFolder = useWorkspaceStore((s) => s.moveWorkspaceToFolder)
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen)
+
+  const activeDrag = useDragContext()
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingType, setEditingType] = useState<'workspace' | 'folder' | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
-
-
 
   const startEditingWorkspace = useCallback((id: string) => {
     setEditingId(id)
@@ -45,84 +386,37 @@ export default function Sidebar(): JSX.Element {
     setEditingType(null)
   }, [])
 
-  // Group workspaces by folder
-  const ungroupedWorkspaces = workspaces.filter((ws) => ws.folderId === null)
-
-  const handleWorkspaceContextMenu = useCallback(async (e: React.MouseEvent, ws: (typeof workspaces)[0]) => {
+  const handleWorkspaceContextMenu = useCallback(async (e: React.MouseEvent, workspaceId: string) => {
     e.preventDefault()
     const items: ContextMenuItem[] = [
       { id: 'rename', label: 'Rename' },
-      ...folders.map((f) => ({ id: `move:${f.id}`, label: `Move to ${f.name}` })),
       { id: 'new-folder', label: 'New Folder...' },
-      ...(ws.folderId !== null ? [{ id: 'no-folder', label: 'No Folder' }] : []),
       ...(workspaces.length > 1 ? [{ id: 'delete', label: 'Delete', destructive: true }] : []),
     ]
 
     const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY })
     if (!result) return
 
-    if (result === 'rename') startEditingWorkspace(ws.id)
-    else if (result === 'new-folder') {
-      const fid = addFolder('New Folder')
-      moveWorkspaceToFolder(ws.id, fid)
-    }
-    else if (result === 'no-folder') moveWorkspaceToFolder(ws.id, null)
-    else if (result === 'delete') setDeleteTarget(ws.id)
-    else if (result.startsWith('move:')) moveWorkspaceToFolder(ws.id, result.slice(5))
-  }, [folders, workspaces, startEditingWorkspace, addFolder, moveWorkspaceToFolder])
+    if (result === 'rename') startEditingWorkspace(workspaceId)
+    else if (result === 'new-folder') addFolder('New Folder')
+    else if (result === 'delete') setDeleteTarget(workspaceId)
+  }, [workspaces, startEditingWorkspace, addFolder])
 
   const handleFolderContextMenu = useCallback(async (e: React.MouseEvent, folderId: string) => {
     e.preventDefault()
     const items: ContextMenuItem[] = [
       { id: 'rename', label: 'Rename Folder' },
+      { id: 'add-workspace', label: 'Add Workspace' },
+      { id: 'add-subfolder', label: 'Add Sub-folder' },
       { id: 'delete', label: 'Delete Folder', destructive: true },
     ]
 
     const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY })
     if (result === 'rename') startEditingFolder(folderId)
+    else if (result === 'add-workspace') addWorkspace()
+    else if (result === 'add-subfolder') addFolder('New Folder', folderId)
     else if (result === 'delete') removeFolder(folderId)
-  }, [startEditingFolder, removeFolder])
-
-  const renderWorkspaceItem = (ws: (typeof workspaces)[0], indented = false) => {
-    const isActive = ws.id === activeWorkspaceId
-    const isEditing = editingId === ws.id && editingType === 'workspace'
-
-    return (
-      <div
-        key={ws.id}
-        className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''}`}
-        style={indented ? { paddingLeft: 28 } : undefined}
-        onClick={() => { if (!isEditing) setActiveWorkspace(ws.id) }}
-        onDoubleClick={() => startEditingWorkspace(ws.id)}
-        onContextMenu={(e) => handleWorkspaceContextMenu(e, ws)}
-      >
-        {/* Amber dot */}
-        <span
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: '50%',
-            background: isActive ? 'var(--accent)' : 'var(--foreground-faint)',
-            flexShrink: 0,
-          }}
-        />
-
-        {isEditing ? (
-          <InlineRenameInput
-            initialValue={ws.name}
-            onCommit={(name) => {
-              renameWorkspace(ws.id, name)
-              stopEditing()
-            }}
-            onCancel={stopEditing}
-            className="text-[13px]"
-          />
-        ) : (
-          <span className="flex-1 truncate">{ws.name}</span>
-        )}
-      </div>
-    )
-  }
+  }, [startEditingFolder, addWorkspace, addFolder, removeFolder])
 
   return (
     <div className={`sidebar ${!sidebarOpen ? 'sidebar-collapsed' : ''}`}>
@@ -146,68 +440,26 @@ export default function Sidebar(): JSX.Element {
         </Tooltip>
       </div>
 
-      {/* Workspace list with folders */}
+      {/* Sidebar tree with DnD */}
       <ScrollArea className="ws-list">
-        {/* Folders first */}
-        {folders.map((folder) => {
-          const folderWorkspaces = workspaces.filter((ws) => ws.folderId === folder.id)
-          const isFolderEditing = editingId === folder.id && editingType === 'folder'
-
-          return (
-            <div key={folder.id}>
-              <div
-                className="folder-header no-drag"
-                onClick={() => toggleFolderCollapsed(folder.id)}
-                onContextMenu={(e) => handleFolderContextMenu(e, folder.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '5px 10px',
-                  fontSize: 11,
-                  fontWeight: 600,
-                  textTransform: 'uppercase' as const,
-                  letterSpacing: '0.03em',
-                  color: 'var(--foreground-faint)',
-                  cursor: 'pointer',
-                  userSelect: 'none',
-                  marginTop: 4,
-                }}
-              >
-                {folder.collapsed ? (
-                  <ChevronRight size={10} />
-                ) : (
-                  <ChevronDown size={10} />
-                )}
-                <FolderClosed size={12} style={{ opacity: 0.6 }} />
-                {isFolderEditing ? (
-                  <InlineRenameInput
-                    initialValue={folder.name}
-                    onCommit={(name) => {
-                      renameFolder(folder.id, name)
-                      stopEditing()
-                    }}
-                    onCancel={stopEditing}
-                    className="text-[12px]"
-                  />
-                ) : (
-                  <span className="flex-1 truncate">{folder.name}</span>
-                )}
-              </div>
-
-              {/* Workspaces inside this folder */}
-              {!folder.collapsed && folderWorkspaces.map((ws) => renderWorkspaceItem(ws, true))}
-            </div>
-          )
-        })}
-
-        {/* Separator between folders and ungrouped */}
-        {folders.length > 0 && ungroupedWorkspaces.length > 0 && (
-          <div style={{ height: 1, background: 'var(--border)', margin: '6px 10px' }} />
-        )}
-
-        {/* Ungrouped workspaces */}
-        {ungroupedWorkspaces.map((ws) => renderWorkspaceItem(ws))}
+        <SidebarTreeLevel
+          nodes={sidebarTree}
+          depth={0}
+          editingId={editingId}
+          editingType={editingType}
+          onStartEditingFolder={startEditingFolder}
+          onStartEditingWorkspace={startEditingWorkspace}
+          onRenameFolder={(id, name) => renameFolder(id, name)}
+          onRenameWorkspace={(id, name) => renameWorkspace(id, name)}
+          onStopEditing={stopEditing}
+          onContextMenuFolder={handleFolderContextMenu}
+          onContextMenuWorkspace={handleWorkspaceContextMenu}
+          onSelectWorkspace={(id) => setActiveWorkspace(id)}
+          onToggleFolder={() => {}}
+          activeWorkspaceId={activeWorkspaceId}
+          deleteTarget={deleteTarget}
+          setDeleteTarget={setDeleteTarget}
+        />
       </ScrollArea>
 
       {/* Delete confirmation dialog */}
