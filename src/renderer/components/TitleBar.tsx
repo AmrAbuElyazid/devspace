@@ -5,23 +5,20 @@ export default function TitleBar(): React.JSX.Element {
 
   return (
     <div
-      className="drag-region flex items-center shrink-0 w-full border-b"
+      className="drag-region flex items-center shrink-0 w-full select-none"
       style={{
         height: 'var(--titlebar-height)',
-        backgroundColor: 'var(--background)',
-        borderColor: 'var(--border)',
+        backgroundColor: 'var(--sidebar-bg)',
+        borderBottom: '1px solid var(--border)',
       }}
     >
-      {/* Padding for macOS traffic light buttons */}
-      {isMac && <div className="shrink-0" style={{ width: 90 }} />}
-
-      {/* App title */}
-      <div
-        className="text-sm font-medium select-none"
-        style={{ color: 'var(--muted-foreground)', paddingLeft: isMac ? 0 : 16 }}
+      {isMac && <div className="shrink-0" style={{ width: 78 }} />}
+      <span
+        className="text-xs font-medium tracking-wide"
+        style={{ color: 'var(--muted-foreground)', letterSpacing: '0.04em' }}
       >
         DevSpace
-      </div>
+      </span>
     </div>
   )
 }

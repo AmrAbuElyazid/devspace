@@ -55,15 +55,15 @@ export default function TabBar(): React.JSX.Element {
     [activeWorkspaceId, removeTab],
   )
 
-  if (!activeWorkspace) return <div style={{ height: 36 }} />
+  if (!activeWorkspace) return <div style={{ height: 'var(--tabbar-height)' }} />
 
   return (
     <div
-      className="shrink-0 flex items-end border-b overflow-x-auto"
+      className="shrink-0 flex items-end overflow-x-auto"
       style={{
-        height: 36,
+        height: 'var(--tabbar-height)',
         backgroundColor: 'var(--background)',
-        borderColor: 'var(--border)',
+        borderBottom: '1px solid var(--border)',
       }}
     >
       {/* Tab list */}
@@ -75,14 +75,15 @@ export default function TabBar(): React.JSX.Element {
           <div
             key={tab.id}
             className={cn(
-              'group flex items-center gap-1 shrink-0 px-3 h-full cursor-pointer text-xs select-none transition-colors duration-150',
+              'group tab-item flex items-center gap-1.5 shrink-0 px-3 h-full cursor-pointer text-xs select-none',
+              isActive && 'tab-active',
             )}
             style={{
               maxWidth: 180,
               minWidth: 80,
-              backgroundColor: isActive ? 'var(--card)' : undefined,
               borderBottom: isActive ? '2px solid var(--primary)' : '2px solid transparent',
               color: isActive ? 'var(--foreground)' : 'var(--muted-foreground)',
+              fontWeight: isActive ? 500 : 400,
             }}
             onClick={() => {
               if (!isEditing) setActiveTab(activeWorkspaceId, tab.id)
@@ -97,21 +98,11 @@ export default function TabBar(): React.JSX.Element {
                 handleRemoveTab(tab.id)
               }
             }}
-            onMouseEnter={(e) => {
-              if (!isActive) {
-                e.currentTarget.style.backgroundColor = 'var(--accent)'
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isActive) {
-                e.currentTarget.style.backgroundColor = 'transparent'
-              }
-            }}
           >
             {isEditing ? (
               <input
                 ref={inputRef}
-                className="flex-1 bg-transparent text-xs outline-none border rounded px-1 py-0"
+                className="flex-1 bg-transparent text-xs outline-none border rounded-md px-1.5 py-0"
                 style={{
                   color: 'var(--foreground)',
                   borderColor: 'var(--primary)',
@@ -132,23 +123,19 @@ export default function TabBar(): React.JSX.Element {
                 <span className="truncate">{tab.name}</span>
                 <button
                   className={cn(
-                    'flex items-center justify-center rounded p-0.5 transition-opacity duration-150',
-                    isActive ? 'opacity-60 hover:opacity-100' : 'opacity-0 group-hover:opacity-60 hover:!opacity-100',
+                    'tab-close flex items-center justify-center rounded p-0.5',
+                    isActive
+                      ? 'opacity-50 hover:opacity-100'
+                      : 'opacity-0 group-hover:opacity-50 hover:!opacity-100',
                   )}
                   style={{ color: 'var(--muted-foreground)' }}
                   onClick={(e) => {
                     e.stopPropagation()
                     handleRemoveTab(tab.id)
                   }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.color = 'var(--foreground)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.color = 'var(--muted-foreground)'
-                  }}
                   title="Close tab"
                 >
-                  <X size={12} />
+                  <X size={11} />
                 </button>
               </>
             )}
@@ -159,19 +146,11 @@ export default function TabBar(): React.JSX.Element {
       {/* Add tab button */}
       <button
         onClick={handleAddTab}
-        className="shrink-0 flex items-center justify-center h-full px-2 transition-colors duration-150"
+        className="tab-add-btn shrink-0 flex items-center justify-center h-full px-2"
         style={{ color: 'var(--muted-foreground)' }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = 'var(--accent)'
-          e.currentTarget.style.color = 'var(--foreground)'
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = 'transparent'
-          e.currentTarget.style.color = 'var(--muted-foreground)'
-        }}
         title="Add tab"
       >
-        <Plus size={14} />
+        <Plus size={13} />
       </button>
     </div>
   )
