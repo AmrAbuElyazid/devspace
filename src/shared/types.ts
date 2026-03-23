@@ -1,4 +1,9 @@
-import type { BrowserBounds, BrowserPermissionRequest, BrowserRuntimeState } from './browser'
+import type {
+  BrowserBounds,
+  BrowserPermissionRequest,
+  BrowserRuntimeState,
+  BrowserStopFindAction,
+} from './browser'
 
 export interface PtyCreateOptions {
   cols: number
@@ -58,7 +63,7 @@ export interface BrowserBridge {
   setFocus: (paneId: string) => Promise<void>
   setZoom: (paneId: string, zoom: number) => Promise<void>
   findInPage: (paneId: string, query: string) => Promise<void>
-  stopFindInPage: (paneId: string, action?: 'clearSelection' | 'keepSelection' | 'activateSelection') => Promise<void>
+  stopFindInPage: (paneId: string, action?: BrowserStopFindAction) => Promise<void>
   onStateChange: (callback: (state: BrowserRuntimeState) => void) => () => void
   onPermissionRequest: (callback: (request: BrowserPermissionRequest) => void) => () => void
 }

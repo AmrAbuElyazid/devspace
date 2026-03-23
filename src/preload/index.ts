@@ -1,10 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { DevspaceBridge } from '../shared/types'
 
-function unsupportedBrowserBridgeMethod(method: string): never {
-  throw new Error(`Not implemented: browser.${method}`)
-}
-
 const bridge: DevspaceBridge = {
   platform: process.platform,
 
@@ -86,20 +82,36 @@ const bridge: DevspaceBridge = {
   },
 
   browser: {
-    create: async () => unsupportedBrowserBridgeMethod('create'),
-    destroy: async () => unsupportedBrowserBridgeMethod('destroy'),
-    loadURL: async () => unsupportedBrowserBridgeMethod('loadURL'),
-    goBack: async () => unsupportedBrowserBridgeMethod('goBack'),
-    goForward: async () => unsupportedBrowserBridgeMethod('goForward'),
-    reload: async () => unsupportedBrowserBridgeMethod('reload'),
-    stop: async () => unsupportedBrowserBridgeMethod('stop'),
-    setBounds: async () => unsupportedBrowserBridgeMethod('setBounds'),
-    setFocus: async () => unsupportedBrowserBridgeMethod('setFocus'),
-    setZoom: async () => unsupportedBrowserBridgeMethod('setZoom'),
-    findInPage: async () => unsupportedBrowserBridgeMethod('findInPage'),
-    stopFindInPage: async () => unsupportedBrowserBridgeMethod('stopFindInPage'),
-    onStateChange: () => () => {},
-    onPermissionRequest: () => () => {},
+    create: (paneId, url) => ipcRenderer.invoke('browser:create', paneId, url),
+    destroy: (paneId) => ipcRenderer.invoke('browser:destroy', paneId),
+    loadURL: (paneId, url) => ipcRenderer.invoke('browser:loadURL', paneId, url),
+    goBack: (paneId) => ipcRenderer.invoke('browser:goBack', paneId),
+    goForward: (paneId) => ipcRenderer.invoke('browser:goForward', paneId),
+    reload: (paneId) => ipcRenderer.invoke('browser:reload', paneId),
+    stop: (paneId) => ipcRenderer.invoke('browser:stop', paneId),
+    setBounds: (paneId, bounds) => ipcRenderer.invoke('browser:setBounds', paneId, bounds),
+    setFocus: (paneId) => ipcRenderer.invoke('browser:setFocus', paneId),
+    setZoom: (paneId, zoom) => ipcRenderer.invoke('browser:setZoom', paneId, zoom),
+    findInPage: (paneId, query) => ipcRenderer.invoke('browser:findInPage', paneId, query),
+    stopFindInPage: (paneId, action) => ipcRenderer.invoke('browser:stopFindInPage', paneId, action),
+    onStateChange: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]): void => {
+        callback(state)
+      }
+      ipcRenderer.on('browser:stateChange', listener)
+      return () => {
+        ipcRenderer.removeListener('browser:stateChange', listener)
+      }
+    },
+    onPermissionRequest: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, request: Parameters<typeof callback>[0]): void => {
+        callback(request)
+      }
+      ipcRenderer.on('browser:permissionRequest', listener)
+      return () => {
+        ipcRenderer.removeListener('browser:permissionRequest', listener)
+      }
+    },
   }
 }
 

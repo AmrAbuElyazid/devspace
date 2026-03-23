@@ -3,6 +3,8 @@ import { readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import type { PtyManager } from './pty-manager'
 import type { BrowserSessionManager } from './browser/browser-session-manager'
+import { BrowserPaneManager } from './browser/browser-pane-manager'
+import type { BrowserBounds, BrowserStopFindAction } from '../shared/browser'
 import {
   validateTerminalDimensions,
   validatePtyId,
@@ -30,9 +32,15 @@ function safeOn(channel: string, handler: (event: any, ...args: any[]) => void) 
 export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   ptyManager: PtyManager,
-  _browserSessionManager: BrowserSessionManager
+  browserSessionManager: BrowserSessionManager
 ): void {
   const allowedRoots = [homedir()]
+  const browserPaneManager = new BrowserPaneManager({
+    addChildView: (view) => mainWindow.contentView.addChildView(view),
+    removeChildView: (view) => mainWindow.contentView.removeChildView(view),
+    sendToRenderer: (channel, payload) => mainWindow.webContents.send(channel, payload),
+    getSession: () => browserSessionManager.getSession(),
+  })
 
   // --- PTY handlers ---
 
@@ -235,6 +243,75 @@ export function registerIpcHandlers(
   })
 
   // --- Theme handlers ---
+
+  safeHandle('browser:create', (_event, paneId: unknown, url: unknown) => {
+    if (typeof paneId !== 'string' || typeof url !== 'string') return
+    browserPaneManager.createPane(paneId, url)
+  })
+
+  safeHandle('browser:destroy', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    browserPaneManager.destroyPane(paneId)
+  })
+
+  safeHandle('browser:loadURL', (_event, paneId: unknown, url: unknown) => {
+    if (typeof paneId !== 'string' || typeof url !== 'string') return
+    browserPaneManager.navigate(paneId, url)
+  })
+
+  safeHandle('browser:goBack', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    browserPaneManager.back(paneId)
+  })
+
+  safeHandle('browser:goForward', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    browserPaneManager.forward(paneId)
+  })
+
+  safeHandle('browser:reload', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    browserPaneManager.reload(paneId)
+  })
+
+  safeHandle('browser:stop', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    browserPaneManager.stop(paneId)
+  })
+
+  safeHandle('browser:setBounds', (_event, paneId: unknown, bounds: unknown) => {
+    if (typeof paneId !== 'string' || typeof bounds !== 'object' || bounds === null) return
+    const nextBounds = bounds as Partial<BrowserBounds>
+    if (
+      typeof nextBounds.x !== 'number' ||
+      typeof nextBounds.y !== 'number' ||
+      typeof nextBounds.width !== 'number' ||
+      typeof nextBounds.height !== 'number'
+    ) {
+      return
+    }
+    browserPaneManager.setBounds(paneId, nextBounds as BrowserBounds)
+  })
+
+  safeHandle('browser:setFocus', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    browserPaneManager.focusPane(paneId)
+  })
+
+  safeHandle('browser:setZoom', (_event, paneId: unknown, zoom: unknown) => {
+    if (typeof paneId !== 'string' || typeof zoom !== 'number' || !isFinite(zoom)) return
+    browserPaneManager.setZoom(paneId, zoom)
+  })
+
+  safeHandle('browser:findInPage', (_event, paneId: unknown, query: unknown) => {
+    if (typeof paneId !== 'string' || typeof query !== 'string') return
+    browserPaneManager.findInPage(paneId, query)
+  })
+
+  safeHandle('browser:stopFindInPage', (_event, paneId: unknown, action?: BrowserStopFindAction) => {
+    if (typeof paneId !== 'string') return
+    browserPaneManager.stopFindInPage(paneId, action)
+  })
 
   safeOn('theme:set', (_event, theme: 'light' | 'dark' | 'system') => {
     nativeTheme.themeSource = theme
