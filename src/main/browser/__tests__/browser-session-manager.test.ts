@@ -218,3 +218,52 @@ test('installHandlers does not accumulate duplicate global certificate listeners
 
   assert.equal(listeners.length, 1)
 })
+
+test('global certificate listener uses the latest routing callbacks', () => {
+  let certificateErrorListener: CertificateErrorListener | undefined
+  const reports: Array<{ paneId: string; url: string }> = []
+
+  const manager = new BrowserSessionManager({
+    fromPartition: () => ({
+      setPermissionCheckHandler: () => {},
+      setCertificateVerifyProc: () => {},
+    }) as never,
+  })
+
+  const appModule = {
+    on: (_event: 'certificate-error', listener: CertificateErrorListener) => {
+      certificateErrorListener = listener
+    },
+  }
+
+  manager.installHandlers({
+    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 1 ? 'stale-pane' : undefined,
+    reportCertificateError: (paneId, url) => {
+      reports.push({ paneId, url })
+    },
+    appModule,
+    log: () => {},
+  })
+
+  manager.installHandlers({
+    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 2 ? 'fresh-pane' : undefined,
+    reportCertificateError: (paneId, url) => {
+      reports.push({ paneId, url })
+    },
+    appModule,
+    log: () => {},
+  })
+
+  let trusted: boolean | undefined
+  certificateErrorListener?.(
+    { preventDefault: () => {} },
+    { id: 2 },
+    'https://expired.badssl.com/',
+    'ERR_CERT_AUTHORITY_INVALID',
+    {},
+    (isTrusted) => { trusted = isTrusted },
+  )
+
+  assert.equal(trusted, false)
+  assert.deepEqual(reports, [{ paneId: 'fresh-pane', url: 'https://expired.badssl.com/' }])
+})

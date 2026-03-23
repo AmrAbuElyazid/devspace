@@ -42,6 +42,10 @@ function getElectronApp(): NonNullable<BrowserSessionManagerDeps['appModule']> {
 
 export class BrowserSessionManager {
   private certificateErrorListenerRegistered = false
+  private currentDeps: BrowserSessionManagerDeps | undefined
+  private currentLog: (message: string, meta?: Record<string, unknown>) => void = (message, meta) => {
+    console.warn(message, meta)
+  }
 
   constructor(private readonly sessionModule: BrowserSessionModule = getElectronSession()) {}
 
@@ -54,6 +58,8 @@ export class BrowserSessionManager {
     const log = deps?.log ?? ((message: string, meta?: Record<string, unknown>) => {
       console.warn(message, meta)
     })
+    this.currentDeps = deps
+    this.currentLog = log
 
     ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
       if (!webContents) {
@@ -120,9 +126,11 @@ export class BrowserSessionManager {
       const appModule = deps?.appModule ?? getElectronApp()
       appModule.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
         event.preventDefault()
+        const currentDeps = this.currentDeps
+        const currentLog = this.currentLog
 
         if (!webContents) {
-          log('[browser] missing webContents for certificate error; denying by default', {
+          currentLog('[browser] missing webContents for certificate error; denying by default', {
             url,
             error,
             certificate,
@@ -131,9 +139,9 @@ export class BrowserSessionManager {
           return
         }
 
-        const paneId = deps?.resolvePaneIdForWebContents(webContents.id)
+        const paneId = currentDeps?.resolvePaneIdForWebContents(webContents.id)
         if (!paneId) {
-          log('[browser] unresolved browser certificate error; denying by default', {
+          currentLog('[browser] unresolved browser certificate error; denying by default', {
             webContentsId: webContents.id,
             url,
             error,
@@ -143,7 +151,7 @@ export class BrowserSessionManager {
           return
         }
 
-        deps?.reportCertificateError(paneId, url)
+        currentDeps?.reportCertificateError(paneId, url)
         callback(false)
       })
     }
