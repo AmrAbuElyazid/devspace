@@ -3,6 +3,7 @@ import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { useWorkspaceStore } from '../store/workspace-store'
+import { useSettingsStore } from '../store/settings-store'
 import { toast } from '../hooks/useToast'
 import { THEME_CHANGE_EVENT } from '../hooks/useTheme'
 import type { TerminalConfig } from '../types/workspace'
@@ -10,27 +11,28 @@ import type { TerminalConfig } from '../types/workspace'
 function getTerminalTheme(): ITheme {
   const isDark = document.documentElement.classList.contains('dark')
   return {
-    background: isDark ? '#161618' : '#f5f5f7',
+    background: isDark ? '#09090b' : '#fafaf9',
     foreground: isDark ? '#e5e5e7' : '#1d1d1f',
-    cursor: isDark ? 'rgb(180, 203, 255)' : '#1d1d1f',
-    cursorAccent: isDark ? '#161618' : '#f5f5f7',
-    selectionBackground: isDark ? 'rgba(180, 203, 255, 0.25)' : 'rgba(0, 0, 0, 0.12)',
+    cursor: isDark ? '#facc15' : '#ca8a04',
+    cursorAccent: isDark ? '#09090b' : '#fafaf9',
+    selectionBackground: isDark ? 'rgba(250, 204, 21, 0.15)' : 'rgba(202, 138, 4, 0.15)',
     selectionForeground: undefined,
-    black: isDark ? 'rgb(24, 30, 38)' : '#1a1c22',
-    red: isDark ? 'rgb(255, 122, 142)' : '#dc2626',
-    green: isDark ? 'rgb(134, 231, 149)' : '#16a34a',
-    yellow: isDark ? 'rgb(244, 205, 114)' : '#ca8a04',
-    blue: isDark ? 'rgb(137, 190, 255)' : '#2563eb',
-    magenta: isDark ? 'rgb(208, 176, 255)' : '#9333ea',
-    cyan: isDark ? 'rgb(124, 232, 237)' : '#0891b2',
-    white: isDark ? 'rgb(210, 218, 230)' : '#e0e4ec',
-    brightBlack: isDark ? 'rgb(75, 85, 99)' : '#6b7280',
-    brightRed: isDark ? 'rgb(255, 150, 166)' : '#ef4444',
-    brightGreen: isDark ? 'rgb(162, 255, 175)' : '#22c55e',
-    brightYellow: isDark ? 'rgb(255, 225, 150)' : '#eab308',
-    brightBlue: isDark ? 'rgb(165, 210, 255)' : '#3b82f6',
-    brightMagenta: isDark ? 'rgb(228, 206, 255)' : '#a855f7',
-    brightCyan: isDark ? 'rgb(155, 245, 249)' : '#06b6d4',
+    // Keep ANSI colors the same (they work well with both themes)
+    black: isDark ? '#18181b' : '#1a1c22',
+    red: isDark ? '#ff7a8e' : '#dc2626',
+    green: isDark ? '#86e795' : '#16a34a',
+    yellow: isDark ? '#f4cd72' : '#ca8a04',
+    blue: isDark ? '#89beff' : '#2563eb',
+    magenta: isDark ? '#d0b0ff' : '#9333ea',
+    cyan: isDark ? '#7ce8ed' : '#0891b2',
+    white: isDark ? '#d2dae6' : '#e0e4ec',
+    brightBlack: isDark ? '#4b5563' : '#6b7280',
+    brightRed: isDark ? '#ff96a6' : '#ef4444',
+    brightGreen: isDark ? '#a2ffaf' : '#22c55e',
+    brightYellow: isDark ? '#ffe196' : '#eab308',
+    brightBlue: isDark ? '#a5d2ff' : '#3b82f6',
+    brightMagenta: isDark ? '#e4ceff' : '#a855f7',
+    brightCyan: isDark ? '#9bf5f9' : '#06b6d4',
     brightWhite: isDark ? '#ffffff' : '#111318',
   }
 }
@@ -50,16 +52,22 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): JSX
 
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
 
+  const fontSize = useSettingsStore((s) => s.fontSize)
+  const scrollback = useSettingsStore((s) => s.terminalScrollback)
+  const cursorStyle = useSettingsStore((s) => s.terminalCursorStyle)
+  const defaultShell = useSettingsStore((s) => s.defaultShell)
+
   const initTerminal = useCallback(async () => {
     if (initedRef.current || !containerRef.current) return
     initedRef.current = true
 
     const terminal = new Terminal({
       cursorBlink: true,
-      fontSize: 13,
+      cursorStyle: cursorStyle,
+      fontSize: fontSize,
       lineHeight: 1.3,
       fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, Monaco, 'Courier New', monospace",
-      scrollback: 5000,
+      scrollback: scrollback,
       theme: getTerminalTheme(),
       allowProposedApi: true,
     })
@@ -83,7 +91,7 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): JSX
         cols,
         rows,
         cwd: config.cwd,
-        shell: config.shell,
+        shell: config.shell || defaultShell || undefined,
       })
     } catch (err) {
       terminal.write(
@@ -161,7 +169,7 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): JSX
       terminalRef.current = null
       fitAddonRef.current = null
     }
-  }, [paneId, config.cwd, config.shell, updatePaneConfig])
+  }, [paneId, config.cwd, config.shell, updatePaneConfig, fontSize, scrollback, cursorStyle, defaultShell])
 
   useEffect(() => {
     initTerminal()
