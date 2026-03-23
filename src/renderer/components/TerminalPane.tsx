@@ -3,6 +3,7 @@ import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import { useWorkspaceStore } from '../store/workspace-store'
+import { THEME_CHANGE_EVENT } from '../hooks/useTheme'
 import type { TerminalConfig } from '../types/workspace'
 
 function getTerminalTheme(): ITheme {
@@ -131,23 +132,22 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): Rea
     })
     if (containerRef.current) resizeObserver.observe(containerRef.current)
 
-    // Theme sync: watch <html> class changes for dark/light toggle (t3code pattern)
-    const themeObserver = new MutationObserver(() => {
+    // Theme sync: listen for explicit theme change events from useTheme hook.
+    // The hook dispatches this event AFTER the .dark class has been toggled,
+    // inside a requestAnimationFrame, so the DOM state is guaranteed correct.
+    const handleThemeChange = (): void => {
       const t = terminalRef.current
       if (!t) return
       t.options.theme = getTerminalTheme()
       t.refresh(0, t.rows - 1)
-    })
-    themeObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class', 'style'],
-    })
+    }
+    window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange)
 
     // Cleanup
     cleanupRef.current = () => {
       if (resizeRaf !== null) cancelAnimationFrame(resizeRaf)
       resizeObserver.disconnect()
-      themeObserver.disconnect()
+      window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange)
       cleanupOnData()
       cleanupOnExit()
       terminalOnDataDisposable.dispose()

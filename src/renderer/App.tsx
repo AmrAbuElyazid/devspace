@@ -88,30 +88,28 @@ export default function App(): React.JSX.Element {
       <Sidebar />
       <div className="app-main">
         <TabBar />
-        <div className="app-content" style={{ position: 'relative' }}>
-          {/* Render ALL tabs stacked; hide inactive ones.
-              This prevents terminal/editor unmount on tab switch,
+        <div className="app-content">
+          {/* Render ALL tabs from ALL workspaces, stacked.
+              Only the active workspace's active tab is visible.
+              This prevents terminal/editor unmount on workspace or tab switch,
               preserving PTY sessions and editor state. */}
-          {activeWorkspace?.tabs.map((tab) => {
-            const isActive = tab.id === activeWorkspace.activeTabId
-            return (
-              <div
-                key={tab.id}
-                className="app-tab-layer"
-                data-active={isActive || undefined}
-              >
-                <SplitLayout
-                  node={tab.root}
-                  workspaceId={activeWorkspace.id}
-                  tabId={tab.id}
-                />
-              </div>
-            )
-          })}
-          {(!activeWorkspace || activeWorkspace.tabs.length === 0) && (
-            <div className="h-full flex items-center justify-center text-sm text-[var(--muted-foreground)]">
-              No tab selected
-            </div>
+          {workspaces.map((ws) =>
+            ws.tabs.map((tab) => {
+              const isVisible = ws.id === activeWorkspaceId && tab.id === ws.activeTabId
+              return (
+                <div
+                  key={`${ws.id}::${tab.id}`}
+                  className="app-tab-layer"
+                  data-active={isVisible || undefined}
+                >
+                  <SplitLayout
+                    node={tab.root}
+                    workspaceId={ws.id}
+                    tabId={tab.id}
+                  />
+                </div>
+              )
+            })
           )}
         </div>
       </div>
