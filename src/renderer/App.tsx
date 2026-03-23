@@ -5,6 +5,7 @@ import { useTheme } from './hooks/useTheme'
 import Sidebar from './components/Sidebar'
 import TabBar from './components/TabBar'
 import SplitLayout from './components/SplitLayout'
+import SettingsPage from './components/SettingsPage'
 import type { SplitNode } from './types/workspace'
 import { ToastViewport } from './components/ui/toast'
 
@@ -19,12 +20,38 @@ export default function App(): JSX.Element {
 
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const settingsOpen = useSettingsStore((s) => s.settingsOpen)
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId)
   const activeTab = activeWorkspace?.tabs.find((t) => t.id === activeWorkspace.activeTabId)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
+      // Escape (no mod key required)
+      if (e.key === 'Escape') {
+        const settings = useSettingsStore.getState()
+        if (settings.settingsOpen) {
+          settings.setSettingsOpen(false)
+          e.preventDefault()
+        }
+        return
+      }
+
+      // Ctrl+1-9 for workspace switching (not Cmd)
+      if (e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        const store = useWorkspaceStore.getState()
+        const num = parseInt(e.key, 10)
+        if (num >= 1 && num <= 9) {
+          e.preventDefault()
+          const targetIndex = num - 1
+          if (targetIndex < store.workspaces.length) {
+            store.setActiveWorkspace(store.workspaces[targetIndex].id)
+          }
+        }
+        return
+      }
+
+      // Cmd/Ctrl shortcuts
       const isMod = e.metaKey || e.ctrlKey
       if (!isMod) return
 
@@ -34,39 +61,31 @@ export default function App(): JSX.Element {
       const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
       if (!ws) return
 
-      if (key === 't' && !shiftKey) {
-        e.preventDefault()
-        store.addTab(ws.id)
-        return
-      }
-      if (key === 'w' && !shiftKey) {
-        e.preventDefault()
-        store.removeTab(ws.id, ws.activeTabId)
-        return
-      }
-      if (key === 'b' && !shiftKey) {
-        e.preventDefault()
-        settings.toggleSidebar()
-        return
-      }
-      if (key === '\\' && !shiftKey) {
+      if (key === 't' && !shiftKey) { e.preventDefault(); store.addTab(ws.id); return }
+      if (key === 'w' && !shiftKey) { e.preventDefault(); store.removeTab(ws.id, ws.activeTabId); return }
+      if (key === 'b' && !shiftKey) { e.preventDefault(); settings.toggleSidebar(); return }
+      if (key === 'n' && !shiftKey) { e.preventDefault(); store.addWorkspace(); return }
+      if (key === ',') { e.preventDefault(); settings.toggleSettings(); return }
+
+      if (key === 'd' && !shiftKey) {
         e.preventDefault()
         const tab = ws.tabs.find((t) => t.id === ws.activeTabId)
         if (tab) {
-          const paneId = findFirstLeaf(tab.root)
-          if (paneId) store.splitPane(ws.id, tab.id, paneId, 'horizontal')
+          const targetPaneId = tab.focusedPaneId || findFirstLeaf(tab.root)
+          if (targetPaneId) store.splitPane(ws.id, tab.id, targetPaneId, 'horizontal')
         }
         return
       }
-      if ((key === '\\' || key === '|') && shiftKey) {
+      if (key === 'd' && shiftKey) {
         e.preventDefault()
         const tab = ws.tabs.find((t) => t.id === ws.activeTabId)
         if (tab) {
-          const paneId = findFirstLeaf(tab.root)
-          if (paneId) store.splitPane(ws.id, tab.id, paneId, 'vertical')
+          const targetPaneId = tab.focusedPaneId || findFirstLeaf(tab.root)
+          if (targetPaneId) store.splitPane(ws.id, tab.id, targetPaneId, 'vertical')
         }
         return
       }
+
       const num = parseInt(key, 10)
       if (num >= 1 && num <= 9) {
         e.preventDefault()
@@ -93,7 +112,7 @@ export default function App(): JSX.Element {
               Only the active workspace's active tab is visible.
               This prevents terminal/editor unmount on workspace or tab switch,
               preserving PTY sessions and editor state. */}
-          {workspaces.map((ws) =>
+           {workspaces.map((ws) =>
             ws.tabs.map((tab) => {
               const isVisible = ws.id === activeWorkspaceId && tab.id === ws.activeTabId
               return (
@@ -111,6 +130,9 @@ export default function App(): JSX.Element {
               )
             })
           )}
+
+          {/* Settings overlay */}
+          {settingsOpen && <SettingsPage />}
         </div>
       </div>
       <ToastViewport />
