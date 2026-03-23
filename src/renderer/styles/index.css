@@ -611,3 +611,33 @@ body::after {
 .split-view-view > .sash-container > .sash.active {
   background-color: var(--primary) !important;
 }
+
+/* ─── Button Depth ───────────────────────────────────────────────────── */
+/* Subtle inner edge highlights for a 3D feel */
+
+.btn-depth {
+  position: relative;
+}
+.btn-depth::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+/* Light mode: subtle top shadow */
+:root .btn-depth::before {
+  box-shadow: 0 1px rgba(0, 0, 0, 0.04);
+}
+/* Dark mode: subtle bottom highlight */
+.dark .btn-depth::before {
+  box-shadow: 0 -1px rgba(255, 255, 255, 0.06);
+}
+
+/* ─── Elevated Surface ───────────────────────────────────────────────── */
+/* Prevent background from bleeding under semi-transparent borders.
+   Apply to: dialog content, menu content, popover content, card surfaces. */
+
+.surface-elevated {
+  background-clip: padding-box;
+}
