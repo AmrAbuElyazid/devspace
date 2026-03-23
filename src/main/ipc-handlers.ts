@@ -346,7 +346,7 @@ export function registerIpcHandlers(
 
   safeHandle('browser:resolvePermission', (_event, requestToken: unknown, decision: unknown) => {
     if (typeof requestToken !== 'string') return
-    if (decision !== 'granted' && decision !== 'denied') return
+    if (decision !== 'allow-once' && decision !== 'allow-for-session' && decision !== 'deny') return
     browserPaneManager.resolvePermission(requestToken, decision as BrowserPermissionDecision)
   })
 
