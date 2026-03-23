@@ -9,6 +9,15 @@ syncShellEnvironment()
 
 const ptyManager = new PtyManager()
 
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  console.error('[main] Uncaught exception:', error)
+})
+
+process.on('unhandledRejection', (reason) => {
+  console.error('[main] Unhandled rejection:', reason)
+})
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1200,
@@ -25,6 +34,11 @@ function createWindow(): void {
       sandbox: false,
       webviewTag: true
     }
+  })
+
+  // Deny all new window requests
+  mainWindow.webContents.setWindowOpenHandler(() => {
+    return { action: 'deny' }
   })
 
   registerIpcHandlers(mainWindow, ptyManager)

@@ -1,28 +1,60 @@
 import { ipcMain, dialog, shell, nativeTheme, BrowserWindow } from 'electron'
 import { readFileSync, writeFileSync } from 'fs'
+import { homedir } from 'os'
 import type { PtyManager } from './pty-manager'
-import type { PtyCreateOptions } from '../shared/types'
+import {
+  validateTerminalDimensions,
+  validatePtyId,
+  validatePtyWriteData,
+  validateFilePath,
+  getSafeExternalUrl
+} from './validation'
 
 export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   ptyManager: PtyManager
 ): void {
+  const allowedRoots = [homedir()]
+
   // --- PTY handlers ---
 
-  ipcMain.handle('pty:create', (_event, options: PtyCreateOptions) => {
-    return ptyManager.create(options)
+  ipcMain.handle('pty:create', (_event, options: unknown) => {
+    if (typeof options !== 'object' || options === null) {
+      return { error: 'Invalid pty create options' }
+    }
+    const opts = options as Record<string, unknown>
+    const dims = validateTerminalDimensions(opts.cols, opts.rows)
+    if (!dims) {
+      return { error: 'Invalid terminal dimensions (cols: 20-400, rows: 5-200)' }
+    }
+    return ptyManager.create({
+      cols: dims.cols,
+      rows: dims.rows,
+      cwd: typeof opts.cwd === 'string' ? opts.cwd : undefined,
+      shell: typeof opts.shell === 'string' ? opts.shell : undefined
+    })
   })
 
-  ipcMain.on('pty:write', (_event, ptyId: string, data: string) => {
-    ptyManager.write(ptyId, data)
+  ipcMain.on('pty:write', (_event, ptyId: unknown, data: unknown) => {
+    const validId = validatePtyId(ptyId)
+    if (!validId) return
+    const validData = validatePtyWriteData(data)
+    if (!validData) return
+    ptyManager.write(validId, validData)
   })
 
-  ipcMain.on('pty:resize', (_event, ptyId: string, cols: number, rows: number) => {
-    ptyManager.resize(ptyId, cols, rows)
+  ipcMain.on('pty:resize', (_event, ptyId: unknown, cols: unknown, rows: unknown) => {
+    const validId = validatePtyId(ptyId)
+    if (!validId) return
+    const dims = validateTerminalDimensions(cols, rows)
+    if (!dims) return
+    ptyManager.resize(validId, dims.cols, dims.rows)
   })
 
-  ipcMain.on('pty:destroy', (_event, ptyId: string) => {
-    ptyManager.destroy(ptyId)
+  ipcMain.on('pty:destroy', (_event, ptyId: unknown) => {
+    const validId = validatePtyId(ptyId)
+    if (!validId) return
+    ptyManager.destroy(validId)
   })
 
   // PTY event forwarding to renderer
@@ -79,8 +111,12 @@ export function registerIpcHandlers(
       }
 
       const filePath = result.filePaths[0]
-      const content = readFileSync(filePath, 'utf-8')
-      return { path: filePath, content }
+      try {
+        const content = readFileSync(filePath, 'utf-8')
+        return { path: filePath, content }
+      } catch {
+        return { error: `Failed to read file: ${filePath}` }
+      }
     }
   )
 
@@ -98,18 +134,39 @@ export function registerIpcHandlers(
 
   // --- File system handlers ---
 
-  ipcMain.handle('fs:readFile', (_event, filePath: string) => {
-    return readFileSync(filePath, 'utf-8')
+  ipcMain.handle('fs:readFile', (_event, filePath: unknown) => {
+    const validPath = validateFilePath(filePath, allowedRoots)
+    if (!validPath) {
+      return { error: 'File path is not allowed' }
+    }
+    try {
+      return readFileSync(validPath, 'utf-8')
+    } catch {
+      return { error: `Failed to read file: ${validPath}` }
+    }
   })
 
-  ipcMain.handle('fs:writeFile', (_event, filePath: string, content: string) => {
-    writeFileSync(filePath, content, 'utf-8')
+  ipcMain.handle('fs:writeFile', (_event, filePath: unknown, content: unknown) => {
+    const validPath = validateFilePath(filePath, allowedRoots)
+    if (!validPath) {
+      return { error: 'File path is not allowed' }
+    }
+    if (typeof content !== 'string') {
+      return { error: 'File content must be a string' }
+    }
+    try {
+      writeFileSync(validPath, content, 'utf-8')
+    } catch {
+      return { error: `Failed to write file: ${validPath}` }
+    }
   })
 
   // --- Shell handlers ---
 
-  ipcMain.on('shell:openExternal', (_event, url: string) => {
-    shell.openExternal(url)
+  ipcMain.on('shell:openExternal', (_event, url: unknown) => {
+    const safeUrl = getSafeExternalUrl(url)
+    if (!safeUrl) return
+    shell.openExternal(safeUrl)
   })
 
   // --- Theme handlers ---
