@@ -40,8 +40,10 @@ function getTabChrome(tab: Tab, panes: Record<string, Pane>, runtimeByPaneId: Br
   }
 
   const runtime = runtimeByPaneId[primaryPaneId]
+  const browserTitle = runtime?.title?.trim() || pane.title || tab.name
+
   return {
-    title: runtime?.title || pane.title || tab.name,
+    title: browserTitle,
     faviconUrl: runtime?.faviconUrl ?? null,
   }
 }

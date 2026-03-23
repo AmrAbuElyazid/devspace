@@ -25,6 +25,13 @@ export interface BrowserSessionManagerDeps {
   log?: (message: string, meta?: Record<string, unknown>) => void
 }
 
+type CertificateVerifyRequest = {
+  hostname?: string
+  errorCode?: number
+  verificationResult?: string
+  webContents?: { id: number } | null
+}
+
 function getElectronSession(): BrowserSessionModule {
   return require('electron').session as typeof import('electron').session
 }
@@ -69,6 +76,42 @@ export class BrowserSessionManager {
 
       return false
     })
+
+    if (typeof ses.setCertificateVerifyProc === 'function') {
+      ses.setCertificateVerifyProc((request: CertificateVerifyRequest, callback: (verificationResult: number) => void) => {
+        if (request.errorCode === 0 || request.verificationResult === 'net::OK') {
+          callback(-3)
+          return
+        }
+
+        const url = request.hostname ? `https://${request.hostname}/` : 'about:blank'
+        const webContentsId = request.webContents?.id
+        if (typeof webContentsId !== 'number') {
+          log('[browser] missing webContents for certificate verification; denying by default', {
+            hostname: request.hostname,
+            errorCode: request.errorCode,
+            verificationResult: request.verificationResult,
+          })
+          callback(-2)
+          return
+        }
+
+        const paneId = deps?.resolvePaneIdForWebContents(webContentsId)
+        if (!paneId) {
+          log('[browser] unresolved browser certificate verification; denying by default', {
+            webContentsId,
+            hostname: request.hostname,
+            errorCode: request.errorCode,
+            verificationResult: request.verificationResult,
+          })
+          callback(-2)
+          return
+        }
+
+        deps?.reportCertificateError(paneId, url)
+        callback(-2)
+      })
+    }
 
     const appModule = deps?.appModule ?? getElectronApp()
     appModule.on('certificate-error', (event, webContents, url, error, certificate, callback) => {

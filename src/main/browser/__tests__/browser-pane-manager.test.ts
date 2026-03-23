@@ -83,3 +83,25 @@ test('runtime updates capture title, favicon, and loading state', () => {
   assert.equal(manager.getRuntimeState('pane-1')?.faviconUrl, 'https://example.com/favicon.ico')
   assert.equal(manager.getRuntimeState('pane-1')?.isLoading, true)
 })
+
+test('navigate keeps persisted runtime url unchanged until navigation commits', () => {
+  const loadCalls: string[] = []
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        loadURL: (url: string) => {
+          loadCalls.push(url)
+        },
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  manager.navigate('pane-1', 'https://next.example.com')
+
+  assert.deepEqual(loadCalls, ['https://example.com', 'https://next.example.com'])
+  assert.equal(manager.getRuntimeState('pane-1')?.url, 'https://example.com')
+})
