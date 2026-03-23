@@ -44,7 +44,7 @@ export interface DevspaceBridge {
     onNativeThemeChange: (callback: (theme: 'light' | 'dark') => void) => () => void
   }
   browser: {
-    create: (paneId: string, url: string, bounds: BrowserBounds) => Promise<void>
+    create: (paneId: string, url: string) => Promise<void>
     destroy: (paneId: string) => Promise<void>
     loadURL: (paneId: string, url: string) => Promise<void>
     goBack: (paneId: string) => Promise<void>
