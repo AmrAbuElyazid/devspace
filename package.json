@@ -10,10 +10,13 @@
     "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null; electron-vite postinstall 2>/dev/null; true"
   },
   "dependencies": {
+    "@base-ui-components/react": "^1.0.0-rc.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
+    "class-variance-authority": "^0.7.1",
     "nanoid": "^5.1.5",
-    "node-pty": "^1.0.0"
+    "node-pty": "^1.0.0",
+    "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -22,7 +25,6 @@
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.4.0",
     "allotment": "^1.0.7",
-    "autoprefixer": "^10.4.27",
     "electron": "^35.0.0",
     "electron-vite": "^3.0.0",
     "lucide-react": "^0.468.0",
