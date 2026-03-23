@@ -10,6 +10,10 @@ test('adds http for localhost host:port input', () => {
   assert.equal(normalizeBrowserInput('localhost:3000'), 'http://localhost:3000')
 })
 
+test('adds http for bare localhost input', () => {
+  assert.equal(normalizeBrowserInput('localhost'), 'http://localhost')
+})
+
 test('maps plain text to Google search', () => {
   assert.equal(
     normalizeBrowserInput('hello world'),
