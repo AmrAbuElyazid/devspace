@@ -602,6 +602,23 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const tab = ws.tabs.find((t) => t.id === tabId)
         if (!tab) return
 
+        // Find sibling pane ID before removing (for focus transfer)
+        let siblingPaneId: string | null = null
+        if (tab.focusedPaneId === paneId) {
+          const parentResult = findParentOfPane(tab.root, paneId)
+          if (parentResult && parentResult.parent.type === 'branch') {
+            const siblings = parentResult.parent.children
+            // Prefer previous sibling, else next
+            const siblingIndex = parentResult.index > 0 ? parentResult.index - 1 : 1
+            if (siblingIndex < siblings.length && siblingIndex >= 0) {
+              const sibling = siblings[siblingIndex]
+              siblingPaneId = sibling.type === 'leaf'
+                ? sibling.paneId
+                : collectPaneIds(sibling)[0] || null
+            }
+          }
+        }
+
         // Destroy PTY before removing pane
         destroyPtyForPane(panes, paneId)
 
@@ -615,6 +632,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           const emptyPane = createEmptyPane()
           newPanes[emptyPane.id] = emptyPane
           newRoot = { type: 'leaf', paneId: emptyPane.id }
+          siblingPaneId = emptyPane.id
         }
 
         set({
@@ -623,7 +641,13 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               ? {
                   ...w,
                   tabs: w.tabs.map((t) =>
-                    t.id === tabId ? { ...t, root: newRoot } : t,
+                    t.id === tabId
+                      ? {
+                          ...t,
+                          root: newRoot,
+                          focusedPaneId: tab.focusedPaneId === paneId ? siblingPaneId : t.focusedPaneId,
+                        }
+                      : t,
                   ),
                 }
               : w,
