@@ -1,4 +1,4 @@
-import { forwardRef, type ComponentProps, type HTMLAttributes } from 'react'
+import React, { forwardRef, type ComponentProps, type HTMLAttributes } from 'react'
 import { Menu as MenuPrimitive } from '@base-ui-components/react/menu'
 import { ContextMenu as ContextMenuPrimitive } from '@base-ui-components/react/context-menu'
 import { cn } from '../../lib/utils'
@@ -126,21 +126,31 @@ const ContextMenuTrigger = forwardRef<HTMLDivElement, ContextMenuTriggerProps>(
 )
 ContextMenuTrigger.displayName = 'ContextMenuTrigger'
 
-const ContextMenuContent = forwardRef<HTMLDivElement, MenuContentProps>(
-  ({ className, side = 'bottom', sideOffset = 4, align = 'start', ...props }, ref) => (
-    <ContextMenuPrimitive.Portal>
+/**
+ * Simple context menu content that renders at the cursor position via a fixed-position portal.
+ * We avoid Base UI's Positioner entirely because Floating UI's clipping-ancestor detection
+ * constrains the popup to the sidebar's overflow:hidden boundary.
+ */
+function ContextMenuContent({
+  className,
+  children,
+  ...props
+}: {
+  className?: string
+  children: React.ReactNode
+} & React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <ContextMenuPrimitive.Portal container={document.body}>
       <ContextMenuPrimitive.Positioner
-        side={side}
-        sideOffset={sideOffset}
-        align={align}
+        side="bottom"
+        align="start"
+        sideOffset={4}
         positionMethod="fixed"
-        collisionPadding={10}
-        collisionBoundary={document.body}
+        style={{ overflow: 'visible' }}
       >
         <ContextMenuPrimitive.Popup
-          ref={ref}
           className={cn(
-            'z-50 min-w-[160px] rounded-lg border border-border bg-background p-1 shadow-lg',
+            'z-[9999] min-w-[180px] rounded-lg border border-border bg-background p-1 shadow-lg',
             'text-foreground outline-none',
             'origin-[var(--transform-origin)]',
             'transition-all duration-150',
@@ -149,12 +159,13 @@ const ContextMenuContent = forwardRef<HTMLDivElement, MenuContentProps>(
             className,
           )}
           {...props}
-        />
+        >
+          {children}
+        </ContextMenuPrimitive.Popup>
       </ContextMenuPrimitive.Positioner>
     </ContextMenuPrimitive.Portal>
-  ),
-)
-ContextMenuContent.displayName = 'ContextMenuContent'
+  )
+}
 
 // ── Exports ───────────────────────────────────────────────────────────────────
 
