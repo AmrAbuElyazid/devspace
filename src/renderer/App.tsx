@@ -88,14 +88,27 @@ export default function App(): React.JSX.Element {
       <Sidebar />
       <div className="app-main">
         <TabBar />
-        <div className="app-content">
-          {activeTab ? (
-            <SplitLayout
-              node={activeTab.root}
-              workspaceId={activeWorkspace!.id}
-              tabId={activeTab.id}
-            />
-          ) : (
+        <div className="app-content" style={{ position: 'relative' }}>
+          {/* Render ALL tabs stacked; hide inactive ones.
+              This prevents terminal/editor unmount on tab switch,
+              preserving PTY sessions and editor state. */}
+          {activeWorkspace?.tabs.map((tab) => {
+            const isActive = tab.id === activeWorkspace.activeTabId
+            return (
+              <div
+                key={tab.id}
+                className="app-tab-layer"
+                data-active={isActive || undefined}
+              >
+                <SplitLayout
+                  node={tab.root}
+                  workspaceId={activeWorkspace.id}
+                  tabId={tab.id}
+                />
+              </div>
+            )
+          })}
+          {(!activeWorkspace || activeWorkspace.tabs.length === 0) && (
             <div className="h-full flex items-center justify-center text-sm text-[var(--muted-foreground)]">
               No tab selected
             </div>
