@@ -15,4 +15,6 @@ test('maps plain text to Google search', () => {
 
 test('keeps explicit schemes unchanged', () => {
   assert.equal(normalizeBrowserInput('https://example.com/a'), 'https://example.com/a')
+  assert.equal(normalizeBrowserInput('about:blank'), 'about:blank')
+  assert.equal(normalizeBrowserInput('mailto:test@example.com'), 'mailto:test@example.com')
 })

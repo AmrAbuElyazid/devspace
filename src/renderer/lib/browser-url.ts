@@ -3,6 +3,10 @@ export function normalizeBrowserInput(input: string): string {
 
   if (!url) return 'about:blank'
 
+  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(url)) {
+    return url
+  }
+
   if (!url.includes('://') && url.includes('.') && !url.includes(' ')) {
     url = `https://${url}`
   }
