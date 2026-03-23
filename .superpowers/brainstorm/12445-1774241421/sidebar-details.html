@@ -1,0 +1,270 @@
+<h2>Single Sidebar — What's Inside?</h2>
+<p class="subtitle">Same structure, different levels of richness. Click any that appeal — multi-select is on.</p>
+
+<div class="cards" data-multiselect>
+  <!-- Option A: Minimal -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 14px; background: #18181b;">
+      <div style="width: 100%; height: 100%; display: flex; flex-direction: column; font-size: 11px; font-family: -apple-system, system-ui, sans-serif; color: rgba(255,255,255,0.9); padding: 6px;">
+        <!-- Header area (traffic lights zone) -->
+        <div style="height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 2px; margin-bottom: 10px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#ff5f57;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#febc2e;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#28c840;"></div>
+        </div>
+        <!-- Workspaces -->
+        <div style="color: rgba(255,255,255,0.3); font-size: 9px; font-weight: 500; padding: 4px 6px; margin-bottom: 4px; display: flex; justify-content: space-between;">
+          WORKSPACES <span style="color: rgba(255,255,255,0.15); cursor: pointer;">+</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; background: rgba(250,204,21,0.08); border-radius: 5px; padding: 6px 8px; margin-bottom: 2px;">
+          <span style="color: #facc15; font-size: 8px;">●</span>
+          <span>API Project</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4); margin-bottom: 2px;">
+          <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>
+          <span>Frontend</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4);">
+          <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>
+          <span>DevOps</span>
+        </div>
+        <div style="flex: 1;"></div>
+        <!-- Theme toggle -->
+        <div style="display: flex; border-radius: 5px; background: rgba(255,255,255,0.04); overflow: hidden; margin-top: 6px;">
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">☀</div>
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">◐</div>
+          <div style="flex:1; text-align:center; padding: 4px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); font-size: 9px; border-radius: 4px;">☾</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Pure Minimal</h3>
+      <p>Just workspaces and a theme toggle. Nothing else. The sidebar stays out of your way entirely.</p>
+    </div>
+  </div>
+
+  <!-- Option B: With metadata -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 14px; background: #18181b;">
+      <div style="width: 100%; height: 100%; display: flex; flex-direction: column; font-size: 11px; font-family: -apple-system, system-ui, sans-serif; color: rgba(255,255,255,0.9); padding: 6px;">
+        <div style="height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 2px; margin-bottom: 10px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#ff5f57;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#febc2e;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#28c840;"></div>
+        </div>
+        <div style="color: rgba(255,255,255,0.3); font-size: 9px; font-weight: 500; padding: 4px 6px; margin-bottom: 4px; display: flex; justify-content: space-between;">
+          WORKSPACES <span style="color: rgba(255,255,255,0.15);">+</span>
+        </div>
+        <!-- Active workspace with metadata -->
+        <div style="background: rgba(250,204,21,0.08); border-radius: 5px; padding: 6px 8px; margin-bottom: 2px;">
+          <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
+            <span style="color: #facc15; font-size: 8px;">●</span>
+            <span>API Project</span>
+            <span style="margin-left: auto; color: rgba(255,255,255,0.2); font-size: 9px;">3 tabs</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4); margin-bottom: 2px;">
+          <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>
+          <span>Frontend</span>
+          <span style="margin-left: auto; color: rgba(255,255,255,0.12); font-size: 9px;">1 tab</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4);">
+          <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>
+          <span>DevOps</span>
+          <span style="margin-left: auto; color: rgba(255,255,255,0.12); font-size: 9px;">2 tabs</span>
+        </div>
+        <div style="flex: 1;"></div>
+        <div style="display: flex; border-radius: 5px; background: rgba(255,255,255,0.04); overflow: hidden; margin-top: 6px;">
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">☀</div>
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">◐</div>
+          <div style="flex:1; text-align:center; padding: 4px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); font-size: 9px; border-radius: 4px;">☾</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. With Tab Counts</h3>
+      <p>Workspace list with subtle tab count badges. Gives you a sense of what's open without adding clutter.</p>
+    </div>
+  </div>
+
+  <!-- Option C: Colored dots -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 14px; background: #18181b;">
+      <div style="width: 100%; height: 100%; display: flex; flex-direction: column; font-size: 11px; font-family: -apple-system, system-ui, sans-serif; color: rgba(255,255,255,0.9); padding: 6px;">
+        <div style="height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 2px; margin-bottom: 10px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#ff5f57;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#febc2e;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#28c840;"></div>
+        </div>
+        <div style="color: rgba(255,255,255,0.3); font-size: 9px; font-weight: 500; padding: 4px 6px; margin-bottom: 4px; display: flex; justify-content: space-between;">
+          WORKSPACES <span style="color: rgba(255,255,255,0.15);">+</span>
+        </div>
+        <!-- Color-coded workspaces -->
+        <div style="display: flex; align-items: center; gap: 6px; background: rgba(250,204,21,0.08); border-radius: 5px; padding: 6px 8px; margin-bottom: 2px;">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #facc15;"></span>
+          <span>API Project</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4); margin-bottom: 2px;">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #38bdf8;"></span>
+          <span>Frontend</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4); margin-bottom: 2px;">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #a78bfa;"></span>
+          <span>DevOps</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4);">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #fb923c;"></span>
+          <span>Personal</span>
+        </div>
+        <div style="flex: 1;"></div>
+        <div style="display: flex; border-radius: 5px; background: rgba(255,255,255,0.04); overflow: hidden; margin-top: 6px;">
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">☀</div>
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">◐</div>
+          <div style="flex:1; text-align:center; padding: 4px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); font-size: 9px; border-radius: 4px;">☾</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. User-Colored Dots</h3>
+      <p>Each workspace gets a user-chosen color dot. Right-click to pick a color. Helps distinguish workspaces at a glance — especially useful with many workspaces.</p>
+    </div>
+  </div>
+
+  <!-- Option D: Grouped/Folders -->
+  <div class="card" data-choice="d" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 14px; background: #18181b;">
+      <div style="width: 100%; height: 100%; display: flex; flex-direction: column; font-size: 11px; font-family: -apple-system, system-ui, sans-serif; color: rgba(255,255,255,0.9); padding: 6px;">
+        <div style="height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 2px; margin-bottom: 10px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#ff5f57;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#febc2e;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#28c840;"></div>
+        </div>
+        <div style="color: rgba(255,255,255,0.3); font-size: 9px; font-weight: 500; padding: 4px 6px; margin-bottom: 4px; display: flex; justify-content: space-between;">
+          WORKSPACES <span style="color: rgba(255,255,255,0.15);">+</span>
+        </div>
+        <!-- Folder group -->
+        <div style="color: rgba(255,255,255,0.3); font-size: 9px; padding: 4px 6px; display: flex; align-items: center; gap: 4px; margin-bottom: 2px;">
+          <span style="font-size: 7px;">▼</span> Work
+        </div>
+        <div style="padding-left: 14px;">
+          <div style="display: flex; align-items: center; gap: 6px; background: rgba(250,204,21,0.08); border-radius: 5px; padding: 5px 8px; margin-bottom: 2px;">
+            <span style="color: #facc15; font-size: 8px;">●</span>
+            <span style="font-size: 10px;">API Project</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; padding: 5px 8px; color: rgba(255,255,255,0.4); margin-bottom: 2px;">
+            <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>
+            <span style="font-size: 10px;">Frontend</span>
+          </div>
+        </div>
+        <div style="color: rgba(255,255,255,0.3); font-size: 9px; padding: 4px 6px; display: flex; align-items: center; gap: 4px; margin-top: 4px; margin-bottom: 2px;">
+          <span style="font-size: 7px;">▶</span> Personal
+        </div>
+        <!-- Ungrouped -->
+        <div style="display: flex; align-items: center; gap: 6px; padding: 5px 8px; color: rgba(255,255,255,0.4); margin-top: 4px;">
+          <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>
+          <span style="font-size: 10px;">Scratch</span>
+        </div>
+        <div style="flex: 1;"></div>
+        <div style="display: flex; border-radius: 5px; background: rgba(255,255,255,0.04); overflow: hidden; margin-top: 6px;">
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">☀</div>
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">◐</div>
+          <div style="flex:1; text-align:center; padding: 4px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); font-size: 9px; border-radius: 4px;">☾</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>D. Collapsible Folders</h3>
+      <p>Your item #4 — optional grouping. Drag workspaces into folders, or leave them ungrouped. Folders collapse to hide workspaces you don't need right now.</p>
+    </div>
+  </div>
+
+  <!-- Option E: Running process indicators -->
+  <div class="card" data-choice="e" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 14px; background: #18181b;">
+      <div style="width: 100%; height: 100%; display: flex; flex-direction: column; font-size: 11px; font-family: -apple-system, system-ui, sans-serif; color: rgba(255,255,255,0.9); padding: 6px;">
+        <div style="height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 2px; margin-bottom: 10px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#ff5f57;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#febc2e;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#28c840;"></div>
+        </div>
+        <div style="color: rgba(255,255,255,0.3); font-size: 9px; font-weight: 500; padding: 4px 6px; margin-bottom: 4px; display: flex; justify-content: space-between;">
+          WORKSPACES <span style="color: rgba(255,255,255,0.15);">+</span>
+        </div>
+        <!-- Active with process count -->
+        <div style="display: flex; align-items: center; gap: 6px; background: rgba(250,204,21,0.08); border-radius: 5px; padding: 6px 8px; margin-bottom: 2px;">
+          <span style="color: #facc15; font-size: 8px;">●</span>
+          <span>API Project</span>
+          <span style="margin-left: auto; display: flex; align-items: center; gap: 3px;">
+            <span style="color: #4ade80; font-size: 7px;">●</span>
+            <span style="color: rgba(255,255,255,0.25); font-size: 9px;">2</span>
+          </span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4); margin-bottom: 2px;">
+          <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>
+          <span>Frontend</span>
+          <span style="margin-left: auto; display: flex; align-items: center; gap: 3px;">
+            <span style="color: #4ade80; font-size: 7px;">●</span>
+            <span style="color: rgba(255,255,255,0.15); font-size: 9px;">1</span>
+          </span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4);">
+          <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>
+          <span>DevOps</span>
+        </div>
+        <div style="flex: 1;"></div>
+        <div style="display: flex; border-radius: 5px; background: rgba(255,255,255,0.04); overflow: hidden; margin-top: 6px;">
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">☀</div>
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">◐</div>
+          <div style="flex:1; text-align:center; padding: 4px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); font-size: 9px; border-radius: 4px;">☾</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>E. Process Indicators</h3>
+      <p>Tiny green dot + count showing active terminal processes per workspace. Know at a glance which workspaces have running servers/watchers. No count = no active terminals.</p>
+    </div>
+  </div>
+
+  <!-- Option F: Keyboard-first -->
+  <div class="card" data-choice="f" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 14px; background: #18181b;">
+      <div style="width: 100%; height: 100%; display: flex; flex-direction: column; font-size: 11px; font-family: -apple-system, system-ui, sans-serif; color: rgba(255,255,255,0.9); padding: 6px;">
+        <div style="height: 24px; display: flex; align-items: center; gap: 6px; padding: 0 2px; margin-bottom: 10px;">
+          <div style="width:10px;height:10px;border-radius:50%;background:#ff5f57;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#febc2e;"></div>
+          <div style="width:10px;height:10px;border-radius:50%;background:#28c840;"></div>
+        </div>
+        <div style="color: rgba(255,255,255,0.3); font-size: 9px; font-weight: 500; padding: 4px 6px; margin-bottom: 4px; display: flex; justify-content: space-between;">
+          WORKSPACES <span style="color: rgba(255,255,255,0.15);">+</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; background: rgba(250,204,21,0.08); border-radius: 5px; padding: 6px 8px; margin-bottom: 2px;">
+          <span style="color: #facc15; font-size: 8px;">●</span>
+          <span>API Project</span>
+          <span style="margin-left: auto; background: rgba(255,255,255,0.06); border-radius: 3px; padding: 1px 5px; font-size: 9px; color: rgba(255,255,255,0.25); font-family: monospace;">⌃1</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4); margin-bottom: 2px;">
+          <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>
+          <span>Frontend</span>
+          <span style="margin-left: auto; background: rgba(255,255,255,0.04); border-radius: 3px; padding: 1px 5px; font-size: 9px; color: rgba(255,255,255,0.15); font-family: monospace;">⌃2</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4);">
+          <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>
+          <span>DevOps</span>
+          <span style="margin-left: auto; background: rgba(255,255,255,0.04); border-radius: 3px; padding: 1px 5px; font-size: 9px; color: rgba(255,255,255,0.15); font-family: monospace;">⌃3</span>
+        </div>
+        <div style="flex: 1;"></div>
+        <div style="display: flex; border-radius: 5px; background: rgba(255,255,255,0.04); overflow: hidden; margin-top: 6px;">
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">☀</div>
+          <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.25); font-size: 9px;">◐</div>
+          <div style="flex:1; text-align:center; padding: 4px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7); font-size: 9px; border-radius: 4px;">☾</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>F. Shortcut Hints</h3>
+      <p>Each workspace shows its Ctrl+N shortcut inline. Teaches the user keyboard navigation. Shortcuts fade to near-invisible so they don't add visual noise.</p>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top: 1.5rem;">These are mix-and-match — you can combine features from multiple options (e.g. colored dots + process indicators + folders).</p>

@@ -48,7 +48,7 @@ export default function Sidebar(): JSX.Element {
   // Group workspaces by folder
   const ungroupedWorkspaces = workspaces.filter((ws) => ws.folderId === null)
 
-  const renderWorkspaceItem = (ws: (typeof workspaces)[0]) => {
+  const renderWorkspaceItem = (ws: (typeof workspaces)[0], indented = false) => {
     const isActive = ws.id === activeWorkspaceId
     const isEditing = editingId === ws.id && editingType === 'workspace'
 
@@ -57,6 +57,7 @@ export default function Sidebar(): JSX.Element {
         <ContextMenuTrigger>
           <div
             className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''}`}
+            style={indented ? { paddingLeft: 28 } : undefined}
             onClick={() => { if (!isEditing) setActiveWorkspace(ws.id) }}
             onDoubleClick={() => startEditingWorkspace(ws.id)}
           >
@@ -160,18 +161,22 @@ export default function Sidebar(): JSX.Element {
               <ContextMenu>
                 <ContextMenuTrigger>
                   <div
-                    className="folder-header no-drag"
-                    onClick={() => toggleFolderCollapsed(folder.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '4px 12px',
-                      fontSize: 12,
-                      color: 'var(--foreground-muted)',
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                    }}
+                  className="folder-header no-drag"
+                  onClick={() => toggleFolderCollapsed(folder.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '5px 10px',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    textTransform: 'uppercase' as const,
+                    letterSpacing: '0.03em',
+                    color: 'var(--foreground-faint)',
+                    cursor: 'pointer',
+                    userSelect: 'none',
+                    marginTop: 4,
+                  }}
                   >
                     {folder.collapsed ? (
                       <ChevronRight size={10} />
@@ -207,10 +212,15 @@ export default function Sidebar(): JSX.Element {
               </ContextMenu>
 
               {/* Workspaces inside this folder */}
-              {!folder.collapsed && folderWorkspaces.map((ws) => renderWorkspaceItem(ws))}
+              {!folder.collapsed && folderWorkspaces.map((ws) => renderWorkspaceItem(ws, true))}
             </div>
           )
         })}
+
+        {/* Separator between folders and ungrouped */}
+        {folders.length > 0 && ungroupedWorkspaces.length > 0 && (
+          <div style={{ height: 1, background: 'var(--border)', margin: '6px 10px' }} />
+        )}
 
         {/* Ungrouped workspaces */}
         {ungroupedWorkspaces.map((ws) => renderWorkspaceItem(ws))}

@@ -1,0 +1,132 @@
+<h2>Sidebar Structure</h2>
+<p class="subtitle">How should workspaces and navigation be organized?</p>
+
+<div class="cards">
+  <!-- Option A: Single sidebar -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 12px; background: #18181b;">
+      <div style="width: 100%; height: 100%; display: flex; border-radius: 6px; overflow: hidden; font-size: 11px; font-family: -apple-system, system-ui, sans-serif;">
+        <!-- Single sidebar -->
+        <div style="width: 180px; background: #18181b; padding: 10px; border-right: 1px solid rgba(255,255,255,0.07); display: flex; flex-direction: column;">
+          <div style="color: rgba(255,255,255,0.3); font-size: 9px; font-weight: 500; padding: 4px 6px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+            WORKSPACES <span style="color: rgba(255,255,255,0.2);">+</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; background: rgba(250,204,21,0.08); border-radius: 5px; padding: 6px 8px; color: rgba(255,255,255,0.9); margin-bottom: 2px;">
+            <span style="color: #facc15; font-size: 8px;">●</span>API Project
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4); margin-bottom: 2px;">
+            <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>Frontend
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4); margin-bottom: 2px;">
+            <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>DevOps
+          </div>
+          <div style="flex: 1;"></div>
+          <!-- Theme toggle at bottom -->
+          <div style="display: flex; border-radius: 5px; background: rgba(255,255,255,0.04); overflow: hidden; margin-top: 8px;">
+            <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.3); font-size: 9px;">☀</div>
+            <div style="flex:1; text-align:center; padding: 4px; color: rgba(255,255,255,0.3); font-size: 9px;">◐</div>
+            <div style="flex:1; text-align:center; padding: 4px; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.8); font-size: 9px; border-radius: 4px;">☾</div>
+          </div>
+        </div>
+        <!-- Main -->
+        <div style="flex: 1; background: #111113; display: flex; flex-direction: column;">
+          <div style="display: flex; border-bottom: 1px solid rgba(255,255,255,0.05); background: #18181b; padding: 0 6px;">
+            <div style="padding: 7px 14px; color: #facc15; font-size: 10px; border-bottom: 2px solid #facc15;">server.ts</div>
+            <div style="padding: 7px 14px; color: rgba(255,255,255,0.3); font-size: 10px;">tests</div>
+          </div>
+          <div style="flex: 1; display: flex; gap: 1px; padding: 2px;">
+            <div style="flex: 1; background: #111113; padding: 8px;">
+              <div style="color: rgba(255,255,255,0.2); font-size: 8px;">editor content</div>
+            </div>
+            <div style="width: 1px; background: rgba(255,255,255,0.05);"></div>
+            <div style="flex: 1; background: #09090b; padding: 8px;">
+              <div style="color: rgba(255,255,255,0.2); font-size: 8px;">terminal</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Single Sidebar</h3>
+      <p>What you have now, refined. Workspace list + theme toggle. Simple and compact. Sidebar collapses with ⌘B.</p>
+    </div>
+  </div>
+
+  <!-- Option B: Activity bar + sidebar -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 12px; background: #18181b;">
+      <div style="width: 100%; height: 100%; display: flex; border-radius: 6px; overflow: hidden; font-size: 11px; font-family: -apple-system, system-ui, sans-serif;">
+        <!-- Activity bar (icon rail) -->
+        <div style="width: 40px; background: #141416; display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; border-right: 1px solid rgba(255,255,255,0.05);">
+          <div style="width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #facc15; font-size: 12px; background: rgba(250,204,21,0.08);">▦</div>
+          <div style="width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.3); font-size: 12px;">⚙</div>
+          <div style="flex:1;"></div>
+          <div style="width: 28px; height: 28px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.3); font-size: 12px;">☾</div>
+        </div>
+        <!-- Sidebar panel -->
+        <div style="width: 160px; background: #18181b; padding: 10px; border-right: 1px solid rgba(255,255,255,0.07); display: flex; flex-direction: column;">
+          <div style="color: rgba(255,255,255,0.3); font-size: 9px; font-weight: 500; padding: 4px 6px; margin-bottom: 4px;">WORKSPACES</div>
+          <div style="display: flex; align-items: center; gap: 6px; background: rgba(250,204,21,0.08); border-radius: 5px; padding: 6px 8px; color: rgba(255,255,255,0.9); margin-bottom: 2px;">
+            <span style="color: #facc15; font-size: 8px;">●</span>API Project
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4); margin-bottom: 2px;">
+            <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>Frontend
+          </div>
+          <div style="display: flex; align-items: center; gap: 6px; padding: 6px 8px; color: rgba(255,255,255,0.4);">
+            <span style="color: rgba(255,255,255,0.15); font-size: 8px;">●</span>DevOps
+          </div>
+        </div>
+        <!-- Main -->
+        <div style="flex: 1; background: #111113; display: flex; flex-direction: column;">
+          <div style="display: flex; border-bottom: 1px solid rgba(255,255,255,0.05); background: #18181b; padding: 0 6px;">
+            <div style="padding: 7px 14px; color: #facc15; font-size: 10px; border-bottom: 2px solid #facc15;">server.ts</div>
+            <div style="padding: 7px 14px; color: rgba(255,255,255,0.3); font-size: 10px;">tests</div>
+          </div>
+          <div style="flex: 1; padding: 8px;">
+            <div style="color: rgba(255,255,255,0.2); font-size: 8px;">content area</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Activity Bar + Panel</h3>
+      <p>Narrow icon rail on the far left (workspaces, settings, theme). Clicking an icon opens/closes the sidebar panel. More extensible if you add features later (file tree, search, etc.).</p>
+    </div>
+  </div>
+
+  <!-- Option C: Collapsible to icons -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding: 12px; background: #18181b;">
+      <div style="width: 100%; height: 100%; display: flex; border-radius: 6px; overflow: hidden; font-size: 11px; font-family: -apple-system, system-ui, sans-serif;">
+        <!-- Collapsed sidebar (icon-only) -->
+        <div style="width: 44px; background: #18181b; display: flex; flex-direction: column; align-items: center; padding: 10px 0; gap: 6px; border-right: 1px solid rgba(255,255,255,0.07);">
+          <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(250,204,21,0.1); display: flex; align-items: center; justify-content: center; color: #facc15; font-size: 10px; font-weight: 600;">AP</div>
+          <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(255,255,255,0.04); display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.35); font-size: 10px; font-weight: 500;">FE</div>
+          <div style="width: 30px; height: 30px; border-radius: 6px; background: rgba(255,255,255,0.04); display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.35); font-size: 10px; font-weight: 500;">DO</div>
+          <div style="flex:1;"></div>
+          <div style="width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.2); font-size: 14px;">+</div>
+        </div>
+        <!-- Main -->
+        <div style="flex: 1; background: #111113; display: flex; flex-direction: column;">
+          <div style="display: flex; border-bottom: 1px solid rgba(255,255,255,0.05); background: #18181b; padding: 0 6px;">
+            <div style="padding: 7px 14px; color: #facc15; font-size: 10px; border-bottom: 2px solid #facc15;">server.ts</div>
+            <div style="padding: 7px 14px; color: rgba(255,255,255,0.3); font-size: 10px;">tests</div>
+          </div>
+          <div style="flex: 1; display: flex; gap: 1px; padding: 2px;">
+            <div style="flex: 1; background: #111113; padding: 8px;">
+              <div style="color: rgba(255,255,255,0.2); font-size: 8px;">editor content</div>
+            </div>
+            <div style="width: 1px; background: rgba(255,255,255,0.05);"></div>
+            <div style="flex: 1; background: #09090b; padding: 8px;">
+              <div style="color: rgba(255,255,255,0.2); font-size: 8px;">terminal</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Avatar Sidebar</h3>
+      <p>Workspaces as 2-letter avatar icons in a narrow rail. Click to switch. Hover or ⌘B expands to full sidebar with names. Maximum content area by default — very Slack-like.</p>
+    </div>
+  </div>
+</div>
