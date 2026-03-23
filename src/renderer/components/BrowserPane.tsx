@@ -11,6 +11,7 @@ import { useBrowserStore } from '../store/browser-store'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
 import BrowserSecurityIndicator from './browser/BrowserSecurityIndicator'
+import BrowserFindBar from './browser/BrowserFindBar'
 import type { BrowserConfig } from '../types/workspace'
 import type { ReactElement } from 'react'
 
@@ -30,6 +31,10 @@ export default function BrowserPane({
   const placeholderRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId])
+  const isFindBarOpen = useBrowserStore((s) => s.findBarOpenByPaneId[paneId] ?? false)
+  const addressBarFocusToken = useBrowserStore((s) => s.addressBarFocusTokenByPaneId[paneId] ?? 0)
+  const findBarFocusToken = useBrowserStore((s) => s.findBarFocusTokenByPaneId[paneId] ?? 0)
+  const closeFindBar = useBrowserStore((s) => s.closeFindBar)
   const initialUrl = useMemo(() => normalizeBrowserInput(config.url || 'about:blank'), [config.url])
   const [inputUrl, setInputUrl] = useState(initialUrl)
   const hasCertificateError = runtimeState?.securityLabel === 'Certificate error'
@@ -69,6 +74,26 @@ export default function BrowserPane({
   }, [runtimeState?.url])
 
   useEffect(() => {
+    if (!runtimeState) {
+      return
+    }
+
+    const desiredZoom = config.zoom ?? 1
+    if (Math.abs(runtimeState.currentZoom - desiredZoom) > 0.001) {
+      void window.api.browser.setZoom(paneId, desiredZoom)
+    }
+  }, [config.zoom, paneId, runtimeState])
+
+  useEffect(() => {
+    if (addressBarFocusToken === 0) {
+      return
+    }
+
+    inputRef.current?.focus()
+    inputRef.current?.select()
+  }, [addressBarFocusToken])
+
+  useEffect(() => {
     const nextVisible = isVisible && !shouldHideNativeView
     const action = nextVisible ? window.api.browser.show : window.api.browser.hide
     void action(paneId)
@@ -81,6 +106,7 @@ export default function BrowserPane({
   const canGoForward = runtimeState?.canGoForward ?? false
   const isSecure = runtimeState?.isSecure ?? false
   const securityLabel = runtimeState?.securityLabel ?? null
+  const findState = runtimeState?.find
 
   const handleNavigate = useCallback((value: string) => {
     const normalized = normalizeBrowserInput(value)
@@ -110,6 +136,11 @@ export default function BrowserPane({
       inputRef.current?.blur()
     }
   }, [currentUrl, handleNavigate, inputUrl])
+
+  const handleCloseFindBar = useCallback(() => {
+    closeFindBar(paneId)
+    void window.api.browser.stopFindInPage(paneId)
+  }, [closeFindBar, paneId])
 
   return (
     <div className="browser-pane-shell">
@@ -174,6 +205,17 @@ export default function BrowserPane({
           </Button>
         </Tooltip>
       </div>
+
+      {isFindBarOpen && (
+        <BrowserFindBar
+          paneId={paneId}
+          query={findState?.query ?? ''}
+          activeMatch={findState?.activeMatch ?? 0}
+          totalMatches={findState?.totalMatches ?? 0}
+          focusToken={findBarFocusToken}
+          onClose={handleCloseFindBar}
+        />
+      )}
 
       {isLoading && <div className="browser-loading-bar" />}
 

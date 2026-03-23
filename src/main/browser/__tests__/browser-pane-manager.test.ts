@@ -144,3 +144,43 @@ test('explicit certificate error security state is preserved on runtime patch', 
   assert.equal(runtimeState?.isSecure, false)
   assert.equal(runtimeState?.securityLabel, 'Certificate error')
 })
+
+test('find result updates active and total matches', () => {
+  const manager = makeManager()
+
+  manager.createPane('pane-1', 'https://example.com')
+  manager.applyFindResult('pane-1', { query: 'hello', activeMatch: 2, totalMatches: 5 })
+
+  assert.deepEqual(manager.getRuntimeState('pane-1')?.find, {
+    query: 'hello',
+    activeMatch: 2,
+    totalMatches: 5,
+  })
+})
+
+test('found-in-page event updates stored match counts', () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>()
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        on: (event: string, listener: (...args: unknown[]) => void) => {
+          listeners.set(event, listener)
+        },
+        loadURL: () => Promise.resolve(),
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  manager.findInPage('pane-1', 'hello')
+  listeners.get('found-in-page')?.({}, { activeMatchOrdinal: 2, matches: 5 })
+
+  assert.deepEqual(manager.getRuntimeState('pane-1')?.find, {
+    query: 'hello',
+    activeMatch: 2,
+    totalMatches: 5,
+  })
+})

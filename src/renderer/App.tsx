@@ -14,11 +14,31 @@ import type { SplitNode } from './types/workspace'
 import { ToastViewport } from './components/ui/toast'
 import { FolderClosed } from 'lucide-react'
 import { findFolder } from './lib/sidebar-tree'
+import type { BrowserConfig, Pane } from './types/workspace'
 
 function findFirstLeaf(node: SplitNode): string | null {
   if (node.type === 'leaf') return node.paneId
   if (node.children.length > 0) return findFirstLeaf(node.children[0])
   return null
+}
+
+function getActiveFocusedBrowserPane(): Pane | null {
+  const store = useWorkspaceStore.getState()
+  const ws = store.workspaces.find((workspace) => workspace.id === store.activeWorkspaceId)
+  if (!ws) return null
+
+  const tab = ws.tabs.find((nextTab) => nextTab.id === ws.activeTabId)
+  if (!tab) return null
+
+  const paneId = tab.focusedPaneId || findFirstLeaf(tab.root)
+  if (!paneId) return null
+
+  const pane = store.panes[paneId]
+  return pane?.type === 'browser' ? pane : null
+}
+
+function clampZoom(zoom: number): number {
+  return Math.min(3, Math.max(0.25, Number(zoom.toFixed(2))))
 }
 
 function subscribeToBrowserEvents(listeners: BrowserBridgeListeners): BrowserBridgeUnsubscribe {
@@ -45,6 +65,7 @@ export default function App(): JSX.Element {
   const handleRuntimeStateChange = useBrowserStore((s) => s.handleRuntimeStateChange)
   const setPendingPermissionRequest = useBrowserStore((s) => s.setPendingPermissionRequest)
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
+  const updateBrowserPaneZoom = useWorkspaceStore((s) => s.updateBrowserPaneZoom)
 
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
@@ -64,11 +85,14 @@ export default function App(): JSX.Element {
             updatePaneConfig(paneId, { url })
           },
           persistCommittedNavigation: state.isLoading === false,
+          persistZoomChange: (paneId, zoom) => {
+            updateBrowserPaneZoom(paneId, zoom)
+          },
         })
       },
       onPermissionRequest: setPendingPermissionRequest,
     })
-  }, [handleRuntimeStateChange, setPendingPermissionRequest, updatePaneConfig])
+  }, [handleRuntimeStateChange, setPendingPermissionRequest, updateBrowserPaneZoom, updatePaneConfig])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
@@ -100,7 +124,7 @@ export default function App(): JSX.Element {
       const isMod = e.metaKey || e.ctrlKey
       if (!isMod) return
 
-      const { key, shiftKey } = e
+      const { key, shiftKey, altKey } = e
       const store = useWorkspaceStore.getState()
       const settings = useSettingsStore.getState()
       const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
@@ -138,6 +162,70 @@ export default function App(): JSX.Element {
         if (targetIndex < ws.tabs.length) {
           store.setActiveTab(ws.id, ws.tabs[targetIndex].id)
         }
+        return
+      }
+
+      const browserPane = getActiveFocusedBrowserPane()
+      if (!browserPane) {
+        return
+      }
+
+      const paneId = browserPane.id
+      const browserStore = useBrowserStore.getState()
+      const browserConfig = browserPane.config as BrowserConfig
+      const currentZoom = useBrowserStore.getState().runtimeByPaneId[paneId]?.currentZoom ?? browserConfig.zoom ?? 1
+
+      if (key === 'l' && !shiftKey) {
+        e.preventDefault()
+        browserStore.requestAddressBarFocus(paneId)
+        return
+      }
+
+      if (key === 'r' && !shiftKey) {
+        e.preventDefault()
+        void window.api.browser.reload(paneId)
+        return
+      }
+
+      if (key === '[' && !shiftKey) {
+        e.preventDefault()
+        void window.api.browser.back(paneId)
+        return
+      }
+
+      if (key === ']' && !shiftKey) {
+        e.preventDefault()
+        void window.api.browser.forward(paneId)
+        return
+      }
+
+      if (key === 'f' && !shiftKey) {
+        e.preventDefault()
+        browserStore.requestFindBarFocus(paneId)
+        return
+      }
+
+      if ((key === 'i' || key === 'I') && altKey) {
+        e.preventDefault()
+        void window.api.browser.toggleDevTools(paneId)
+        return
+      }
+
+      if (key === '=' || key === '+') {
+        e.preventDefault()
+        void window.api.browser.setZoom(paneId, clampZoom(currentZoom + 0.1))
+        return
+      }
+
+      if (key === '-') {
+        e.preventDefault()
+        void window.api.browser.setZoom(paneId, clampZoom(currentZoom - 0.1))
+        return
+      }
+
+      if (key === '0') {
+        e.preventDefault()
+        void window.api.browser.resetZoom(paneId)
       }
     }
 

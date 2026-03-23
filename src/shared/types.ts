@@ -1,4 +1,5 @@
 import type {
+  BrowserFindInPageOptions,
   BrowserBounds,
   BrowserPermissionDecision,
   BrowserPermissionRequest,
@@ -74,7 +75,7 @@ export interface BrowserBridge {
   setFocus: (paneId: string) => Promise<void>
   setZoom: (paneId: string, zoom: number) => Promise<void>
   resetZoom: (paneId: string) => Promise<void>
-  findInPage: (paneId: string, query: string) => Promise<void>
+  findInPage: (paneId: string, query: string, options?: BrowserFindInPageOptions) => Promise<void>
   stopFindInPage: (paneId: string, action?: BrowserStopFindAction) => Promise<void>
   toggleDevTools: (paneId: string) => Promise<void>
   showContextMenu: (paneId: string, position?: { x: number; y: number }) => Promise<void>

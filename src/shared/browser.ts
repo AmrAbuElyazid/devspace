@@ -13,6 +13,11 @@ export interface BrowserFindState {
   totalMatches: number
 }
 
+export interface BrowserFindInPageOptions {
+  forward?: boolean
+  findNext?: boolean
+}
+
 export type BrowserStopFindAction = 'clearSelection' | 'keepSelection' | 'activateSelection'
 export type BrowserPermissionDecision = 'allow-once' | 'allow-for-session' | 'deny'
 

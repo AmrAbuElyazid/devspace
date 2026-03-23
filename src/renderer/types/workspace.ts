@@ -8,10 +8,7 @@ export interface TerminalConfig {
 
 export interface BrowserConfig {
   url: string
-}
-
-export interface BrowserPanePreferences {
-  zoom: number
+  zoom?: number
 }
 
 export interface EditorConfig {

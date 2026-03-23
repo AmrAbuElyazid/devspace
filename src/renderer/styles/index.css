@@ -705,6 +705,39 @@
   z-index: 2;
 }
 
+.browser-find-bar {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background: color-mix(in srgb, var(--card) 92%, var(--background));
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 2;
+}
+
+.browser-find-input {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--foreground);
+  font-size: 11px;
+  outline: none;
+}
+
+.browser-find-count {
+  min-width: 62px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
 .browser-pane-shell {
   height: 100%;
   width: 100%;
