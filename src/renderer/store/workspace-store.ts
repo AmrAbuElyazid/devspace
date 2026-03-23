@@ -169,6 +169,17 @@ function createDefaultWorkspace(
 }
 
 // ---------------------------------------------------------------------------
+// PTY cleanup helper
+// ---------------------------------------------------------------------------
+
+function destroyPtyForPane(panes: Record<string, Pane>, paneId: string): void {
+  const pane = panes[paneId]
+  if (pane && pane.type === 'terminal' && pane.config?.ptyId) {
+    window.api.pty.destroy(pane.config.ptyId as string)
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
 
@@ -271,6 +282,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           }
         }
 
+        // Destroy PTYs for all terminal panes being removed
+        for (const pid of paneIdsToRemove) {
+          destroyPtyForPane(panes, pid)
+        }
+
         const newPanes = { ...panes }
         for (const pid of paneIdsToRemove) {
           delete newPanes[pid]
@@ -350,8 +366,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const tab = ws.tabs.find((t) => t.id === tabId)
         if (!tab) return
 
-        // Clean up panes
+        // Destroy PTYs and clean up panes
         const paneIdsToRemove = collectPaneIds(tab.root)
+        for (const pid of paneIdsToRemove) {
+          destroyPtyForPane(panes, pid)
+        }
         const newPanes = { ...panes }
         for (const pid of paneIdsToRemove) {
           delete newPanes[pid]
@@ -431,7 +450,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       removePane(paneId) {
-        const newPanes = { ...get().panes }
+        const { panes } = get()
+        destroyPtyForPane(panes, paneId)
+        const newPanes = { ...panes }
         delete newPanes[paneId]
         set({ panes: newPanes })
       },
@@ -463,6 +484,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const { panes } = get()
         const pane = panes[paneId]
         if (!pane) return
+
+        // Destroy PTY if changing away from terminal
+        if (pane.type === 'terminal' && type !== 'terminal') {
+          destroyPtyForPane(panes, paneId)
+        }
 
         set({
           panes: {
@@ -530,6 +556,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const tab = ws.tabs.find((t) => t.id === tabId)
         if (!tab) return
 
+        // Destroy PTY before removing pane
+        destroyPtyForPane(panes, paneId)
+
         const newPanes = { ...panes }
         delete newPanes[paneId]
 
@@ -579,7 +608,16 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       partialize: (state) => ({
         workspaces: state.workspaces,
         activeWorkspaceId: state.activeWorkspaceId,
-        panes: state.panes,
+        panes: Object.fromEntries(
+          Object.entries(state.panes).map(([id, pane]) => {
+            if (pane.type === 'terminal') {
+              const config = { ...pane.config } as Record<string, unknown>
+              delete config.ptyId
+              return [id, { ...pane, config }]
+            }
+            return [id, pane]
+          })
+        ),
       }),
     },
   ),
