@@ -7,7 +7,7 @@ import EditorPane from './EditorPane'
 import BrowserPane from './BrowserPane'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
-import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem, MenuSeparator } from './ui/menu'
+import type { ContextMenuItem } from '../../shared/types'
 import type { PaneType, TerminalConfig, EditorConfig, BrowserConfig } from '../types/workspace'
 
 interface PaneContainerProps {
@@ -95,54 +95,58 @@ export default function PaneContainer({
       className={`h-full w-full flex flex-col pane-focus-ring ${isFocused ? 'pane-focused' : ''}`}
       onMouseDown={handleFocus}
     >
-      <ContextMenu>
-        <ContextMenuTrigger>
-          <div className="pane-toolbar">
-            <div className="pane-toolbar-title">
-              <TypeIcon size={12} style={{ opacity: 0.6 }} />
-              <span>{pane.title}</span>
-            </div>
-            <div className="pane-actions">
-              <Tooltip content="Split Right" shortcut="⌘D">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="pane-action"
-                  onClick={handleSplitH}
-                >
-                  <Columns2 size={12} />
-                </Button>
-              </Tooltip>
-              <Tooltip content="Split Down" shortcut="⌘⇧D">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="pane-action"
-                  onClick={handleSplitV}
-                >
-                  <Rows2 size={12} />
-                </Button>
-              </Tooltip>
-              <Tooltip content="Close Pane">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="pane-action pane-action-close"
-                  onClick={handleClose}
-                >
-                  <X size={12} />
-                </Button>
-              </Tooltip>
-            </div>
-          </div>
-        </ContextMenuTrigger>
-        <ContextMenuContent side="bottom" align="start">
-          <MenuItem onClick={handleSplitH} shortcut="⌘D">Split Horizontal</MenuItem>
-          <MenuItem onClick={handleSplitV} shortcut="⌘⇧D">Split Vertical</MenuItem>
-          <MenuSeparator />
-          <MenuItem onClick={handleClose} destructive>Close Pane</MenuItem>
-        </ContextMenuContent>
-      </ContextMenu>
+      <div
+        className="pane-toolbar"
+        onContextMenu={async (e) => {
+          e.preventDefault()
+          const items: ContextMenuItem[] = [
+            { id: 'split-h', label: 'Split Right' },
+            { id: 'split-v', label: 'Split Down' },
+            { id: 'close', label: 'Close Pane', destructive: true },
+          ]
+          const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY })
+          if (result === 'split-h') handleSplitH()
+          else if (result === 'split-v') handleSplitV()
+          else if (result === 'close') handleClose()
+        }}
+      >
+        <div className="pane-toolbar-title">
+          <TypeIcon size={12} style={{ opacity: 0.6 }} />
+          <span>{pane.title}</span>
+        </div>
+        <div className="pane-actions">
+          <Tooltip content="Split Right" shortcut="⌘D">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="pane-action"
+              onClick={handleSplitH}
+            >
+              <Columns2 size={12} />
+            </Button>
+          </Tooltip>
+          <Tooltip content="Split Down" shortcut="⌘⇧D">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="pane-action"
+              onClick={handleSplitV}
+            >
+              <Rows2 size={12} />
+            </Button>
+          </Tooltip>
+          <Tooltip content="Close Pane">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="pane-action pane-action-close"
+              onClick={handleClose}
+            >
+              <X size={12} />
+            </Button>
+          </Tooltip>
+        </div>
+      </div>
       <div className="flex-1 overflow-hidden">
         <PaneContent paneId={paneId} pane={pane} workspaceId={workspaceId} tabId={tabId} />
       </div>
