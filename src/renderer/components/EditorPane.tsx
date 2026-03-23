@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { FolderOpen, Save, FileCode } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
@@ -64,6 +64,9 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): React.J
   const isDirty = content !== savedContent
   const isDark = document.documentElement.classList.contains('dark')
 
+  // Use ref to always have the latest save function available to Monaco's command
+  const handleSaveRef = useRef<() => Promise<void>>(() => Promise.resolve())
+
   const handleSave = useCallback(async () => {
     if (!filePath) return
     try {
@@ -73,6 +76,10 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): React.J
       console.error('Failed to save file:', err)
     }
   }, [filePath, content])
+
+  useEffect(() => {
+    handleSaveRef.current = handleSave
+  }, [handleSave])
 
   const handleOpenFile = useCallback(async () => {
     const result = await window.api.dialog.openFile()
@@ -98,14 +105,14 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): React.J
     (editor, monacoInstance) => {
       editorRef.current = editor
 
-      // Register Cmd+S / Ctrl+S
+      // Register Cmd+S / Ctrl+S (use ref to avoid stale closure)
       editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
-        handleSave()
+        handleSaveRef.current()
       })
 
       editor.focus()
     },
-    [handleSave],
+    [],
   )
 
   const handleChange = useCallback((value: string | undefined) => {
