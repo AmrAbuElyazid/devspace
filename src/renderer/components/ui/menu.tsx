@@ -1,5 +1,6 @@
 import { forwardRef, type ComponentProps, type HTMLAttributes } from 'react'
 import { Menu as MenuPrimitive } from '@base-ui-components/react/menu'
+import { ContextMenu as ContextMenuPrimitive } from '@base-ui-components/react/context-menu'
 import { cn } from '../../lib/utils'
 
 // ── Root ──────────────────────────────────────────────────────────────────────
@@ -110,7 +111,46 @@ function MenuLabel({
   )
 }
 
+// ── Context Menu (right-click) ────────────────────────────────────────────────
+
+type ContextMenuProps = ComponentProps<typeof ContextMenuPrimitive.Root>
+
+function ContextMenu(props: ContextMenuProps) {
+  return <ContextMenuPrimitive.Root {...props} />
+}
+
+type ContextMenuTriggerProps = ComponentProps<typeof ContextMenuPrimitive.Trigger>
+
+const ContextMenuTrigger = forwardRef<HTMLDivElement, ContextMenuTriggerProps>(
+  (props, ref) => <ContextMenuPrimitive.Trigger ref={ref} render={<div />} {...props} />,
+)
+ContextMenuTrigger.displayName = 'ContextMenuTrigger'
+
+const ContextMenuContent = forwardRef<HTMLDivElement, MenuContentProps>(
+  ({ className, side = 'bottom', sideOffset = 4, align = 'start', ...props }, ref) => (
+    <ContextMenuPrimitive.Portal>
+      <ContextMenuPrimitive.Positioner side={side} sideOffset={sideOffset} align={align}>
+        <ContextMenuPrimitive.Popup
+          ref={ref}
+          className={cn(
+            'z-50 min-w-[160px] rounded-lg border border-border bg-background p-1 shadow-lg',
+            'text-foreground outline-none',
+            'origin-[var(--transform-origin)]',
+            'transition-all duration-150',
+            'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
+            'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
+            className,
+          )}
+          {...props}
+        />
+      </ContextMenuPrimitive.Positioner>
+    </ContextMenuPrimitive.Portal>
+  ),
+)
+ContextMenuContent.displayName = 'ContextMenuContent'
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 export { Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuLabel }
-export type { MenuProps, MenuContentProps, MenuItemProps }
+export { ContextMenu, ContextMenuTrigger, ContextMenuContent }
+export type { MenuProps, MenuContentProps, MenuItemProps, ContextMenuProps, ContextMenuTriggerProps }
