@@ -1,10 +1,11 @@
 import type {
   BrowserBounds,
   BrowserFindState,
+  BrowserPermissionDecision,
   BrowserRuntimeState,
   BrowserStopFindAction,
 } from '../../shared/browser'
-import type { BrowserPaneManagerDeps, BrowserPaneRecord } from './browser-types'
+import type { BrowserPaneController, BrowserPaneManagerDeps, BrowserPaneRecord } from './browser-types'
 
 function createElectronView(options: Electron.WebContentsViewConstructorOptions): Electron.WebContentsView {
   const { WebContentsView } = require('electron') as typeof import('electron')
@@ -53,7 +54,7 @@ type WebContentsEventEmitter = {
   on: (event: string, listener: (...args: unknown[]) => void) => void
 }
 
-export class BrowserPaneManager {
+export class BrowserPaneManager implements BrowserPaneController {
   private readonly panes = new Map<string, BrowserPaneRecord>()
   private readonly createView: NonNullable<BrowserPaneManagerDeps['createView']>
 
@@ -89,6 +90,17 @@ export class BrowserPaneManager {
 
     this.hidePane(paneId)
     this.panes.delete(paneId)
+
+    const close = (pane.view.webContents as { close?: () => void }).close
+    if (typeof close === 'function') {
+      close.call(pane.view.webContents)
+      return
+    }
+
+    const destroyView = (pane.view as { destroy?: () => void }).destroy
+    if (typeof destroyView === 'function') {
+      destroyView.call(pane.view)
+    }
   }
 
   showPane(paneId: string): void {
@@ -215,6 +227,10 @@ export class BrowserPaneManager {
     }
   }
 
+  resetZoom(paneId: string): void {
+    this.setZoom(paneId, 1)
+  }
+
   findInPage(paneId: string, query: string): void {
     const pane = this.panes.get(paneId)
     if (!pane) {
@@ -249,13 +265,42 @@ export class BrowserPaneManager {
     }
   }
 
+  toggleDevTools(paneId: string): void {
+    const pane = this.panes.get(paneId)
+    if (!pane) {
+      return
+    }
+
+    const isOpened = pane.view.webContents?.isDevToolsOpened
+    const openDevTools = pane.view.webContents?.openDevTools
+    const closeDevTools = pane.view.webContents?.closeDevTools
+    if (typeof isOpened === 'function' && isOpened.call(pane.view.webContents)) {
+      if (typeof closeDevTools === 'function') {
+        closeDevTools.call(pane.view.webContents)
+      }
+      return
+    }
+
+    if (typeof openDevTools === 'function') {
+      openDevTools.call(pane.view.webContents)
+    }
+  }
+
+  showContextMenu(_paneId: string, _position?: { x: number; y: number }): void {
+    // Placeholder for later browser context-menu wiring.
+  }
+
+  resolvePermission(_requestToken: string, _decision: BrowserPermissionDecision): void {
+    // Placeholder for later permission-response wiring.
+  }
+
   getRuntimeState(paneId: string): BrowserRuntimeState | undefined {
     const pane = this.panes.get(paneId)
     return pane ? cloneRuntimeState(pane.runtimeState) : undefined
   }
 
   private emitStateChange(pane: BrowserPaneRecord): void {
-    this.deps.sendToRenderer('browser:stateChange', cloneRuntimeState(pane.runtimeState))
+    this.deps.sendToRenderer('browser:stateChanged', cloneRuntimeState(pane.runtimeState))
   }
 
   private registerWebContentsListeners(pane: BrowserPaneRecord): void {

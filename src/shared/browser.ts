@@ -14,6 +14,7 @@ export interface BrowserFindState {
 }
 
 export type BrowserStopFindAction = 'clearSelection' | 'keepSelection' | 'activateSelection'
+export type BrowserPermissionDecision = 'granted' | 'denied'
 
 export interface BrowserRuntimeState {
   paneId: string

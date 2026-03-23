@@ -2,9 +2,8 @@ import { ipcMain, dialog, shell, nativeTheme, BrowserWindow, Menu } from 'electr
 import { readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import type { PtyManager } from './pty-manager'
-import type { BrowserSessionManager } from './browser/browser-session-manager'
-import { BrowserPaneManager } from './browser/browser-pane-manager'
-import type { BrowserBounds, BrowserStopFindAction } from '../shared/browser'
+import type { BrowserBounds, BrowserPermissionDecision, BrowserStopFindAction } from '../shared/browser'
+import type { BrowserPaneController } from './browser/browser-types'
 import {
   validateTerminalDimensions,
   validatePtyId,
@@ -32,15 +31,9 @@ function safeOn(channel: string, handler: (event: any, ...args: any[]) => void) 
 export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   ptyManager: PtyManager,
-  browserSessionManager: BrowserSessionManager
+  browserPaneManager: BrowserPaneController
 ): void {
   const allowedRoots = [homedir()]
-  const browserPaneManager = new BrowserPaneManager({
-    addChildView: (view) => mainWindow.contentView.addChildView(view),
-    removeChildView: (view) => mainWindow.contentView.removeChildView(view),
-    sendToRenderer: (channel, payload) => mainWindow.webContents.send(channel, payload),
-    getSession: () => browserSessionManager.getSession(),
-  })
 
   // --- PTY handlers ---
 
@@ -254,12 +247,12 @@ export function registerIpcHandlers(
     browserPaneManager.destroyPane(paneId)
   })
 
-  safeHandle('browser:showPane', (_event, paneId: unknown) => {
+  safeHandle('browser:show', (_event, paneId: unknown) => {
     if (typeof paneId !== 'string') return
     browserPaneManager.showPane(paneId)
   })
 
-  safeHandle('browser:hidePane', (_event, paneId: unknown) => {
+  safeHandle('browser:hide', (_event, paneId: unknown) => {
     if (typeof paneId !== 'string') return
     browserPaneManager.hidePane(paneId)
   })
@@ -269,17 +262,17 @@ export function registerIpcHandlers(
     return browserPaneManager.getRuntimeState(paneId)
   })
 
-  safeHandle('browser:loadURL', (_event, paneId: unknown, url: unknown) => {
+  safeHandle('browser:navigate', (_event, paneId: unknown, url: unknown) => {
     if (typeof paneId !== 'string' || typeof url !== 'string') return
     browserPaneManager.navigate(paneId, url)
   })
 
-  safeHandle('browser:goBack', (_event, paneId: unknown) => {
+  safeHandle('browser:back', (_event, paneId: unknown) => {
     if (typeof paneId !== 'string') return
     browserPaneManager.back(paneId)
   })
 
-  safeHandle('browser:goForward', (_event, paneId: unknown) => {
+  safeHandle('browser:forward', (_event, paneId: unknown) => {
     if (typeof paneId !== 'string') return
     browserPaneManager.forward(paneId)
   })
@@ -318,6 +311,11 @@ export function registerIpcHandlers(
     browserPaneManager.setZoom(paneId, zoom)
   })
 
+  safeHandle('browser:resetZoom', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    browserPaneManager.resetZoom(paneId)
+  })
+
   safeHandle('browser:findInPage', (_event, paneId: unknown, query: unknown) => {
     if (typeof paneId !== 'string' || typeof query !== 'string') return
     browserPaneManager.findInPage(paneId, query)
@@ -326,6 +324,30 @@ export function registerIpcHandlers(
   safeHandle('browser:stopFindInPage', (_event, paneId: unknown, action?: BrowserStopFindAction) => {
     if (typeof paneId !== 'string') return
     browserPaneManager.stopFindInPage(paneId, action)
+  })
+
+  safeHandle('browser:toggleDevTools', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    browserPaneManager.toggleDevTools(paneId)
+  })
+
+  safeHandle('browser:showContextMenu', (_event, paneId: unknown, position?: unknown) => {
+    if (typeof paneId !== 'string') return
+    if (position && (typeof position !== 'object' || position === null)) return
+    let nextPosition: { x: number; y: number } | undefined
+    if (position && typeof position === 'object' && position !== null) {
+      const next = position as Partial<{ x: number; y: number }>
+      if (typeof next.x === 'number' && typeof next.y === 'number') {
+        nextPosition = { x: next.x, y: next.y }
+      }
+    }
+    browserPaneManager.showContextMenu(paneId, nextPosition)
+  })
+
+  safeHandle('browser:resolvePermission', (_event, requestToken: unknown, decision: unknown) => {
+    if (typeof requestToken !== 'string') return
+    if (decision !== 'granted' && decision !== 'denied') return
+    browserPaneManager.resolvePermission(requestToken, decision as BrowserPermissionDecision)
   })
 
   safeOn('theme:set', (_event, theme: 'light' | 'dark' | 'system') => {

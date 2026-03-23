@@ -84,35 +84,39 @@ const bridge: DevspaceBridge = {
   browser: {
     create: (paneId, url) => ipcRenderer.invoke('browser:create', paneId, url),
     destroy: (paneId) => ipcRenderer.invoke('browser:destroy', paneId),
-    showPane: (paneId) => ipcRenderer.invoke('browser:showPane', paneId),
-    hidePane: (paneId) => ipcRenderer.invoke('browser:hidePane', paneId),
+    show: (paneId) => ipcRenderer.invoke('browser:show', paneId),
+    hide: (paneId) => ipcRenderer.invoke('browser:hide', paneId),
     getRuntimeState: (paneId) => ipcRenderer.invoke('browser:getRuntimeState', paneId),
-    loadURL: (paneId, url) => ipcRenderer.invoke('browser:loadURL', paneId, url),
-    goBack: (paneId) => ipcRenderer.invoke('browser:goBack', paneId),
-    goForward: (paneId) => ipcRenderer.invoke('browser:goForward', paneId),
+    navigate: (paneId, url) => ipcRenderer.invoke('browser:navigate', paneId, url),
+    back: (paneId) => ipcRenderer.invoke('browser:back', paneId),
+    forward: (paneId) => ipcRenderer.invoke('browser:forward', paneId),
     reload: (paneId) => ipcRenderer.invoke('browser:reload', paneId),
     stop: (paneId) => ipcRenderer.invoke('browser:stop', paneId),
     setBounds: (paneId, bounds) => ipcRenderer.invoke('browser:setBounds', paneId, bounds),
     setFocus: (paneId) => ipcRenderer.invoke('browser:setFocus', paneId),
     setZoom: (paneId, zoom) => ipcRenderer.invoke('browser:setZoom', paneId, zoom),
+    resetZoom: (paneId) => ipcRenderer.invoke('browser:resetZoom', paneId),
     findInPage: (paneId, query) => ipcRenderer.invoke('browser:findInPage', paneId, query),
     stopFindInPage: (paneId, action) => ipcRenderer.invoke('browser:stopFindInPage', paneId, action),
+    toggleDevTools: (paneId) => ipcRenderer.invoke('browser:toggleDevTools', paneId),
+    showContextMenu: (paneId, position) => ipcRenderer.invoke('browser:showContextMenu', paneId, position),
+    resolvePermission: (requestToken, decision) => ipcRenderer.invoke('browser:resolvePermission', requestToken, decision),
     onStateChange: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]): void => {
         callback(state)
       }
-      ipcRenderer.on('browser:stateChange', listener)
+      ipcRenderer.on('browser:stateChanged', listener)
       return () => {
-        ipcRenderer.removeListener('browser:stateChange', listener)
+        ipcRenderer.removeListener('browser:stateChanged', listener)
       }
     },
     onPermissionRequest: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, request: Parameters<typeof callback>[0]): void => {
         callback(request)
       }
-      ipcRenderer.on('browser:permissionRequest', listener)
+      ipcRenderer.on('browser:permissionRequested', listener)
       return () => {
-        ipcRenderer.removeListener('browser:permissionRequest', listener)
+        ipcRenderer.removeListener('browser:permissionRequested', listener)
       }
     },
   }

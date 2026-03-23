@@ -1,5 +1,6 @@
 import type {
   BrowserBounds,
+  BrowserPermissionDecision,
   BrowserPermissionRequest,
   BrowserRuntimeState,
   BrowserStopFindAction,
@@ -54,19 +55,23 @@ export interface DevspaceBridge {
 export interface BrowserBridge {
   create: (paneId: string, url: string) => Promise<void>
   destroy: (paneId: string) => Promise<void>
-  showPane: (paneId: string) => Promise<void>
-  hidePane: (paneId: string) => Promise<void>
+  show: (paneId: string) => Promise<void>
+  hide: (paneId: string) => Promise<void>
   getRuntimeState: (paneId: string) => Promise<BrowserRuntimeState | undefined>
-  loadURL: (paneId: string, url: string) => Promise<void>
-  goBack: (paneId: string) => Promise<void>
-  goForward: (paneId: string) => Promise<void>
+  navigate: (paneId: string, url: string) => Promise<void>
+  back: (paneId: string) => Promise<void>
+  forward: (paneId: string) => Promise<void>
   reload: (paneId: string) => Promise<void>
   stop: (paneId: string) => Promise<void>
   setBounds: (paneId: string, bounds: BrowserBounds) => Promise<void>
   setFocus: (paneId: string) => Promise<void>
   setZoom: (paneId: string, zoom: number) => Promise<void>
+  resetZoom: (paneId: string) => Promise<void>
   findInPage: (paneId: string, query: string) => Promise<void>
   stopFindInPage: (paneId: string, action?: BrowserStopFindAction) => Promise<void>
+  toggleDevTools: (paneId: string) => Promise<void>
+  showContextMenu: (paneId: string, position?: { x: number; y: number }) => Promise<void>
+  resolvePermission: (requestToken: string, decision: BrowserPermissionDecision) => Promise<void>
   onStateChange: (callback: (state: BrowserRuntimeState) => void) => () => void
   onPermissionRequest: (callback: (request: BrowserPermissionRequest) => void) => () => void
 }

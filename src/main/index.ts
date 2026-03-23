@@ -4,6 +4,7 @@ import { syncShellEnvironment } from './shell-env'
 import { PtyManager } from './pty-manager'
 import { registerIpcHandlers } from './ipc-handlers'
 import { BrowserSessionManager } from './browser/browser-session-manager'
+import { BrowserPaneManager } from './browser/browser-pane-manager'
 
 // Sync shell environment before app is ready (macOS GUI apps don't inherit login shell env)
 syncShellEnvironment()
@@ -43,7 +44,14 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  registerIpcHandlers(mainWindow, ptyManager, browserSessionManager)
+  const browserPaneManager = new BrowserPaneManager({
+    addChildView: (view) => mainWindow.contentView.addChildView(view),
+    removeChildView: (view) => mainWindow.contentView.removeChildView(view),
+    sendToRenderer: (channel, payload) => mainWindow.webContents.send(channel, payload),
+    getSession: () => browserSessionManager.getSession(),
+  })
+
+  registerIpcHandlers(mainWindow, ptyManager, browserPaneManager)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
