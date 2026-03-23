@@ -60,6 +60,102 @@
     overflow-y: hidden;
     overscroll-behavior-y: none;
   }
+
+  /* Drag and drop feedback */
+  .drag-overlay-workspace,
+  .drag-overlay-tab {
+    background: var(--bg-2);
+    border: 1px solid var(--amber);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    opacity: 0.9;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .drag-overlay-folder {
+    background: var(--bg-2);
+    border: 1px solid var(--amber);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    opacity: 0.9;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+
+  .sidebar-drop-indicator {
+    height: 2px;
+    background: var(--amber);
+    border-radius: 1px;
+    margin: 0 8px;
+    pointer-events: none;
+  }
+
+  .sidebar-item-drag-over-folder {
+    background: rgba(250, 204, 21, 0.1) !important;
+    border-radius: 6px;
+  }
+
+  .sidebar-workspace-drop-target {
+    outline: 1px solid rgba(250, 204, 21, 0.4);
+    outline-offset: -1px;
+    border-radius: 6px;
+  }
+
+  .tab-dragging {
+    opacity: 0.5;
+  }
+
+  .pane-drop-zone-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .pane-drop-zone-half {
+    position: absolute;
+    background: rgba(250, 204, 21, 0.08);
+    border: 1px solid rgba(250, 204, 21, 0.3);
+    transition: opacity 0.1s ease;
+  }
+
+  .pane-drop-zone-half.left {
+    top: 0; left: 0; bottom: 0; width: 50%;
+    border-right: 2px solid rgba(250, 204, 21, 0.5);
+  }
+
+  .pane-drop-zone-half.right {
+    top: 0; right: 0; bottom: 0; width: 50%;
+    border-left: 2px solid rgba(250, 204, 21, 0.5);
+  }
+
+  .pane-drop-zone-half.top {
+    top: 0; left: 0; right: 0; height: 50%;
+    border-bottom: 2px solid rgba(250, 204, 21, 0.5);
+  }
+
+  .pane-drop-zone-half.bottom {
+    bottom: 0; left: 0; right: 0; height: 50%;
+    border-top: 2px solid rgba(250, 204, 21, 0.5);
+  }
+
+  [data-dragging="true"] {
+    cursor: grabbing !important;
+  }
+
+  .cursor-grab {
+    cursor: grab;
+  }
 }
 
 /* ─── Design Tokens ──────────────────────────────────────────────────── */
