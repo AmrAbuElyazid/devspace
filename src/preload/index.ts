@@ -1,5 +1,7 @@
-import { contextBridge, ipcRenderer } from 'electron'
 import type { DevspaceBridge } from '../shared/types'
+import { getElectronBridge } from './electron-bridge'
+
+const { contextBridge, ipcRenderer } = getElectronBridge()
 
 const bridge: DevspaceBridge = {
   platform: process.platform,

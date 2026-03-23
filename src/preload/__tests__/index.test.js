@@ -5,25 +5,27 @@ test('browser bridge exposes spec-aligned browser IPC methods', async () => {
   const listenerRegistrations = []
   let exposedBridge
 
-  mock.module('electron', () => ({
-    contextBridge: {
-      exposeInMainWorld: (_key, bridge) => {
-        exposedBridge = bridge
+  mock.module('../electron-bridge', () => ({
+    getElectronBridge: () => ({
+      contextBridge: {
+        exposeInMainWorld: (_key, bridge) => {
+          exposedBridge = bridge
+        },
       },
-    },
-    ipcRenderer: {
-      invoke: (...args) => {
-        invokeCalls.push(args)
-        return Promise.resolve(undefined)
+      ipcRenderer: {
+        invoke: (...args) => {
+          invokeCalls.push(args)
+          return Promise.resolve(undefined)
+        },
+        send: () => {},
+        on: (channel) => {
+          listenerRegistrations.push(['on', channel])
+        },
+        removeListener: (channel) => {
+          listenerRegistrations.push(['removeListener', channel])
+        },
       },
-      send: () => {},
-      on: (channel) => {
-        listenerRegistrations.push(['on', channel])
-      },
-      removeListener: (channel) => {
-        listenerRegistrations.push(['removeListener', channel])
-      },
-    },
+    }),
   }))
 
   await import('../index')
