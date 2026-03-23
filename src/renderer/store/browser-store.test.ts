@@ -100,3 +100,73 @@ test('does not persist uncommitted navigation targets', () => {
   assert.deepEqual(persisted, [{ paneId: 'pane-1', url: 'https://committed.example' }])
   assert.equal(store.getState().runtimeByPaneId['pane-1']?.url, 'https://typed-but-uncommitted.example')
 })
+
+test('persists zoom changes independently from url persistence', () => {
+  const store = createBrowserStore()
+  const persistedUrls: Array<{ paneId: string; url: string }> = []
+  const persistedZooms: Array<{ paneId: string; zoom: number }> = []
+
+  store.getState().handleRuntimeStateChange({
+    paneId: 'pane-1',
+    url: 'https://example.com',
+    title: 'Example',
+    faviconUrl: null,
+    isLoading: false,
+    canGoBack: false,
+    canGoForward: false,
+    isSecure: true,
+    securityLabel: 'Secure',
+    currentZoom: 1,
+    find: null,
+  }, {
+    persistUrlChange: (paneId, url) => {
+      persistedUrls.push({ paneId, url })
+    },
+    persistCommittedNavigation: true,
+    persistZoomChange: (paneId, zoom) => {
+      persistedZooms.push({ paneId, zoom })
+    },
+  })
+
+  store.getState().handleRuntimeStateChange({
+    paneId: 'pane-1',
+    url: 'https://example.com',
+    title: 'Example',
+    faviconUrl: null,
+    isLoading: false,
+    canGoBack: false,
+    canGoForward: false,
+    isSecure: true,
+    securityLabel: 'Secure',
+    currentZoom: 1.25,
+    find: null,
+  }, {
+    persistUrlChange: (paneId, url) => {
+      persistedUrls.push({ paneId, url })
+    },
+    persistCommittedNavigation: true,
+    persistZoomChange: (paneId, zoom) => {
+      persistedZooms.push({ paneId, zoom })
+    },
+  })
+
+  assert.deepEqual(persistedUrls, [{ paneId: 'pane-1', url: 'https://example.com' }])
+  assert.deepEqual(persistedZooms, [{ paneId: 'pane-1', zoom: 1 }, { paneId: 'pane-1', zoom: 1.25 }])
+})
+
+test('find bar focus and visibility are tracked per pane', () => {
+  const store = createBrowserStore()
+
+  store.getState().requestFindBarFocus('pane-1')
+  assert.equal(store.getState().findBarOpenByPaneId['pane-1'], true)
+  assert.equal(store.getState().findBarFocusTokenByPaneId['pane-1'], 1)
+
+  store.getState().requestFindBarFocus('pane-1')
+  assert.equal(store.getState().findBarFocusTokenByPaneId['pane-1'], 2)
+
+  store.getState().closeFindBar('pane-1')
+  assert.equal(store.getState().findBarOpenByPaneId['pane-1'], false)
+
+  store.getState().requestAddressBarFocus('pane-1')
+  assert.equal(store.getState().addressBarFocusTokenByPaneId['pane-1'], 1)
+})

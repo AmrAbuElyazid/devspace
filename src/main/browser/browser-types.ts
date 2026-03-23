@@ -1,5 +1,6 @@
 import type { Session, View, WebContentsView, WebContentsViewConstructorOptions } from 'electron'
 import type {
+  BrowserFindInPageOptions,
   BrowserBounds,
   BrowserPermissionDecision,
   BrowserRuntimeState,
@@ -55,9 +56,10 @@ export interface BrowserPaneController {
   focusPane(paneId: string): void
   setZoom(paneId: string, zoom: number): void
   resetZoom(paneId: string): void
-  findInPage(paneId: string, query: string): void
+  findInPage(paneId: string, query: string, options?: BrowserFindInPageOptions): void
   stopFindInPage(paneId: string, action?: BrowserStopFindAction): void
   toggleDevTools(paneId: string): void
+  applyFindResult(paneId: string, result: { query: string; activeMatch: number; totalMatches: number }): void
   showContextMenu(paneId: string, position?: { x: number; y: number }): void
   resolvePermission(requestToken: string, decision: BrowserPermissionDecision): void
 }

@@ -1,4 +1,5 @@
 import type {
+  BrowserFindInPageOptions,
   BrowserBounds,
   BrowserFindState,
   BrowserPermissionDecision,
@@ -52,6 +53,11 @@ function createInitialRuntimeState(paneId: string, initialUrl: string): BrowserR
 
 type WebContentsEventEmitter = {
   on: (event: string, listener: (...args: unknown[]) => void) => void
+}
+
+type FoundInPageResult = {
+  activeMatchOrdinal?: number
+  matches?: number
 }
 
 export class BrowserPaneManager implements BrowserPaneController {
@@ -248,7 +254,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     this.setZoom(paneId, 1)
   }
 
-  findInPage(paneId: string, query: string): void {
+  findInPage(paneId: string, query: string, options?: BrowserFindInPageOptions): void {
     const pane = this.panes.get(paneId)
     if (!pane) {
       return
@@ -263,8 +269,22 @@ export class BrowserPaneManager implements BrowserPaneController {
 
     const findInPage = pane.view.webContents?.findInPage
     if (typeof findInPage === 'function') {
-      void findInPage.call(pane.view.webContents, query)
+      void findInPage.call(pane.view.webContents, query, options)
     }
+  }
+
+  applyFindResult(paneId: string, result: { query: string; activeMatch: number; totalMatches: number }): void {
+    const pane = this.panes.get(paneId)
+    if (!pane) {
+      return
+    }
+
+    pane.runtimeState.find = {
+      query: result.query,
+      activeMatch: result.activeMatch,
+      totalMatches: result.totalMatches,
+    }
+    this.emitStateChange(pane)
   }
 
   stopFindInPage(paneId: string, action: BrowserStopFindAction = 'clearSelection'): void {
@@ -382,6 +402,19 @@ export class BrowserPaneManager implements BrowserPaneController {
 
     webContents.on('page-favicon-updated', (_event: unknown, favicons: string[]) => {
       this.applyRuntimePatch(pane.runtimeState.paneId, { faviconUrl: favicons[0] ?? null })
+    })
+
+    webContents.on('found-in-page', (_event: unknown, result: FoundInPageResult) => {
+      const query = pane.runtimeState.find?.query
+      if (!query) {
+        return
+      }
+
+      this.applyFindResult(pane.runtimeState.paneId, {
+        query,
+        activeMatch: result.activeMatchOrdinal ?? 0,
+        totalMatches: result.matches ?? 0,
+      })
     })
 
     webContents.on('did-fail-load', (_event: unknown, errorCode: number, errorDescription: string, validatedURL: string, isMainFrame?: boolean) => {

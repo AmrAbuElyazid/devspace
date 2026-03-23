@@ -23,6 +23,7 @@ import {
 import { cleanupPaneResources, type PaneCleanupDeps } from '../lib/pane-cleanup'
 import { markBrowserPaneDestroyed } from '../lib/browser-pane-session'
 import { useBrowserStore } from './browser-store'
+import type { BrowserConfig } from '../types/workspace'
 
 // ---------------------------------------------------------------------------
 // Tree helper functions (pure)
@@ -234,6 +235,7 @@ interface WorkspaceState {
   addPane: (type: PaneType, config?: Partial<PaneConfig>) => string
   removePane: (paneId: string) => void
   updatePaneConfig: (paneId: string, updates: Partial<PaneConfig>) => void
+  updateBrowserPaneZoom: (paneId: string, zoom: number) => void
   updatePaneTitle: (paneId: string, title: string) => void
   changePaneType: (paneId: string, type: PaneType, config?: PaneConfig) => void
 
@@ -522,6 +524,25 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           panes: {
             ...panes,
             [paneId]: { ...pane, config: nextConfig },
+          },
+        })
+      },
+
+      updateBrowserPaneZoom(paneId, zoom) {
+        const { panes } = get()
+        const pane = panes[paneId]
+        if (!pane || pane.type !== 'browser') return
+
+        const config = (pane.config ?? {}) as BrowserConfig
+        if (config.zoom === zoom) return
+
+        set({
+          panes: {
+            ...panes,
+            [paneId]: {
+              ...pane,
+              config: { ...config, zoom },
+            },
           },
         })
       },
@@ -901,9 +922,11 @@ function debouncedPersist(state: WorkspaceState): void {
 useWorkspaceStore.subscribe((state) => debouncedPersist(state))
 
 // Flush on unload (prevents data loss on window close)
-window.addEventListener('beforeunload', () => {
-  if (persistTimer) {
-    clearTimeout(persistTimer)
-    persistState(useWorkspaceStore.getState())
-  }
-})
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+      persistState(useWorkspaceStore.getState())
+    }
+  })
+}

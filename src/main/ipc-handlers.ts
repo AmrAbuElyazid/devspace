@@ -2,7 +2,7 @@ import { ipcMain, dialog, shell, nativeTheme, BrowserWindow, Menu } from 'electr
 import { readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import type { PtyManager } from './pty-manager'
-import type { BrowserBounds, BrowserPermissionDecision, BrowserStopFindAction } from '../shared/browser'
+import type { BrowserBounds, BrowserFindInPageOptions, BrowserPermissionDecision, BrowserStopFindAction } from '../shared/browser'
 import type { BrowserPaneController } from './browser/browser-types'
 import {
   validateTerminalDimensions,
@@ -316,9 +316,9 @@ export function registerIpcHandlers(
     browserPaneManager.resetZoom(paneId)
   })
 
-  safeHandle('browser:findInPage', (_event, paneId: unknown, query: unknown) => {
+  safeHandle('browser:findInPage', (_event, paneId: unknown, query: unknown, options?: BrowserFindInPageOptions) => {
     if (typeof paneId !== 'string' || typeof query !== 'string') return
-    browserPaneManager.findInPage(paneId, query)
+    browserPaneManager.findInPage(paneId, query, options)
   })
 
   safeHandle('browser:stopFindInPage', (_event, paneId: unknown, action?: BrowserStopFindAction) => {
