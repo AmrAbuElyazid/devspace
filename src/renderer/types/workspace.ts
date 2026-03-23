@@ -19,12 +19,6 @@ export interface EditorConfig {
 
 export interface EmptyConfig {}
 
-export interface WorkspaceFolder {
-  id: string
-  name: string
-  collapsed: boolean
-}
-
 export type PaneConfig = TerminalConfig | BrowserConfig | EditorConfig | EmptyConfig
 
 export interface Pane {
@@ -47,10 +41,13 @@ export interface Tab {
   focusedPaneId: string | null
 }
 
+export type SidebarNode =
+  | { type: 'workspace'; workspaceId: string }
+  | { type: 'folder'; id: string; name: string; collapsed: boolean; children: SidebarNode[] }
+
 export interface Workspace {
   id: string
   name: string
   tabs: Tab[]
   activeTabId: string
-  folderId: string | null
 }
