@@ -58,11 +58,23 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): React.J
   const [language, setLanguage] = useState(config.language || 'plaintext')
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
 
+  const [isDark, setIsDark] = useState(
+    document.documentElement.classList.contains('dark')
+  )
+
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle)
 
   const isDirty = content !== savedContent
-  const isDark = document.documentElement.classList.contains('dark')
+
+  useEffect(() => {
+    const handleThemeChange = (e: Event): void => {
+      const detail = (e as CustomEvent).detail
+      setIsDark(detail?.theme === 'dark')
+    }
+    window.addEventListener('devspace:theme-changed', handleThemeChange)
+    return () => window.removeEventListener('devspace:theme-changed', handleThemeChange)
+  }, [])
 
   // Use ref to always have the latest save function available to Monaco's command
   const handleSaveRef = useRef<() => Promise<void>>(() => Promise.resolve())

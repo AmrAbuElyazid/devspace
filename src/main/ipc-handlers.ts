@@ -1,5 +1,5 @@
 import { ipcMain, dialog, shell, nativeTheme, BrowserWindow } from 'electron'
-import { readFileSync, writeFileSync } from 'fs'
+import { readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import type { PtyManager } from './pty-manager'
 import {
@@ -10,6 +10,22 @@ import {
   getSafeExternalUrl
 } from './validation'
 
+const registeredHandlers = new Set<string>()
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function safeHandle(channel: string, handler: (event: any, ...args: any[]) => any) {
+  if (registeredHandlers.has(channel)) return
+  registeredHandlers.add(channel)
+  ipcMain.handle(channel, handler)
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function safeOn(channel: string, handler: (event: any, ...args: any[]) => void) {
+  if (registeredHandlers.has(channel)) return
+  registeredHandlers.add(channel)
+  ipcMain.on(channel, handler)
+}
+
 export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   ptyManager: PtyManager
@@ -18,7 +34,7 @@ export function registerIpcHandlers(
 
   // --- PTY handlers ---
 
-  ipcMain.handle('pty:create', (_event, options: unknown) => {
+  safeHandle('pty:create', (_event, options: unknown) => {
     if (typeof options !== 'object' || options === null) {
       return { error: 'Invalid pty create options' }
     }
@@ -35,7 +51,7 @@ export function registerIpcHandlers(
     })
   })
 
-  ipcMain.on('pty:write', (_event, ptyId: unknown, data: unknown) => {
+  safeOn('pty:write', (_event, ptyId: unknown, data: unknown) => {
     const validId = validatePtyId(ptyId)
     if (!validId) return
     const validData = validatePtyWriteData(data)
@@ -43,7 +59,7 @@ export function registerIpcHandlers(
     ptyManager.write(validId, validData)
   })
 
-  ipcMain.on('pty:resize', (_event, ptyId: unknown, cols: unknown, rows: unknown) => {
+  safeOn('pty:resize', (_event, ptyId: unknown, cols: unknown, rows: unknown) => {
     const validId = validatePtyId(ptyId)
     if (!validId) return
     const dims = validateTerminalDimensions(cols, rows)
@@ -51,7 +67,7 @@ export function registerIpcHandlers(
     ptyManager.resize(validId, dims.cols, dims.rows)
   })
 
-  ipcMain.on('pty:destroy', (_event, ptyId: unknown) => {
+  safeOn('pty:destroy', (_event, ptyId: unknown) => {
     const validId = validatePtyId(ptyId)
     if (!validId) return
     ptyManager.destroy(validId)
@@ -68,11 +84,11 @@ export function registerIpcHandlers(
 
   // --- Window handlers ---
 
-  ipcMain.on('window:minimize', () => {
+  safeOn('window:minimize', () => {
     mainWindow.minimize()
   })
 
-  ipcMain.on('window:maximize', () => {
+  safeOn('window:maximize', () => {
     if (mainWindow.isMaximized()) {
       mainWindow.unmaximize()
     } else {
@@ -80,11 +96,11 @@ export function registerIpcHandlers(
     }
   })
 
-  ipcMain.on('window:close', () => {
+  safeOn('window:close', () => {
     mainWindow.close()
   })
 
-  ipcMain.handle('window:isMaximized', () => {
+  safeHandle('window:isMaximized', () => {
     return mainWindow.isMaximized()
   })
 
@@ -98,7 +114,7 @@ export function registerIpcHandlers(
 
   // --- Dialog handlers ---
 
-  ipcMain.handle(
+  safeHandle(
     'dialog:openFile',
     async (_event, options?: { filters?: { name: string; extensions: string[] }[] }) => {
       const result = await dialog.showOpenDialog(mainWindow, {
@@ -112,7 +128,7 @@ export function registerIpcHandlers(
 
       const filePath = result.filePaths[0]
       try {
-        const content = readFileSync(filePath, 'utf-8')
+        const content = await readFile(filePath, 'utf-8')
         return { path: filePath, content }
       } catch {
         return { error: `Failed to read file: ${filePath}` }
@@ -120,7 +136,7 @@ export function registerIpcHandlers(
     }
   )
 
-  ipcMain.handle('dialog:openFolder', async () => {
+  safeHandle('dialog:openFolder', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
       properties: ['openDirectory']
     })
@@ -134,19 +150,19 @@ export function registerIpcHandlers(
 
   // --- File system handlers ---
 
-  ipcMain.handle('fs:readFile', (_event, filePath: unknown) => {
+  safeHandle('fs:readFile', async (_event, filePath: unknown) => {
     const validPath = validateFilePath(filePath, allowedRoots)
     if (!validPath) {
       return { error: 'File path is not allowed' }
     }
     try {
-      return readFileSync(validPath, 'utf-8')
+      return await readFile(validPath, 'utf-8')
     } catch {
       return { error: `Failed to read file: ${validPath}` }
     }
   })
 
-  ipcMain.handle('fs:writeFile', (_event, filePath: unknown, content: unknown) => {
+  safeHandle('fs:writeFile', async (_event, filePath: unknown, content: unknown) => {
     const validPath = validateFilePath(filePath, allowedRoots)
     if (!validPath) {
       return { error: 'File path is not allowed' }
@@ -155,7 +171,7 @@ export function registerIpcHandlers(
       return { error: 'File content must be a string' }
     }
     try {
-      writeFileSync(validPath, content, 'utf-8')
+      await writeFile(validPath, content, 'utf-8')
     } catch {
       return { error: `Failed to write file: ${validPath}` }
     }
@@ -163,7 +179,7 @@ export function registerIpcHandlers(
 
   // --- Shell handlers ---
 
-  ipcMain.on('shell:openExternal', (_event, url: unknown) => {
+  safeOn('shell:openExternal', (_event, url: unknown) => {
     const safeUrl = getSafeExternalUrl(url)
     if (!safeUrl) return
     shell.openExternal(safeUrl)
@@ -171,11 +187,11 @@ export function registerIpcHandlers(
 
   // --- Theme handlers ---
 
-  ipcMain.on('theme:set', (_event, theme: 'light' | 'dark' | 'system') => {
+  safeOn('theme:set', (_event, theme: 'light' | 'dark' | 'system') => {
     nativeTheme.themeSource = theme
   })
 
-  ipcMain.handle('theme:getNativeTheme', () => {
+  safeHandle('theme:getNativeTheme', () => {
     return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
   })
 
