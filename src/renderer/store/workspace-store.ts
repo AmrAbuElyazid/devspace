@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import { nanoid } from 'nanoid'
 import type {
   Workspace,
@@ -224,8 +223,34 @@ interface WorkspaceState {
   ) => void
 }
 
-// Build initial state
-function buildInitialState() {
+// ---------------------------------------------------------------------------
+// Persistence helpers
+// ---------------------------------------------------------------------------
+
+const PERSIST_KEY = 'devspace-workspaces'
+const PERSIST_DEBOUNCE_MS = 500
+
+function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes'> | null {
+  try {
+    const raw = localStorage.getItem(PERSIST_KEY)
+    if (!raw) return null
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+// Build initial state — hydrate from localStorage or create defaults
+function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes'> {
+  const persisted = loadPersistedState()
+  if (persisted && persisted.workspaces && persisted.workspaces.length > 0) {
+    return {
+      workspaces: persisted.workspaces,
+      activeWorkspaceId: persisted.activeWorkspaceId,
+      panes: persisted.panes ?? {},
+    }
+  }
+
   const pane = createEmptyPane()
   const tab = createDefaultTab('Tab 1', pane)
   const workspace = createDefaultWorkspace('Workspace 1', tab)
@@ -245,7 +270,6 @@ const titleForType: Record<PaneType, string> = {
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()(
-  persist(
     (set, get) => ({
       ...buildInitialState(),
 
@@ -603,22 +627,48 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         })
       },
     }),
-    {
-      name: 'devspace:workspace-state',
-      partialize: (state) => ({
-        workspaces: state.workspaces,
-        activeWorkspaceId: state.activeWorkspaceId,
-        panes: Object.fromEntries(
-          Object.entries(state.panes).map(([id, pane]) => {
-            if (pane.type === 'terminal') {
-              const config = { ...pane.config } as Record<string, unknown>
-              delete config.ptyId
-              return [id, { ...pane, config }]
-            }
-            return [id, pane]
-          })
-        ),
-      }),
-    },
-  ),
 )
+
+// ---------------------------------------------------------------------------
+// Debounced persistence
+// ---------------------------------------------------------------------------
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null
+
+function persistState(state: WorkspaceState): void {
+  const data = {
+    workspaces: state.workspaces,
+    activeWorkspaceId: state.activeWorkspaceId,
+    panes: Object.fromEntries(
+      Object.entries(state.panes).map(([id, pane]) => {
+        if (pane.type === 'terminal') {
+          const config = { ...pane.config } as Record<string, unknown>
+          delete config.ptyId
+          return [id, { ...pane, config }]
+        }
+        return [id, pane]
+      })
+    ),
+  }
+  try {
+    localStorage.setItem(PERSIST_KEY, JSON.stringify(data))
+  } catch (e) {
+    console.error('[Persist] Failed to save state:', e)
+  }
+}
+
+function debouncedPersist(state: WorkspaceState): void {
+  if (persistTimer) clearTimeout(persistTimer)
+  persistTimer = setTimeout(() => persistState(state), PERSIST_DEBOUNCE_MS)
+}
+
+// Subscribe to store changes
+useWorkspaceStore.subscribe((state) => debouncedPersist(state))
+
+// Flush on unload (prevents data loss on window close)
+window.addEventListener('beforeunload', () => {
+  if (persistTimer) {
+    clearTimeout(persistTimer)
+    persistState(useWorkspaceStore.getState())
+  }
+})
