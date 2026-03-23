@@ -1,6 +1,8 @@
-import { memo, useCallback, useEffect, type ElementType } from 'react'
+import { memo, useCallback, useEffect, useRef, useState, useMemo, type ElementType } from 'react'
 import { Terminal, FileCode, Globe, Square, Columns2, Rows2, X } from 'lucide-react'
+import { useDroppable } from '@dnd-kit/core'
 import { useWorkspaceStore } from '../store/workspace-store'
+import { useDragContext } from '../hooks/useDragAndDrop'
 import EmptyPane from './EmptyPane'
 import TerminalPane from './TerminalPane'
 import EditorPane from './EditorPane'
@@ -9,6 +11,7 @@ import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
 import type { ContextMenuItem } from '../../shared/types'
 import type { PaneType, TerminalConfig, EditorConfig, BrowserConfig } from '../types/workspace'
+import type { DropSide } from '../types/dnd'
 
 interface PaneContainerProps {
   paneId: string
@@ -52,6 +55,55 @@ export default function PaneContainer({
   const activeTab = activeWs?.tabs.find((t) => t.id === activeWs.activeTabId)
   const isFocused = activeTab?.focusedPaneId === paneId
 
+  // --- DnD drop zone ---
+  const activeDrag = useDragContext()
+  const paneRef = useRef<HTMLDivElement>(null)
+  const [dropSide, setDropSide] = useState<DropSide | null>(null)
+
+  const droppableData = useMemo(() => ({
+    type: 'pane-zone' as const,
+    workspaceId,
+    tabId,
+    paneId,
+    side: dropSide,
+  }), [workspaceId, tabId, paneId, dropSide])
+
+  const { setNodeRef: setDropRef, isOver } = useDroppable({
+    id: `pane-zone-${paneId}`,
+    data: droppableData,
+    disabled: activeDrag?.type !== 'tab',
+  })
+
+  useEffect(() => {
+    if (!isOver || activeDrag?.type !== 'tab' || !paneRef.current) {
+      setDropSide(null)
+      return
+    }
+    const paneEl = paneRef.current
+    function handlePointerMove(e: PointerEvent): void {
+      const rect = paneEl.getBoundingClientRect()
+      const relX = (e.clientX - rect.left) / rect.width
+      const relY = (e.clientY - rect.top) / rect.height
+      const distLeft = relX
+      const distRight = 1 - relX
+      const distTop = relY
+      const distBottom = 1 - relY
+      const min = Math.min(distLeft, distRight, distTop, distBottom)
+      let side: DropSide = 'left'
+      if (min === distRight) side = 'right'
+      else if (min === distTop) side = 'top'
+      else if (min === distBottom) side = 'bottom'
+      setDropSide(side)
+    }
+    window.addEventListener('pointermove', handlePointerMove)
+    return () => window.removeEventListener('pointermove', handlePointerMove)
+  }, [isOver, activeDrag])
+
+  const mergedRef = useCallback((el: HTMLDivElement | null) => {
+    paneRef.current = el
+    setDropRef(el)
+  }, [setDropRef])
+
   const handleSplitH = useCallback(() => splitPane(workspaceId, tabId, paneId, 'horizontal'), [splitPane, workspaceId, tabId, paneId])
   const handleSplitV = useCallback(() => splitPane(workspaceId, tabId, paneId, 'vertical'), [splitPane, workspaceId, tabId, paneId])
   const handleClose = useCallback(() => closePane(workspaceId, tabId, paneId), [closePane, workspaceId, tabId, paneId])
@@ -78,21 +130,32 @@ export default function PaneContainer({
 
   const TypeIcon = paneTypeIcons[pane.type]
 
+  const dropOverlay = isOver && activeDrag?.type === 'tab' && dropSide ? (
+    <div className="pane-drop-zone-overlay">
+      <div className={`pane-drop-zone-half ${dropSide}`} />
+    </div>
+  ) : null
+
   // For empty panes, don't show the toolbar — show the selector directly
   if (pane.type === 'empty') {
     return (
       <div
+        ref={mergedRef}
         className={`h-full w-full pane-focus-ring ${isFocused ? 'pane-focused' : ''}`}
+        style={{ position: 'relative' }}
         onMouseDown={handleFocus}
       >
         <PaneContent paneId={paneId} pane={pane} workspaceId={workspaceId} tabId={tabId} />
+        {dropOverlay}
       </div>
     )
   }
 
   return (
     <div
+      ref={mergedRef}
       className={`h-full w-full flex flex-col pane-focus-ring ${isFocused ? 'pane-focused' : ''}`}
+      style={{ position: 'relative' }}
       onMouseDown={handleFocus}
     >
       <div
@@ -150,6 +213,7 @@ export default function PaneContainer({
       <div className="flex-1 overflow-hidden">
         <PaneContent paneId={paneId} pane={pane} workspaceId={workspaceId} tabId={tabId} />
       </div>
+      {dropOverlay}
     </div>
   )
 }
