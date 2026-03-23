@@ -108,6 +108,62 @@
     opacity: 0.5;
   }
 
+  /* ── Insertion line indicators ─────────────────────────────────────── */
+
+  /* Sidebar: horizontal line at top or bottom edge of item */
+  .sidebar-insert-before::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .sidebar-insert-after::before {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  /* Tab bar: vertical line at left or right edge of tab */
+  .tab-insert-before::before {
+    content: '';
+    position: absolute;
+    left: -1px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .tab-insert-after::before {
+    content: '';
+    position: absolute;
+    right: -1px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+    z-index: 10;
+    pointer-events: none;
+  }
+
   .pane-drop-zone-overlay {
     position: absolute;
     inset: 0;

@@ -1,7 +1,6 @@
 import { useState, useCallback, useRef } from 'react'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core'
-import { CSS } from '@dnd-kit/utilities'
 import { Plus, Settings, ChevronDown, ChevronRight, FolderClosed } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { useSettingsStore } from '../store/settings-store'
@@ -10,6 +9,7 @@ import { Tooltip } from './ui/tooltip'
 import { ScrollArea } from './ui/scroll-area'
 import { AlertDialog } from './ui/alert-dialog'
 import { InlineRenameInput } from './ui/InlineRenameInput'
+import { useInsertionIndicator } from '../hooks/useInsertionIndicator'
 import type { ContextMenuItem } from '../../shared/types'
 import type { SidebarNode } from '../types/workspace'
 import { useDragContext } from '../hooks/useDragAndDrop'
@@ -50,9 +50,8 @@ function SortableWorkspaceItem({
     attributes,
     listeners,
     setNodeRef: setSortableRef,
-    transform,
-    transition,
     isDragging,
+    isOver,
   } = useSortable({
     id: `ws-${workspaceId}`,
     data: { type: 'sidebar-workspace' as const, workspaceId, parentFolderId },
@@ -73,21 +72,28 @@ function SortableWorkspaceItem({
     [setSortableRef, setDropRef],
   )
 
+  // Insertion line indicator — items stay in place, line shows where drop will go
+  const isSidebarDrag = activeDrag?.type === 'sidebar-workspace' || activeDrag?.type === 'sidebar-folder'
+  const insertPosition = useInsertionIndicator(isOver && !isDragging && isSidebarDrag, false, mergedRef, 'vertical')
+
   const style = {
-    transform: CSS.Translate.toString(transform),
-    transition,
     paddingLeft: depth * 16,
     opacity: isDragging ? 0.4 : undefined,
   }
 
-  // Only show drop target highlight when dragging a tab from a DIFFERENT workspace
-  const showDropTarget = isTabOver && activeDrag?.type === 'tab' && activeDrag.workspaceId !== workspaceId
+  // Show drop target highlight when dragging a tab from a DIFFERENT workspace.
+  // Check both isTabOver (separate droppable) and isOver (sortable) since pointerWithin
+  // may match either — typically the sortable wins because it registers first.
+  const showDropTarget = (isTabOver || isOver) && activeDrag?.type === 'tab' && activeDrag.workspaceId !== workspaceId
+
+  const insertClass = insertPosition === 'before' ? 'sidebar-insert-before' : insertPosition === 'after' ? 'sidebar-insert-after' : ''
 
   return (
     <div
       ref={setRef}
       style={style}
-      className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''} ${showDropTarget ? 'sidebar-workspace-drop-target' : ''}`}
+      data-sortable-id={`ws-${workspaceId}`}
+      className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''} ${showDropTarget ? 'sidebar-workspace-drop-target' : ''} ${insertClass}`}
       onClick={() => { if (!isEditing) onSelect() }}
       onDoubleClick={onStartEditing}
       onContextMenu={onContextMenu}
@@ -163,12 +169,12 @@ function SortableFolderItem({
   deleteTarget: string | null
   setDeleteTarget: (id: string | null) => void
 }): JSX.Element {
+  const folderRef = useRef<HTMLDivElement | null>(null)
+
   const {
     attributes,
     listeners,
     setNodeRef,
-    transform,
-    transition,
     isDragging,
     isOver,
   } = useSortable({
@@ -176,22 +182,33 @@ function SortableFolderItem({
     data: { type: 'sidebar-folder' as const, folderId: folder.id, parentFolderId },
   })
 
-  const style = {
-    transform: CSS.Translate.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : undefined,
-  }
+  const setFolderRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      folderRef.current = el
+      setNodeRef(el)
+    },
+    [setNodeRef],
+  )
 
-  const showDragOver = isOver && !isDragging
+  // Folder uses edge zones (0.25 threshold): edges show insertion line, center shows folder highlight
+  const activeDragCtx = useDragContext()
+  const isSidebarDrag = activeDragCtx?.type === 'sidebar-workspace' || activeDragCtx?.type === 'sidebar-folder'
+  const insertPosition = useInsertionIndicator(isOver && !isDragging && isSidebarDrag, false, folderRef, 'vertical', 0.25)
+
+  // Show folder highlight only when pointer is in center zone (insertPosition === null means center)
+  const showDragOver = isOver && !isDragging && isSidebarDrag && insertPosition === null
+  const insertClass = insertPosition === 'before' ? 'sidebar-insert-before' : insertPosition === 'after' ? 'sidebar-insert-after' : ''
 
   return (
-    <div style={style}>
+    <div style={{ opacity: isDragging ? 0.4 : undefined }}>
       <div
-        ref={setNodeRef}
-        className={`folder-header no-drag ${showDragOver ? 'sidebar-item-drag-over-folder' : ''}`}
+        ref={setFolderRef}
+        data-sortable-id={`folder-${folder.id}`}
+        className={`folder-header no-drag ${showDragOver ? 'sidebar-item-drag-over-folder' : ''} ${insertClass}`}
         onClick={onToggle}
         onContextMenu={(e) => onContextMenuFolder(e, folder.id)}
         style={{
+          position: 'relative',
           display: 'flex',
           alignItems: 'center',
           gap: 6,

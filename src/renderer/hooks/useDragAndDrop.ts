@@ -119,6 +119,37 @@ export function useDragAndDrop() {
 
     const state = store.getState()
 
+    // Helper: compute final pointer position from the drag event
+    const pointerPos = event.activatorEvent instanceof PointerEvent
+      ? {
+          x: (event.activatorEvent as PointerEvent).clientX + event.delta.x,
+          y: (event.activatorEvent as PointerEvent).clientY + event.delta.y,
+        }
+      : null
+
+    // Helper: determine if pointer is in the "after" half of an element
+    function isInsertAfter(sortableId: string, axis: 'vertical' | 'horizontal'): boolean {
+      if (!pointerPos) return true // fallback: insert after
+      const el = document.querySelector(`[data-sortable-id="${sortableId}"]`)
+      if (!el) return true
+      const rect = el.getBoundingClientRect()
+      if (axis === 'vertical') {
+        return (pointerPos.y - rect.top) / rect.height > 0.5
+      }
+      return (pointerPos.x - rect.left) / rect.width > 0.5
+    }
+
+    // Helper: for folders, determine if pointer is in the center zone (drop-into)
+    // vs edge zones (reorder). Uses 0.25 threshold matching the useInsertionIndicator hook.
+    function isFolderCenterZone(sortableId: string): boolean {
+      if (!pointerPos) return true
+      const el = document.querySelector(`[data-sortable-id="${sortableId}"]`)
+      if (!el) return true
+      const rect = el.getBoundingClientRect()
+      const relY = (pointerPos.y - rect.top) / rect.height
+      return relY >= 0.25 && relY <= 0.75
+    }
+
     // ── Sidebar item → Sidebar item (reorder / move between levels / drop into folder) ──
     const isSidebarDrag = dragData.type === 'sidebar-workspace' || dragData.type === 'sidebar-folder'
     const isSidebarDrop = dropType === 'sidebar-workspace' || dropType === 'sidebar-folder'
@@ -128,34 +159,71 @@ export function useDragAndDrop() {
       const nodeType = dragData.type === 'sidebar-workspace' ? 'workspace' : 'folder'
 
       if (dropType === 'sidebar-folder') {
-        // Dropped ON a folder → insert as last child
         const targetFolderId = dropData.folderId as string
         if (nodeType === 'folder' && nodeId === targetFolderId) return
-        const folder = findFolder(state.sidebarTree as SidebarNode[], targetFolderId)
-        const index = folder ? folder.children.length : 0
-        state.reorderSidebarNode(nodeId, nodeType, targetFolderId, index)
-        // Auto-expand the folder so user sees where the item went
-        state.expandFolder(targetFolderId)
+
+        // Check if pointer is in the center zone (drop INTO folder) or edge zone (reorder)
+        if (isFolderCenterZone(`folder-${targetFolderId}`)) {
+          // Center zone → insert as last child of folder
+          const folder = findFolder(state.sidebarTree as SidebarNode[], targetFolderId)
+          const index = folder ? folder.children.length : 0
+          state.reorderSidebarNode(nodeId, nodeType, targetFolderId, index)
+          state.expandFolder(targetFolderId)
+        } else {
+          // Edge zone → reorder next to the folder in its parent
+          const overParentFolderId = (dropData.parentFolderId as string | null) ?? null
+          const sidebarTree = state.sidebarTree as SidebarNode[]
+          const parentChildren = overParentFolderId === null
+            ? sidebarTree
+            : findFolder(sidebarTree, overParentFolderId)?.children ?? sidebarTree
+
+          const overIndex = parentChildren.findIndex(
+            (child) => child.type === 'folder' && child.id === targetFolderId,
+          )
+          const insertAfter = isInsertAfter(`folder-${targetFolderId}`, 'vertical')
+          let targetIndex = insertAfter ? overIndex + 1 : overIndex
+
+          // Adjust for same-parent removal
+          const dragParentId = (active.data.current as Record<string, unknown>).parentFolderId as string | null ?? null
+          if (dragParentId === overParentFolderId) {
+            const dragOrigIndex = parentChildren.findIndex((child) => {
+              if (nodeType === 'workspace') return child.type === 'workspace' && child.workspaceId === nodeId
+              return child.type === 'folder' && child.id === nodeId
+            })
+            if (dragOrigIndex !== -1 && dragOrigIndex < targetIndex) targetIndex--
+          }
+
+          state.reorderSidebarNode(nodeId, nodeType, overParentFolderId, targetIndex)
+        }
       } else {
-        // Dropped ON a workspace → insert at its position
+        // Dropped ON a workspace → insert before/after based on pointer position
         const overParentFolderId = (dropData.parentFolderId as string | null) ?? null
         const overWsId = dropData.workspaceId as string
 
         const sidebarTree = state.sidebarTree as SidebarNode[]
-        let parentChildren: SidebarNode[]
-        if (overParentFolderId === null) {
-          parentChildren = sidebarTree
-        } else {
-          const parentFolder = findFolder(sidebarTree, overParentFolderId)
-          parentChildren = parentFolder ? parentFolder.children : sidebarTree
-        }
+        const parentChildren = overParentFolderId === null
+          ? sidebarTree
+          : findFolder(sidebarTree, overParentFolderId)?.children ?? sidebarTree
 
         let overIndex = parentChildren.findIndex(
           (child) => child.type === 'workspace' && child.workspaceId === overWsId,
         )
         if (overIndex === -1) overIndex = parentChildren.length
 
-        state.reorderSidebarNode(nodeId, nodeType, overParentFolderId, overIndex)
+        const insertAfter = isInsertAfter(`ws-${overWsId}`, 'vertical')
+        let targetIndex = insertAfter ? overIndex + 1 : overIndex
+
+        // Adjust for same-parent removal
+        const dragParentId = (active.data.current as Record<string, unknown>).parentFolderId as string | null ?? null
+        if (dragParentId === overParentFolderId) {
+          const dragOrigIndex = parentChildren.findIndex((child) => {
+            if (nodeType === 'workspace') return child.type === 'workspace' && child.workspaceId === nodeId
+            return child.type === 'folder' && child.id === nodeId
+          })
+          if (dragOrigIndex !== -1 && dragOrigIndex < targetIndex) targetIndex--
+        }
+
+        state.reorderSidebarNode(nodeId, nodeType, overParentFolderId, targetIndex)
       }
       return
     }
@@ -166,16 +234,24 @@ export function useDragAndDrop() {
         const ws = state.workspaces.find((w) => w.id === dragData.workspaceId)
         if (!ws) return
         const fromIndex = ws.tabs.findIndex((t) => t.id === dragData.tabId)
-        const toIndex = ws.tabs.findIndex((t) => t.id === (dropData.tabId as string))
-        if (fromIndex !== -1 && toIndex !== -1 && fromIndex !== toIndex) {
-          state.reorderTabs(dragData.workspaceId, fromIndex, toIndex)
+        const overIndex = ws.tabs.findIndex((t) => t.id === (dropData.tabId as string))
+        if (fromIndex === -1 || overIndex === -1) return
+
+        const insertAfter = isInsertAfter(`tab-${dropData.tabId as string}`, 'horizontal')
+        let targetIndex = insertAfter ? overIndex + 1 : overIndex
+        if (fromIndex < targetIndex) targetIndex--
+        if (fromIndex !== targetIndex) {
+          state.reorderTabs(dragData.workspaceId, fromIndex, targetIndex)
         }
       }
       return
     }
 
     // ── Tab → Sidebar workspace (cross-workspace move) ──
-    if (dragData.type === 'tab' && dropType === 'sidebar-workspace-target') {
+    // Accept both 'sidebar-workspace-target' (separate droppable) and 'sidebar-workspace'
+    // (sortable droppable). Both are registered on the same DOM element; pointerWithin
+    // typically returns the sortable first since it's registered first.
+    if (dragData.type === 'tab' && (dropType === 'sidebar-workspace-target' || dropType === 'sidebar-workspace')) {
       const targetWsId = dropData.workspaceId as string
       if (dragData.workspaceId !== targetWsId) {
         state.moveTabToWorkspace(dragData.workspaceId, dragData.tabId, targetWsId)
@@ -186,22 +262,12 @@ export function useDragAndDrop() {
     // ── Tab → Pane zone (merge tab into split) ──
     if (dragData.type === 'tab' && dropType === 'pane-zone') {
       // Compute split direction from pointer position relative to pane rect.
-      // This is the single source of truth — no dependency on stale React state.
       const paneId = dropData.paneId as string
       const paneEl = document.querySelector(`[data-pane-drop-id="${paneId}"]`)
       let side: DropSide = 'right'
-      if (paneEl && event.activatorEvent instanceof PointerEvent) {
-        // Use the last known pointer coordinates from the drag event
+      if (paneEl && pointerPos) {
         const rect = paneEl.getBoundingClientRect()
-        // dnd-kit doesn't expose final pointer position in onDragEnd,
-        // but the activatorEvent has initial coordinates. For the final position,
-        // we use the delta from the active node's transform.
-        const coords = (event as any).delta
-          ? { x: (event.activatorEvent as PointerEvent).clientX + (event as any).delta.x,
-              y: (event.activatorEvent as PointerEvent).clientY + (event as any).delta.y }
-          : { x: (event.activatorEvent as PointerEvent).clientX,
-              y: (event.activatorEvent as PointerEvent).clientY }
-        side = computeDropSide(coords.x, coords.y, rect)
+        side = computeDropSide(pointerPos.x, pointerPos.y, rect)
       } else if (dropData.side) {
         // Fallback: read the side tracked by PaneContainer's pointermove listener
         side = dropData.side as DropSide
