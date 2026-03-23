@@ -97,6 +97,37 @@ body {
   transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
 }
 
+/* Selection color */
+::selection {
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+/* Focus rings */
+*:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* Tab transition */
+.tab-transition {
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+/* Sidebar transition */
+.sidebar-transition {
+  transition: width 200ms ease, min-width 200ms ease, opacity 150ms ease;
+}
+
+/* Pane toolbar show-on-hover */
+.pane-toolbar-actions {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.group:hover .pane-toolbar-actions,
+.pane-toolbar-actions:focus-within {
+  opacity: 1;
+}
+
 /* Allotment sash (resize handle) styling */
 .split-view-view .sash-container .sash {
   background: var(--border);
@@ -104,4 +135,25 @@ body {
 }
 .split-view-view .sash-container .sash:hover {
   background: var(--primary);
+}
+
+/* Allotment sash styling — make visible and themed */
+.split-view-view > .sash-container > .sash {
+  background-color: var(--border) !important;
+}
+.split-view-view > .sash-container > .sash:hover {
+  background-color: var(--primary) !important;
+  transition: background-color 150ms ease;
+}
+.split-view-view > .sash-container > .sash.active {
+  background-color: var(--primary) !important;
+}
+
+/* Smooth page transitions */
+.fade-in {
+  animation: fadeIn 150ms ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
