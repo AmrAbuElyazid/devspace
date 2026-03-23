@@ -7,6 +7,7 @@ import { useWorkspaceStore } from '../store/workspace-store'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
 import type { BrowserConfig } from '../types/workspace'
+import type { ReactElement } from 'react'
 
 interface BrowserPaneProps {
   paneId: string
@@ -15,17 +16,16 @@ interface BrowserPaneProps {
   hideNativeView: boolean
 }
 
-const createdPaneIds = new Set<string>()
-
 export default function BrowserPane({
   paneId,
   config,
   isVisible,
   hideNativeView,
-}: BrowserPaneProps): JSX.Element {
+}: BrowserPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId])
+  const isPaneCreated = useBrowserStore((s) => s.createdPaneIds[paneId] === true)
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle)
   const initialUrl = useMemo(() => normalizeBrowserInput(config.url || 'about:blank'), [config.url])
@@ -40,23 +40,23 @@ export default function BrowserPane({
   useEffect(() => {
     let cancelled = false
 
-    if (createdPaneIds.has(paneId)) {
+    if (isPaneCreated) {
       return () => {
         cancelled = true
       }
     }
 
-    createdPaneIds.add(paneId)
+    useBrowserStore.getState().markPaneCreated(paneId)
     void window.api.browser.create(paneId, initialUrl).catch(() => {
       if (!cancelled) {
-        createdPaneIds.delete(paneId)
+        useBrowserStore.getState().markPaneDestroyed(paneId)
       }
     })
 
     return () => {
       cancelled = true
     }
-  }, [initialUrl, paneId])
+  }, [initialUrl, isPaneCreated, paneId])
 
   useEffect(() => {
     if (runtimeState?.url) {
