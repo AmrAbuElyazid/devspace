@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { FolderOpen, Save, FileCode } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
+import { toast } from '../hooks/useToast'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
 import type { EditorConfig } from '../types/workspace'
@@ -86,8 +87,10 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): React.J
     try {
       await window.api.fs.writeFile(filePath, content)
       setSavedContent(content)
+      toast('File saved', 'success')
     } catch (err) {
       console.error('Failed to save file:', err)
+      toast('Failed to save file', 'error')
     }
   }, [filePath, content])
 
