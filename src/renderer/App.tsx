@@ -42,8 +42,9 @@ function subscribeToBrowserEvents(listeners: BrowserBridgeListeners): BrowserBri
 export default function App(): JSX.Element {
   useTheme()
 
-  const upsertRuntimeState = useBrowserStore((s) => s.upsertRuntimeState)
+  const handleRuntimeStateChange = useBrowserStore((s) => s.handleRuntimeStateChange)
   const setPendingPermissionRequest = useBrowserStore((s) => s.setPendingPermissionRequest)
+  const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
 
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
@@ -57,10 +58,14 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     return subscribeToBrowserEvents({
-      onStateChange: upsertRuntimeState,
+      onStateChange: (state) => {
+        handleRuntimeStateChange(state, (paneId, url) => {
+          updatePaneConfig(paneId, { url })
+        })
+      },
       onPermissionRequest: setPendingPermissionRequest,
     })
-  }, [setPendingPermissionRequest, upsertRuntimeState])
+  }, [handleRuntimeStateChange, setPendingPermissionRequest, updatePaneConfig])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {

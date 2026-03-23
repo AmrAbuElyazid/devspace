@@ -11,6 +11,7 @@ import { useBrowserStore } from '../store/browser-store'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
+import BrowserSecurityIndicator from './browser/BrowserSecurityIndicator'
 import type { BrowserConfig } from '../types/workspace'
 import type { ReactElement } from 'react'
 
@@ -30,7 +31,6 @@ export default function BrowserPane({
   const placeholderRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId])
-  const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle)
   const initialUrl = useMemo(() => normalizeBrowserInput(config.url || 'about:blank'), [config.url])
   const [inputUrl, setInputUrl] = useState(initialUrl)
@@ -65,9 +65,8 @@ export default function BrowserPane({
   useEffect(() => {
     if (runtimeState?.url) {
       setInputUrl(runtimeState.url)
-      updatePaneConfig(paneId, { url: runtimeState.url })
     }
-  }, [paneId, runtimeState?.url, updatePaneConfig])
+  }, [runtimeState?.url])
 
   useEffect(() => {
     if (runtimeState?.title) {
@@ -82,9 +81,13 @@ export default function BrowserPane({
   }, [hideNativeView, isVisible, paneId])
 
   const currentUrl = runtimeState?.url ?? initialUrl
+  const currentTitle = runtimeState?.title ?? 'Browser'
   const isLoading = runtimeState?.isLoading ?? false
   const canGoBack = runtimeState?.canGoBack ?? false
   const canGoForward = runtimeState?.canGoForward ?? false
+  const isSecure = runtimeState?.isSecure ?? false
+  const securityLabel = runtimeState?.securityLabel ?? null
+  const hasCertificateError = securityLabel === 'Certificate error'
 
   const handleNavigate = useCallback((value: string) => {
     const normalized = normalizeBrowserInput(value)
@@ -153,6 +156,8 @@ export default function BrowserPane({
           </Button>
         </Tooltip>
 
+        <BrowserSecurityIndicator isSecure={isSecure} securityLabel={securityLabel} />
+
         <input
           ref={inputRef}
           type="text"
@@ -180,10 +185,26 @@ export default function BrowserPane({
       {isLoading && <div className="browser-loading-bar" />}
 
       <div className="browser-shell-viewport">
+        {hasCertificateError && (
+          <div className="browser-failure-surface">
+            <div className="browser-failure-card">
+              <div className="browser-failure-eyebrow">Navigation blocked</div>
+              <h2>{securityLabel}</h2>
+              <p>{currentTitle}. The page did not load because its certificate could not be trusted.</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void window.api.browser.reload(paneId)}
+              >
+                Try again
+              </Button>
+            </div>
+          </div>
+        )}
         <div
           ref={placeholderRef}
           className="browser-native-view-slot"
-          data-native-view-hidden={!isVisible || hideNativeView ? 'true' : undefined}
+          data-native-view-hidden={!isVisible || hideNativeView || hasCertificateError ? 'true' : undefined}
         />
       </div>
     </div>

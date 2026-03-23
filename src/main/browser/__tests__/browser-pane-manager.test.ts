@@ -73,3 +73,13 @@ test('hidePane preserves runtime state and visibility bookkeeping', () => {
   assert.equal(manager.getRuntimeState('pane-1')?.url, 'https://example.com')
   assert.equal(manager.isPaneVisible('pane-1'), false)
 })
+
+test('runtime updates capture title, favicon, and loading state', () => {
+  const manager = makeManager()
+  manager.createPane('pane-1', 'https://example.com')
+  manager.applyRuntimePatch('pane-1', { title: 'Example', faviconUrl: 'https://example.com/favicon.ico', isLoading: true })
+
+  assert.equal(manager.getRuntimeState('pane-1')?.title, 'Example')
+  assert.equal(manager.getRuntimeState('pane-1')?.faviconUrl, 'https://example.com/favicon.ico')
+  assert.equal(manager.getRuntimeState('pane-1')?.isLoading, true)
+})
