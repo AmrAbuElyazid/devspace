@@ -12,7 +12,6 @@ import { AlertDialog } from './ui/alert-dialog'
 import { InlineRenameInput } from './ui/InlineRenameInput'
 import type { ContextMenuItem } from '../../shared/types'
 import type { SidebarNode } from '../types/workspace'
-import type { DragItemData } from '../types/dnd'
 import { useDragContext } from '../hooks/useDragAndDrop'
 
 // ---------------------------------------------------------------------------
@@ -21,6 +20,7 @@ import { useDragContext } from '../hooks/useDragAndDrop'
 
 function SortableWorkspaceItem({
   workspaceId,
+  parentFolderId,
   depth,
   isActive,
   isEditing,
@@ -32,6 +32,7 @@ function SortableWorkspaceItem({
   onContextMenu,
 }: {
   workspaceId: string
+  parentFolderId: string | null
   depth: number
   isActive: boolean
   isEditing: boolean
@@ -54,7 +55,7 @@ function SortableWorkspaceItem({
     isDragging,
   } = useSortable({
     id: `ws-${workspaceId}`,
-    data: { type: 'sidebar-workspace', workspaceId } satisfies DragItemData,
+    data: { type: 'sidebar-workspace' as const, workspaceId, parentFolderId },
   })
 
   const { setNodeRef: setDropRef, isOver: isTabOver } = useDroppable({
@@ -124,6 +125,7 @@ function SortableWorkspaceItem({
 
 function SortableFolderItem({
   folder,
+  parentFolderId,
   depth,
   isEditing,
   editingId,
@@ -142,6 +144,7 @@ function SortableFolderItem({
   setDeleteTarget,
 }: {
   folder: SidebarNode & { type: 'folder' }
+  parentFolderId: string | null
   depth: number
   isEditing: boolean
   editingId: string | null
@@ -169,7 +172,7 @@ function SortableFolderItem({
     isOver,
   } = useSortable({
     id: `folder-${folder.id}`,
-    data: { type: 'sidebar-folder', folderId: folder.id } satisfies DragItemData,
+    data: { type: 'sidebar-folder' as const, folderId: folder.id, parentFolderId },
   })
 
   const style = {
@@ -229,6 +232,7 @@ function SortableFolderItem({
       {!folder.collapsed && (
         <SidebarTreeLevel
           nodes={folder.children}
+          parentFolderId={folder.id}
           depth={depth + 1}
           editingId={editingId}
           editingType={editingType}
@@ -256,6 +260,7 @@ function SortableFolderItem({
 
 function SidebarTreeLevel({
   nodes,
+  parentFolderId,
   depth,
   editingId,
   editingType,
@@ -273,6 +278,7 @@ function SidebarTreeLevel({
   setDeleteTarget,
 }: {
   nodes: SidebarNode[]
+  parentFolderId: string | null
   depth: number
   editingId: string | null
   editingType: 'workspace' | 'folder' | null
@@ -306,6 +312,7 @@ function SidebarTreeLevel({
             <SortableWorkspaceItem
               key={`ws-${ws.id}`}
               workspaceId={ws.id}
+              parentFolderId={parentFolderId}
               depth={depth}
               isActive={ws.id === activeWorkspaceId}
               isEditing={editingId === ws.id && editingType === 'workspace'}
@@ -324,6 +331,7 @@ function SidebarTreeLevel({
           <SortableFolderItem
             key={`folder-${node.id}`}
             folder={node}
+            parentFolderId={parentFolderId}
             depth={depth}
             isEditing={editingId === node.id && editingType === 'folder'}
             editingId={editingId}
@@ -444,6 +452,7 @@ export default function Sidebar(): JSX.Element {
       <ScrollArea className="ws-list">
         <SidebarTreeLevel
           nodes={sidebarTree}
+          parentFolderId={null}
           depth={0}
           editingId={editingId}
           editingType={editingType}

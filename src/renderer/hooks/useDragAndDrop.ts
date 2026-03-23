@@ -9,7 +9,6 @@ import {
   type CollisionDetection,
   closestCenter,
   pointerWithin,
-  rectIntersection,
 } from '@dnd-kit/core'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { findFolder } from '../lib/sidebar-tree'
@@ -38,11 +37,49 @@ export function useDragAndDrop() {
   )
 
   const collisionDetection: CollisionDetection = useCallback((args) => {
+    const { active, droppableContainers } = args
+    const activeData = active.data.current as Record<string, unknown> | undefined
+
+    if (activeData?.type === 'tab') {
+      // For tab drags, prioritize: tab items > sidebar targets > pane zones
+      const tabContainers = droppableContainers.filter((container) => {
+        const data = container.data.current as Record<string, unknown> | undefined
+        return data?.type === 'tab'
+      })
+      const tabCollisions = closestCenter({ ...args, droppableContainers: tabContainers })
+      if (tabCollisions.length > 0) return tabCollisions
+
+      const sidebarContainers = droppableContainers.filter((container) => {
+        const data = container.data.current as Record<string, unknown> | undefined
+        return data?.type === 'sidebar-workspace-target'
+      })
+      const sidebarCollisions = pointerWithin({ ...args, droppableContainers: sidebarContainers })
+      if (sidebarCollisions.length > 0) return sidebarCollisions
+
+      const paneContainers = droppableContainers.filter((container) => {
+        const data = container.data.current as Record<string, unknown> | undefined
+        return data?.type === 'pane-zone'
+      })
+      const paneCollisions = pointerWithin({ ...args, droppableContainers: paneContainers })
+      if (paneCollisions.length > 0) return paneCollisions
+
+      return []
+    }
+
+    if (activeData?.type === 'sidebar-workspace' || activeData?.type === 'sidebar-folder') {
+      // For sidebar drags, only consider sidebar items
+      const sidebarContainers = droppableContainers.filter((container) => {
+        const data = container.data.current as Record<string, unknown> | undefined
+        return data?.type === 'sidebar-workspace' || data?.type === 'sidebar-folder' || data?.type === 'sidebar-workspace-target'
+      })
+      const collisions = closestCenter({ ...args, droppableContainers: sidebarContainers })
+      if (collisions.length > 0) return collisions
+    }
+
+    // Default fallback
     const pointerCollisions = pointerWithin(args)
     if (pointerCollisions.length > 0) return pointerCollisions
-    const closestCollisions = closestCenter(args)
-    if (closestCollisions.length > 0) return closestCollisions
-    return rectIntersection(args)
+    return closestCenter(args)
   }, [])
 
   const clearFolderExpandTimer = useCallback(() => {
@@ -113,33 +150,43 @@ export function useDragAndDrop() {
 
     const state = store.getState()
 
-    // === Sidebar reorder ===
-    if (
-      (dragData.type === 'sidebar-workspace' || dragData.type === 'sidebar-folder') &&
-      dropType === 'sidebar-sortable'
-    ) {
-      const nodeId = dragData.type === 'sidebar-workspace' ? dragData.workspaceId : dragData.folderId
-      const nodeType = dragData.type === 'sidebar-workspace' ? 'workspace' : 'folder'
-      state.reorderSidebarNode(
-        nodeId,
-        nodeType,
-        dropData.parentFolderId as string | null,
-        dropData.index as number,
-      )
-      return
-    }
+    // === Sidebar item dropped on another sidebar item (reorder / cross-level move) ===
+    const isSidebarDrag = dragData.type === 'sidebar-workspace' || dragData.type === 'sidebar-folder'
+    const isSidebarDrop = dropType === 'sidebar-workspace' || dropType === 'sidebar-folder'
 
-    // === Drop into folder ===
-    if (
-      (dragData.type === 'sidebar-workspace' || dragData.type === 'sidebar-folder') &&
-      dropType === 'sidebar-folder'
-    ) {
+    if (isSidebarDrag && isSidebarDrop) {
       const nodeId = dragData.type === 'sidebar-workspace' ? dragData.workspaceId : dragData.folderId
       const nodeType = dragData.type === 'sidebar-workspace' ? 'workspace' : 'folder'
-      const targetFolderId = dropData.folderId as string
-      const folder = findFolder(state.sidebarTree as SidebarNode[], targetFolderId)
-      const index = folder ? folder.children.length : 0
-      state.reorderSidebarNode(nodeId, nodeType, targetFolderId, index)
+
+      if (dropType === 'sidebar-folder') {
+        // Dropped ON a folder → insert as last child of that folder
+        const targetFolderId = dropData.folderId as string
+        // Don't drop a folder into itself
+        if (nodeType === 'folder' && nodeId === targetFolderId) return
+        const folder = findFolder(state.sidebarTree as SidebarNode[], targetFolderId)
+        const index = folder ? folder.children.length : 0
+        state.reorderSidebarNode(nodeId, nodeType, targetFolderId, index)
+      } else {
+        // Dropped ON a workspace → insert at the workspace's position in its parent
+        const overParentFolderId = (dropData.parentFolderId as string | null) ?? null
+        const overWsId = dropData.workspaceId as string
+
+        const sidebarTree = state.sidebarTree as SidebarNode[]
+        let parentChildren: SidebarNode[]
+        if (overParentFolderId === null) {
+          parentChildren = sidebarTree
+        } else {
+          const parentFolder = findFolder(sidebarTree, overParentFolderId)
+          parentChildren = parentFolder ? parentFolder.children : sidebarTree
+        }
+
+        let overIndex = parentChildren.findIndex(
+          (child) => child.type === 'workspace' && child.workspaceId === overWsId,
+        )
+        if (overIndex === -1) overIndex = parentChildren.length
+
+        state.reorderSidebarNode(nodeId, nodeType, overParentFolderId, overIndex)
+      }
       return
     }
 
