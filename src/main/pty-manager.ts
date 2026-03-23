@@ -1,7 +1,31 @@
 import * as pty from 'node-pty'
 import type { IPty } from 'node-pty'
 import { nanoid } from 'nanoid'
+import { chmodSync } from 'fs'
+import { join, dirname } from 'path'
 import type { PtyCreateOptions } from '../shared/types'
+
+// Ensure spawn-helper is executable (bun doesn't run postinstall scripts that set this)
+function ensureSpawnHelperExecutable(): void {
+  try {
+    const arch = process.arch === 'arm64' ? 'arm64' : 'x64'
+    const platform = process.platform
+    const candidates = [
+      join(dirname(require.resolve('node-pty')), '..', 'prebuilds', `${platform}-${arch}`, 'spawn-helper'),
+      join(dirname(require.resolve('node-pty')), '..', 'build', 'Release', 'spawn-helper'),
+    ]
+    for (const p of candidates) {
+      try {
+        chmodSync(p, 0o755)
+      } catch {
+        // candidate doesn't exist, try next
+      }
+    }
+  } catch {
+    // best-effort
+  }
+}
+ensureSpawnHelperExecutable()
 
 export class PtyManager {
   private sessions = new Map<string, IPty>()

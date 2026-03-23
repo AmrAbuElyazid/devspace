@@ -1,103 +1,131 @@
 @import "tailwindcss";
 
-/* Light theme (default) */
-:root {
-  --background: #fafafa;
-  --foreground: #0a0a0a;
-  --card: #ffffff;
-  --card-foreground: #0a0a0a;
-  --primary: #1a1a2e;
-  --primary-foreground: #fafafa;
-  --secondary: #f0f0f5;
-  --secondary-foreground: #0a0a0a;
-  --muted: #f0f0f5;
-  --muted-foreground: #6b6b80;
-  --accent: #f0f0f5;
-  --accent-foreground: #0a0a0a;
-  --border: #e2e2ea;
-  --input: #e2e2ea;
-  --ring: #1a1a2e;
-  --radius: 0.5rem;
-  --sidebar-width: 240px;
-  --titlebar-height: 52px;
+@custom-variant dark (&:is(.dark, .dark *));
+
+/* Import DM Sans from Google Fonts or use system font with optical sizing */
+@font-face {
+  font-family: 'DM Sans';
+  src: local('DM Sans'), local('DMSans-Regular');
+  font-display: swap;
 }
 
-/* Dark theme */
-.dark {
-  --background: #0a0a0f;
-  --foreground: #ececf1;
-  --card: #131318;
-  --card-foreground: #ececf1;
-  --primary: #a5b4fc;
-  --primary-foreground: #0a0a0f;
-  --secondary: #1e1e2a;
-  --secondary-foreground: #ececf1;
-  --muted: #1e1e2a;
-  --muted-foreground: #8888a0;
-  --accent: #1e1e2a;
-  --accent-foreground: #ececf1;
-  --border: #2a2a3a;
-  --input: #2a2a3a;
-  --ring: #a5b4fc;
-  --radius: 0.5rem;
+:root {
+  --background: #f8f9fa;
+  --foreground: #111318;
+  --card: #ffffff;
+  --card-foreground: #111318;
+  --popover: #ffffff;
+  --popover-foreground: #111318;
+  --primary: oklch(0.488 0.217 264);
+  --primary-foreground: #ffffff;
+  --secondary: #f1f3f5;
+  --secondary-foreground: #111318;
+  --muted: #f1f3f5;
+  --muted-foreground: #6c7688;
+  --accent: #edf0f4;
+  --accent-foreground: #111318;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e1e5eb;
+  --input: #e1e5eb;
+  --ring: oklch(0.488 0.217 264);
+  --radius: 0.625rem;
   --sidebar-width: 240px;
+  --sidebar-bg: #f1f3f5;
   --titlebar-height: 52px;
+  --tabbar-height: 36px;
+}
+
+.dark {
+  --background: #0c0d10;
+  --foreground: #e0e4ec;
+  --card: #141519;
+  --card-foreground: #e0e4ec;
+  --popover: #141519;
+  --popover-foreground: #e0e4ec;
+  --primary: oklch(0.588 0.217 264);
+  --primary-foreground: #0c0d10;
+  --secondary: #1a1c22;
+  --secondary-foreground: #e0e4ec;
+  --muted: #1a1c22;
+  --muted-foreground: #6e7a8a;
+  --accent: #1e2028;
+  --accent-foreground: #e0e4ec;
+  --destructive: #f87171;
+  --destructive-foreground: #0c0d10;
+  --border: #252830;
+  --input: #252830;
+  --ring: oklch(0.588 0.217 264);
+  --sidebar-bg: #111318;
 }
 
 /* Reset */
-* {
+*, *::before, *::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  border-color: var(--border);
 }
 
-/* Body */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   overflow: hidden;
   background-color: var(--background);
   color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.5;
+  position: relative;
+}
+
+/* Noise texture overlay for depth — t3code pattern */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 /* Drag regions for frameless window */
-.drag-region {
-  -webkit-app-region: drag;
-}
+.drag-region { -webkit-app-region: drag; }
+.no-drag { -webkit-app-region: no-drag; }
 
-.no-drag {
-  -webkit-app-region: no-drag;
-}
-
-/* Custom scrollbar styling */
+/* Scrollbar styling — subtle, t3code-inspired */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-
 ::-webkit-scrollbar-track {
   background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background-color: var(--muted-foreground);
   border-radius: 3px;
+  background: rgba(0, 0, 0, 0.15);
 }
-
+.dark ::-webkit-scrollbar-thumb,
+:is(.dark) ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+}
 ::-webkit-scrollbar-thumb:hover {
-  background-color: var(--foreground);
+  background: rgba(0, 0, 0, 0.25);
 }
-
+.dark ::-webkit-scrollbar-thumb:hover,
+:is(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
 
-/* Smooth transitions for interactive elements */
-.transition-colors-fast {
-  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
-}
-
-/* Selection color */
+/* Selection */
 ::selection {
   background: color-mix(in srgb, var(--primary) 30%, transparent);
 }
@@ -108,43 +136,135 @@ body {
   outline-offset: 2px;
 }
 
-/* Tab transition */
-.tab-transition {
-  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+/* Theme switch: suppress transitions */
+.no-transitions,
+.no-transitions *,
+.no-transitions *::before,
+.no-transitions *::after {
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
 }
 
 /* Sidebar transition */
 .sidebar-transition {
-  transition: width 200ms ease, min-width 200ms ease, opacity 150ms ease;
+  transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              min-width 200ms cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 150ms ease;
 }
 
 /* Pane toolbar show-on-hover */
 .pane-toolbar-actions {
   opacity: 0;
-  transition: opacity 150ms ease;
+  transition: opacity 120ms ease;
 }
 .group:hover .pane-toolbar-actions,
 .pane-toolbar-actions:focus-within {
   opacity: 1;
 }
 
-/* Allotment sash (resize handle) styling */
-.split-view-view .sash-container .sash {
-  background: var(--border);
-  transition: background 150ms ease;
+/* Sidebar workspace item hover styles */
+.sidebar-item {
+  transition: background-color 120ms ease, color 120ms ease;
 }
-.split-view-view .sash-container .sash:hover {
-  background: var(--primary);
+.sidebar-item:not(.sidebar-item-active):hover {
+  background-color: var(--accent);
+}
+.sidebar-item-active {
+  background-color: color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
-/* Allotment sash styling — make visible and themed */
+/* Sidebar button hover */
+.sidebar-btn {
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.sidebar-btn:hover {
+  background-color: var(--accent);
+  color: var(--foreground);
+}
+
+/* Theme toggle pill */
+.theme-toggle-btn {
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.theme-toggle-btn:hover:not(.theme-toggle-active) {
+  background-color: var(--accent);
+  color: var(--foreground);
+}
+.theme-toggle-active {
+  background-color: var(--accent);
+  color: var(--foreground);
+}
+
+/* Tab styles */
+.tab-item {
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.tab-item:not(.tab-active):hover {
+  background-color: var(--accent);
+}
+.tab-active {
+  background-color: var(--card);
+}
+
+/* Tab close button */
+.tab-close {
+  transition: opacity 120ms ease, color 120ms ease, background-color 120ms ease;
+}
+.tab-close:hover {
+  color: var(--foreground);
+  background-color: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+/* Tab add button */
+.tab-add-btn {
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.tab-add-btn:hover {
+  background-color: var(--accent);
+  color: var(--foreground);
+}
+
+/* Empty pane card */
+.empty-pane-card {
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.empty-pane-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  transform: translateY(-2px);
+}
+.dark .empty-pane-card:hover,
+:is(.dark) .empty-pane-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* Pane toolbar action buttons */
+.pane-action-btn {
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.pane-action-btn:hover {
+  background-color: var(--accent);
+  color: var(--foreground);
+}
+.pane-action-close:hover {
+  background-color: color-mix(in srgb, var(--destructive) 15%, transparent);
+  color: var(--destructive);
+}
+
+/* Workspace delete button */
+.ws-delete-btn {
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.ws-delete-btn:hover {
+  color: var(--destructive);
+}
+
+/* Allotment sash styling — slim, refined */
 .split-view-view > .sash-container > .sash {
   background-color: var(--border) !important;
+  transition: background-color 200ms ease !important;
 }
-.split-view-view > .sash-container > .sash:hover {
-  background-color: var(--primary) !important;
-  transition: background-color 150ms ease;
-}
+.split-view-view > .sash-container > .sash:hover,
 .split-view-view > .sash-container > .sash.active {
   background-color: var(--primary) !important;
 }

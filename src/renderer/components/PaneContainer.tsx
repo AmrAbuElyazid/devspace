@@ -54,20 +54,20 @@ export default function PaneContainer({
 
   return (
     <div className="h-full w-full flex flex-col group/pane">
-      {/* Toolbar */}
+      {/* Toolbar — refined, thinner */}
       <div
         className="flex items-center justify-between shrink-0 px-2"
         style={{
-          height: 28,
+          height: 24,
           backgroundColor: 'var(--card)',
           borderBottom: '1px solid var(--border)',
         }}
       >
         {/* Left: icon + title */}
         <div className="flex items-center gap-1.5 min-w-0">
-          <TypeIcon size={14} style={{ color: 'var(--muted-foreground)' }} className="shrink-0" />
+          <TypeIcon size={12} style={{ color: 'var(--muted-foreground)', opacity: 0.7 }} className="shrink-0" />
           <span
-            className="text-xs truncate"
+            className="text-[11px] truncate"
             style={{ color: 'var(--muted-foreground)' }}
           >
             {pane.title}
@@ -75,30 +75,30 @@ export default function PaneContainer({
         </div>
 
         {/* Right: action buttons (visible on hover) */}
-        <div className="flex items-center gap-0.5 opacity-0 group-hover/pane:opacity-100 transition-opacity">
+        <div className="flex items-center gap-px opacity-0 group-hover/pane:opacity-100 transition-opacity duration-[120ms]">
           <button
             onClick={() => splitPane(workspaceId, tabId, paneId, 'horizontal')}
-            className="flex items-center justify-center rounded hover:bg-[var(--accent)]"
-            style={{ width: 20, height: 20, color: 'var(--muted-foreground)' }}
+            className="pane-action-btn flex items-center justify-center rounded"
+            style={{ width: 18, height: 18, color: 'var(--muted-foreground)' }}
             title="Split Right"
           >
-            <Columns2 size={12} />
+            <Columns2 size={11} />
           </button>
           <button
             onClick={() => splitPane(workspaceId, tabId, paneId, 'vertical')}
-            className="flex items-center justify-center rounded hover:bg-[var(--accent)]"
-            style={{ width: 20, height: 20, color: 'var(--muted-foreground)' }}
+            className="pane-action-btn flex items-center justify-center rounded"
+            style={{ width: 18, height: 18, color: 'var(--muted-foreground)' }}
             title="Split Down"
           >
-            <Rows2 size={12} />
+            <Rows2 size={11} />
           </button>
           <button
             onClick={() => closePane(workspaceId, tabId, paneId)}
-            className="flex items-center justify-center rounded hover:bg-[var(--destructive)]"
-            style={{ width: 20, height: 20, color: 'var(--muted-foreground)' }}
+            className="pane-action-btn pane-action-close flex items-center justify-center rounded"
+            style={{ width: 18, height: 18, color: 'var(--muted-foreground)' }}
             title="Close"
           >
-            <X size={12} />
+            <X size={11} />
           </button>
         </div>
       </div>

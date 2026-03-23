@@ -102,11 +102,17 @@ export default function App(): React.JSX.Element {
   }, [])
 
   return (
-    <div className="h-screen w-screen flex flex-col overflow-hidden" style={{ backgroundColor: 'var(--background)', color: 'var(--foreground)' }}>
+    <div
+      className="h-screen w-screen flex flex-col overflow-hidden"
+      style={{ backgroundColor: 'var(--background)', color: 'var(--foreground)' }}
+    >
       <TitleBar />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div
+          className="flex flex-1 flex-col overflow-hidden"
+          style={{ backgroundColor: 'var(--background)' }}
+        >
           <TabBar />
           <div className="flex-1 overflow-hidden">
             {activeTab ? (

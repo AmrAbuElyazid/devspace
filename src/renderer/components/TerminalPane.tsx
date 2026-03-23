@@ -6,30 +6,31 @@ import { useWorkspaceStore } from '../store/workspace-store'
 import type { TerminalConfig } from '../types/workspace'
 
 function getTerminalTheme() {
-  const style = getComputedStyle(document.documentElement)
+  const isDark = document.documentElement.classList.contains('dark')
   return {
-    background: style.getPropertyValue('--background').trim() || '#0a0a0f',
-    foreground: style.getPropertyValue('--foreground').trim() || '#ececf1',
-    cursor: style.getPropertyValue('--foreground').trim() || '#ececf1',
-    cursorAccent: style.getPropertyValue('--background').trim() || '#0a0a0f',
-    selectionBackground: 'rgba(255, 255, 255, 0.15)',
+    background: isDark ? '#0c0d10' : '#f8f9fa',
+    foreground: isDark ? '#e0e4ec' : '#111318',
+    cursor: isDark ? 'rgb(180, 203, 255)' : '#111318',
+    cursorAccent: isDark ? '#0c0d10' : '#f8f9fa',
+    selectionBackground: isDark ? 'rgba(180, 203, 255, 0.25)' : 'rgba(0, 0, 0, 0.12)',
     selectionForeground: undefined,
-    black: '#1e1e2e',
-    red: '#f38ba8',
-    green: '#a6e3a1',
-    yellow: '#f9e2af',
-    blue: '#89b4fa',
-    magenta: '#cba6f7',
-    cyan: '#94e2d5',
-    white: '#cdd6f4',
-    brightBlack: '#585b70',
-    brightRed: '#f38ba8',
-    brightGreen: '#a6e3a1',
-    brightYellow: '#f9e2af',
-    brightBlue: '#89b4fa',
-    brightMagenta: '#cba6f7',
-    brightCyan: '#94e2d5',
-    brightWhite: '#ffffff',
+    // t3code-inspired ANSI colors
+    black: isDark ? 'rgb(24, 30, 38)' : '#1a1c22',
+    red: isDark ? 'rgb(255, 122, 142)' : '#dc2626',
+    green: isDark ? 'rgb(134, 231, 149)' : '#16a34a',
+    yellow: isDark ? 'rgb(244, 205, 114)' : '#ca8a04',
+    blue: isDark ? 'rgb(137, 190, 255)' : '#2563eb',
+    magenta: isDark ? 'rgb(208, 176, 255)' : '#9333ea',
+    cyan: isDark ? 'rgb(124, 232, 237)' : '#0891b2',
+    white: isDark ? 'rgb(210, 218, 230)' : '#e0e4ec',
+    brightBlack: isDark ? 'rgb(75, 85, 99)' : '#6b7280',
+    brightRed: isDark ? 'rgb(255, 150, 166)' : '#ef4444',
+    brightGreen: isDark ? 'rgb(162, 255, 175)' : '#22c55e',
+    brightYellow: isDark ? 'rgb(255, 225, 150)' : '#eab308',
+    brightBlue: isDark ? 'rgb(165, 210, 255)' : '#3b82f6',
+    brightMagenta: isDark ? 'rgb(228, 206, 255)' : '#a855f7',
+    brightCyan: isDark ? 'rgb(155, 245, 249)' : '#06b6d4',
+    brightWhite: isDark ? '#ffffff' : '#111318',
   }
 }
 
@@ -55,7 +56,7 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): Rea
     const terminal = new Terminal({
       cursorBlink: true,
       fontSize: 13,
-      lineHeight: 1.2,
+      lineHeight: 1.35,
       fontFamily:
         "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, Monaco, 'Courier New', monospace",
       scrollback: 5000,
