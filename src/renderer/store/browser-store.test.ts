@@ -32,13 +32,3 @@ test('tracks and clears pending permission requests', () => {
   store.getState().clearPendingPermissionRequest()
   assert.equal(store.getState().pendingPermissionRequest, null)
 })
-
-test('clears session pane creation bookkeeping when a browser pane is destroyed', () => {
-  const store = createBrowserStore()
-
-  store.getState().markPaneCreated('pane-1')
-  assert.equal(store.getState().createdPaneIds['pane-1'], true)
-
-  store.getState().markPaneDestroyed('pane-1')
-  assert.equal(store.getState().createdPaneIds['pane-1'], undefined)
-})
