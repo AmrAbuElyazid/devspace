@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { nanoid } from 'nanoid'
 import type {
   Workspace,
-  WorkspaceFolder,
+  SidebarNode,
   Tab,
   Pane,
   PaneType,
@@ -10,6 +10,16 @@ import type {
   SplitNode,
   SplitDirection,
 } from '../types/workspace'
+import {
+  findSidebarNode,
+  findFolder,
+  removeSidebarNode,
+  insertSidebarNode,
+  isDescendant,
+  updateFolderInTree,
+  removeFolderPromoteChildren,
+  collectWorkspaceIds,
+} from '../lib/sidebar-tree'
 
 // ---------------------------------------------------------------------------
 // Tree helper functions (pure)
@@ -157,16 +167,12 @@ function createDefaultTab(name: string, pane: Pane): Tab {
   }
 }
 
-function createDefaultWorkspace(
-  name: string,
-  tab: Tab,
-): Workspace {
+function createDefaultWorkspace(name: string, tab: Tab): Workspace {
   return {
     id: nanoid(),
     name,
     tabs: [tab],
     activeTabId: tab.id,
-    folderId: null,
   }
 }
 
@@ -189,7 +195,7 @@ interface WorkspaceState {
   workspaces: Workspace[]
   activeWorkspaceId: string
   panes: Record<string, Pane>
-  folders: WorkspaceFolder[]
+  sidebarTree: SidebarNode[]
 
   // Workspace CRUD
   addWorkspace: (name?: string) => void
@@ -197,12 +203,13 @@ interface WorkspaceState {
   renameWorkspace: (id: string, name: string) => void
   setActiveWorkspace: (id: string) => void
 
-  // Folder CRUD
-  addFolder: (name: string) => string
+  // Sidebar tree actions
+  reorderSidebarNode: (nodeId: string, nodeType: 'workspace' | 'folder', targetParentId: string | null, targetIndex: number) => void
+  addFolder: (name: string, parentId?: string | null) => string
   removeFolder: (folderId: string) => void
   renameFolder: (folderId: string, name: string) => void
   toggleFolderCollapsed: (folderId: string) => void
-  moveWorkspaceToFolder: (workspaceId: string, folderId: string | null) => void
+  expandFolder: (folderId: string) => void
 
   // Focus
   setFocusedPane: (workspaceId: string, tabId: string, paneId: string) => void
@@ -212,6 +219,11 @@ interface WorkspaceState {
   removeTab: (workspaceId: string, tabId: string) => void
   renameTab: (workspaceId: string, tabId: string, name: string) => void
   setActiveTab: (workspaceId: string, tabId: string) => void
+
+  // Tab DnD actions
+  reorderTabs: (workspaceId: string, fromIndex: number, toIndex: number) => void
+  moveTabToWorkspace: (fromWorkspaceId: string, tabId: string, toWorkspaceId: string, toIndex?: number) => void
+  mergeTabIntoSplit: (sourceWorkspaceId: string, sourceTabId: string, targetWorkspaceId: string, targetTabId: string, targetPaneId: string, side: 'left' | 'right' | 'top' | 'bottom') => void
 
   // Pane operations
   addPane: (type: PaneType, config?: Partial<PaneConfig>) => string
@@ -244,16 +256,18 @@ interface WorkspaceState {
 const PERSIST_KEY = 'devspace-workspaces'
 const PERSIST_DEBOUNCE_MS = 500
 
-function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'folders'> | null {
+function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'sidebarTree'> | null {
   try {
     const raw = localStorage.getItem(PERSIST_KEY)
     if (!raw) return null
     const persisted = JSON.parse(raw)
+    // If persisted data has old format (no sidebarTree), ignore it (fresh start)
+    if (!persisted.sidebarTree) return null
     return {
       workspaces: persisted.workspaces,
       activeWorkspaceId: persisted.activeWorkspaceId,
       panes: persisted.panes ?? {},
-      folders: persisted.folders ?? [],
+      sidebarTree: persisted.sidebarTree,
     }
   } catch {
     return null
@@ -261,26 +275,19 @@ function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorksp
 }
 
 // Build initial state — hydrate from localStorage or create defaults
-function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'folders'> {
+function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'sidebarTree'> {
   const persisted = loadPersistedState()
-  if (persisted && persisted.workspaces && persisted.workspaces.length > 0) {
-    return {
-      workspaces: persisted.workspaces,
-      activeWorkspaceId: persisted.activeWorkspaceId,
-      panes: persisted.panes ?? {},
-      folders: persisted.folders ?? [],
-    }
+  if (persisted) {
+    return persisted
   }
-
   const pane = createEmptyPane()
   const tab = createDefaultTab('Tab 1', pane)
-  const workspace = createDefaultWorkspace('Workspace 1', tab)
-
+  const ws = createDefaultWorkspace('Workspace 1', tab)
   return {
-    workspaces: [workspace],
-    activeWorkspaceId: workspace.id,
-    panes: { [pane.id]: pane } as Record<string, Pane>,
-    folders: [],
+    workspaces: [ws],
+    activeWorkspaceId: ws.id,
+    panes: { [pane.id]: pane },
+    sidebarTree: [{ type: 'workspace' as const, workspaceId: ws.id }],
   }
 }
 
@@ -299,71 +306,64 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       // Workspace CRUD
       // -------------------------------------------------------------------
 
-      addWorkspace(name) {
-        const { workspaces, panes } = get()
+      addWorkspace: (name) => {
         const pane = createEmptyPane()
         const tab = createDefaultTab('Tab 1', pane)
-        const ws = createDefaultWorkspace(
-          name ?? `Workspace ${workspaces.length + 1}`,
-          tab,
-        )
-
-        set({
-          workspaces: [...workspaces, ws],
+        const wsName = name ?? `Workspace ${get().workspaces.length + 1}`
+        const ws = createDefaultWorkspace(wsName, tab)
+        set((state) => ({
+          workspaces: [...state.workspaces, ws],
           activeWorkspaceId: ws.id,
-          panes: { ...panes, [pane.id]: pane },
-        })
+          panes: { ...state.panes, [pane.id]: pane },
+          sidebarTree: [...state.sidebarTree, { type: 'workspace' as const, workspaceId: ws.id }],
+        }))
       },
 
-      removeWorkspace(id) {
-        const { workspaces, activeWorkspaceId, panes } = get()
-        const ws = workspaces.find((w) => w.id === id)
+      removeWorkspace: (id) => {
+        const state = get()
+        const ws = state.workspaces.find((w) => w.id === id)
         if (!ws) return
 
-        // Collect pane IDs to remove
-        const paneIdsToRemove = new Set<string>()
+        const paneIdsToDestroy: string[] = []
         for (const tab of ws.tabs) {
-          for (const pid of collectPaneIds(tab.root)) {
-            paneIdsToRemove.add(pid)
-          }
+          paneIdsToDestroy.push(...collectPaneIds(tab.root))
+        }
+        for (const paneId of paneIdsToDestroy) {
+          destroyPtyForPane(state.panes, paneId)
+        }
+        const newPanes = { ...state.panes }
+        for (const paneId of paneIdsToDestroy) {
+          delete newPanes[paneId]
         }
 
-        // Destroy PTYs for all terminal panes being removed
-        for (const pid of paneIdsToRemove) {
-          destroyPtyForPane(panes, pid)
-        }
-
-        const newPanes = { ...panes }
-        for (const pid of paneIdsToRemove) {
-          delete newPanes[pid]
-        }
-
-        const remaining = workspaces.filter((w) => w.id !== id)
+        const [newTree] = removeSidebarNode(state.sidebarTree, id, 'workspace')
+        const remaining = state.workspaces.filter((w) => w.id !== id)
 
         if (remaining.length === 0) {
-          // Must always have at least one workspace
-          const pane = createEmptyPane()
-          const tab = createDefaultTab('Tab 1', pane)
-          const newWs = createDefaultWorkspace('Workspace 1', tab)
-          newPanes[pane.id] = pane
-
+          const newPane = createEmptyPane()
+          const newTab = createDefaultTab('Tab 1', newPane)
+          const newWs = createDefaultWorkspace('Workspace 1', newTab)
+          newPanes[newPane.id] = newPane
           set({
             workspaces: [newWs],
             activeWorkspaceId: newWs.id,
             panes: newPanes,
+            sidebarTree: [...newTree, { type: 'workspace' as const, workspaceId: newWs.id }],
           })
           return
         }
 
-        let newActiveId = activeWorkspaceId
-        if (activeWorkspaceId === id) {
-          newActiveId = remaining[0].id
+        let newActiveId = state.activeWorkspaceId
+        if (newActiveId === id) {
+          const oldIndex = state.workspaces.findIndex((w) => w.id === id)
+          newActiveId = remaining[Math.min(oldIndex, remaining.length - 1)]?.id ?? remaining[0].id
         }
 
         set({
           workspaces: remaining,
           activeWorkspaceId: newActiveId,
           panes: newPanes,
+          sidebarTree: newTree,
         })
       },
 
@@ -674,47 +674,55 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       // -------------------------------------------------------------------
-      // Folder CRUD
+      // Sidebar tree actions
       // -------------------------------------------------------------------
 
-      addFolder(name) {
+      reorderSidebarNode: (nodeId, nodeType, targetParentId, targetIndex) => {
+        set((state) => {
+          if (nodeType === 'folder' && targetParentId !== null) {
+            if (nodeId === targetParentId) return state
+            if (isDescendant(state.sidebarTree, nodeId, targetParentId)) return state
+          }
+          const [treeAfterRemove, removed] = removeSidebarNode(state.sidebarTree, nodeId, nodeType)
+          if (!removed) return state
+          const newTree = insertSidebarNode(treeAfterRemove, removed, targetParentId, targetIndex)
+          return { sidebarTree: newTree }
+        })
+      },
+
+      addFolder: (name, parentId = null) => {
         const id = nanoid()
-        const folder: WorkspaceFolder = { id, name, collapsed: false }
-        set({ folders: [...get().folders, folder] })
+        const folderNode: SidebarNode = { type: 'folder', id, name, collapsed: false, children: [] }
+        set((state) => ({
+          sidebarTree: insertSidebarNode(state.sidebarTree, folderNode, parentId, parentId === null ? state.sidebarTree.length : Infinity),
+        }))
         return id
       },
 
-      removeFolder(folderId) {
-        set({
-          folders: get().folders.filter((f) => f.id !== folderId),
-          workspaces: get().workspaces.map((w) =>
-            w.folderId === folderId ? { ...w, folderId: null } : w,
-          ),
+      removeFolder: (folderId) => {
+        set((state) => ({
+          sidebarTree: removeFolderPromoteChildren(state.sidebarTree, folderId),
+        }))
+      },
+
+      renameFolder: (folderId, name) => {
+        set((state) => ({
+          sidebarTree: updateFolderInTree(state.sidebarTree, folderId, { name }),
+        }))
+      },
+
+      toggleFolderCollapsed: (folderId) => {
+        set((state) => {
+          const folder = findFolder(state.sidebarTree, folderId)
+          if (!folder) return state
+          return { sidebarTree: updateFolderInTree(state.sidebarTree, folderId, { collapsed: !folder.collapsed }) }
         })
       },
 
-      renameFolder(folderId, name) {
-        set({
-          folders: get().folders.map((f) =>
-            f.id === folderId ? { ...f, name } : f,
-          ),
-        })
-      },
-
-      toggleFolderCollapsed(folderId) {
-        set({
-          folders: get().folders.map((f) =>
-            f.id === folderId ? { ...f, collapsed: !f.collapsed } : f,
-          ),
-        })
-      },
-
-      moveWorkspaceToFolder(workspaceId, folderId) {
-        set({
-          workspaces: get().workspaces.map((w) =>
-            w.id === workspaceId ? { ...w, folderId } : w,
-          ),
-        })
+      expandFolder: (folderId) => {
+        set((state) => ({
+          sidebarTree: updateFolderInTree(state.sidebarTree, folderId, { collapsed: false }),
+        }))
       },
 
       // -------------------------------------------------------------------
@@ -735,6 +743,115 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           ),
         })
       },
+
+      // -------------------------------------------------------------------
+      // Tab DnD actions
+      // -------------------------------------------------------------------
+
+      reorderTabs: (workspaceId, fromIndex, toIndex) => {
+        set((state) => ({
+          workspaces: state.workspaces.map((ws) => {
+            if (ws.id !== workspaceId) return ws
+            const tabs = [...ws.tabs]
+            const [moved] = tabs.splice(fromIndex, 1)
+            if (!moved) return ws
+            tabs.splice(toIndex, 0, moved)
+            return { ...ws, tabs }
+          }),
+        }))
+      },
+
+      moveTabToWorkspace: (fromWorkspaceId, tabId, toWorkspaceId, toIndex) => {
+        set((state) => {
+          const fromWs = state.workspaces.find((w) => w.id === fromWorkspaceId)
+          const toWs = state.workspaces.find((w) => w.id === toWorkspaceId)
+          if (!fromWs || !toWs) return state
+          const tab = fromWs.tabs.find((t) => t.id === tabId)
+          if (!tab) return state
+          if (fromWorkspaceId === toWorkspaceId) return state
+
+          const remainingTabs = fromWs.tabs.filter((t) => t.id !== tabId)
+          let sourceTabs = remainingTabs
+          let newPanes = state.panes
+          if (sourceTabs.length === 0) {
+            const emptyPane = createEmptyPane()
+            const emptyTab = createDefaultTab('Tab 1', emptyPane)
+            sourceTabs = [emptyTab]
+            newPanes = { ...newPanes, [emptyPane.id]: emptyPane }
+          }
+
+          let sourceActiveTabId = fromWs.activeTabId
+          if (sourceActiveTabId === tabId) {
+            sourceActiveTabId = sourceTabs[0].id
+          }
+
+          const targetTabs = [...toWs.tabs]
+          const insertIndex = toIndex !== undefined ? Math.min(toIndex, targetTabs.length) : targetTabs.length
+          targetTabs.splice(insertIndex, 0, tab)
+
+          return {
+            workspaces: state.workspaces.map((ws) => {
+              if (ws.id === fromWorkspaceId) return { ...ws, tabs: sourceTabs, activeTabId: sourceActiveTabId }
+              if (ws.id === toWorkspaceId) return { ...ws, tabs: targetTabs, activeTabId: tab.id }
+              return ws
+            }),
+            activeWorkspaceId: toWorkspaceId,
+            panes: newPanes,
+          }
+        })
+      },
+
+      mergeTabIntoSplit: (sourceWorkspaceId, sourceTabId, targetWorkspaceId, targetTabId, targetPaneId, side) => {
+        set((state) => {
+          const sourceWs = state.workspaces.find((w) => w.id === sourceWorkspaceId)
+          const targetWs = state.workspaces.find((w) => w.id === targetWorkspaceId)
+          if (!sourceWs || !targetWs) return state
+          const sourceTab = sourceWs.tabs.find((t) => t.id === sourceTabId)
+          const targetTab = targetWs.tabs.find((t) => t.id === targetTabId)
+          if (!sourceTab || !targetTab) return state
+          if (sourceWorkspaceId === targetWorkspaceId && sourceTabId === targetTabId) return state
+
+          const newContent: SplitNode = sourceTab.root
+          const direction: SplitDirection = (side === 'left' || side === 'right') ? 'horizontal' : 'vertical'
+          const existingLeaf: SplitNode = { type: 'leaf', paneId: targetPaneId }
+          const children: SplitNode[] = (side === 'left' || side === 'top')
+            ? [newContent, existingLeaf]
+            : [existingLeaf, newContent]
+          const replacement: SplitNode = { type: 'branch', direction, children, sizes: [50, 50] }
+          const newTargetRoot = replaceLeafInTree(targetTab.root, targetPaneId, replacement)
+
+          const remainingSourceTabs = sourceWs.tabs.filter((t) => t.id !== sourceTabId)
+          let sourceTabs = remainingSourceTabs
+          let newPanes = state.panes
+          if (sourceTabs.length === 0) {
+            const emptyPane = createEmptyPane()
+            const emptyTab = createDefaultTab('Tab 1', emptyPane)
+            sourceTabs = [emptyTab]
+            newPanes = { ...newPanes, [emptyPane.id]: emptyPane }
+          }
+          let sourceActiveTabId = sourceWs.activeTabId
+          if (sourceActiveTabId === sourceTabId) {
+            sourceActiveTabId = sourceTabs[0].id
+          }
+
+          return {
+            workspaces: state.workspaces.map((ws) => {
+              if (ws.id === sourceWorkspaceId && ws.id === targetWorkspaceId) {
+                const tabs = sourceTabs.map((t) =>
+                  t.id === targetTabId ? { ...t, root: newTargetRoot } : t
+                )
+                return { ...ws, tabs, activeTabId: sourceActiveTabId }
+              }
+              if (ws.id === sourceWorkspaceId) return { ...ws, tabs: sourceTabs, activeTabId: sourceActiveTabId }
+              if (ws.id === targetWorkspaceId) {
+                return { ...ws, tabs: ws.tabs.map((t) => t.id === targetTabId ? { ...t, root: newTargetRoot } : t) }
+              }
+              return ws
+            }),
+            panes: newPanes,
+          }
+        })
+      },
     }),
 )
 
@@ -748,7 +865,7 @@ function persistState(state: WorkspaceState): void {
   const data = {
     workspaces: state.workspaces,
     activeWorkspaceId: state.activeWorkspaceId,
-    folders: state.folders,
+    sidebarTree: state.sidebarTree,
     panes: Object.fromEntries(
       Object.entries(state.panes).map(([id, pane]) => {
         if (pane.type === 'terminal') {
