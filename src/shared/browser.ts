@@ -7,6 +7,14 @@ export interface BrowserBounds {
   height: number
 }
 
+export interface BrowserFindState {
+  query: string
+  activeMatch: number
+  totalMatches: number
+}
+
+export type BrowserStopFindAction = 'clearSelection' | 'keepSelection' | 'activateSelection'
+
 export interface BrowserRuntimeState {
   paneId: string
   url: string
@@ -18,7 +26,7 @@ export interface BrowserRuntimeState {
   isSecure: boolean
   securityLabel: string | null
   currentZoom: number
-  find: { query: string; activeMatch: number; totalMatches: number } | null
+  find: BrowserFindState | null
 }
 
 export interface BrowserPermissionRequest {
