@@ -43,22 +43,24 @@ export interface DevspaceBridge {
     getNativeTheme: () => Promise<'light' | 'dark'>
     onNativeThemeChange: (callback: (theme: 'light' | 'dark') => void) => () => void
   }
-  browser: {
-    create: (paneId: string, url: string) => Promise<void>
-    destroy: (paneId: string) => Promise<void>
-    loadURL: (paneId: string, url: string) => Promise<void>
-    goBack: (paneId: string) => Promise<void>
-    goForward: (paneId: string) => Promise<void>
-    reload: (paneId: string) => Promise<void>
-    stop: (paneId: string) => Promise<void>
-    setBounds: (paneId: string, bounds: BrowserBounds) => Promise<void>
-    setFocus: (paneId: string) => Promise<void>
-    setZoom: (paneId: string, zoom: number) => Promise<void>
-    findInPage: (paneId: string, query: string) => Promise<void>
-    stopFindInPage: (paneId: string, action?: 'clearSelection' | 'keepSelection' | 'activateSelection') => Promise<void>
-    onStateChange: (callback: (state: BrowserRuntimeState) => void) => () => void
-    onPermissionRequest: (callback: (request: BrowserPermissionRequest) => void) => () => void
-  }
+  browser: BrowserBridge
+}
+
+export interface BrowserBridge {
+  create: (paneId: string, url: string) => Promise<void>
+  destroy: (paneId: string) => Promise<void>
+  loadURL: (paneId: string, url: string) => Promise<void>
+  goBack: (paneId: string) => Promise<void>
+  goForward: (paneId: string) => Promise<void>
+  reload: (paneId: string) => Promise<void>
+  stop: (paneId: string) => Promise<void>
+  setBounds: (paneId: string, bounds: BrowserBounds) => Promise<void>
+  setFocus: (paneId: string) => Promise<void>
+  setZoom: (paneId: string, zoom: number) => Promise<void>
+  findInPage: (paneId: string, query: string) => Promise<void>
+  stopFindInPage: (paneId: string, action?: 'clearSelection' | 'keepSelection' | 'activateSelection') => Promise<void>
+  onStateChange: (callback: (state: BrowserRuntimeState) => void) => () => void
+  onPermissionRequest: (callback: (request: BrowserPermissionRequest) => void) => () => void
 }
 
 export interface ContextMenuItem<T extends string = string> {

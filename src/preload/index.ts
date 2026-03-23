@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { DevspaceBridge } from '../shared/types'
 
 function unsupportedBrowserBridgeMethod(method: string): never {
-  throw new Error(`window.api.browser.${method} is not implemented yet`)
+  throw new Error(`Not implemented: browser.${method}`)
 }
 
 const bridge: DevspaceBridge = {
