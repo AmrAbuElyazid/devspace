@@ -79,6 +79,23 @@ const bridge: DevspaceBridge = {
         ipcRenderer.removeListener('theme:nativeThemeChange', listener)
       }
     }
+  },
+
+  browser: {
+    create: async () => {},
+    destroy: async () => {},
+    loadURL: async () => {},
+    goBack: async () => {},
+    goForward: async () => {},
+    reload: async () => {},
+    stop: async () => {},
+    setBounds: async () => {},
+    setFocus: async () => {},
+    setZoom: async () => {},
+    findInPage: async () => {},
+    stopFindInPage: async () => {},
+    onStateChange: () => () => {},
+    onPermissionRequest: () => () => {},
   }
 }
 
