@@ -7,6 +7,7 @@ import {
 } from '../browser-session-manager'
 
 type PermissionCheckHandler = Parameters<Session['setPermissionCheckHandler']>[0]
+type CertificateVerifyProc = Parameters<Session['setCertificateVerifyProc']>[0]
 type CertificateErrorListener = (
   event: { preventDefault: () => void },
   webContents: { id: number },
@@ -23,6 +24,7 @@ test('uses a dedicated persistent browser partition', () => {
 test('getSession uses fromPartition with the shared browser partition', () => {
   const fakeSession = {
     setPermissionCheckHandler: () => {},
+    setCertificateVerifyProc: () => {},
   }
   let partition: string | undefined
 
@@ -41,11 +43,15 @@ test('getSession uses fromPartition with the shared browser partition', () => {
 
 test('installHandlers registers a permission check handler on the session', () => {
   let registeredHandler: PermissionCheckHandler | undefined
+  let registeredVerifyProc: CertificateVerifyProc | undefined
 
   const manager = new BrowserSessionManager({
     fromPartition: () => ({
       setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
         registeredHandler = handler
+      },
+      setCertificateVerifyProc: (handler: CertificateVerifyProc) => {
+        registeredVerifyProc = handler
       },
     }) as never,
   })
@@ -58,7 +64,55 @@ test('installHandlers registers a permission check handler on the session', () =
   })
 
   assert.equal(typeof registeredHandler, 'function')
+  assert.equal(typeof registeredVerifyProc, 'function')
   assert.equal(registeredHandler?.({ id: 1 } as never, 'notifications', 'https://example.com', {} as never), false)
+})
+
+test('certificate verification fails closed and reports pane failures', () => {
+  let registeredVerifyProc: CertificateVerifyProc | undefined
+  const reported: Array<{ paneId: string; url: string }> = []
+  const logs: string[] = []
+
+  const manager = new BrowserSessionManager({
+    fromPartition: () => ({
+      setPermissionCheckHandler: () => {},
+      setCertificateVerifyProc: (handler: CertificateVerifyProc) => {
+        registeredVerifyProc = handler
+      },
+    }) as never,
+  })
+
+  manager.installHandlers({
+    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 9 ? 'pane-9' : undefined,
+    reportCertificateError: (paneId, url) => {
+      reported.push({ paneId, url })
+    },
+    appModule: { on: () => undefined },
+    log: (message) => {
+      logs.push(message)
+    },
+  })
+
+  let verificationResult: number | undefined
+  registeredVerifyProc?.(
+    {
+      hostname: 'expired.badssl.com',
+      verificationResult: 'net::ERR_CERT_AUTHORITY_INVALID',
+      errorCode: -202,
+      validatedCertificate: {},
+      certificate: {},
+      isIssuedByKnownRoot: false,
+      verificationTime: 0,
+      webContents: { id: 9 },
+    } as never,
+    (result) => {
+      verificationResult = result
+    },
+  )
+
+  assert.equal(verificationResult, -2)
+  assert.deepEqual(reported, [{ paneId: 'pane-9', url: 'https://expired.badssl.com/' }])
+  assert.equal(logs.length, 0)
 })
 
 test('permission checks fail closed and log when pane resolution fails', () => {
@@ -70,6 +124,7 @@ test('permission checks fail closed and log when pane resolution fails', () => {
       setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
         registeredHandler = handler
       },
+      setCertificateVerifyProc: () => {},
     }) as never,
   })
 
@@ -97,6 +152,7 @@ test('certificate errors are blocked and routed to the owning pane', () => {
   const manager = new BrowserSessionManager({
     fromPartition: () => ({
       setPermissionCheckHandler: () => {},
+      setCertificateVerifyProc: () => {},
     }) as never,
   })
 

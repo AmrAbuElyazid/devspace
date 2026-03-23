@@ -59,8 +59,11 @@ export default function App(): JSX.Element {
   useEffect(() => {
     return subscribeToBrowserEvents({
       onStateChange: (state) => {
-        handleRuntimeStateChange(state, (paneId, url) => {
-          updatePaneConfig(paneId, { url })
+        handleRuntimeStateChange(state, {
+          persistUrlChange: (paneId, url) => {
+            updatePaneConfig(paneId, { url })
+          },
+          persistCommittedNavigation: state.isLoading === false,
         })
       },
       onPermissionRequest: setPendingPermissionRequest,

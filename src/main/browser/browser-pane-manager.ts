@@ -160,8 +160,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return
     }
 
-    pane.runtimeState.url = url
-    Object.assign(pane.runtimeState, getSecurityState(url))
+    pane.runtimeState.isLoading = true
     this.emitStateChange(pane)
 
     const loadURL = pane.view.webContents?.loadURL

@@ -8,7 +8,10 @@ interface BrowserStoreState {
   upsertRuntimeState: (state: BrowserRuntimeState) => void
   handleRuntimeStateChange: (
     state: BrowserRuntimeState,
-    persistUrlChange: (paneId: string, url: string) => void,
+    options: {
+      persistUrlChange: (paneId: string, url: string) => void
+      persistCommittedNavigation: boolean
+    },
   ) => void
   clearRuntimeState: (paneId: string) => void
   setPendingPermissionRequest: (request: BrowserPermissionRequest) => void
@@ -27,7 +30,7 @@ export function createBrowserStore() {
         },
       }))
     },
-    handleRuntimeStateChange: (runtimeState, persistUrlChange) => {
+    handleRuntimeStateChange: (runtimeState, options) => {
       const previousUrl = get().runtimeByPaneId[runtimeState.paneId]?.url
       set((state) => ({
         runtimeByPaneId: {
@@ -35,8 +38,8 @@ export function createBrowserStore() {
           [runtimeState.paneId]: runtimeState,
         },
       }))
-      if (previousUrl !== runtimeState.url) {
-        persistUrlChange(runtimeState.paneId, runtimeState.url)
+      if (options.persistCommittedNavigation && previousUrl !== runtimeState.url) {
+        options.persistUrlChange(runtimeState.paneId, runtimeState.url)
       }
     },
     clearRuntimeState: (paneId) => {
