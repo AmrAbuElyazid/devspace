@@ -103,6 +103,22 @@ body::after {
 .app-content {
   flex: 1;
   overflow: hidden;
+  position: relative;
+}
+
+/* Tab layers: all tabs are stacked; only the active one is visible.
+   Using visibility + z-index instead of display:none so xterm keeps its
+   canvas dimensions and doesn't need to re-fit on tab switch. */
+.app-tab-layer {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  z-index: 0;
+}
+
+.app-tab-layer[data-active] {
+  visibility: visible;
+  z-index: 1;
 }
 
 /* ─── Sidebar ────────────────────────────────────────────────────────── */

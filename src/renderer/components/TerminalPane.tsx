@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useCallback } from 'react'
-import { Terminal } from 'xterm'
+import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import 'xterm/css/xterm.css'
+import '@xterm/xterm/css/xterm.css'
 import { useWorkspaceStore } from '../store/workspace-store'
 import type { TerminalConfig } from '../types/workspace'
 
-function getTerminalTheme() {
+function getTerminalTheme(): ITheme {
   const isDark = document.documentElement.classList.contains('dark')
   return {
     background: isDark ? '#161618' : '#f5f5f7',
@@ -14,7 +14,6 @@ function getTerminalTheme() {
     cursorAccent: isDark ? '#161618' : '#f5f5f7',
     selectionBackground: isDark ? 'rgba(180, 203, 255, 0.25)' : 'rgba(0, 0, 0, 0.12)',
     selectionForeground: undefined,
-    // t3code-inspired ANSI colors
     black: isDark ? 'rgb(24, 30, 38)' : '#1a1c22',
     red: isDark ? 'rgb(255, 122, 142)' : '#dc2626',
     green: isDark ? 'rgb(134, 231, 149)' : '#16a34a',
@@ -56,9 +55,8 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): Rea
     const terminal = new Terminal({
       cursorBlink: true,
       fontSize: 13,
-      lineHeight: 1.35,
-      fontFamily:
-        "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, Monaco, 'Courier New', monospace",
+      lineHeight: 1.3,
+      fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, Monaco, 'Courier New', monospace",
       scrollback: 5000,
       theme: getTerminalTheme(),
       allowProposedApi: true,
@@ -71,9 +69,8 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): Rea
     fitAddonRef.current = fitAddon
 
     terminal.open(containerRef.current)
-
-    // Initial fit to get dimensions
     fitAddon.fit()
+
     const cols = terminal.cols
     const rows = terminal.rows
 
@@ -98,9 +95,7 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): Rea
 
     // Data flow: PTY -> terminal
     const cleanupOnData = window.api.pty.onData((id, data) => {
-      if (id === ptyId) {
-        terminal.write(data)
-      }
+      if (id === ptyId) terminal.write(data)
     })
 
     // Data flow: terminal -> PTY
@@ -111,58 +106,46 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): Rea
     // PTY exit handling
     const cleanupOnExit = window.api.pty.onExit((id, code) => {
       if (id === ptyId) {
-        terminal.write(
-          `\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`,
-        )
+        terminal.write(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`)
         ptyIdRef.current = null
       }
     })
 
-    // Resize handling with RAF-based debounce
+    // Resize handling with RAF debounce
     let resizeRaf: number | null = null
     const resizeObserver = new ResizeObserver(() => {
-      if (resizeRaf !== null) {
-        cancelAnimationFrame(resizeRaf)
-      }
+      if (resizeRaf !== null) cancelAnimationFrame(resizeRaf)
       resizeRaf = requestAnimationFrame(() => {
         resizeRaf = null
         if (fitAddonRef.current && terminalRef.current) {
           try {
             fitAddonRef.current.fit()
-            const newCols = terminalRef.current.cols
-            const newRows = terminalRef.current.rows
-            if (ptyIdRef.current) {
-              window.api.pty.resize(ptyIdRef.current, newCols, newRows)
-            }
+            const c = terminalRef.current.cols
+            const r = terminalRef.current.rows
+            if (ptyIdRef.current) window.api.pty.resize(ptyIdRef.current, c, r)
           } catch {
-            // Terminal may be disposed during cleanup
+            // may be disposed
           }
         }
       })
     })
+    if (containerRef.current) resizeObserver.observe(containerRef.current)
 
-    if (containerRef.current) {
-      resizeObserver.observe(containerRef.current)
-    }
-
-    // Theme sync: watch for dark class changes on <html> and update terminal colors
+    // Theme sync: watch <html> class changes for dark/light toggle (t3code pattern)
     const themeObserver = new MutationObserver(() => {
-      if (terminalRef.current) {
-        terminalRef.current.options.theme = getTerminalTheme()
-        // Force repaint of all visible rows — xterm doesn't repaint on theme change alone
-        terminalRef.current.refresh(0, terminalRef.current.rows - 1)
-      }
+      const t = terminalRef.current
+      if (!t) return
+      t.options.theme = getTerminalTheme()
+      t.refresh(0, t.rows - 1)
     })
     themeObserver.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['class'],
+      attributeFilter: ['class', 'style'],
     })
 
-    // Store cleanup function
+    // Cleanup
     cleanupRef.current = () => {
-      if (resizeRaf !== null) {
-        cancelAnimationFrame(resizeRaf)
-      }
+      if (resizeRaf !== null) cancelAnimationFrame(resizeRaf)
       resizeObserver.disconnect()
       themeObserver.disconnect()
       cleanupOnData()
@@ -180,7 +163,6 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): Rea
 
   useEffect(() => {
     initTerminal()
-
     return () => {
       if (cleanupRef.current) {
         cleanupRef.current()
