@@ -129,7 +129,14 @@ ContextMenuTrigger.displayName = 'ContextMenuTrigger'
 const ContextMenuContent = forwardRef<HTMLDivElement, MenuContentProps>(
   ({ className, side = 'bottom', sideOffset = 4, align = 'start', ...props }, ref) => (
     <ContextMenuPrimitive.Portal>
-      <ContextMenuPrimitive.Positioner side={side} sideOffset={sideOffset} align={align} positionMethod="fixed" collisionPadding={10}>
+      <ContextMenuPrimitive.Positioner
+        side={side}
+        sideOffset={sideOffset}
+        align={align}
+        positionMethod="fixed"
+        collisionPadding={10}
+        collisionBoundary={document.body}
+      >
         <ContextMenuPrimitive.Popup
           ref={ref}
           className={cn(
