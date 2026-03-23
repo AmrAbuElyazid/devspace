@@ -1,10 +1,10 @@
-import { forwardRef } from 'react'
+import { forwardRef, type ComponentProps, type HTMLAttributes } from 'react'
 import { Menu as MenuPrimitive } from '@base-ui-components/react/menu'
 import { cn } from '../../lib/utils'
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
-type MenuProps = React.ComponentProps<typeof MenuPrimitive.Root>
+type MenuProps = ComponentProps<typeof MenuPrimitive.Root>
 
 function Menu(props: MenuProps) {
   return <MenuPrimitive.Root {...props} />
@@ -12,7 +12,7 @@ function Menu(props: MenuProps) {
 
 // ── Trigger ───────────────────────────────────────────────────────────────────
 
-type MenuTriggerProps = React.ComponentProps<typeof MenuPrimitive.Trigger>
+type MenuTriggerProps = ComponentProps<typeof MenuPrimitive.Trigger>
 
 const MenuTrigger = forwardRef<HTMLButtonElement, MenuTriggerProps>(
   (props, ref) => <MenuPrimitive.Trigger ref={ref} {...props} />,
@@ -22,7 +22,7 @@ MenuTrigger.displayName = 'MenuTrigger'
 // ── Content ───────────────────────────────────────────────────────────────────
 
 interface MenuContentProps
-  extends React.ComponentProps<typeof MenuPrimitive.Popup> {
+  extends ComponentProps<typeof MenuPrimitive.Popup> {
   side?: 'top' | 'bottom' | 'left' | 'right'
   sideOffset?: number
   align?: 'start' | 'center' | 'end'
@@ -54,7 +54,7 @@ MenuContent.displayName = 'MenuContent'
 // ── Item ──────────────────────────────────────────────────────────────────────
 
 interface MenuItemProps
-  extends React.ComponentProps<typeof MenuPrimitive.Item> {
+  extends ComponentProps<typeof MenuPrimitive.Item> {
   /** Display a keyboard shortcut on the right side */
   shortcut?: string
   /** Destructive styling */
@@ -98,7 +98,7 @@ function MenuSeparator({ className }: { className?: string }) {
 function MenuLabel({
   className,
   ...props
-}: React.HTMLAttributes<HTMLDivElement>) {
+}: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(

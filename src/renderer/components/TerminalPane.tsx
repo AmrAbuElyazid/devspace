@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react'
+import { useEffect, useRef, useCallback } from 'react'
 import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -40,7 +40,7 @@ interface TerminalPaneProps {
   config: TerminalConfig
 }
 
-export default function TerminalPane({ paneId, config }: TerminalPaneProps): React.JSX.Element {
+export default function TerminalPane({ paneId, config }: TerminalPaneProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)

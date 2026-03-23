@@ -1,10 +1,10 @@
-import { forwardRef } from 'react'
+import { forwardRef, type ComponentProps } from 'react'
 import { Dialog as DialogPrimitive } from '@base-ui-components/react/dialog'
 import { cn } from '../../lib/utils'
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
-type DialogProps = React.ComponentProps<typeof DialogPrimitive.Root>
+type DialogProps = ComponentProps<typeof DialogPrimitive.Root>
 
 function Dialog(props: DialogProps) {
   return <DialogPrimitive.Root {...props} />
@@ -12,7 +12,7 @@ function Dialog(props: DialogProps) {
 
 // ── Trigger ───────────────────────────────────────────────────────────────────
 
-type DialogTriggerProps = React.ComponentProps<typeof DialogPrimitive.Trigger>
+type DialogTriggerProps = ComponentProps<typeof DialogPrimitive.Trigger>
 
 const DialogTrigger = forwardRef<HTMLButtonElement, DialogTriggerProps>(
   (props, ref) => <DialogPrimitive.Trigger ref={ref} {...props} />,
@@ -21,7 +21,7 @@ DialogTrigger.displayName = 'DialogTrigger'
 
 // ── Close ─────────────────────────────────────────────────────────────────────
 
-type DialogCloseProps = React.ComponentProps<typeof DialogPrimitive.Close>
+type DialogCloseProps = ComponentProps<typeof DialogPrimitive.Close>
 
 const DialogClose = forwardRef<HTMLButtonElement, DialogCloseProps>(
   (props, ref) => <DialogPrimitive.Close ref={ref} {...props} />,
@@ -31,7 +31,7 @@ DialogClose.displayName = 'DialogClose'
 // ── Content ───────────────────────────────────────────────────────────────────
 
 interface DialogContentProps
-  extends React.ComponentProps<typeof DialogPrimitive.Popup> {
+  extends ComponentProps<typeof DialogPrimitive.Popup> {
   /** Hide the default close button */
   hideClose?: boolean
 }
@@ -90,7 +90,7 @@ DialogContent.displayName = 'DialogContent'
 
 // ── Title ─────────────────────────────────────────────────────────────────────
 
-type DialogTitleProps = React.ComponentProps<typeof DialogPrimitive.Title>
+type DialogTitleProps = ComponentProps<typeof DialogPrimitive.Title>
 
 const DialogTitle = forwardRef<HTMLHeadingElement, DialogTitleProps>(
   ({ className, ...props }, ref) => (
@@ -105,7 +105,7 @@ DialogTitle.displayName = 'DialogTitle'
 
 // ── Description ───────────────────────────────────────────────────────────────
 
-type DialogDescriptionProps = React.ComponentProps<
+type DialogDescriptionProps = ComponentProps<
   typeof DialogPrimitive.Description
 >
 

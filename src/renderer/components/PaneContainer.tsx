@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react'
+import { useCallback, useState, type ElementType } from 'react'
 import { Terminal, FileCode, Globe, Square, Columns2, Rows2, X } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import EmptyPane from './EmptyPane'
@@ -16,14 +16,14 @@ interface PaneContainerProps {
   tabId: string
 }
 
-const paneTypeIcons: Record<PaneType, React.ElementType> = {
+const paneTypeIcons: Record<PaneType, ElementType> = {
   terminal: Terminal,
   editor: FileCode,
   browser: Globe,
   empty: Square,
 }
 
-function PaneContent({ paneId, pane }: { paneId: string; pane: { type: PaneType; config: unknown } }): React.JSX.Element {
+function PaneContent({ paneId, pane }: { paneId: string; pane: { type: PaneType; config: unknown } }): JSX.Element {
   switch (pane.type) {
     case 'empty':
       return <EmptyPane paneId={paneId} />
@@ -40,7 +40,7 @@ export default function PaneContainer({
   paneId,
   workspaceId,
   tabId,
-}: PaneContainerProps): React.JSX.Element {
+}: PaneContainerProps): JSX.Element {
   const pane = useWorkspaceStore((s) => s.panes[paneId])
   const splitPane = useWorkspaceStore((s) => s.splitPane)
   const closePane = useWorkspaceStore((s) => s.closePane)
