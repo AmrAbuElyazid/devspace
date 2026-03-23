@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { DevspaceBridge } from '../shared/types'
 
+function unsupportedBrowserBridgeMethod(method: string): never {
+  throw new Error(`window.api.browser.${method} is not implemented yet`)
+}
+
 const bridge: DevspaceBridge = {
   platform: process.platform,
 
@@ -82,18 +86,18 @@ const bridge: DevspaceBridge = {
   },
 
   browser: {
-    create: async () => {},
-    destroy: async () => {},
-    loadURL: async () => {},
-    goBack: async () => {},
-    goForward: async () => {},
-    reload: async () => {},
-    stop: async () => {},
-    setBounds: async () => {},
-    setFocus: async () => {},
-    setZoom: async () => {},
-    findInPage: async () => {},
-    stopFindInPage: async () => {},
+    create: async () => unsupportedBrowserBridgeMethod('create'),
+    destroy: async () => unsupportedBrowserBridgeMethod('destroy'),
+    loadURL: async () => unsupportedBrowserBridgeMethod('loadURL'),
+    goBack: async () => unsupportedBrowserBridgeMethod('goBack'),
+    goForward: async () => unsupportedBrowserBridgeMethod('goForward'),
+    reload: async () => unsupportedBrowserBridgeMethod('reload'),
+    stop: async () => unsupportedBrowserBridgeMethod('stop'),
+    setBounds: async () => unsupportedBrowserBridgeMethod('setBounds'),
+    setFocus: async () => unsupportedBrowserBridgeMethod('setFocus'),
+    setZoom: async () => unsupportedBrowserBridgeMethod('setZoom'),
+    findInPage: async () => unsupportedBrowserBridgeMethod('findInPage'),
+    stopFindInPage: async () => unsupportedBrowserBridgeMethod('stopFindInPage'),
     onStateChange: () => () => {},
     onPermissionRequest: () => () => {},
   }
