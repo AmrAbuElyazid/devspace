@@ -79,7 +79,6 @@ export class BrowserPaneManager implements BrowserPaneController {
     this.panes.set(paneId, pane)
     this.registerWebContentsListeners(pane)
     this.navigate(paneId, initialUrl)
-    this.emitStateChange(pane)
   }
 
   destroyPane(paneId: string): void {

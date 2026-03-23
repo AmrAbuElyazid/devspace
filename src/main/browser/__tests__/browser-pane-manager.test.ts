@@ -4,6 +4,7 @@ import { BrowserPaneManager } from '../browser-pane-manager'
 
 test('tracks pane lifecycle bookkeeping across create show hide and destroy', () => {
   const childViews: unknown[] = []
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = []
   let destroyed = false
   const view = {
     webContents: {
@@ -24,7 +25,9 @@ test('tracks pane lifecycle bookkeeping across create show hide and destroy', ()
         childViews.splice(index, 1)
       }
     },
-    sendToRenderer: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload })
+    },
   })
 
   manager.createPane('pane-1', 'https://example.com')
@@ -32,6 +35,8 @@ test('tracks pane lifecycle bookkeeping across create show hide and destroy', ()
   assert.equal(manager.getRuntimeState('pane-1')?.paneId, 'pane-1')
   assert.equal(manager.getRuntimeState('pane-1')?.url, 'https://example.com')
   assert.deepEqual(childViews, [])
+  assert.equal(rendererMessages.length, 1)
+  assert.equal(rendererMessages[0]?.channel, 'browser:stateChanged')
 
   manager.showPane('pane-1')
 

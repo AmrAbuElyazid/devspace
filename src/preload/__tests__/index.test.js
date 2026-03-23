@@ -37,7 +37,7 @@ test('browser bridge exposes spec-aligned browser IPC methods', async () => {
   await exposedBridge.browser.toggleDevTools('pane-1')
   await exposedBridge.browser.resetZoom('pane-1')
   await exposedBridge.browser.showContextMenu('pane-1', { x: 10, y: 20 })
-  await exposedBridge.browser.resolvePermission('token-1', 'granted')
+  await exposedBridge.browser.resolvePermission('token-1', 'allow-for-session')
   const unsubscribeState = exposedBridge.browser.onStateChange(() => {})
   const unsubscribePermission = exposedBridge.browser.onPermissionRequest(() => {})
   unsubscribeState()
@@ -53,7 +53,7 @@ test('browser bridge exposes spec-aligned browser IPC methods', async () => {
     ['browser:toggleDevTools', 'pane-1'],
     ['browser:resetZoom', 'pane-1'],
     ['browser:showContextMenu', 'pane-1', { x: 10, y: 20 }],
-    ['browser:resolvePermission', 'token-1', 'granted'],
+    ['browser:resolvePermission', 'token-1', 'allow-for-session'],
   ])
 
   expect(listenerRegistrations).toEqual([
