@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState, useMemo, type ElementType, type ReactElement } from 'react'
 import { Terminal, FileCode, Globe, Square, Columns2, Rows2, X } from 'lucide-react'
 import { useDroppable } from '@dnd-kit/core'
+import { shouldHideBrowserNativeViewForDrag } from '../lib/browser-pane-visibility'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { useDragContext } from '../hooks/useDragAndDrop'
 import EmptyPane from './EmptyPane'
@@ -87,7 +88,7 @@ export default function PaneContainer({
   // Without this check, pointerWithin matches hidden pane zones, causing
   // the overlay to render on invisible elements and merges into wrong tabs.
   const isVisibleTab = workspaceId === activeWorkspaceId && tabId === activeWs?.activeTabId
-  const shouldHideBrowserNativeView = activeDrag?.type === 'tab' && isVisibleTab
+  const shouldHideBrowserNativeView = shouldHideBrowserNativeViewForDrag(activeDrag, isVisibleTab)
   const canAcceptTabDrop =
     activeDrag?.type === 'tab' &&
     isVisibleTab &&

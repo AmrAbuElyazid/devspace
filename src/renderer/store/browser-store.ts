@@ -4,12 +4,9 @@ import type { BrowserPermissionRequest, BrowserRuntimeState } from '../../shared
 
 interface BrowserStoreState {
   runtimeByPaneId: Record<string, BrowserRuntimeState>
-  createdPaneIds: Record<string, true>
   pendingPermissionRequest: BrowserPermissionRequest | null
   upsertRuntimeState: (state: BrowserRuntimeState) => void
   clearRuntimeState: (paneId: string) => void
-  markPaneCreated: (paneId: string) => void
-  markPaneDestroyed: (paneId: string) => void
   setPendingPermissionRequest: (request: BrowserPermissionRequest) => void
   clearPendingPermissionRequest: () => void
 }
@@ -17,7 +14,6 @@ interface BrowserStoreState {
 export function createBrowserStore() {
   return createStore<BrowserStoreState>()((set) => ({
     runtimeByPaneId: {},
-    createdPaneIds: {},
     pendingPermissionRequest: null,
     upsertRuntimeState: (runtimeState) => {
       set((state) => ({
@@ -32,21 +28,6 @@ export function createBrowserStore() {
         const runtimeByPaneId = { ...state.runtimeByPaneId }
         delete runtimeByPaneId[paneId]
         return { runtimeByPaneId }
-      })
-    },
-    markPaneCreated: (paneId) => {
-      set((state) => ({
-        createdPaneIds: {
-          ...state.createdPaneIds,
-          [paneId]: true,
-        },
-      }))
-    },
-    markPaneDestroyed: (paneId) => {
-      set((state) => {
-        const createdPaneIds = { ...state.createdPaneIds }
-        delete createdPaneIds[paneId]
-        return { createdPaneIds }
       })
     },
     setPendingPermissionRequest: (request) => {

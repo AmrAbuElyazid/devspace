@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState, useCallback, type KeyboardEvent } from 'react'
 import { ArrowLeft, ArrowRight, RotateCw, Search, X } from 'lucide-react'
 import { normalizeBrowserInput } from '../lib/browser-url'
+import {
+  hasCreatedBrowserPane,
+  markBrowserPaneCreated,
+  markBrowserPaneDestroyed,
+} from '../lib/browser-pane-session'
 import { useBrowserBounds } from '../hooks/useBrowserBounds'
 import { useBrowserStore } from '../store/browser-store'
 import { useWorkspaceStore } from '../store/workspace-store'
@@ -25,7 +30,6 @@ export default function BrowserPane({
   const placeholderRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId])
-  const isPaneCreated = useBrowserStore((s) => s.createdPaneIds[paneId] === true)
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle)
   const initialUrl = useMemo(() => normalizeBrowserInput(config.url || 'about:blank'), [config.url])
@@ -40,23 +44,23 @@ export default function BrowserPane({
   useEffect(() => {
     let cancelled = false
 
-    if (isPaneCreated) {
+    if (hasCreatedBrowserPane(paneId)) {
       return () => {
         cancelled = true
       }
     }
 
-    useBrowserStore.getState().markPaneCreated(paneId)
+    markBrowserPaneCreated(paneId)
     void window.api.browser.create(paneId, initialUrl).catch(() => {
       if (!cancelled) {
-        useBrowserStore.getState().markPaneDestroyed(paneId)
+        markBrowserPaneDestroyed(paneId)
       }
     })
 
     return () => {
       cancelled = true
     }
-  }, [initialUrl, isPaneCreated, paneId])
+  }, [initialUrl, paneId])
 
   useEffect(() => {
     if (runtimeState?.url) {
