@@ -84,6 +84,9 @@ const bridge: DevspaceBridge = {
   browser: {
     create: (paneId, url) => ipcRenderer.invoke('browser:create', paneId, url),
     destroy: (paneId) => ipcRenderer.invoke('browser:destroy', paneId),
+    showPane: (paneId) => ipcRenderer.invoke('browser:showPane', paneId),
+    hidePane: (paneId) => ipcRenderer.invoke('browser:hidePane', paneId),
+    getRuntimeState: (paneId) => ipcRenderer.invoke('browser:getRuntimeState', paneId),
     loadURL: (paneId, url) => ipcRenderer.invoke('browser:loadURL', paneId, url),
     goBack: (paneId) => ipcRenderer.invoke('browser:goBack', paneId),
     goForward: (paneId) => ipcRenderer.invoke('browser:goForward', paneId),

@@ -254,6 +254,21 @@ export function registerIpcHandlers(
     browserPaneManager.destroyPane(paneId)
   })
 
+  safeHandle('browser:showPane', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    browserPaneManager.showPane(paneId)
+  })
+
+  safeHandle('browser:hidePane', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    browserPaneManager.hidePane(paneId)
+  })
+
+  safeHandle('browser:getRuntimeState', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return undefined
+    return browserPaneManager.getRuntimeState(paneId)
+  })
+
   safeHandle('browser:loadURL', (_event, paneId: unknown, url: unknown) => {
     if (typeof paneId !== 'string' || typeof url !== 'string') return
     browserPaneManager.navigate(paneId, url)
