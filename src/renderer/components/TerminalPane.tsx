@@ -145,12 +145,24 @@ export default function TerminalPane({ paneId, config }: TerminalPaneProps): Rea
       resizeObserver.observe(containerRef.current)
     }
 
+    // Theme sync: watch for dark class changes on <html> and update terminal colors
+    const themeObserver = new MutationObserver(() => {
+      if (terminalRef.current) {
+        terminalRef.current.options.theme = getTerminalTheme()
+      }
+    })
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    })
+
     // Store cleanup function
     cleanupRef.current = () => {
       if (resizeRaf !== null) {
         cancelAnimationFrame(resizeRaf)
       }
       resizeObserver.disconnect()
+      themeObserver.disconnect()
       cleanupOnData()
       cleanupOnExit()
       terminalOnDataDisposable.dispose()
