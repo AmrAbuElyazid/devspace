@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell, nativeTheme, BrowserWindow } from 'electron'
+import { ipcMain, dialog, shell, nativeTheme, BrowserWindow, Menu } from 'electron'
 import { readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import type { PtyManager } from './pty-manager'
@@ -183,6 +183,53 @@ export function registerIpcHandlers(
     const safeUrl = getSafeExternalUrl(url)
     if (!safeUrl) return
     shell.openExternal(safeUrl)
+  })
+
+  // --- Context menu handler ---
+
+  safeHandle('contextMenu:show', async (_event, items: unknown, position: unknown) => {
+    if (!Array.isArray(items)) return null
+
+    return new Promise<string | null>((resolve) => {
+      let hasDestructive = false
+      const template: Electron.MenuItemConstructorOptions[] = []
+
+      for (const item of items) {
+        if (typeof item !== 'object' || item === null) continue
+        const { id, label, destructive } = item as { id?: string; label?: string; destructive?: boolean }
+        if (typeof id !== 'string' || typeof label !== 'string') continue
+
+        if (destructive && !hasDestructive) {
+          hasDestructive = true
+          template.push({ type: 'separator' })
+        }
+
+        template.push({
+          label,
+          click: () => resolve(id),
+        })
+      }
+
+      const menu = Menu.buildFromTemplate(template)
+
+      const popupOptions: Electron.PopupOptions = {
+        window: mainWindow,
+        callback: () => resolve(null),
+      }
+
+      if (
+        typeof position === 'object' && position !== null &&
+        'x' in position && 'y' in position
+      ) {
+        const { x, y } = position as { x: number; y: number }
+        if (typeof x === 'number' && typeof y === 'number' && isFinite(x) && isFinite(y)) {
+          popupOptions.x = Math.floor(x)
+          popupOptions.y = Math.floor(y)
+        }
+      }
+
+      menu.popup(popupOptions)
+    })
   })
 
   // --- Theme handlers ---

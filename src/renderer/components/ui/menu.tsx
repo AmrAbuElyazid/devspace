@@ -1,6 +1,5 @@
-import React, { forwardRef, type ComponentProps, type HTMLAttributes } from 'react'
+import { forwardRef, type ComponentProps, type HTMLAttributes } from 'react'
 import { Menu as MenuPrimitive } from '@base-ui-components/react/menu'
-import { ContextMenu as ContextMenuPrimitive } from '@base-ui-components/react/context-menu'
 import { cn } from '../../lib/utils'
 
 // ── Root ──────────────────────────────────────────────────────────────────────
@@ -111,64 +110,7 @@ function MenuLabel({
   )
 }
 
-// ── Context Menu (right-click) ────────────────────────────────────────────────
-
-type ContextMenuProps = ComponentProps<typeof ContextMenuPrimitive.Root>
-
-function ContextMenu(props: ContextMenuProps) {
-  return <ContextMenuPrimitive.Root {...props} />
-}
-
-type ContextMenuTriggerProps = ComponentProps<typeof ContextMenuPrimitive.Trigger>
-
-const ContextMenuTrigger = forwardRef<HTMLDivElement, ContextMenuTriggerProps>(
-  (props, ref) => <ContextMenuPrimitive.Trigger ref={ref} render={<div />} {...props} />,
-)
-ContextMenuTrigger.displayName = 'ContextMenuTrigger'
-
-/**
- * Simple context menu content that renders at the cursor position via a fixed-position portal.
- * We avoid Base UI's Positioner entirely because Floating UI's clipping-ancestor detection
- * constrains the popup to the sidebar's overflow:hidden boundary.
- */
-function ContextMenuContent({
-  className,
-  children,
-  ...props
-}: {
-  className?: string
-  children: React.ReactNode
-} & React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <ContextMenuPrimitive.Portal container={document.body}>
-      <ContextMenuPrimitive.Positioner
-        side="bottom"
-        align="start"
-        sideOffset={4}
-        positionMethod="fixed"
-        style={{ overflow: 'visible' }}
-      >
-        <ContextMenuPrimitive.Popup
-          className={cn(
-            'z-[9999] min-w-[180px] rounded-lg border border-border bg-background p-1 shadow-lg',
-            'text-foreground outline-none',
-            'origin-[var(--transform-origin)]',
-            'transition-all duration-150',
-            'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
-            'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
-            className,
-          )}
-          {...props}
-        >
-          {children}
-        </ContextMenuPrimitive.Popup>
-      </ContextMenuPrimitive.Positioner>
-    </ContextMenuPrimitive.Portal>
-  )
-}
-
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 export { Menu, MenuTrigger, MenuContent, MenuItem, MenuSeparator, MenuLabel }
-export { ContextMenu, ContextMenuTrigger, ContextMenuContent }
-export type { MenuProps, MenuContentProps, MenuItemProps, ContextMenuProps, ContextMenuTriggerProps }
+export type { MenuProps, MenuContentProps, MenuItemProps }

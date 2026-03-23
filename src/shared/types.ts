@@ -33,11 +33,20 @@ export interface DevspaceBridge {
   shell: {
     openExternal: (url: string) => void
   }
+  contextMenu: {
+    show: <T extends string>(items: ContextMenuItem<T>[], position?: { x: number; y: number }) => Promise<T | null>
+  }
   theme: {
     set: (theme: 'light' | 'dark' | 'system') => void
     getNativeTheme: () => Promise<'light' | 'dark'>
     onNativeThemeChange: (callback: (theme: 'light' | 'dark') => void) => () => void
   }
+}
+
+export interface ContextMenuItem<T extends string = string> {
+  id: T
+  label: string
+  destructive?: boolean
 }
 
 declare global {

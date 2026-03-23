@@ -63,6 +63,10 @@ const bridge: DevspaceBridge = {
     openExternal: (url) => ipcRenderer.send('shell:openExternal', url)
   },
 
+  contextMenu: {
+    show: (items, position) => ipcRenderer.invoke('contextMenu:show', items, position),
+  },
+
   theme: {
     set: (theme) => ipcRenderer.send('theme:set', theme),
     getNativeTheme: () => ipcRenderer.invoke('theme:getNativeTheme'),
