@@ -17,40 +17,20 @@ export default function EmptyPane({ paneId }: EmptyPaneProps): React.JSX.Element
   const changePaneType = useWorkspaceStore((s) => s.changePaneType)
 
   return (
-    <div
-      className="h-full w-full flex items-center justify-center"
-      style={{ backgroundColor: 'var(--background)' }}
-    >
-      <div className="flex flex-col items-center gap-5">
-        <span
-          className="text-xs font-medium uppercase select-none"
-          style={{ color: 'var(--muted-foreground)', letterSpacing: '0.06em' }}
-        >
-          Add a pane
-        </span>
-        <div className="flex gap-3">
+    <div className="empty-pane">
+      <div style={{ textAlign: 'center' }}>
+        <div className="empty-pane-label">Add a pane</div>
+        <div style={{ display: 'flex', gap: 10 }}>
           {options.map(({ type, label, desc, icon: Icon, defaultConfig }) => (
             <button
               key={type}
               onClick={() => changePaneType(paneId, type, defaultConfig)}
-              className="empty-pane-card flex flex-col items-center justify-center gap-2 border cursor-pointer"
-              style={{
-                width: 110,
-                height: 100,
-                borderRadius: 'var(--radius)',
-                borderColor: 'var(--border)',
-                backgroundColor: 'var(--card)',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-              }}
+              className="empty-pane-card"
             >
-              <Icon size={24} style={{ color: 'var(--muted-foreground)' }} />
-              <div className="flex flex-col items-center gap-0.5">
-                <span className="text-xs font-medium" style={{ color: 'var(--foreground)' }}>
-                  {label}
-                </span>
-                <span className="text-[10px]" style={{ color: 'var(--muted-foreground)' }}>
-                  {desc}
-                </span>
+              <Icon size={22} style={{ color: 'var(--muted-foreground)' }} />
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--foreground)' }}>{label}</div>
+                <div style={{ fontSize: 10, color: 'var(--muted-foreground)' }}>{desc}</div>
               </div>
             </button>
           ))}

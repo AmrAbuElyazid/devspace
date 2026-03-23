@@ -52,58 +52,46 @@ export default function PaneContainer({
 
   const TypeIcon = paneTypeIcons[pane.type]
 
+  // For empty panes, don't show the toolbar — show the selector directly
+  if (pane.type === 'empty') {
+    return (
+      <div className="h-full w-full group/pane">
+        <PaneContent paneId={paneId} pane={pane} />
+      </div>
+    )
+  }
+
   return (
     <div className="h-full w-full flex flex-col group/pane">
-      {/* Toolbar — refined, thinner */}
-      <div
-        className="flex items-center justify-between shrink-0 px-2"
-        style={{
-          height: 24,
-          backgroundColor: 'var(--card)',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        {/* Left: icon + title */}
-        <div className="flex items-center gap-1.5 min-w-0">
-          <TypeIcon size={12} style={{ color: 'var(--muted-foreground)', opacity: 0.7 }} className="shrink-0" />
-          <span
-            className="text-[11px] truncate"
-            style={{ color: 'var(--muted-foreground)' }}
-          >
-            {pane.title}
-          </span>
+      <div className="pane-toolbar">
+        <div className="pane-toolbar-title">
+          <TypeIcon size={12} style={{ opacity: 0.6 }} />
+          <span>{pane.title}</span>
         </div>
-
-        {/* Right: action buttons (visible on hover) */}
-        <div className="flex items-center gap-px opacity-0 group-hover/pane:opacity-100 transition-opacity duration-[120ms]">
+        <div className="pane-actions">
           <button
             onClick={() => splitPane(workspaceId, tabId, paneId, 'horizontal')}
-            className="pane-action-btn flex items-center justify-center rounded"
-            style={{ width: 18, height: 18, color: 'var(--muted-foreground)' }}
+            className="pane-action"
             title="Split Right"
           >
-            <Columns2 size={11} />
+            <Columns2 size={12} />
           </button>
           <button
             onClick={() => splitPane(workspaceId, tabId, paneId, 'vertical')}
-            className="pane-action-btn flex items-center justify-center rounded"
-            style={{ width: 18, height: 18, color: 'var(--muted-foreground)' }}
+            className="pane-action"
             title="Split Down"
           >
-            <Rows2 size={11} />
+            <Rows2 size={12} />
           </button>
           <button
             onClick={() => closePane(workspaceId, tabId, paneId)}
-            className="pane-action-btn pane-action-close flex items-center justify-center rounded"
-            style={{ width: 18, height: 18, color: 'var(--muted-foreground)' }}
+            className="pane-action pane-action-close"
             title="Close"
           >
-            <X size={11} />
+            <X size={12} />
           </button>
         </div>
       </div>
-
-      {/* Content area */}
       <div className="flex-1 overflow-hidden">
         <PaneContent paneId={paneId} pane={pane} />
       </div>
