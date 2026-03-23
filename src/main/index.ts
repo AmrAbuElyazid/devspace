@@ -3,11 +3,13 @@ import { join } from 'path'
 import { syncShellEnvironment } from './shell-env'
 import { PtyManager } from './pty-manager'
 import { registerIpcHandlers } from './ipc-handlers'
+import { BrowserSessionManager } from './browser/browser-session-manager'
 
 // Sync shell environment before app is ready (macOS GUI apps don't inherit login shell env)
 syncShellEnvironment()
 
 const ptyManager = new PtyManager()
+const browserSessionManager = new BrowserSessionManager()
 
 // Global error handlers
 process.on('uncaughtException', (error) => {
@@ -41,7 +43,7 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
-  registerIpcHandlers(mainWindow, ptyManager)
+  registerIpcHandlers(mainWindow, ptyManager, browserSessionManager)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
@@ -55,6 +57,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  browserSessionManager.installHandlers()
   createWindow()
 
   app.on('activate', () => {

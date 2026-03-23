@@ -2,6 +2,7 @@ import { ipcMain, dialog, shell, nativeTheme, BrowserWindow, Menu } from 'electr
 import { readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import type { PtyManager } from './pty-manager'
+import type { BrowserSessionManager } from './browser/browser-session-manager'
 import {
   validateTerminalDimensions,
   validatePtyId,
@@ -28,7 +29,8 @@ function safeOn(channel: string, handler: (event: any, ...args: any[]) => void) 
 
 export function registerIpcHandlers(
   mainWindow: BrowserWindow,
-  ptyManager: PtyManager
+  ptyManager: PtyManager,
+  _browserSessionManager: BrowserSessionManager
 ): void {
   const allowedRoots = [homedir()]
 
