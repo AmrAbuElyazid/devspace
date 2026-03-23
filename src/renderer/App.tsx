@@ -2,12 +2,14 @@ import { useEffect } from 'react'
 import { DndContext, DragOverlay } from '@dnd-kit/core'
 import { useWorkspaceStore } from './store/workspace-store'
 import { useSettingsStore } from './store/settings-store'
+import { useBrowserStore } from './store/browser-store'
 import { useTheme } from './hooks/useTheme'
 import { useDragAndDrop, DragContext } from './hooks/useDragAndDrop'
 import Sidebar from './components/Sidebar'
 import TabBar from './components/TabBar'
 import SplitLayout from './components/SplitLayout'
 import SettingsPage from './components/SettingsPage'
+import type { BrowserBridgeListeners, BrowserBridgeUnsubscribe } from '../shared/types'
 import type { SplitNode } from './types/workspace'
 import { ToastViewport } from './components/ui/toast'
 import { FolderClosed } from 'lucide-react'
@@ -19,8 +21,29 @@ function findFirstLeaf(node: SplitNode): string | null {
   return null
 }
 
+function subscribeToBrowserEvents(listeners: BrowserBridgeListeners): BrowserBridgeUnsubscribe {
+  const disposers: BrowserBridgeUnsubscribe[] = []
+
+  if (listeners.onStateChange) {
+    disposers.push(window.api.browser.onStateChange(listeners.onStateChange))
+  }
+
+  if (listeners.onPermissionRequest) {
+    disposers.push(window.api.browser.onPermissionRequest(listeners.onPermissionRequest))
+  }
+
+  return () => {
+    for (const dispose of disposers) {
+      dispose()
+    }
+  }
+}
+
 export default function App(): JSX.Element {
   useTheme()
+
+  const upsertRuntimeState = useBrowserStore((s) => s.upsertRuntimeState)
+  const setPendingPermissionRequest = useBrowserStore((s) => s.setPendingPermissionRequest)
 
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
@@ -31,6 +54,13 @@ export default function App(): JSX.Element {
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId)
   const activeTab = activeWorkspace?.tabs.find((t) => t.id === activeWorkspace.activeTabId)
+
+  useEffect(() => {
+    return subscribeToBrowserEvents({
+      onStateChange: upsertRuntimeState,
+      onPermissionRequest: setPendingPermissionRequest,
+    })
+  }, [setPendingPermissionRequest, upsertRuntimeState])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
