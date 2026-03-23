@@ -10,6 +10,10 @@ export interface BrowserConfig {
   url: string
 }
 
+export interface BrowserPanePreferences {
+  zoom: number
+}
+
 export interface EditorConfig {
   filePath?: string
   language?: string
