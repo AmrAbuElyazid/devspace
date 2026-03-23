@@ -7,7 +7,7 @@ import { Tooltip } from './ui/tooltip'
 import { ScrollArea } from './ui/scroll-area'
 import { AlertDialog } from './ui/alert-dialog'
 import { InlineRenameInput } from './ui/InlineRenameInput'
-import { Menu, MenuContent, MenuItem, MenuSeparator } from './ui/menu'
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, MenuItem, MenuSeparator } from './ui/menu'
 
 export default function Sidebar(): JSX.Element {
   const workspaces = useWorkspaceStore((s) => s.workspaces)
@@ -28,10 +28,7 @@ export default function Sidebar(): JSX.Element {
   const [editingType, setEditingType] = useState<'workspace' | 'folder' | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
 
-  // Context menu state for workspaces
-  const [wsMenuOpen, setWsMenuOpen] = useState<string | null>(null)
-  // Context menu state for folders
-  const [folderMenuOpen, setFolderMenuOpen] = useState<string | null>(null)
+
 
   const startEditingWorkspace = useCallback((id: string) => {
     setEditingId(id)
@@ -54,48 +51,45 @@ export default function Sidebar(): JSX.Element {
   const renderWorkspaceItem = (ws: (typeof workspaces)[0]) => {
     const isActive = ws.id === activeWorkspaceId
     const isEditing = editingId === ws.id && editingType === 'workspace'
-    const isMenuOpen = wsMenuOpen === ws.id
 
     return (
-      <Menu key={ws.id} open={isMenuOpen} onOpenChange={(open) => setWsMenuOpen(open ? ws.id : null)}>
-        <div
-          className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''}`}
-          onClick={() => { if (!isEditing) setActiveWorkspace(ws.id) }}
-          onDoubleClick={() => startEditingWorkspace(ws.id)}
-          onContextMenu={(e) => {
-            e.preventDefault()
-            setWsMenuOpen(ws.id)
-          }}
-        >
-          {/* Amber dot */}
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: '50%',
-              background: isActive ? 'var(--accent)' : 'var(--foreground-faint)',
-              flexShrink: 0,
-            }}
-          />
-
-          {isEditing ? (
-            <InlineRenameInput
-              initialValue={ws.name}
-              onCommit={(name) => {
-                renameWorkspace(ws.id, name)
-                stopEditing()
+      <ContextMenu key={ws.id}>
+        <ContextMenuTrigger>
+          <div
+            className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''}`}
+            onClick={() => { if (!isEditing) setActiveWorkspace(ws.id) }}
+            onDoubleClick={() => startEditingWorkspace(ws.id)}
+          >
+            {/* Amber dot */}
+            <span
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: '50%',
+                background: isActive ? 'var(--accent)' : 'var(--foreground-faint)',
+                flexShrink: 0,
               }}
-              onCancel={stopEditing}
-              className="text-[13px]"
             />
-          ) : (
-            <span className="flex-1 truncate">{ws.name}</span>
-          )}
-        </div>
+
+            {isEditing ? (
+              <InlineRenameInput
+                initialValue={ws.name}
+                onCommit={(name) => {
+                  renameWorkspace(ws.id, name)
+                  stopEditing()
+                }}
+                onCancel={stopEditing}
+                className="text-[13px]"
+              />
+            ) : (
+              <span className="flex-1 truncate">{ws.name}</span>
+            )}
+          </div>
+        </ContextMenuTrigger>
 
         {/* Context menu */}
-        <MenuContent side="right" align="start">
-          <MenuItem onClick={() => { setWsMenuOpen(null); startEditingWorkspace(ws.id) }}>
+        <ContextMenuContent side="bottom" align="start">
+          <MenuItem onClick={() => startEditingWorkspace(ws.id)}>
             Rename
           </MenuItem>
           <MenuSeparator />
@@ -103,10 +97,7 @@ export default function Sidebar(): JSX.Element {
           {folders.map((folder) => (
             <MenuItem
               key={folder.id}
-              onClick={() => {
-                moveWorkspaceToFolder(ws.id, folder.id)
-                setWsMenuOpen(null)
-              }}
+              onClick={() => moveWorkspaceToFolder(ws.id, folder.id)}
             >
               → {folder.name}
             </MenuItem>
@@ -115,35 +106,23 @@ export default function Sidebar(): JSX.Element {
             onClick={() => {
               const fid = addFolder('New Folder')
               moveWorkspaceToFolder(ws.id, fid)
-              setWsMenuOpen(null)
             }}
           >
             New Folder...
           </MenuItem>
           {ws.folderId !== null && (
-            <MenuItem
-              onClick={() => {
-                moveWorkspaceToFolder(ws.id, null)
-                setWsMenuOpen(null)
-              }}
-            >
+            <MenuItem onClick={() => moveWorkspaceToFolder(ws.id, null)}>
               No Folder
             </MenuItem>
           )}
           <MenuSeparator />
           {workspaces.length > 1 && (
-            <MenuItem
-              onClick={() => {
-                setDeleteTarget(ws.id)
-                setWsMenuOpen(null)
-              }}
-              destructive
-            >
+            <MenuItem onClick={() => setDeleteTarget(ws.id)} destructive>
               Delete
             </MenuItem>
           )}
-        </MenuContent>
-      </Menu>
+        </ContextMenuContent>
+      </ContextMenu>
     )
   }
 
@@ -175,74 +154,57 @@ export default function Sidebar(): JSX.Element {
         {folders.map((folder) => {
           const folderWorkspaces = workspaces.filter((ws) => ws.folderId === folder.id)
           const isFolderEditing = editingId === folder.id && editingType === 'folder'
-          const isFolderMenuOpen = folderMenuOpen === folder.id
 
           return (
             <div key={folder.id}>
-              <Menu
-                open={isFolderMenuOpen}
-                onOpenChange={(open) => setFolderMenuOpen(open ? folder.id : null)}
-              >
-                <div
-                  className="folder-header no-drag"
-                  onClick={() => toggleFolderCollapsed(folder.id)}
-                  onContextMenu={(e) => {
-                    e.preventDefault()
-                    setFolderMenuOpen(folder.id)
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                    padding: '4px 12px',
-                    fontSize: 12,
-                    color: 'var(--foreground-muted)',
-                    cursor: 'pointer',
-                    userSelect: 'none',
-                  }}
-                >
-                  {folder.collapsed ? (
-                    <ChevronRight size={10} />
-                  ) : (
-                    <ChevronDown size={10} />
-                  )}
-                  <FolderClosed size={12} style={{ opacity: 0.6 }} />
-                  {isFolderEditing ? (
-                    <InlineRenameInput
-                      initialValue={folder.name}
-                      onCommit={(name) => {
-                        renameFolder(folder.id, name)
-                        stopEditing()
-                      }}
-                      onCancel={stopEditing}
-                      className="text-[12px]"
-                    />
-                  ) : (
-                    <span className="flex-1 truncate">{folder.name}</span>
-                  )}
-                </div>
+              <ContextMenu>
+                <ContextMenuTrigger>
+                  <div
+                    className="folder-header no-drag"
+                    onClick={() => toggleFolderCollapsed(folder.id)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '4px 12px',
+                      fontSize: 12,
+                      color: 'var(--foreground-muted)',
+                      cursor: 'pointer',
+                      userSelect: 'none',
+                    }}
+                  >
+                    {folder.collapsed ? (
+                      <ChevronRight size={10} />
+                    ) : (
+                      <ChevronDown size={10} />
+                    )}
+                    <FolderClosed size={12} style={{ opacity: 0.6 }} />
+                    {isFolderEditing ? (
+                      <InlineRenameInput
+                        initialValue={folder.name}
+                        onCommit={(name) => {
+                          renameFolder(folder.id, name)
+                          stopEditing()
+                        }}
+                        onCancel={stopEditing}
+                        className="text-[12px]"
+                      />
+                    ) : (
+                      <span className="flex-1 truncate">{folder.name}</span>
+                    )}
+                  </div>
+                </ContextMenuTrigger>
 
                 {/* Folder context menu */}
-                <MenuContent side="right" align="start">
-                  <MenuItem
-                    onClick={() => {
-                      setFolderMenuOpen(null)
-                      startEditingFolder(folder.id)
-                    }}
-                  >
+                <ContextMenuContent side="bottom" align="start">
+                  <MenuItem onClick={() => startEditingFolder(folder.id)}>
                     Rename Folder
                   </MenuItem>
-                  <MenuItem
-                    onClick={() => {
-                      removeFolder(folder.id)
-                      setFolderMenuOpen(null)
-                    }}
-                    destructive
-                  >
+                  <MenuItem onClick={() => removeFolder(folder.id)} destructive>
                     Delete Folder
                   </MenuItem>
-                </MenuContent>
-              </Menu>
+                </ContextMenuContent>
+              </ContextMenu>
 
               {/* Workspaces inside this folder */}
               {!folder.collapsed && folderWorkspaces.map((ws) => renderWorkspaceItem(ws))}
