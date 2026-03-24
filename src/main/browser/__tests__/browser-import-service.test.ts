@@ -6,6 +6,7 @@ import test from 'node:test'
 import {
   BrowserImportService,
   BrowserImportServiceError,
+  CHROME_SAFE_STORAGE_TIMEOUT_MS,
   collectChromiumCookies,
   dedupeHistoryEntries,
   decodeSafariBinaryCookies,
@@ -145,6 +146,69 @@ test('importChrome returns retryable keychain failure after importing history', 
     retryable: true,
     message: 'Keychain access denied',
   })
+})
+
+test('Chrome keychain lookup timeout allows enough time for interactive auth', () => {
+  assert.ok(CHROME_SAFE_STORAGE_TIMEOUT_MS >= 15000)
+})
+
+test('importChrome accepts very large Chrome history timestamps from sqlite bigint rows', async () => {
+  const importedHistory: Array<{ url: string; title: string; visitedAt: number; source: string; browserProfile?: string }> = []
+
+  const service = new BrowserImportService({
+    sessionManager: {
+      getSession: () => ({ cookies: { set: async () => undefined, flushStore: async () => undefined } }) as never,
+    },
+    historyService: {
+      importEntries: (entries) => {
+        importedHistory.push(...entries)
+        return entries.length
+      },
+    },
+    loadChromeHistoryImpl: async () => [
+      {
+        url: 'https://example.com/large-time',
+        title: 'Large Time',
+        visitedAt: Number(13418806877500541n / 1000n - 11_644_473_600_000n),
+        source: 'chrome-import',
+        browserProfile: 'Default',
+      },
+    ],
+    loadChromeCookiesImpl: async () => [],
+  })
+
+  const result = await service.importChrome('/tmp/Default', 'history')
+
+  assert.deepEqual(result, { ok: true, importedCookies: 0, importedHistory: 1 })
+  assert.equal(importedHistory.length, 1)
+  assert.equal(importedHistory[0]?.url, 'https://example.com/large-time')
+  assert.ok(Number.isFinite(importedHistory[0]?.visitedAt))
+})
+
+test('collectChromiumCookies accepts oversized Chromium expiration timestamps provided as strings', () => {
+  const cookies = collectChromiumCookies(
+    [
+      {
+        name: 'sid',
+        value: 'abc',
+        host_key: '.example.com',
+        path: '/',
+        expires_utc: '13418806877500541',
+        samesite: -1,
+        is_secure: 0,
+        is_httponly: 1,
+      },
+    ],
+    {
+      browser: 'chrome',
+      profile: 'Default',
+      includeExpired: true,
+      decrypt: () => null,
+    },
+  )
+
+  assert.equal(cookies.length, 1)
+  assert.ok(typeof cookies[0]?.expires === 'number')
 })
 
 test('importSafari returns explicit Full Disk Access missing status', async () => {
