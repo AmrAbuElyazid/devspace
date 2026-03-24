@@ -8,7 +8,26 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "postinstall": "electron-vite postinstall 2>/dev/null; true",
-    "rebuild-native": "cd native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=arm64 --dist-url=https://electronjs.org/headers"
+    "rebuild-native": "cd native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=arm64 --dist-url=https://electronjs.org/headers",
+    "dist": "bun run build && bun run rebuild-native && bunx electron-builder --mac --arm64 --dir"
+  },
+  "build": {
+    "appId": "com.devspace.app",
+    "productName": "Devspace",
+    "mac": {
+      "target": "dir",
+      "category": "public.app-category.developer-tools",
+      "identity": null
+    },
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "native/build/Release/ghostty_bridge.node"
+    ],
+    "extraResources": [],
+    "asar": false
   },
   "dependencies": {
     "@base-ui-components/react": "^1.0.0-rc.0",
@@ -24,15 +43,16 @@
   },
   "devDependencies": {
     "@monaco-editor/react": "^4.7.0",
-    "node-gyp": "^12.2.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.4.0",
     "allotment": "^1.0.7",
     "electron": "^35.0.0",
+    "electron-builder": "^26.8.1",
     "electron-vite": "^3.0.0",
     "lucide-react": "^0.468.0",
+    "node-gyp": "^12.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwindcss": "^4.1.3",
