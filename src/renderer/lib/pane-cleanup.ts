@@ -1,7 +1,8 @@
-import type { Pane, TerminalConfig } from '../types/workspace'
+import type { Pane } from '../types/workspace'
+import { markSurfaceDestroyed } from '../components/TerminalPane'
 
 export type PaneCleanupDeps = {
-  destroyPty: (ptyId: string) => void
+  destroyTerminal: (surfaceId: string) => void
   destroyBrowser: (paneId: string) => void
   clearBrowserRuntime: (paneId: string) => void
 }
@@ -12,10 +13,10 @@ export function cleanupPaneResources(
   deps: PaneCleanupDeps,
 ): void {
   const pane = panes[paneId]
-  const terminalConfig = pane?.type === 'terminal' ? pane.config as TerminalConfig : null
 
-  if (terminalConfig?.ptyId) {
-    deps.destroyPty(terminalConfig.ptyId)
+  if (pane?.type === 'terminal') {
+    markSurfaceDestroyed(paneId)
+    deps.destroyTerminal(paneId)
   }
 
   if (pane?.type === 'browser') {

@@ -13,22 +13,29 @@ import type {
   BrowserStopFindAction,
 } from './browser'
 
-export interface PtyCreateOptions {
-  cols: number
-  rows: number
+export interface TerminalBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface TerminalCreateOptions {
   cwd?: string
-  shell?: string
 }
 
 export interface DevspaceBridge {
   platform: string
-  pty: {
-    create: (options: PtyCreateOptions) => Promise<string>
-    write: (ptyId: string, data: string) => void
-    resize: (ptyId: string, cols: number, rows: number) => void
-    destroy: (ptyId: string) => void
-    onData: (callback: (ptyId: string, data: string) => void) => () => void
-    onExit: (callback: (ptyId: string, exitCode: number) => void) => () => void
+  terminal: {
+    create: (surfaceId: string, options?: TerminalCreateOptions) => Promise<void>
+    destroy: (surfaceId: string) => Promise<void>
+    show: (surfaceId: string) => Promise<void>
+    hide: (surfaceId: string) => Promise<void>
+    focus: (surfaceId: string) => Promise<void>
+    setBounds: (surfaceId: string, bounds: TerminalBounds) => Promise<void>
+    setVisibleSurfaces: (surfaceIds: string[]) => Promise<void>
+    onTitleChanged: (callback: (surfaceId: string, title: string) => void) => () => void
+    onClosed: (callback: (surfaceId: string) => void) => () => void
   }
   window: {
     minimize: () => void

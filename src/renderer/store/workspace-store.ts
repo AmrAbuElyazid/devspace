@@ -206,8 +206,8 @@ function createDefaultWorkspace(name: string, tab: Tab): Workspace {
 }
 
 const defaultPaneCleanupDeps: PaneCleanupDeps = {
-  destroyPty: (ptyId) => {
-    window.api.pty.destroy(ptyId)
+  destroyTerminal: (surfaceId) => {
+    void window.api.terminal.destroy(surfaceId)
   },
   destroyBrowser: (paneId) => {
     void window.api.browser.destroy(paneId)
@@ -948,16 +948,7 @@ function persistState(state: WorkspaceState): void {
     workspaces: state.workspaces,
     activeWorkspaceId: state.activeWorkspaceId,
     sidebarTree: state.sidebarTree,
-    panes: Object.fromEntries(
-      Object.entries(state.panes).map(([id, pane]) => {
-        if (pane.type === 'terminal') {
-          const config = { ...pane.config } as Record<string, unknown>
-          delete config.ptyId
-          return [id, { ...pane, config }]
-        }
-        return [id, pane]
-      })
-    ),
+    panes: state.panes,
   }
   try {
     localStorage.setItem(PERSIST_KEY, JSON.stringify(data))

@@ -1,7 +1,7 @@
 import { ipcMain, dialog, shell, nativeTheme, BrowserWindow, Menu } from 'electron'
 import { readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
-import type { PtyManager } from './pty-manager'
+import type { TerminalManager } from './terminal-manager'
 import type {
   BrowserBounds,
   BrowserFindInPageOptions,
@@ -13,9 +13,6 @@ import type { BrowserPaneController } from './browser/browser-types'
 import type { BrowserImportService } from './browser/browser-import-service'
 import { findHostViewBounds, translateRendererBoundsToContentBounds } from './browser/browser-view-bounds'
 import {
-  validateTerminalDimensions,
-  validatePtyId,
-  validatePtyWriteData,
   validateFilePath,
   getSafeExternalUrl
 } from './validation'
@@ -44,60 +41,66 @@ function parseBrowserImportMode(mode: unknown): BrowserImportMode | null {
 
 export function registerIpcHandlers(
   mainWindow: BrowserWindow,
-  ptyManager: PtyManager,
+  terminalManager: TerminalManager,
   browserPaneManager: BrowserPaneController,
   browserImportService?: BrowserImportService,
 ): void {
   const allowedRoots = [homedir()]
 
-  // --- PTY handlers ---
+  // --- Terminal handlers ---
 
-  safeHandle('pty:create', (_event, options: unknown) => {
-    if (typeof options !== 'object' || options === null) {
-      return { error: 'Invalid pty create options' }
+  safeHandle('terminal:create', (_event, surfaceId: unknown, _options: unknown) => {
+    if (typeof surfaceId !== 'string') return
+    terminalManager.createSurface(surfaceId)
+  })
+
+  safeHandle('terminal:destroy', (_event, surfaceId: unknown) => {
+    if (typeof surfaceId !== 'string') return
+    terminalManager.destroySurface(surfaceId)
+  })
+
+  safeHandle('terminal:show', (_event, surfaceId: unknown) => {
+    if (typeof surfaceId !== 'string') return
+    terminalManager.showSurface(surfaceId)
+  })
+
+  safeHandle('terminal:hide', (_event, surfaceId: unknown) => {
+    if (typeof surfaceId !== 'string') return
+    terminalManager.hideSurface(surfaceId)
+  })
+
+  safeHandle('terminal:focus', (_event, surfaceId: unknown) => {
+    if (typeof surfaceId !== 'string') return
+    terminalManager.focusSurface(surfaceId)
+  })
+
+  safeHandle('terminal:setVisibleSurfaces', (_event, surfaceIds: unknown) => {
+    if (!Array.isArray(surfaceIds)) return
+    const valid = surfaceIds.filter((id): id is string => typeof id === 'string')
+    terminalManager.setVisibleSurfaces(valid)
+  })
+
+  safeHandle('terminal:setBounds', (_event, surfaceId: unknown, bounds: unknown) => {
+    if (typeof surfaceId !== 'string' || typeof bounds !== 'object' || bounds === null) return
+    const b = bounds as Partial<{ x: number; y: number; width: number; height: number }>
+    if (
+      typeof b.x !== 'number' ||
+      typeof b.y !== 'number' ||
+      typeof b.width !== 'number' ||
+      typeof b.height !== 'number'
+    ) {
+      return
     }
-    const opts = options as Record<string, unknown>
-    const dims = validateTerminalDimensions(opts.cols, opts.rows)
-    if (!dims) {
-      return { error: 'Invalid terminal dimensions (cols: 20-400, rows: 5-200)' }
-    }
-    return ptyManager.create({
-      cols: dims.cols,
-      rows: dims.rows,
-      cwd: typeof opts.cwd === 'string' ? opts.cwd : undefined,
-      shell: typeof opts.shell === 'string' ? opts.shell : undefined
-    })
+    terminalManager.setBounds(surfaceId, { x: b.x, y: b.y, width: b.width, height: b.height })
   })
 
-  safeOn('pty:write', (_event, ptyId: unknown, data: unknown) => {
-    const validId = validatePtyId(ptyId)
-    if (!validId) return
-    const validData = validatePtyWriteData(data)
-    if (!validData) return
-    ptyManager.write(validId, validData)
+  // Terminal event forwarding to renderer
+  terminalManager.onTitleChanged((surfaceId, title) => {
+    mainWindow.webContents.send('terminal:titleChanged', surfaceId, title)
   })
 
-  safeOn('pty:resize', (_event, ptyId: unknown, cols: unknown, rows: unknown) => {
-    const validId = validatePtyId(ptyId)
-    if (!validId) return
-    const dims = validateTerminalDimensions(cols, rows)
-    if (!dims) return
-    ptyManager.resize(validId, dims.cols, dims.rows)
-  })
-
-  safeOn('pty:destroy', (_event, ptyId: unknown) => {
-    const validId = validatePtyId(ptyId)
-    if (!validId) return
-    ptyManager.destroy(validId)
-  })
-
-  // PTY event forwarding to renderer
-  ptyManager.onData((ptyId, data) => {
-    mainWindow.webContents.send('pty:data', ptyId, data)
-  })
-
-  ptyManager.onExit((ptyId, code) => {
-    mainWindow.webContents.send('pty:exit', ptyId, code)
+  terminalManager.onSurfaceClosed((surfaceId) => {
+    mainWindow.webContents.send('terminal:closed', surfaceId)
   })
 
   // --- Window handlers ---

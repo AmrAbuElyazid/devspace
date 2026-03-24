@@ -2,8 +2,6 @@ export type PaneType = 'terminal' | 'browser' | 'editor' | 'empty'
 
 export interface TerminalConfig {
   cwd?: string
-  shell?: string
-  ptyId?: string
 }
 
 export interface BrowserConfig {
