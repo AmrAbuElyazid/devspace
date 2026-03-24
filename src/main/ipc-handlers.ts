@@ -80,6 +80,10 @@ export function registerIpcHandlers(
     terminalManager.setVisibleSurfaces(valid)
   })
 
+  safeHandle('terminal:blur', () => {
+    terminalManager.blurSurfaces()
+  })
+
   safeHandle('terminal:setBounds', (_event, surfaceId: unknown, bounds: unknown) => {
     if (typeof surfaceId !== 'string' || typeof bounds !== 'object' || bounds === null) return
     const b = bounds as Partial<{ x: number; y: number; width: number; height: number }>

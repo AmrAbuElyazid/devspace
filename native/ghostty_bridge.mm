@@ -192,10 +192,66 @@ static ghostty_input_mods_e translateMods(NSEventModifierFlags flags) {
 
 // ---- Keyboard ----
 
-// Intercept Cmd+key combos before Electron's menu system eats them
+// Check if a Cmd+key combo is reserved by the host app (devspace).
+// These shortcuts always propagate to Electron's menu system instead
+// of being consumed by Ghostty.
+static bool isAppReservedShortcut(NSEvent* event) {
+    NSEventModifierFlags flags = event.modifierFlags;
+    bool hasCmd   = (flags & NSEventModifierFlagCommand) != 0;
+    bool hasShift = (flags & NSEventModifierFlagShift) != 0;
+    bool hasAlt   = (flags & NSEventModifierFlagOption) != 0;
+    if (!hasCmd) return false;
+
+    NSString* chars = event.charactersIgnoringModifiers;
+    if (!chars || chars.length == 0) return false;
+    unichar ch = [chars characterAtIndex:0];
+
+    // Cmd only (no Shift, no Alt)
+    if (!hasShift && !hasAlt) {
+        switch (ch) {
+            case 't': // New tab
+            case 'w': // Close tab
+            case 'n': // New workspace
+            case 'b': // Toggle sidebar
+            case ',': // Settings
+            case 'd': // Split right
+            case 'l': // Focus browser URL bar
+            case 'r': // Reload browser
+            case '[': // Browser back
+            case ']': // Browser forward
+            case 'f': // Browser find
+            case '=': // Browser zoom in
+            case '+': // Browser zoom in (alt)
+            case '-': // Browser zoom out
+            case '0': // Browser zoom reset
+                return true;
+            default: break;
+        }
+        // Cmd+1-9: switch tab
+        if (ch >= '1' && ch <= '9') return true;
+    }
+
+    // Cmd+Shift (no Alt)
+    if (hasShift && !hasAlt) {
+        if (ch == 'd' || ch == 'D') return true; // Split down
+    }
+
+    // Cmd+Alt
+    if (hasAlt && !hasShift) {
+        if (ch == 'i' || ch == 'I') return true; // Browser dev tools
+    }
+
+    return false;
+}
+
+// Intercept Cmd+key combos before Electron's menu system eats them.
+// App-reserved shortcuts are always passed through to Electron.
 - (BOOL)performKeyEquivalent:(NSEvent*)event {
     if (!self.surface) return NO;
     if ([self.window firstResponder] != self) return NO;
+
+    // Let app-reserved shortcuts propagate to Electron's menu accelerators
+    if (isAppReservedShortcut(event)) return NO;
 
     if (event.modifierFlags & NSEventModifierFlagCommand) {
         ghostty_input_key_s key = {};
@@ -922,6 +978,19 @@ static Napi::Value SetCallback(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
+// Resign first responder if a GhosttyView currently has it, returning
+// keyboard focus to the Electron web content view.
+static Napi::Value BlurSurfaces(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (!g_state.window) return env.Undefined();
+
+    NSResponder* responder = [g_state.window firstResponder];
+    if ([responder isKindOfClass:[GhosttyView class]]) {
+        [g_state.window makeFirstResponder:[g_state.window contentView]];
+    }
+    return env.Undefined();
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("init", Napi::Function::New(env, InitGhostty));
     exports.Set("createSurface", Napi::Function::New(env, CreateSurface));
@@ -931,6 +1000,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("showSurface", Napi::Function::New(env, ShowSurface));
     exports.Set("hideSurface", Napi::Function::New(env, HideSurface));
     exports.Set("setVisibleSurfaces", Napi::Function::New(env, SetVisibleSurfaces));
+    exports.Set("blurSurfaces", Napi::Function::New(env, BlurSurfaces));
     exports.Set("setCallback", Napi::Function::New(env, SetCallback));
     return exports;
 }

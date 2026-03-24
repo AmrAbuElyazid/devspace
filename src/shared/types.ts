@@ -26,6 +26,9 @@ export interface TerminalCreateOptions {
 
 export interface DevspaceBridge {
   platform: string
+  app: {
+    onAction: (callback: (channel: string, ...args: unknown[]) => void) => () => void
+  }
   terminal: {
     create: (surfaceId: string, options?: TerminalCreateOptions) => Promise<void>
     destroy: (surfaceId: string) => Promise<void>
@@ -34,6 +37,7 @@ export interface DevspaceBridge {
     focus: (surfaceId: string) => Promise<void>
     setBounds: (surfaceId: string, bounds: TerminalBounds) => Promise<void>
     setVisibleSurfaces: (surfaceIds: string[]) => Promise<void>
+    blur: () => Promise<void>
     onTitleChanged: (callback: (surfaceId: string, title: string) => void) => () => void
     onClosed: (callback: (surfaceId: string) => void) => () => void
   }

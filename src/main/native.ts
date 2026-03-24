@@ -14,6 +14,7 @@ export interface GhosttyBridge {
   focusSurface(surfaceId: string): void
   resizeSurface(surfaceId: string, x: number, y: number, width: number, height: number): void
   setVisibleSurfaces(surfaceIds: string[]): void
+  blurSurfaces(): void
   setCallback(event: string, callback: (...args: unknown[]) => void): void
 }
 

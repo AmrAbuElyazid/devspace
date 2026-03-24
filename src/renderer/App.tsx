@@ -63,6 +63,16 @@ export default function App(): JSX.Element {
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId)
   const activeTab = activeWorkspace?.tabs.find((t) => t.id === activeWorkspace.activeTabId)
 
+  // When a full-screen overlay (settings, dialog) is active, native views
+  // must be hidden so the DOM overlay is visible.  Also resign first
+  // responder from any terminal so keyboard events flow to the DOM.
+  const overlayActive = settingsOpen
+  useEffect(() => {
+    if (overlayActive) {
+      void window.api.terminal.blur()
+    }
+  }, [overlayActive])
+
   useEffect(() => {
     return subscribeToBrowserEvents({
       onStateChange: (state) => {
@@ -92,7 +102,122 @@ export default function App(): JSX.Element {
     })
   }, [clearPendingPermissionRequest, handleRuntimeStateChange, openBrowserTab, setPendingPermissionRequest, updateBrowserPaneZoom, updatePaneConfig])
 
+  // Shared action handlers — called by both DOM keydown (when web content
+  // has focus) and IPC menu accelerators (when a native view has focus).
   useEffect(() => {
+    function doSplitRight(): void {
+      const store = useWorkspaceStore.getState()
+      const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
+      if (!ws) return
+      const tab = ws.tabs.find((t) => t.id === ws.activeTabId)
+      if (tab) {
+        const targetPaneId = getSplitShortcutTargetPaneId(tab)
+        if (targetPaneId) store.splitPane(ws.id, tab.id, targetPaneId, 'horizontal')
+      }
+    }
+
+    function doSplitDown(): void {
+      const store = useWorkspaceStore.getState()
+      const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
+      if (!ws) return
+      const tab = ws.tabs.find((t) => t.id === ws.activeTabId)
+      if (tab) {
+        const targetPaneId = getSplitShortcutTargetPaneId(tab)
+        if (targetPaneId) store.splitPane(ws.id, tab.id, targetPaneId, 'vertical')
+      }
+    }
+
+    function doSwitchTab(num: number): void {
+      const store = useWorkspaceStore.getState()
+      const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
+      if (!ws) return
+      const targetIndex = num - 1
+      if (targetIndex < ws.tabs.length) {
+        store.setActiveTab(ws.id, ws.tabs[targetIndex].id)
+      }
+    }
+
+    function getBrowserContext(): { paneId: string; currentZoom: number } | null {
+      const store = useWorkspaceStore.getState()
+      const browserPane = getActiveFocusedBrowserPane(store)
+      if (!browserPane) return null
+      const browserConfig = browserPane.config as BrowserConfig
+      const currentZoom = useBrowserStore.getState().runtimeByPaneId[browserPane.id]?.currentZoom ?? browserConfig.zoom ?? 1
+      return { paneId: browserPane.id, currentZoom }
+    }
+
+    // Menu accelerator IPC listener — handles shortcuts when native views have focus
+    const disposeIpc = window.api.app.onAction((channel, ...args) => {
+      const store = useWorkspaceStore.getState()
+      const settings = useSettingsStore.getState()
+      const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
+      if (!ws && channel !== 'app:toggle-settings') return
+
+      switch (channel) {
+        case 'app:new-tab': if (ws) store.addTab(ws.id); break
+        case 'app:close-tab': if (ws) store.removeTab(ws.id, ws.activeTabId); break
+        case 'app:new-workspace': store.addWorkspace(); break
+        case 'app:toggle-sidebar': settings.toggleSidebar(); break
+        case 'app:toggle-settings': settings.toggleSettings(); break
+        case 'app:split-right': doSplitRight(); break
+        case 'app:split-down': doSplitDown(); break
+        case 'app:switch-tab': {
+          const num = typeof args[0] === 'number' ? args[0] : parseInt(String(args[0]), 10)
+          if (num >= 1 && num <= 9) doSwitchTab(num)
+          break
+        }
+        case 'app:browser-focus-url': {
+          const ctx = getBrowserContext()
+          if (ctx) useBrowserStore.getState().requestAddressBarFocus(ctx.paneId)
+          break
+        }
+        case 'app:browser-reload': {
+          const ctx = getBrowserContext()
+          if (ctx) void window.api.browser.reload(ctx.paneId)
+          break
+        }
+        case 'app:browser-back': {
+          const ctx = getBrowserContext()
+          if (ctx) void window.api.browser.back(ctx.paneId)
+          break
+        }
+        case 'app:browser-forward': {
+          const ctx = getBrowserContext()
+          if (ctx) void window.api.browser.forward(ctx.paneId)
+          break
+        }
+        case 'app:browser-find': {
+          const ctx = getBrowserContext()
+          if (ctx) useBrowserStore.getState().requestFindBarFocus(ctx.paneId)
+          break
+        }
+        case 'app:browser-zoom-in': {
+          const ctx = getBrowserContext()
+          if (ctx) void window.api.browser.setZoom(ctx.paneId, clampZoom(ctx.currentZoom + 0.1))
+          break
+        }
+        case 'app:browser-zoom-out': {
+          const ctx = getBrowserContext()
+          if (ctx) void window.api.browser.setZoom(ctx.paneId, clampZoom(ctx.currentZoom - 0.1))
+          break
+        }
+        case 'app:browser-zoom-reset': {
+          const ctx = getBrowserContext()
+          if (ctx) void window.api.browser.resetZoom(ctx.paneId)
+          break
+        }
+        case 'app:browser-devtools': {
+          const ctx = getBrowserContext()
+          if (ctx) void window.api.browser.toggleDevTools(ctx.paneId)
+          break
+        }
+      }
+    })
+
+    // DOM keydown handler — handles shortcuts when web content has focus.
+    // The Menu accelerators also fire in this case, but the keydown handler
+    // prevents default to stop double-firing for things like Escape and
+    // Ctrl+1-9 which are NOT in the menu.
     const handler = (e: KeyboardEvent): void => {
       // Escape (no mod key required)
       if (e.key === 'Escape') {
@@ -104,7 +229,7 @@ export default function App(): JSX.Element {
         return
       }
 
-      // Ctrl+1-9 for workspace switching (not Cmd)
+      // Ctrl+1-9 for workspace switching (not Cmd — not in menu)
       if (e.ctrlKey && !e.metaKey && !e.shiftKey) {
         const store = useWorkspaceStore.getState()
         const num = parseInt(e.key, 10)
@@ -117,118 +242,13 @@ export default function App(): JSX.Element {
         }
         return
       }
-
-      // Cmd/Ctrl shortcuts
-      const isMod = e.metaKey || e.ctrlKey
-      if (!isMod) return
-
-      const { key, shiftKey, altKey } = e
-      const store = useWorkspaceStore.getState()
-      const settings = useSettingsStore.getState()
-      const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
-      if (!ws) return
-
-      if (key === 't' && !shiftKey) { e.preventDefault(); store.addTab(ws.id); return }
-      if (key === 'w' && !shiftKey) { e.preventDefault(); store.removeTab(ws.id, ws.activeTabId); return }
-      if (key === 'b' && !shiftKey) { e.preventDefault(); settings.toggleSidebar(); return }
-      if (key === 'n' && !shiftKey) { e.preventDefault(); store.addWorkspace(); return }
-      if (key === ',') { e.preventDefault(); settings.toggleSettings(); return }
-
-      if (key === 'd' && !shiftKey) {
-        e.preventDefault()
-        const tab = ws.tabs.find((t) => t.id === ws.activeTabId)
-        if (tab) {
-          const targetPaneId = getSplitShortcutTargetPaneId(tab)
-          if (targetPaneId) store.splitPane(ws.id, tab.id, targetPaneId, 'horizontal')
-        }
-        return
-      }
-      if (key === 'd' && shiftKey) {
-        e.preventDefault()
-        const tab = ws.tabs.find((t) => t.id === ws.activeTabId)
-        if (tab) {
-          const targetPaneId = getSplitShortcutTargetPaneId(tab)
-          if (targetPaneId) store.splitPane(ws.id, tab.id, targetPaneId, 'vertical')
-        }
-        return
-      }
-
-      const num = parseInt(key, 10)
-      if (num >= 1 && num <= 9) {
-        e.preventDefault()
-        const targetIndex = num - 1
-        if (targetIndex < ws.tabs.length) {
-          store.setActiveTab(ws.id, ws.tabs[targetIndex].id)
-        }
-        return
-      }
-
-      const browserPane = getActiveFocusedBrowserPane(store)
-      if (!browserPane) {
-        return
-      }
-
-      const paneId = browserPane.id
-      const browserStore = useBrowserStore.getState()
-      const browserConfig = browserPane.config as BrowserConfig
-      const currentZoom = useBrowserStore.getState().runtimeByPaneId[paneId]?.currentZoom ?? browserConfig.zoom ?? 1
-
-      if (key === 'l' && !shiftKey) {
-        e.preventDefault()
-        browserStore.requestAddressBarFocus(paneId)
-        return
-      }
-
-      if (key === 'r' && !shiftKey) {
-        e.preventDefault()
-        void window.api.browser.reload(paneId)
-        return
-      }
-
-      if (key === '[' && !shiftKey) {
-        e.preventDefault()
-        void window.api.browser.back(paneId)
-        return
-      }
-
-      if (key === ']' && !shiftKey) {
-        e.preventDefault()
-        void window.api.browser.forward(paneId)
-        return
-      }
-
-      if (key === 'f' && !shiftKey) {
-        e.preventDefault()
-        browserStore.requestFindBarFocus(paneId)
-        return
-      }
-
-      if ((key === 'i' || key === 'I') && altKey) {
-        e.preventDefault()
-        void window.api.browser.toggleDevTools(paneId)
-        return
-      }
-
-      if (key === '=' || key === '+') {
-        e.preventDefault()
-        void window.api.browser.setZoom(paneId, clampZoom(currentZoom + 0.1))
-        return
-      }
-
-      if (key === '-') {
-        e.preventDefault()
-        void window.api.browser.setZoom(paneId, clampZoom(currentZoom - 0.1))
-        return
-      }
-
-      if (key === '0') {
-        e.preventDefault()
-        void window.api.browser.resetZoom(paneId)
-      }
     }
 
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+    return () => {
+      window.removeEventListener('keydown', handler)
+      disposeIpc()
+    }
   }, [])
 
   // Layout: sidebar on left, main area on right. No separate title bar.
@@ -265,6 +285,7 @@ export default function App(): JSX.Element {
                         node={tab.root}
                         workspaceId={ws.id}
                         tabId={tab.id}
+                        overlayActive={overlayActive}
                       />
                     </div>
                   )

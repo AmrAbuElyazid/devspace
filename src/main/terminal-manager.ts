@@ -75,6 +75,11 @@ export class TerminalManager {
     this.bridge.resizeSurface(surfaceId, bounds.x, bounds.y, bounds.width, bounds.height)
   }
 
+  blurSurfaces(): void {
+    if (!this.bridge) return
+    this.bridge.blurSurfaces()
+  }
+
   destroyAll(): void {
     if (!this.bridge) return
     for (const surfaceId of this.activeSurfaces) {

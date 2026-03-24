@@ -98,18 +98,35 @@ function createWindow(): void {
 app.whenReady().then(() => {
   createWindow()
 
-  // Set application menu with Edit menu for native view responder chain
+  // Set application menu with Edit menu for native view responder chain.
+  // App-level shortcuts are registered as menu accelerators so they fire
+  // even when a native GhosttyView has keyboard focus.
+  const send = (channel: string, ...args: unknown[]): void => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (win) win.webContents.send(channel, ...args)
+  }
+
   const menuTemplate: Electron.MenuItemConstructorOptions[] = [
     {
       label: app.name,
       submenu: [
         { role: 'about' },
         { type: 'separator' },
+        { label: 'Settings…', accelerator: 'Cmd+,', click: () => send('app:toggle-settings') },
+        { type: 'separator' },
         { role: 'hide' },
         { role: 'hideOthers' },
         { role: 'unhide' },
         { type: 'separator' },
         { role: 'quit' },
+      ],
+    },
+    {
+      label: 'File',
+      submenu: [
+        { label: 'New Tab', accelerator: 'Cmd+T', click: () => send('app:new-tab') },
+        { label: 'Close Tab', accelerator: 'Cmd+W', click: () => send('app:close-tab') },
+        { label: 'New Workspace', accelerator: 'Cmd+N', click: () => send('app:new-workspace') },
       ],
     },
     {
@@ -122,6 +139,38 @@ app.whenReady().then(() => {
         { role: 'copy' },
         { role: 'paste' },
         { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Toggle Sidebar', accelerator: 'Cmd+B', click: () => send('app:toggle-sidebar') },
+        { type: 'separator' },
+        { label: 'Split Right', accelerator: 'Cmd+D', click: () => send('app:split-right') },
+        { label: 'Split Down', accelerator: 'Cmd+Shift+D', click: () => send('app:split-down') },
+        { type: 'separator' },
+        ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({
+          label: `Tab ${n}`,
+          accelerator: `Cmd+${n}`,
+          click: () => send('app:switch-tab', n),
+          visible: false, // hidden from menu but accelerator still works
+        })),
+      ],
+    },
+    {
+      label: 'Browser',
+      submenu: [
+        { label: 'Focus Address Bar', accelerator: 'Cmd+L', click: () => send('app:browser-focus-url') },
+        { label: 'Reload', accelerator: 'Cmd+R', click: () => send('app:browser-reload') },
+        { label: 'Back', accelerator: 'Cmd+[', click: () => send('app:browser-back') },
+        { label: 'Forward', accelerator: 'Cmd+]', click: () => send('app:browser-forward') },
+        { label: 'Find', accelerator: 'Cmd+F', click: () => send('app:browser-find') },
+        { type: 'separator' },
+        { label: 'Zoom In', accelerator: 'Cmd+=', click: () => send('app:browser-zoom-in') },
+        { label: 'Zoom Out', accelerator: 'Cmd+-', click: () => send('app:browser-zoom-out') },
+        { label: 'Reset Zoom', accelerator: 'Cmd+0', click: () => send('app:browser-zoom-reset') },
+        { type: 'separator' },
+        { label: 'Developer Tools', accelerator: 'Cmd+Alt+I', click: () => send('app:browser-devtools') },
       ],
     },
     {
