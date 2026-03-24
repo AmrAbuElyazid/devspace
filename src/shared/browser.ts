@@ -22,6 +22,12 @@ export type BrowserStopFindAction = 'clearSelection' | 'keepSelection' | 'activa
 export type BrowserPermissionDecision = 'allow-once' | 'allow-for-session' | 'deny'
 export type BrowserContextMenuTarget = 'page' | 'link' | 'selection'
 
+export interface BrowserFailureState {
+  kind: 'navigation' | 'crash'
+  detail: string
+  url: string
+}
+
 export interface BrowserRuntimeState {
   paneId: string
   url: string
@@ -34,6 +40,7 @@ export interface BrowserRuntimeState {
   securityLabel: string | null
   currentZoom: number
   find: BrowserFindState | null
+  failure: BrowserFailureState | null
 }
 
 export interface BrowserContextMenuRequest {

@@ -13,9 +13,11 @@ import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
 import BrowserSecurityIndicator from './browser/BrowserSecurityIndicator'
 import BrowserFindBar from './browser/BrowserFindBar'
+import BrowserPermissionPrompt from './browser/BrowserPermissionPrompt'
+import BrowserPaneStatusSurface from './browser/BrowserPaneStatusSurface'
 import type { BrowserConfig } from '../types/workspace'
 import type { ReactElement } from 'react'
-import type { BrowserContextMenuRequest } from '../../shared/browser'
+import type { BrowserContextMenuRequest, BrowserPermissionDecision } from '../../shared/browser'
 import type { ContextMenuItem } from '../../shared/types'
 
 interface BrowserPaneProps {
@@ -75,15 +77,21 @@ export default function BrowserPane({
   const placeholderRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId])
+  const pendingPermissionRequest = useBrowserStore((s) => s.pendingPermissionRequest)
   const isFindBarOpen = useBrowserStore((s) => s.findBarOpenByPaneId[paneId] ?? false)
   const addressBarFocusToken = useBrowserStore((s) => s.addressBarFocusTokenByPaneId[paneId] ?? 0)
   const findBarFocusToken = useBrowserStore((s) => s.findBarFocusTokenByPaneId[paneId] ?? 0)
   const closeFindBar = useBrowserStore((s) => s.closeFindBar)
+  const clearPendingPermissionRequest = useBrowserStore((s) => s.clearPendingPermissionRequest)
   const openBrowserTab = useWorkspaceStore((s) => s.openBrowserTab)
   const initialUrl = useMemo(() => normalizeBrowserInput(config.url || 'about:blank'), [config.url])
   const [inputUrl, setInputUrl] = useState(initialUrl)
   const hasCertificateError = runtimeState?.securityLabel === 'Certificate error'
-  const shouldHideNativeView = hideNativeView || hasCertificateError
+  const failure = runtimeState?.failure ?? null
+  const shouldHideNativeView = hideNativeView || failure !== null
+  const activePermissionRequest = pendingPermissionRequest?.paneId === paneId
+    ? pendingPermissionRequest
+    : null
 
   useBrowserBounds({
     paneId,
@@ -171,6 +179,36 @@ export default function BrowserPane({
 
     void window.api.browser.reload(paneId)
   }, [isLoading, paneId])
+
+  const handlePermissionDecision = useCallback((decision: BrowserPermissionDecision) => {
+    if (!activePermissionRequest) {
+      return
+    }
+
+    clearPendingPermissionRequest()
+    void window.api.browser.resolvePermission(activePermissionRequest.requestToken, decision)
+  }, [activePermissionRequest, clearPendingPermissionRequest])
+
+  const handleDismissPermissionPrompt = useCallback(() => {
+    handlePermissionDecision('deny')
+  }, [handlePermissionDecision])
+
+  const handleDismissFailure = useCallback(() => {
+    useBrowserStore.getState().upsertRuntimeState({
+      paneId,
+      url: currentUrl,
+      title: currentTitle,
+      faviconUrl: runtimeState?.faviconUrl ?? null,
+      isLoading,
+      canGoBack,
+      canGoForward,
+      isSecure,
+      securityLabel,
+      currentZoom: runtimeState?.currentZoom ?? config.zoom ?? 1,
+      find: findState ?? null,
+      failure: null,
+    })
+  }, [canGoBack, canGoForward, config.zoom, currentTitle, currentUrl, findState, isLoading, isSecure, paneId, runtimeState?.currentZoom, runtimeState?.faviconUrl, securityLabel])
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Enter') {
@@ -325,22 +363,20 @@ export default function BrowserPane({
 
       {isLoading && <div className="browser-loading-bar" />}
 
+      {activePermissionRequest && (
+        <BrowserPermissionPrompt
+          request={activePermissionRequest}
+          onDecision={handlePermissionDecision}
+          onDismiss={handleDismissPermissionPrompt}
+        />
+      )}
+
       <div className="browser-shell-viewport">
-        {hasCertificateError && (
-          <div className="browser-failure-surface">
-            <div className="browser-failure-card">
-              <div className="browser-failure-eyebrow">Navigation blocked</div>
-              <h2>{securityLabel}</h2>
-              <p>{currentTitle}. The page did not load because its certificate could not be trusted.</p>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => void window.api.browser.reload(paneId)}
-              >
-                Try again
-              </Button>
-            </div>
-          </div>
+        {failure && (
+          <BrowserPaneStatusSurface
+            failure={failure}
+            onPrimaryAction={() => void window.api.browser.reload(paneId)}
+          />
         )}
         <div
           ref={placeholderRef}

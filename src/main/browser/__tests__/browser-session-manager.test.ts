@@ -7,6 +7,7 @@ import {
 } from '../browser-session-manager'
 
 type PermissionCheckHandler = Parameters<Session['setPermissionCheckHandler']>[0]
+type PermissionRequestHandler = Parameters<NonNullable<Session['setPermissionRequestHandler']>>[0]
 type CertificateVerifyProc = Parameters<Session['setCertificateVerifyProc']>[0]
 type CertificateErrorListener = (
   event: { preventDefault: () => void },
@@ -43,12 +44,16 @@ test('getSession uses fromPartition with the shared browser partition', () => {
 
 test('installHandlers registers a permission check handler on the session', () => {
   let registeredHandler: PermissionCheckHandler | undefined
+  let registeredRequestHandler: PermissionRequestHandler | undefined
   let registeredVerifyProc: CertificateVerifyProc | undefined
 
   const manager = new BrowserSessionManager({
     fromPartition: () => ({
       setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
         registeredHandler = handler
+      },
+      setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
+        registeredRequestHandler = handler
       },
       setCertificateVerifyProc: (handler: CertificateVerifyProc) => {
         registeredVerifyProc = handler
@@ -64,11 +69,159 @@ test('installHandlers registers a permission check handler on the session', () =
   })
 
   assert.equal(typeof registeredHandler, 'function')
+  assert.equal(typeof registeredRequestHandler, 'function')
   assert.equal(typeof registeredVerifyProc, 'function')
   assert.equal(registeredHandler?.({ id: 1 } as never, 'notifications', 'https://example.com', {} as never), false)
 })
 
-test('certificate verification fails closed and reports pane failures', () => {
+test('permission request handler emits a mapped browser permission request', () => {
+  let registeredRequestHandler: PermissionRequestHandler | undefined
+  const requested: Array<{ paneId: string; origin: string; permissionType: string; requestToken: string }> = []
+
+  const manager = new BrowserSessionManager({
+    fromPartition: () => ({
+      setPermissionCheckHandler: () => {},
+      setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
+        registeredRequestHandler = handler
+      },
+      setCertificateVerifyProc: () => {},
+    }) as never,
+  })
+
+  manager.installHandlers({
+    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 12 ? 'pane-12' : undefined,
+    reportCertificateError: () => {},
+    requestBrowserPermission: (request, resolve) => {
+      requested.push(request)
+      resolve('allow-once')
+    },
+    appModule: { on: () => undefined },
+    log: () => {},
+  })
+
+  let allowed: boolean | undefined
+  registeredRequestHandler?.(
+    {
+      id: 12,
+      getURL: () => 'https://camera.example/path',
+    } as never,
+    'media',
+    (nextAllowed) => {
+      allowed = nextAllowed
+    },
+    {
+      mediaType: 'video',
+      requestingUrl: 'https://camera.example/path',
+    } as never,
+  )
+
+  assert.equal(allowed, true)
+  assert.equal(requested.length, 1)
+  assert.equal(requested[0]?.paneId, 'pane-12')
+  assert.equal(requested[0]?.origin, 'https://camera.example')
+  assert.equal(requested[0]?.permissionType, 'camera')
+  assert.equal(typeof requested[0]?.requestToken, 'string')
+})
+
+test('allow-for-session is remembered by permission check handler for the same origin and permission type', () => {
+  let registeredHandler: PermissionCheckHandler | undefined
+  let registeredRequestHandler: PermissionRequestHandler | undefined
+
+  const manager = new BrowserSessionManager({
+    fromPartition: () => ({
+      setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
+        registeredHandler = handler
+      },
+      setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
+        registeredRequestHandler = handler
+      },
+      setCertificateVerifyProc: () => {},
+    }) as never,
+  })
+
+  manager.installHandlers({
+    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 12 ? 'pane-12' : undefined,
+    reportCertificateError: () => {},
+    requestBrowserPermission: (_request, resolve) => {
+      resolve('allow-for-session')
+    },
+    appModule: { on: () => undefined },
+    log: () => {},
+  })
+
+  let allowed: boolean | undefined
+  registeredRequestHandler?.(
+    {
+      id: 12,
+      getURL: () => 'https://camera.example/path',
+    } as never,
+    'media',
+    (nextAllowed) => {
+      allowed = nextAllowed
+    },
+    {
+      mediaType: 'video',
+      requestingUrl: 'https://camera.example/path',
+    } as never,
+  )
+
+  assert.equal(allowed, true)
+  assert.equal(
+    registeredHandler?.(
+      { id: 12 } as never,
+      'media',
+      'https://camera.example',
+      { mediaType: 'video', requestingUrl: 'https://camera.example/path' } as never,
+    ),
+    true,
+  )
+})
+
+test('allow-for-session still passes permission checks without webContents when origin is known', () => {
+  let registeredHandler: PermissionCheckHandler | undefined
+  let registeredRequestHandler: PermissionRequestHandler | undefined
+
+  const manager = new BrowserSessionManager({
+    fromPartition: () => ({
+      setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
+        registeredHandler = handler
+      },
+      setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
+        registeredRequestHandler = handler
+      },
+      setCertificateVerifyProc: () => {},
+    }) as never,
+  })
+
+  manager.installHandlers({
+    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 12 ? 'pane-12' : undefined,
+    reportCertificateError: () => {},
+    requestBrowserPermission: (_request, resolve) => {
+      resolve('allow-for-session')
+    },
+    appModule: { on: () => undefined },
+    log: () => {},
+  })
+
+  registeredRequestHandler?.(
+    {
+      id: 12,
+      getURL: () => 'https://camera.example/path',
+    } as never,
+    'notifications',
+    () => {},
+    {
+      requestingUrl: 'https://camera.example/path',
+    } as never,
+  )
+
+  assert.equal(
+    registeredHandler?.(null as never, 'notifications', 'https://camera.example', {} as never),
+    true,
+  )
+})
+
+test('certificate verification fails closed without surfacing a pane failure directly', () => {
   let registeredVerifyProc: CertificateVerifyProc | undefined
   const reported: Array<{ paneId: string; url: string }> = []
   const logs: string[] = []
@@ -111,7 +264,7 @@ test('certificate verification fails closed and reports pane failures', () => {
   )
 
   assert.equal(verificationResult, -2)
-  assert.deepEqual(reported, [{ paneId: 'pane-9', url: 'https://expired.badssl.com/' }])
+  assert.deepEqual(reported, [])
   assert.equal(logs.length, 0)
 })
 
@@ -143,7 +296,7 @@ test('permission checks fail closed and log when pane resolution fails', () => {
   assert.match(logs[0] ?? '', /unresolved browser permission request/i)
 })
 
-test('certificate errors are blocked and routed to the owning pane', () => {
+test('certificate errors are blocked without surfacing a pane failure directly from the app listener', () => {
   let certificateErrorListener: CertificateErrorListener | undefined
   const reported: Array<{ paneId: string; url: string }> = []
   let prevented = false
@@ -183,7 +336,7 @@ test('certificate errors are blocked and routed to the owning pane', () => {
 
   assert.equal(prevented, true)
   assert.equal(trusted, false)
-  assert.deepEqual(reported, [{ paneId: 'pane-7', url: 'https://expired.badssl.com/' }])
+  assert.deepEqual(reported, [])
 })
 
 test('installHandlers does not accumulate duplicate global certificate listeners', () => {
@@ -219,7 +372,7 @@ test('installHandlers does not accumulate duplicate global certificate listeners
   assert.equal(listeners.length, 1)
 })
 
-test('global certificate listener uses the latest routing callbacks', () => {
+test('global certificate listener still uses the latest callbacks while remaining side-effect free', () => {
   let certificateErrorListener: CertificateErrorListener | undefined
   const reports: Array<{ paneId: string; url: string }> = []
 
@@ -265,5 +418,5 @@ test('global certificate listener uses the latest routing callbacks', () => {
   )
 
   assert.equal(trusted, false)
-  assert.deepEqual(reports, [{ paneId: 'fresh-pane', url: 'https://expired.badssl.com/' }])
+  assert.deepEqual(reports, [])
 })

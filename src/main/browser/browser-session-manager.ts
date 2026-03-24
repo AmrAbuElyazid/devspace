@@ -1,4 +1,6 @@
 import type { Session } from 'electron'
+import { randomUUID } from 'node:crypto'
+import type { BrowserPermissionDecision, BrowserPermissionRequest, BrowserPermissionType } from '../../shared/browser'
 
 export const BROWSER_PARTITION = 'persist:devspace-global-browser'
 
@@ -9,6 +11,10 @@ export interface BrowserSessionModule {
 export interface BrowserSessionManagerDeps {
   resolvePaneIdForWebContents: (webContentsId: number) => string | undefined
   reportCertificateError: (paneId: string, url: string) => void
+  requestBrowserPermission?: (
+    request: BrowserPermissionRequest,
+    resolve: (decision: BrowserPermissionDecision) => void,
+  ) => void
   appModule?: {
     on: (
       event: 'certificate-error',
@@ -32,6 +38,47 @@ type CertificateVerifyRequest = {
   webContents?: { id: number } | null
 }
 
+type PermissionRequestDetails = {
+  mediaType?: string
+  requestingUrl?: string
+}
+
+type SessionPermissionGrantKey = `${BrowserPermissionType}|${string}`
+
+function mapPermissionType(permission: string, details: PermissionRequestDetails): BrowserPermissionType | null {
+  if (permission === 'geolocation' || permission === 'notifications') {
+    return permission
+  }
+
+  if (permission === 'media') {
+    if (details.mediaType === 'video') {
+      return 'camera'
+    }
+    if (details.mediaType === 'audio') {
+      return 'microphone'
+    }
+  }
+
+  return null
+}
+
+function toRequestOrigin(rawUrl: string | undefined, fallbackUrl: string | undefined): string | null {
+  const candidate = rawUrl || fallbackUrl
+  if (!candidate) {
+    return null
+  }
+
+  try {
+    return new URL(candidate).origin
+  } catch {
+    return null
+  }
+}
+
+function decisionAllows(decision: BrowserPermissionDecision): boolean {
+  return decision === 'allow-once' || decision === 'allow-for-session'
+}
+
 function getElectronSession(): BrowserSessionModule {
   return require('electron').session as typeof import('electron').session
 }
@@ -46,6 +93,7 @@ export class BrowserSessionManager {
   private currentLog: (message: string, meta?: Record<string, unknown>) => void = (message, meta) => {
     console.warn(message, meta)
   }
+  private readonly sessionPermissionGrants = new Set<SessionPermissionGrantKey>()
 
   constructor(private readonly sessionModule: BrowserSessionModule = getElectronSession()) {}
 
@@ -62,6 +110,16 @@ export class BrowserSessionManager {
     this.currentLog = log
 
     ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
+      const permissionType = mapPermissionType(permission, (details ?? {}) as PermissionRequestDetails)
+      const origin = toRequestOrigin(
+        (details as PermissionRequestDetails | undefined)?.requestingUrl,
+        requestingOrigin,
+      )
+
+      if (permissionType && origin && this.sessionPermissionGrants.has(this.toSessionPermissionGrantKey(permissionType, origin))) {
+        return true
+      }
+
       if (!webContents) {
         log('[browser] missing webContents for permission request; denying by default', {
           permission,
@@ -82,8 +140,61 @@ export class BrowserSessionManager {
         return false
       }
 
-      return false
+      if (!permissionType || !origin) {
+        return false
+      }
+
+      return this.sessionPermissionGrants.has(this.toSessionPermissionGrantKey(permissionType, origin))
     })
+
+    if (typeof ses.setPermissionRequestHandler === 'function') {
+      ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
+        if (!webContents) {
+          log('[browser] missing webContents for permission request prompt; denying by default', {
+            permission,
+            details,
+          })
+          callback(false)
+          return
+        }
+
+        const paneId = deps?.resolvePaneIdForWebContents(webContents.id)
+        if (!paneId) {
+          log('[browser] unresolved browser permission request prompt; denying by default', {
+            webContentsId: webContents.id,
+            permission,
+            details,
+          })
+          callback(false)
+          return
+        }
+
+        const permissionType = mapPermissionType(permission, (details ?? {}) as PermissionRequestDetails)
+        const origin = toRequestOrigin(
+          (details as PermissionRequestDetails | undefined)?.requestingUrl,
+          typeof (webContents as { getURL?: () => string }).getURL === 'function'
+            ? (webContents as { getURL: () => string }).getURL()
+            : undefined,
+        )
+
+        if (!permissionType || !origin || !deps?.requestBrowserPermission) {
+          callback(false)
+          return
+        }
+
+        deps.requestBrowserPermission({
+          paneId,
+          origin,
+          permissionType,
+          requestToken: randomUUID(),
+        }, (decision) => {
+          if (decision === 'allow-for-session') {
+            this.sessionPermissionGrants.add(this.toSessionPermissionGrantKey(permissionType, origin))
+          }
+          callback(decisionAllows(decision))
+        })
+      })
+    }
 
     if (typeof ses.setCertificateVerifyProc === 'function') {
       ses.setCertificateVerifyProc((request: CertificateVerifyRequest, callback: (verificationResult: number) => void) => {
@@ -92,7 +203,6 @@ export class BrowserSessionManager {
           return
         }
 
-        const url = request.hostname ? `https://${request.hostname}/` : 'about:blank'
         const webContentsId = request.webContents?.id
         if (typeof webContentsId !== 'number') {
           log('[browser] missing webContents for certificate verification; denying by default', {
@@ -104,8 +214,7 @@ export class BrowserSessionManager {
           return
         }
 
-        const paneId = deps?.resolvePaneIdForWebContents(webContentsId)
-        if (!paneId) {
+        if (!deps?.resolvePaneIdForWebContents(webContentsId)) {
           log('[browser] unresolved browser certificate verification; denying by default', {
             webContentsId,
             hostname: request.hostname,
@@ -116,7 +225,6 @@ export class BrowserSessionManager {
           return
         }
 
-        deps?.reportCertificateError(paneId, url)
         callback(-2)
       })
     }
@@ -139,8 +247,7 @@ export class BrowserSessionManager {
           return
         }
 
-        const paneId = currentDeps?.resolvePaneIdForWebContents(webContents.id)
-        if (!paneId) {
+        if (!currentDeps?.resolvePaneIdForWebContents(webContents.id)) {
           currentLog('[browser] unresolved browser certificate error; denying by default', {
             webContentsId: webContents.id,
             url,
@@ -151,9 +258,12 @@ export class BrowserSessionManager {
           return
         }
 
-        currentDeps?.reportCertificateError(paneId, url)
         callback(false)
       })
     }
+  }
+
+  private toSessionPermissionGrantKey(permissionType: BrowserPermissionType, origin: string): SessionPermissionGrantKey {
+    return `${permissionType}|${origin}`
   }
 }
