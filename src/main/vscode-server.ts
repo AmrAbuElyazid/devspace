@@ -1,5 +1,8 @@
 import { spawn, execSync, type ChildProcess } from 'child_process'
 import { createServer } from 'net'
+import { mkdirSync } from 'fs'
+import { join } from 'path'
+import { homedir } from 'os'
 
 interface ServerInstance {
   process: ChildProcess
@@ -72,6 +75,12 @@ export class VscodeServerManager {
   private servers = new Map<string, ServerInstance>()
   private codeCli: string | null = null
   private codeCliChecked = false
+  private serverDataDir: string
+
+  constructor(serverDataDir?: string) {
+    this.serverDataDir = serverDataDir || join(homedir(), '.devspace', 'vscode-server-data')
+    mkdirSync(this.serverDataDir, { recursive: true })
+  }
 
   /** Resolve the `code` CLI path (cached). */
   private getCodeCli(): string | null {
@@ -127,6 +136,7 @@ export class VscodeServerManager {
       '--port', String(port),
       '--without-connection-token',
       '--accept-server-license-terms',
+      '--server-data-dir', this.serverDataDir,
     ], {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
