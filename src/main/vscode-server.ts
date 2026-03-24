@@ -1,5 +1,5 @@
 import { spawn, execSync, type ChildProcess } from 'child_process'
-import { createServer, type AddressInfo } from 'net'
+import { createServer } from 'net'
 
 interface ServerInstance {
   process: ChildProcess
@@ -9,15 +9,30 @@ interface ServerInstance {
   refCount: number
 }
 
-/** Find a free TCP port by briefly binding to port 0. */
-function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
+/**
+ * Derive a deterministic port from a folder path so the same folder always
+ * maps to the same origin (http://127.0.0.1:PORT). This preserves the
+ * browser's IndexedDB across sessions — VS Code web settings, extensions,
+ * login state, and theme all persist.
+ *
+ * Range: 9100-9899 (800 slots, plenty for concurrent folders).
+ */
+function stablePortForFolder(folder: string): number {
+  let hash = 0
+  for (let i = 0; i < folder.length; i++) {
+    hash = ((hash << 5) - hash + folder.charCodeAt(i)) | 0
+  }
+  return 9100 + (Math.abs(hash) % 800)
+}
+
+/** Check if a port is available by trying to bind to it. */
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
     const server = createServer()
-    server.listen(0, '127.0.0.1', () => {
-      const port = (server.address() as AddressInfo).port
-      server.close(() => resolve(port))
+    server.once('error', () => resolve(false))
+    server.listen(port, '127.0.0.1', () => {
+      server.close(() => resolve(true))
     })
-    server.on('error', reject)
   })
 }
 
@@ -74,7 +89,8 @@ export class VscodeServerManager {
 
   /**
    * Start (or reuse) a `code serve-web` server for the given folder.
-   * Returns the URL to load in a WebContentsView.
+   * Uses a deterministic port per folder to preserve IndexedDB state
+   * (settings, extensions, login) across sessions.
    */
   async start(folder: string): Promise<{ url: string; port: number }> {
     const existing = this.servers.get(folder)
@@ -88,7 +104,21 @@ export class VscodeServerManager {
       throw new Error('VS Code CLI (code) not found. Install VS Code and ensure the "code" command is in PATH.')
     }
 
-    const port = await findFreePort()
+    // Use a stable port for this folder. If it's occupied (hash collision
+    // or leftover process), fall back to adjacent ports.
+    let port = stablePortForFolder(folder)
+    let found = false
+    for (let attempt = 0; attempt < 20; attempt++) {
+      if (await isPortFree(port + attempt)) {
+        port = port + attempt
+        found = true
+        break
+      }
+    }
+    if (!found) {
+      throw new Error(`No free port found near ${port} for folder: ${folder}`)
+    }
+
     const url = `http://127.0.0.1:${port}?folder=${encodeURIComponent(folder)}`
 
     const child = spawn(cli, [
