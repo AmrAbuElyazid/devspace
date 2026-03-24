@@ -167,8 +167,33 @@ function createDefaultTab(name: string, pane: Pane): Tab {
     id: nanoid(),
     name,
     root: { type: 'leaf', paneId: pane.id },
-    focusedPaneId: null,
+    focusedPaneId: pane.id,
   }
+}
+
+function findFirstLeafPaneId(node: SplitNode): string | null {
+  if (node.type === 'leaf') {
+    return node.paneId
+  }
+
+  for (const child of node.children) {
+    const paneId = findFirstLeafPaneId(child)
+    if (paneId) {
+      return paneId
+    }
+  }
+
+  return null
+}
+
+export function normalizeFocusedPaneIds(workspaces: Workspace[]): Workspace[] {
+  return workspaces.map((workspace) => ({
+    ...workspace,
+    tabs: workspace.tabs.map((tab) => ({
+      ...tab,
+      focusedPaneId: tab.focusedPaneId ?? findFirstLeafPaneId(tab.root),
+    })),
+  }))
 }
 
 function createDefaultWorkspace(name: string, tab: Tab): Workspace {
@@ -222,6 +247,7 @@ interface WorkspaceState {
 
   // Tab CRUD
   addTab: (workspaceId: string, name?: string) => void
+  openBrowserTab: (workspaceId: string, url: string) => void
   removeTab: (workspaceId: string, tabId: string) => void
   renameTab: (workspaceId: string, tabId: string, name: string) => void
   setActiveTab: (workspaceId: string, tabId: string) => void
@@ -271,7 +297,7 @@ function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorksp
     // If persisted data has old format (no sidebarTree), ignore it (fresh start)
     if (!persisted.sidebarTree) return null
     return {
-      workspaces: persisted.workspaces,
+      workspaces: normalizeFocusedPaneIds(persisted.workspaces),
       activeWorkspaceId: persisted.activeWorkspaceId,
       panes: persisted.panes ?? {},
       sidebarTree: persisted.sidebarTree,
@@ -408,6 +434,33 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               : w,
           ),
           panes: { ...panes, [pane.id]: pane },
+        })
+      },
+
+      openBrowserTab(workspaceId, url) {
+        const { workspaces, panes } = get()
+        const ws = workspaces.find((workspace) => workspace.id === workspaceId)
+        if (!ws) return
+
+        const paneId = get().addPane('browser', { url })
+        const tab = createDefaultTab(`Tab ${ws.tabs.length + 1}`, get().panes[paneId] ?? {
+          id: paneId,
+          type: 'browser',
+          title: titleForType.browser,
+          config: { url },
+        })
+
+        set({
+          workspaces: get().workspaces.map((workspace) =>
+            workspace.id === workspaceId
+              ? {
+                  ...workspace,
+                  tabs: [...workspace.tabs, tab],
+                  activeTabId: tab.id,
+                }
+              : workspace,
+          ),
+          panes: get().panes,
         })
       },
 

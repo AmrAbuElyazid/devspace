@@ -53,6 +53,7 @@ const PaneContent = memo(function PaneContent({
       return (
         <BrowserPane
           paneId={paneId}
+          workspaceId={workspaceId}
           config={(pane.config ?? { url: 'https://www.google.com' }) as BrowserConfig}
           isVisible={isVisible}
           hideNativeView={hideNativeView}

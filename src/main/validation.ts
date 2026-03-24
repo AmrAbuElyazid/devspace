@@ -2,8 +2,11 @@
 
 import path from 'path'
 
+const SAFARI_FULL_DISK_ACCESS_SETTINGS_URL = 'x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles'
+
 export function getSafeExternalUrl(rawUrl: unknown): string | null {
   if (typeof rawUrl !== 'string' || rawUrl.length === 0) return null
+  if (rawUrl === SAFARI_FULL_DISK_ACCESS_SETTINGS_URL) return rawUrl
   let parsedUrl: URL
   try {
     parsedUrl = new URL(rawUrl)

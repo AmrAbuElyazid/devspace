@@ -3,6 +3,7 @@ import { expect, mock, test } from 'bun:test'
 test('browser bridge exposes spec-aligned browser IPC methods', async () => {
   const invokeCalls = []
   const listenerRegistrations = []
+  const listenerCallbacks = new Map()
   let exposedBridge
 
   mock.module('../electron-bridge', () => ({
@@ -18,8 +19,9 @@ test('browser bridge exposes spec-aligned browser IPC methods', async () => {
           return Promise.resolve(undefined)
         },
         send: () => {},
-        on: (channel) => {
+        on: (channel, listener) => {
           listenerRegistrations.push(['on', channel])
+          listenerCallbacks.set(channel, listener)
         },
         removeListener: (channel) => {
           listenerRegistrations.push(['removeListener', channel])
@@ -40,10 +42,16 @@ test('browser bridge exposes spec-aligned browser IPC methods', async () => {
   await exposedBridge.browser.resetZoom('pane-1')
   await exposedBridge.browser.showContextMenu('pane-1', { x: 10, y: 20 })
   await exposedBridge.browser.resolvePermission('token-1', 'allow-for-session')
+  await exposedBridge.browser.importChrome('/tmp/Profile 1', 'history')
+  await exposedBridge.browser.importSafari('cookies')
   const unsubscribeState = exposedBridge.browser.onStateChange(() => {})
   const unsubscribePermission = exposedBridge.browser.onPermissionRequest(() => {})
+  const unsubscribeContextMenu = exposedBridge.browser.onContextMenuRequest(() => {})
+  const unsubscribeOpenInNewTab = exposedBridge.browser.onOpenInNewTabRequest(() => {})
   unsubscribeState()
   unsubscribePermission()
+  unsubscribeContextMenu()
+  unsubscribeOpenInNewTab()
 
   expect(invokeCalls).toEqual([
     ['browser:show', 'pane-1'],
@@ -56,12 +64,18 @@ test('browser bridge exposes spec-aligned browser IPC methods', async () => {
     ['browser:resetZoom', 'pane-1'],
     ['browser:showContextMenu', 'pane-1', { x: 10, y: 20 }],
     ['browser:resolvePermission', 'token-1', 'allow-for-session'],
+    ['browser:importChrome', '/tmp/Profile 1', 'history'],
+    ['browser:importSafari', 'cookies'],
   ])
 
   expect(listenerRegistrations).toEqual([
     ['on', 'browser:stateChanged'],
     ['on', 'browser:permissionRequested'],
+    ['on', 'browser:contextMenuRequested'],
+    ['on', 'browser:openInNewTabRequested'],
     ['removeListener', 'browser:stateChanged'],
     ['removeListener', 'browser:permissionRequested'],
+    ['removeListener', 'browser:contextMenuRequested'],
+    ['removeListener', 'browser:openInNewTabRequested'],
   ])
 })

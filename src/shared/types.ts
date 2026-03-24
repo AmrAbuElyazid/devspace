@@ -1,9 +1,15 @@
 import type {
   BrowserFindInPageOptions,
   BrowserBounds,
+  BrowserContextMenuRequest,
+  BrowserImportMode,
+  BrowserImportResult,
+  BrowserOpenInNewTabRequest,
   BrowserPermissionDecision,
   BrowserPermissionRequest,
   BrowserRuntimeState,
+  ChromeProfileDescriptor,
+  SafariAccessResult,
   BrowserStopFindAction,
 } from './browser'
 
@@ -56,6 +62,8 @@ export interface DevspaceBridge {
 export interface BrowserBridgeListeners {
   onStateChange?: (state: BrowserRuntimeState) => void
   onPermissionRequest?: (request: BrowserPermissionRequest) => void
+  onContextMenuRequest?: (request: BrowserContextMenuRequest) => void
+  onOpenInNewTabRequest?: (request: BrowserOpenInNewTabRequest) => void
 }
 
 export type BrowserBridgeUnsubscribe = () => void
@@ -80,8 +88,14 @@ export interface BrowserBridge {
   toggleDevTools: (paneId: string) => Promise<void>
   showContextMenu: (paneId: string, position?: { x: number; y: number }) => Promise<void>
   resolvePermission: (requestToken: string, decision: BrowserPermissionDecision) => Promise<void>
+  listChromeProfiles: () => Promise<ChromeProfileDescriptor[]>
+  importChrome: (profilePath: string, mode?: BrowserImportMode) => Promise<BrowserImportResult>
+  importSafari: (mode?: BrowserImportMode) => Promise<BrowserImportResult>
+  detectSafariAccess: (mode?: BrowserImportMode) => Promise<SafariAccessResult>
   onStateChange: (callback: (state: BrowserRuntimeState) => void) => BrowserBridgeUnsubscribe
   onPermissionRequest: (callback: (request: BrowserPermissionRequest) => void) => BrowserBridgeUnsubscribe
+  onContextMenuRequest: (callback: (request: BrowserContextMenuRequest) => void) => BrowserBridgeUnsubscribe
+  onOpenInNewTabRequest: (callback: (request: BrowserOpenInNewTabRequest) => void) => BrowserBridgeUnsubscribe
 }
 
 export interface ContextMenuItem<T extends string = string> {

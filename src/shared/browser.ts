@@ -20,6 +20,7 @@ export interface BrowserFindInPageOptions {
 
 export type BrowserStopFindAction = 'clearSelection' | 'keepSelection' | 'activateSelection'
 export type BrowserPermissionDecision = 'allow-once' | 'allow-for-session' | 'deny'
+export type BrowserContextMenuTarget = 'page' | 'link' | 'selection'
 
 export interface BrowserRuntimeState {
   paneId: string
@@ -35,9 +36,55 @@ export interface BrowserRuntimeState {
   find: BrowserFindState | null
 }
 
+export interface BrowserContextMenuRequest {
+  paneId: string
+  position: { x: number; y: number }
+  target: BrowserContextMenuTarget
+  pageUrl: string
+  linkUrl: string | null
+  selectionText: string | null
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
+export interface BrowserOpenInNewTabRequest {
+  paneId: string
+  url: string
+}
+
 export interface BrowserPermissionRequest {
   paneId: string
   origin: string
   permissionType: BrowserPermissionType
   requestToken: string
 }
+
+export interface ChromeProfileDescriptor {
+  name: string
+  path: string
+}
+
+export type BrowserImportMode = 'cookies' | 'history' | 'everything'
+
+export type BrowserImportResult =
+  | {
+      ok: true
+      importedCookies: number
+      importedHistory: number
+    }
+  | {
+      ok: false
+      code: string
+      importedCookies: number
+      importedHistory: number
+      message?: string
+      retryable?: boolean
+    }
+
+export type SafariAccessResult =
+  | { ok: true }
+  | {
+      ok: false
+      code: 'SAFARI_FULL_DISK_ACCESS_REQUIRED'
+      message: string
+    }

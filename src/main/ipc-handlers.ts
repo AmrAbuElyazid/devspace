@@ -2,8 +2,16 @@ import { ipcMain, dialog, shell, nativeTheme, BrowserWindow, Menu } from 'electr
 import { readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import type { PtyManager } from './pty-manager'
-import type { BrowserBounds, BrowserFindInPageOptions, BrowserPermissionDecision, BrowserStopFindAction } from '../shared/browser'
+import type {
+  BrowserBounds,
+  BrowserFindInPageOptions,
+  BrowserImportMode,
+  BrowserPermissionDecision,
+  BrowserStopFindAction,
+} from '../shared/browser'
 import type { BrowserPaneController } from './browser/browser-types'
+import type { BrowserImportService } from './browser/browser-import-service'
+import { findHostViewBounds, translateRendererBoundsToContentBounds } from './browser/browser-view-bounds'
 import {
   validateTerminalDimensions,
   validatePtyId,
@@ -28,10 +36,17 @@ function safeOn(channel: string, handler: (event: any, ...args: any[]) => void) 
   ipcMain.on(channel, handler)
 }
 
+function parseBrowserImportMode(mode: unknown): BrowserImportMode | null {
+  if (mode === undefined) return 'everything'
+  if (mode === 'cookies' || mode === 'history' || mode === 'everything') return mode
+  return null
+}
+
 export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   ptyManager: PtyManager,
-  browserPaneManager: BrowserPaneController
+  browserPaneManager: BrowserPaneController,
+  browserImportService?: BrowserImportService,
 ): void {
   const allowedRoots = [homedir()]
 
@@ -287,7 +302,7 @@ export function registerIpcHandlers(
     browserPaneManager.stop(paneId)
   })
 
-  safeHandle('browser:setBounds', (_event, paneId: unknown, bounds: unknown) => {
+  safeHandle('browser:setBounds', (event, paneId: unknown, bounds: unknown) => {
     if (typeof paneId !== 'string' || typeof bounds !== 'object' || bounds === null) return
     const nextBounds = bounds as Partial<BrowserBounds>
     if (
@@ -298,7 +313,16 @@ export function registerIpcHandlers(
     ) {
       return
     }
-    browserPaneManager.setBounds(paneId, nextBounds as BrowserBounds)
+
+    const rendererHostBounds = findHostViewBounds(mainWindow.contentView, event.sender.id)
+    const senderZoomFactor = typeof event.sender.getZoomFactor === 'function'
+      ? event.sender.getZoomFactor()
+      : null
+    const translatedBounds = translateRendererBoundsToContentBounds(
+      nextBounds as BrowserBounds,
+      rendererHostBounds,
+    )
+    browserPaneManager.setBounds(paneId, translatedBounds)
   })
 
   safeHandle('browser:setFocus', (_event, paneId: unknown) => {
@@ -348,6 +372,58 @@ export function registerIpcHandlers(
     if (typeof requestToken !== 'string') return
     if (decision !== 'allow-once' && decision !== 'allow-for-session' && decision !== 'deny') return
     browserPaneManager.resolvePermission(requestToken, decision as BrowserPermissionDecision)
+  })
+
+  safeHandle('browser:listChromeProfiles', async () => {
+    return browserImportService?.listChromeProfiles() ?? []
+  })
+
+  safeHandle('browser:importChrome', async (_event, profilePath: unknown, mode?: unknown) => {
+    if (typeof profilePath !== 'string' || !browserImportService) {
+      return { ok: false, code: 'INVALID_CHROME_PROFILE', importedCookies: 0, importedHistory: 0 }
+    }
+
+    const importMode = parseBrowserImportMode(mode)
+    if (!importMode) {
+      return { ok: false, code: 'INVALID_BROWSER_IMPORT_MODE', importedCookies: 0, importedHistory: 0 }
+    }
+
+    const allowedProfiles = await browserImportService.listChromeProfiles()
+    if (!allowedProfiles.some((profile) => profile.path === profilePath)) {
+      return { ok: false, code: 'INVALID_CHROME_PROFILE', importedCookies: 0, importedHistory: 0 }
+    }
+
+    return browserImportService.importChrome(profilePath, importMode)
+  })
+
+  safeHandle('browser:importSafari', async (_event, mode?: unknown) => {
+    if (!browserImportService) {
+      return { ok: false, code: 'SAFARI_IMPORT_UNAVAILABLE', importedCookies: 0, importedHistory: 0 }
+    }
+
+    const importMode = parseBrowserImportMode(mode)
+    if (!importMode) {
+      return { ok: false, code: 'INVALID_BROWSER_IMPORT_MODE', importedCookies: 0, importedHistory: 0 }
+    }
+
+    return browserImportService.importSafari(importMode)
+  })
+
+  safeHandle('browser:detectSafariAccess', async (_event, mode?: unknown) => {
+    const importMode = parseBrowserImportMode(mode)
+    if (!importMode) {
+      return {
+        ok: false,
+        code: 'SAFARI_FULL_DISK_ACCESS_REQUIRED',
+        message: 'Invalid Safari import mode.',
+      }
+    }
+
+    return browserImportService?.detectSafariAccess(importMode) ?? {
+      ok: false,
+      code: 'SAFARI_FULL_DISK_ACCESS_REQUIRED',
+      message: 'Safari import service unavailable.',
+    }
   })
 
   safeOn('theme:set', (_event, theme: 'light' | 'dark' | 'system') => {

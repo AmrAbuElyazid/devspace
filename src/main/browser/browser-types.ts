@@ -6,6 +6,7 @@ import type {
   BrowserRuntimeState,
   BrowserStopFindAction,
 } from '../../shared/browser'
+import type { BrowserHistoryRecorder } from './browser-history-service'
 
 export type BrowserPaneManagerDeps = {
   createView?: (options: WebContentsViewConstructorOptions) => WebContentsView
@@ -13,6 +14,7 @@ export type BrowserPaneManagerDeps = {
   removeChildView: (view: View) => void
   sendToRenderer: (channel: string, payload: unknown) => void
   getSession?: () => Session
+  historyService?: BrowserHistoryRecorder
 }
 
 export interface BrowserPaneRecord {
