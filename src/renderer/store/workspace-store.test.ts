@@ -35,6 +35,9 @@ test('cleanupPaneResources destroys browser panes and clears runtime state', () 
       destroyBrowser: (paneId) => {
         destroyedPaneIds.push(paneId)
       },
+      destroyEditor: () => {
+        throw new Error('unexpected editor cleanup')
+      },
       clearBrowserRuntime: (paneId) => {
         clearedPaneIds.push(paneId)
       },

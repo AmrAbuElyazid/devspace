@@ -1,9 +1,11 @@
 import type { Pane } from '../types/workspace'
 import { markSurfaceDestroyed } from '../components/TerminalPane'
+import { markEditorDestroyed } from '../components/EditorPane'
 
 export type PaneCleanupDeps = {
   destroyTerminal: (surfaceId: string) => void
   destroyBrowser: (paneId: string) => void
+  destroyEditor: (paneId: string) => void
   clearBrowserRuntime: (paneId: string) => void
 }
 
@@ -22,5 +24,10 @@ export function cleanupPaneResources(
   if (pane?.type === 'browser') {
     deps.destroyBrowser(paneId)
     deps.clearBrowserRuntime(paneId)
+  }
+
+  if (pane?.type === 'editor') {
+    markEditorDestroyed(paneId)
+    deps.destroyEditor(paneId)
   }
 }

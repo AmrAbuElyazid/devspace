@@ -59,7 +59,14 @@ const PaneContent = memo(function PaneContent({
         />
       )
     case 'editor':
-      return <EditorPane paneId={paneId} config={(pane.config ?? {}) as EditorConfig} />
+      return (
+        <EditorPane
+          paneId={paneId}
+          config={(pane.config ?? {}) as EditorConfig}
+          isVisible={isVisible}
+          hideNativeView={hideNativeView}
+        />
+      )
     case 'browser':
       return (
         <BrowserPane

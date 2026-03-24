@@ -85,6 +85,12 @@ registerIpcHandlers(
     },
   },
   {
+    isAvailable: () => false,
+    start: async () => ({ error: 'test' }),
+    release: () => {},
+    stopAll: () => {},
+  },
+  {
     listChromeProfiles: async () => [{ name: 'Profile 1', path: '/tmp/Profile 1' }],
     importChrome: async (profilePath, mode) => {
       browserImportCalls.push(['importChrome', profilePath, mode])

@@ -111,6 +111,12 @@ const bridge: DevspaceBridge = {
     }
   },
 
+  editor: {
+    isAvailable: () => ipcRenderer.invoke('editor:isAvailable'),
+    start: (paneId, folderPath) => ipcRenderer.invoke('editor:start', paneId, folderPath),
+    stop: (paneId) => ipcRenderer.invoke('editor:stop', paneId),
+  },
+
   browser: {
     create: (paneId, url) => ipcRenderer.invoke('browser:create', paneId, url),
     destroy: (paneId) => ipcRenderer.invoke('browser:destroy', paneId),

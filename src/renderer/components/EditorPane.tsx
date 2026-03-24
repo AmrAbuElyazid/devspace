@@ -1,290 +1,187 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
-import Editor, { type OnMount } from '@monaco-editor/react'
-import { FolderOpen, Save, FileCode } from 'lucide-react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { FolderOpen, AlertCircle, Loader2 } from 'lucide-react'
+import { useBrowserBounds } from '../hooks/useBrowserBounds'
 import { useWorkspaceStore } from '../store/workspace-store'
-import { useSettingsStore } from '../store/settings-store'
-import { THEME_CHANGE_EVENT } from '../hooks/useTheme'
-import { toast } from '../hooks/useToast'
 import { Button } from './ui/button'
-import { Tooltip } from './ui/tooltip'
 import type { EditorConfig } from '../types/workspace'
-import type * as monaco from 'monaco-editor'
+import type { ReactElement } from 'react'
+
+// Module-level tracking to survive React remounts (same pattern as TerminalPane)
+const startedEditors = new Set<string>()
+
+/** Call when an editor pane is destroyed externally. */
+export function markEditorDestroyed(paneId: string): void {
+  startedEditors.delete(paneId)
+}
 
 interface EditorPaneProps {
   paneId: string
   config: EditorConfig
+  isVisible: boolean
+  hideNativeView: boolean
 }
 
-function detectLanguage(filePath: string): string {
-  const ext = filePath.split('.').pop()?.toLowerCase()
-  const map: Record<string, string> = {
-    ts: 'typescript',
-    tsx: 'typescriptreact',
-    js: 'javascript',
-    jsx: 'javascriptreact',
-    json: 'json',
-    md: 'markdown',
-    html: 'html',
-    css: 'css',
-    scss: 'scss',
-    py: 'python',
-    rs: 'rust',
-    go: 'go',
-    yaml: 'yaml',
-    yml: 'yaml',
-    sh: 'shell',
-    bash: 'shell',
-    sql: 'sql',
-    graphql: 'graphql',
-    xml: 'xml',
-    svg: 'xml',
-    toml: 'toml',
-    ini: 'ini',
-    dockerfile: 'dockerfile',
-    c: 'c',
-    cpp: 'cpp',
-    h: 'c',
-    hpp: 'cpp',
-    java: 'java',
-    kt: 'kotlin',
-    rb: 'ruby',
-    php: 'php',
-    swift: 'swift',
-    lua: 'lua',
-    r: 'r',
-  }
-  return map[ext || ''] || 'plaintext'
-}
+type EditorState =
+  | { status: 'picking-folder' }
+  | { status: 'starting'; folderPath: string }
+  | { status: 'running'; folderPath: string }
+  | { status: 'error'; message: string }
+  | { status: 'unavailable' }
 
-export default function EditorPane({ paneId, config }: EditorPaneProps): JSX.Element {
-  const [content, setContent] = useState(config.content || '')
-  const [savedContent, setSavedContent] = useState(config.content || '')
-  const [filePath, setFilePath] = useState(config.filePath || '')
-  const [language, setLanguage] = useState(config.language || 'plaintext')
-  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
-
-  const [scopedFolder, setScopedFolder] = useState(config.scopedFolder || '')
-  const [isDark, setIsDark] = useState(
-    document.documentElement.classList.contains('dark')
-  )
-
+export default function EditorPane({
+  paneId,
+  config,
+  isVisible,
+  hideNativeView,
+}: EditorPaneProps): ReactElement {
+  const placeholderRef = useRef<HTMLDivElement>(null)
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle)
 
-  const editorFontSize = useSettingsStore((s) => s.fontSize)
-  const editorWordWrap = useSettingsStore((s) => s.editorWordWrap)
-  const editorMinimap = useSettingsStore((s) => s.editorMinimap)
-  const editorTabSize = useSettingsStore((s) => s.editorTabSize)
+  const shouldShowNativeView = isVisible && !hideNativeView
 
-  const isDirty = content !== savedContent
-
-  useEffect(() => {
-    const handleThemeChange = (e: Event): void => {
-      const detail = (e as CustomEvent).detail
-      setIsDark(detail?.theme === 'dark')
+  // Determine initial state based on config
+  const [state, setState] = useState<EditorState>(() => {
+    if (startedEditors.has(paneId)) {
+      return { status: 'running', folderPath: config.folderPath || '' }
     }
-    window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange)
-    return () => window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange)
-  }, [])
-
-  // Use ref to always have the latest save function available to Monaco's command
-  const handleSaveRef = useRef<() => Promise<void>>(() => Promise.resolve())
-
-  const handleSave = useCallback(async () => {
-    if (!filePath) return
-    try {
-      await window.api.fs.writeFile(filePath, content)
-      setSavedContent(content)
-      toast('File saved', 'success')
-    } catch (err) {
-      console.error('Failed to save file:', err)
-      toast('Failed to save file', 'error')
+    if (config.folderPath) {
+      return { status: 'starting', folderPath: config.folderPath }
     }
-  }, [filePath, content])
+    return { status: 'picking-folder' }
+  })
 
+  // Track bounds for the WebContentsView (reuses browser bounds hook)
+  useBrowserBounds({
+    paneId,
+    enabled: shouldShowNativeView && state.status === 'running',
+    ref: placeholderRef,
+  })
+
+  // Start the VS Code server when we have a folder
   useEffect(() => {
-    handleSaveRef.current = handleSave
-  }, [handleSave])
+    if (state.status !== 'starting') return
+    if (startedEditors.has(paneId)) {
+      setState({ status: 'running', folderPath: state.folderPath })
+      return
+    }
 
-  const handleOpenFolder = useCallback(async () => {
-    const result = await window.api.dialog.openFolder()
-    if (!result) return
-    setScopedFolder(result)
-    updatePaneConfig(paneId, { scopedFolder: result })
-  }, [paneId, updatePaneConfig])
+    let cancelled = false
 
-  const handleOpenFile = useCallback(async () => {
-    const result = await window.api.dialog.openFile(scopedFolder || undefined)
-    if (!result) return
+    void (async () => {
+      const result = await window.api.editor.start(paneId, state.folderPath)
 
-    const detectedLang = detectLanguage(result.path)
-    const fileName = result.path.split('/').pop() || result.path.split('\\').pop() || result.path
+      if (cancelled) return
 
-    setContent(result.content)
-    setSavedContent(result.content)
-    setFilePath(result.path)
-    setLanguage(detectedLang)
+      if ('error' in result) {
+        setState({ status: 'error', message: result.error })
+        return
+      }
 
-    updatePaneConfig(paneId, {
-      filePath: result.path,
-      content: result.content,
-      language: detectedLang,
+      startedEditors.add(paneId)
+      const folderName = state.folderPath.split('/').pop() || state.folderPath
+      updatePaneTitle(paneId, `VS Code: ${folderName}`)
+      updatePaneConfig(paneId, { folderPath: state.folderPath })
+      setState({ status: 'running', folderPath: state.folderPath })
+    })()
+
+    return () => { cancelled = true }
+  }, [paneId, state, updatePaneConfig, updatePaneTitle])
+
+  // Show/hide the WebContentsView based on visibility
+  useEffect(() => {
+    if (state.status !== 'running') return
+    const action = shouldShowNativeView
+      ? window.api.browser.show
+      : window.api.browser.hide
+    void action(paneId)
+  }, [shouldShowNativeView, paneId, state.status])
+
+  // Check availability on mount
+  useEffect(() => {
+    if (state.status !== 'picking-folder') return
+    void window.api.editor.isAvailable().then((available) => {
+      if (!available) {
+        setState({ status: 'unavailable' })
+      }
     })
-    updatePaneTitle(paneId, fileName)
-  }, [paneId, scopedFolder, updatePaneConfig, updatePaneTitle])
+  }, [state.status])
 
-  const handleEditorDidMount: OnMount = useCallback(
-    (editor, monacoInstance) => {
-      editorRef.current = editor
-
-      // Register Cmd+S / Ctrl+S (use ref to avoid stale closure)
-      editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
-        handleSaveRef.current()
-      })
-
-      editor.focus()
-    },
-    [],
-  )
-
-  const handleChange = useCallback((value: string | undefined) => {
-    setContent(value || '')
+  // Folder picker
+  const handlePickFolder = useCallback(async () => {
+    const folder = await window.api.dialog.openFolder()
+    if (!folder) return
+    setState({ status: 'starting', folderPath: folder })
   }, [])
 
-  // Empty state: no file open and no content
-  if (!filePath && !content) {
+  // Retry on error
+  const handleRetry = useCallback(() => {
+    if (config.folderPath) {
+      setState({ status: 'starting', folderPath: config.folderPath })
+    } else {
+      setState({ status: 'picking-folder' })
+    }
+  }, [config.folderPath])
+
+  // Render states before the VS Code view is ready
+  if (state.status === 'unavailable') {
     return (
-      <div
-        className="h-full w-full flex flex-col items-center justify-center gap-4"
-        style={{ backgroundColor: 'var(--background)' }}
-      >
-        <FileCode size={48} style={{ color: 'var(--muted-foreground)', opacity: 0.5 }} />
-        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-          Open a file to start editing
+      <div className="h-full w-full flex flex-col items-center justify-center gap-4" style={{ backgroundColor: 'var(--background)' }}>
+        <AlertCircle size={48} style={{ color: 'var(--destructive)', opacity: 0.6 }} />
+        <p className="text-sm text-center max-w-xs" style={{ color: 'var(--muted-foreground)' }}>
+          VS Code CLI not found. Install <strong>Visual Studio Code</strong> and
+          run <code className="px-1 py-0.5 rounded text-xs" style={{ background: 'var(--surface)' }}>
+          Shell Command: Install &apos;code&apos; command in PATH</code> from
+          the VS Code command palette.
         </p>
-        <div className="flex gap-2">
-          <Button onClick={handleOpenFile}>
-            <FolderOpen size={14} />
-            Open File
-          </Button>
-          <Button variant="outline" onClick={handleOpenFolder}>
-            <FolderOpen size={14} />
-            Open Folder
-          </Button>
-        </div>
       </div>
     )
   }
 
-  const displayPath = filePath
-    ? filePath.length > 60
-      ? '...' + filePath.slice(-57)
-      : filePath
-    : 'Untitled'
+  if (state.status === 'error') {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center gap-4" style={{ backgroundColor: 'var(--background)' }}>
+        <AlertCircle size={48} style={{ color: 'var(--destructive)', opacity: 0.6 }} />
+        <p className="text-sm text-center max-w-xs" style={{ color: 'var(--muted-foreground)' }}>
+          {state.message}
+        </p>
+        <Button onClick={handleRetry}>Retry</Button>
+      </div>
+    )
+  }
 
+  if (state.status === 'picking-folder') {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center gap-4" style={{ backgroundColor: 'var(--background)' }}>
+        <FolderOpen size={48} style={{ color: 'var(--muted-foreground)', opacity: 0.5 }} />
+        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+          Open a folder to start editing
+        </p>
+        <Button onClick={handlePickFolder}>
+          <FolderOpen size={14} />
+          Open Folder
+        </Button>
+      </div>
+    )
+  }
+
+  if (state.status === 'starting') {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center gap-3" style={{ backgroundColor: 'var(--background)' }}>
+        <Loader2 size={24} className="animate-spin" style={{ color: 'var(--muted-foreground)' }} />
+        <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+          Starting VS Code server...
+        </p>
+      </div>
+    )
+  }
+
+  // Running state — native view placeholder
   return (
-    <div className="h-full w-full flex flex-col" style={{ backgroundColor: 'var(--background)' }}>
-      {/* Top bar */}
-      <div
-        className="flex items-center justify-between shrink-0 px-2"
-        style={{
-          height: 32,
-          backgroundColor: 'var(--card)',
-          borderBottom: '1px solid var(--border)',
-        }}
-      >
-        {/* Left: file path + dirty indicator */}
-        <div className="flex items-center gap-1.5 min-w-0">
-          {scopedFolder && (
-            <span
-              className="text-xs shrink-0"
-              style={{
-                color: 'var(--foreground-faint)',
-                fontFamily: "'SF Mono', 'Fira Code', Menlo, Monaco, monospace",
-                fontSize: 10,
-              }}
-              title={scopedFolder}
-            >
-              {scopedFolder.split('/').pop()}/
-            </span>
-          )}
-          <span
-            className="text-xs truncate"
-            style={{
-              color: 'var(--muted-foreground)',
-              fontFamily: "'SF Mono', 'Fira Code', Menlo, Monaco, monospace",
-              fontSize: 11,
-            }}
-            title={filePath || 'Untitled'}
-          >
-            {displayPath}
-          </span>
-          {isDirty && (
-            <span
-              className="shrink-0"
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                backgroundColor: 'var(--primary)',
-                display: 'inline-block',
-              }}
-              title="Unsaved changes"
-            />
-          )}
-        </div>
-
-        {/* Right: actions */}
-        <div className="flex items-center gap-1">
-          <Tooltip content="Open File" shortcut="⌘O">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleOpenFile}
-            >
-              <FolderOpen size={12} />
-              <span>Open</span>
-            </Button>
-          </Tooltip>
-          {isDirty && filePath && (
-            <Tooltip content="Save" shortcut="⌘S">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleSave}
-              >
-                <Save size={12} />
-              </Button>
-            </Tooltip>
-          )}
-        </div>
-      </div>
-
-      {/* Editor content */}
-      <div className="flex-1 overflow-hidden">
-        <Editor
-          height="100%"
-          language={language}
-          value={content}
-          theme={isDark ? 'vs-dark' : 'vs'}
-          onChange={handleChange}
-          onMount={handleEditorDidMount}
-          options={{
-            minimap: { enabled: editorMinimap },
-            fontSize: editorFontSize,
-            fontFamily: "'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, Monaco, monospace",
-            wordWrap: editorWordWrap ? 'on' : 'off',
-            tabSize: editorTabSize,
-            scrollBeyondLastLine: false,
-            smoothScrolling: true,
-            cursorBlinking: 'smooth',
-            padding: { top: 8 },
-            renderWhitespace: 'selection',
-            bracketPairColorization: { enabled: true },
-            automaticLayout: true,
-          }}
-        />
-      </div>
-    </div>
+    <div
+      ref={placeholderRef}
+      className="browser-native-view-slot"
+      data-native-view-hidden={!shouldShowNativeView ? 'true' : undefined}
+    />
   )
 }

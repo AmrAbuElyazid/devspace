@@ -67,6 +67,11 @@ export interface DevspaceBridge {
     getNativeTheme: () => Promise<'light' | 'dark'>
     onNativeThemeChange: (callback: (theme: 'light' | 'dark') => void) => () => void
   }
+  editor: {
+    isAvailable: () => Promise<boolean>
+    start: (paneId: string, folderPath: string) => Promise<{ url: string } | { error: string }>
+    stop: (paneId: string) => Promise<void>
+  }
   browser: BrowserBridge
 }
 

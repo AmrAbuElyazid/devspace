@@ -2,6 +2,7 @@ import { ipcMain, dialog, shell, nativeTheme, BrowserWindow, Menu } from 'electr
 import { readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import type { TerminalManager } from './terminal-manager'
+import type { VscodeServerManager } from './vscode-server'
 import type {
   BrowserBounds,
   BrowserFindInPageOptions,
@@ -43,6 +44,7 @@ export function registerIpcHandlers(
   mainWindow: BrowserWindow,
   terminalManager: TerminalManager,
   browserPaneManager: BrowserPaneController,
+  vscodeServerManager: VscodeServerManager,
   browserImportService?: BrowserImportService,
 ): void {
   const allowedRoots = [homedir()]
@@ -96,6 +98,40 @@ export function registerIpcHandlers(
       return
     }
     terminalManager.setBounds(surfaceId, { x: b.x, y: b.y, width: b.width, height: b.height })
+  })
+
+  // --- Editor (VS Code serve-web) handlers ---
+
+  // Track which pane maps to which folder so we can release on stop
+  const editorPaneFolders = new Map<string, string>()
+
+  safeHandle('editor:isAvailable', () => {
+    return vscodeServerManager.isAvailable()
+  })
+
+  safeHandle('editor:start', async (_event, paneId: unknown, folderPath: unknown) => {
+    if (typeof paneId !== 'string' || typeof folderPath !== 'string') {
+      return { error: 'Invalid arguments' }
+    }
+    try {
+      const { url } = await vscodeServerManager.start(folderPath)
+      editorPaneFolders.set(paneId, folderPath)
+      browserPaneManager.createPane(paneId, url)
+      return { url }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return { error: message }
+    }
+  })
+
+  safeHandle('editor:stop', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    const folder = editorPaneFolders.get(paneId)
+    if (folder) {
+      editorPaneFolders.delete(paneId)
+      vscodeServerManager.release(folder)
+    }
+    browserPaneManager.destroyPane(paneId)
   })
 
   // Terminal event forwarding to renderer

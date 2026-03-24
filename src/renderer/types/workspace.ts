@@ -10,10 +10,7 @@ export interface BrowserConfig {
 }
 
 export interface EditorConfig {
-  filePath?: string
-  language?: string
-  content?: string
-  scopedFolder?: string
+  folderPath?: string
 }
 
 export interface EmptyConfig {}

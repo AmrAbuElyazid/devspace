@@ -14,7 +14,7 @@ const shortcuts = [
   { keys: '⌘⇧D', action: 'Split down' },
   { keys: '⌘1-9', action: 'Switch tab' },
   { keys: '⌃1-9', action: 'Switch workspace' },
-  { keys: '⌘S', action: 'Save file (editor)' },
+
   { keys: 'Esc', action: 'Close settings' },
 ]
 
@@ -22,7 +22,6 @@ export default function SettingsPage(): JSX.Element {
   const {
     theme, setTheme,
     fontSize, defaultShell, terminalScrollback, terminalCursorStyle,
-    editorWordWrap, editorMinimap, editorTabSize,
     updateSetting, setSettingsOpen,
   } = useSettingsStore()
 
@@ -88,21 +87,10 @@ export default function SettingsPage(): JSX.Element {
         {/* Editor */}
         <section>
           <SectionTitle>Editor</SectionTitle>
-          <SettingRow label="Word wrap">
-            <Toggle checked={editorWordWrap} onChange={(v) => updateSetting('editorWordWrap', v)} />
-          </SettingRow>
-          <SettingRow label="Minimap">
-            <Toggle checked={editorMinimap} onChange={(v) => updateSetting('editorMinimap', v)} />
-          </SettingRow>
-          <SettingRow label="Tab size">
-            <SegmentedControl
-              options={[
-                { label: '2', value: 2 },
-                { label: '4', value: 4 },
-              ]}
-              value={editorTabSize}
-              onChange={(v) => updateSetting('editorTabSize', v as number)}
-            />
+          <SettingRow label="Engine">
+            <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+              VS Code (code serve-web)
+            </span>
           </SettingRow>
         </section>
 
