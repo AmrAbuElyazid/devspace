@@ -13,3 +13,6 @@ native/build/
 
 # Large binary deps (libghostty static lib)
 deps/libghostty/lib/
+
+# Electron-builder output
+release/
