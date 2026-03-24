@@ -11,6 +11,7 @@ import type { BrowserSessionManager } from './browser-session-manager'
 const CHROME_HISTORY_SOURCE = 'chrome-import'
 const SAFARI_HISTORY_SOURCE = 'safari-import'
 const CHROME_ROOT = join(homedir(), 'Library', 'Application Support', 'Google', 'Chrome')
+export const CHROME_SAFE_STORAGE_TIMEOUT_MS = 15_000
 const SAFARI_COOKIE_CANDIDATES = [
   join(homedir(), 'Library', 'Cookies', 'Cookies.binarycookies'),
   join(homedir(), 'Library', 'Containers', 'com.apple.Safari', 'Data', 'Library', 'Cookies', 'Cookies.binarycookies'),
@@ -383,7 +384,7 @@ export class BrowserImportService {
     }
 
     const rows = await this.queryHistoryDb(historyDbPath, `
-      SELECT urls.url AS url, urls.title AS title, visits.visit_time AS visited_at
+      SELECT urls.url AS url, urls.title AS title, CAST(visits.visit_time AS TEXT) AS visited_at
       FROM visits
       INNER JOIN urls ON urls.id = visits.url
       ORDER BY visits.visit_time DESC
@@ -418,7 +419,7 @@ export class BrowserImportService {
     }
 
     const rows = await this.queryHistoryDb(historyDbPath, `
-      SELECT history_items.url AS url, history_visits.title AS title, history_visits.visit_time AS visited_at
+      SELECT history_items.url AS url, history_visits.title AS title, CAST(history_visits.visit_time AS TEXT) AS visited_at
       FROM history_visits
       INNER JOIN history_items ON history_items.id = history_visits.history_item
       ORDER BY history_visits.visit_time DESC
@@ -804,7 +805,7 @@ function readChromeSafeStorageKey(dbPath: string): Buffer {
   const args = ['find-generic-password', '-w', '-a', keychain.account, '-s', keychain.service]
 
   try {
-    const password = execFileSync('security', args, { encoding: 'utf8', timeout: 3000 }).trim()
+    const password = execFileSync('security', args, { encoding: 'utf8', timeout: CHROME_SAFE_STORAGE_TIMEOUT_MS }).trim()
     if (!password) {
       throw new Error(`Failed to read macOS Keychain (${keychain.label}): empty password.`)
     }
@@ -847,7 +848,7 @@ async function queryCookieDb(dbPath: string): Promise<Array<Record<string, unkno
 
   try {
     return db.query(
-      'SELECT name, value, host_key, path, expires_utc, samesite, encrypted_value, is_secure, is_httponly FROM cookies ORDER BY expires_utc DESC',
+      'SELECT name, value, host_key, path, CAST(expires_utc AS TEXT) AS expires_utc, samesite, encrypted_value, is_secure, is_httponly FROM cookies ORDER BY expires_utc DESC',
     )
   } finally {
     db.close()
@@ -1055,6 +1056,7 @@ function decodeSafariBinaryCookies(buffer: Buffer): ImportedBrowserCookie[] {
 }
 
 export { decodeSafariBinaryCookies }
+export { readChromeSafeStorageKey }
 
 function decodeSafariCookiePage(page: Buffer): ImportedBrowserCookie[] {
   if (page.length < 16 || page.readUInt32BE(0) !== 0x00000100) {
