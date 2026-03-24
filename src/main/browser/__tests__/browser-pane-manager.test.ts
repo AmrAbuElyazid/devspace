@@ -184,3 +184,282 @@ test('found-in-page event updates stored match counts', () => {
     totalMatches: 5,
   })
 })
+
+test('showPane reapplies the stored zoom factor when a pane becomes visible again', () => {
+  const zoomCalls: number[] = []
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        loadURL: () => Promise.resolve(),
+        setZoomFactor: (zoom: number) => {
+          zoomCalls.push(zoom)
+        },
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  manager.setZoom('pane-1', 1.5)
+  manager.showPane('pane-1')
+  manager.hidePane('pane-1')
+  manager.showPane('pane-1')
+
+  assert.deepEqual(zoomCalls, [1.5, 1.5, 1.5])
+})
+
+test('navigation actions and state use navigationHistory instead of deprecated webContents APIs', () => {
+  const calls: string[] = []
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        loadURL: () => Promise.resolve(),
+        canGoBack: () => {
+          calls.push('deprecated-canGoBack')
+          return false
+        },
+        canGoForward: () => {
+          calls.push('deprecated-canGoForward')
+          return false
+        },
+        goBack: () => {
+          calls.push('deprecated-goBack')
+        },
+        goForward: () => {
+          calls.push('deprecated-goForward')
+        },
+        navigationHistory: {
+          canGoBack: () => {
+            calls.push('history-canGoBack')
+            return true
+          },
+          canGoForward: () => {
+            calls.push('history-canGoForward')
+            return false
+          },
+          goBack: () => {
+            calls.push('history-goBack')
+          },
+          goForward: () => {
+            calls.push('history-goForward')
+          },
+        },
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  manager.back('pane-1')
+  manager.forward('pane-1')
+  manager.applyRuntimePatch('pane-1', {})
+  const runtimeBeforeSync = manager.getRuntimeState('pane-1')
+
+  assert.equal(runtimeBeforeSync?.canGoBack, false)
+
+  const listeners = new Map<string, (...args: unknown[]) => void>()
+  const syncManager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        on: (event: string, listener: (...args: unknown[]) => void) => {
+          listeners.set(event, listener)
+        },
+        loadURL: () => Promise.resolve(),
+        canGoBack: () => {
+          calls.push('deprecated-sync-canGoBack')
+          return false
+        },
+        canGoForward: () => {
+          calls.push('deprecated-sync-canGoForward')
+          return false
+        },
+        navigationHistory: {
+          canGoBack: () => {
+            calls.push('history-sync-canGoBack')
+            return true
+          },
+          canGoForward: () => {
+            calls.push('history-sync-canGoForward')
+            return true
+          },
+          goBack: () => {
+            calls.push('history-sync-goBack')
+          },
+          goForward: () => {
+            calls.push('history-sync-goForward')
+          },
+        },
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+
+  syncManager.createPane('pane-2', 'https://example.com')
+  listeners.get('did-stop-loading')?.()
+
+  const runtimeState = syncManager.getRuntimeState('pane-2')
+  assert.equal(runtimeState?.canGoBack, true)
+  assert.equal(runtimeState?.canGoForward, true)
+  assert.deepEqual(calls, [
+    'history-goBack',
+    'history-goForward',
+    'history-sync-canGoBack',
+    'history-sync-canGoForward',
+  ])
+})
+
+test('context-menu events emit a browser context-menu payload to the renderer', () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>()
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = []
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        on: (event: string, listener: (...args: unknown[]) => void) => {
+          listeners.set(event, listener)
+        },
+        loadURL: () => Promise.resolve(),
+        canGoBack: () => true,
+        canGoForward: () => false,
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload })
+    },
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  manager.setBounds('pane-1', { x: 20, y: 40, width: 800, height: 600 })
+
+  listeners.get('context-menu')?.(
+    { preventDefault() {} },
+    {
+      x: 12,
+      y: 16,
+      linkURL: 'https://devspace.example/docs',
+      selectionText: '',
+    },
+  )
+
+  assert.deepEqual(rendererMessages.at(-1), {
+    channel: 'browser:contextMenuRequested',
+    payload: {
+      paneId: 'pane-1',
+      position: { x: 32, y: 56 },
+      target: 'link',
+      pageUrl: 'https://example.com',
+      linkUrl: 'https://devspace.example/docs',
+      selectionText: null,
+      canGoBack: true,
+      canGoForward: false,
+    },
+  })
+})
+
+test('window.open requests are denied and emitted as open-in-new-tab requests', () => {
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = []
+  let windowOpenHandler: ((details: { url: string }) => { action: 'deny' | 'allow' }) | undefined
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        loadURL: () => Promise.resolve(),
+        setWindowOpenHandler: (handler: (details: { url: string }) => { action: 'deny' | 'allow' }) => {
+          windowOpenHandler = handler
+        },
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload })
+    },
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+
+  const result = windowOpenHandler?.({ url: 'https://devspace.example/new-tab' })
+
+  assert.deepEqual(result, { action: 'deny' })
+  assert.deepEqual(rendererMessages.at(-1), {
+    channel: 'browser:openInNewTabRequested',
+    payload: {
+      paneId: 'pane-1',
+      url: 'https://devspace.example/new-tab',
+    },
+  })
+})
+
+test('committed navigations are recorded in browser history with devspace source', () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>()
+  const historyCalls: Array<{ url: string; title: string; source: string }> = []
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        on: (event: string, listener: (...args: unknown[]) => void) => {
+          listeners.set(event, listener)
+        },
+        loadURL: () => Promise.resolve(),
+        getTitle: () => 'Committed page',
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+    historyService: {
+      recordVisit: (entry: { url: string; title: string; source: string }) => {
+        historyCalls.push(entry)
+      },
+    },
+  } as never)
+
+  manager.createPane('pane-1', 'https://example.com')
+  listeners.get('did-navigate')?.({}, 'https://devspace.example/history')
+
+  assert.equal(historyCalls.length, 1)
+  assert.equal(historyCalls[0]?.url, 'https://devspace.example/history')
+  assert.equal(historyCalls[0]?.title, 'https://devspace.example/history')
+  assert.equal(historyCalls[0]?.source, 'devspace')
+})
+
+test('history capture avoids stale titles and refreshes when the real title arrives later', () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>()
+  const historyCalls: Array<{ url: string; title: string; source: string; visitedAt: number }> = []
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        on: (event: string, listener: (...args: unknown[]) => void) => {
+          listeners.set(event, listener)
+        },
+        loadURL: () => Promise.resolve(),
+        getTitle: () => 'Previous page',
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+    historyService: {
+      recordVisit: (entry: { url: string; title: string; source: string; visitedAt: number }) => {
+        historyCalls.push(entry)
+      },
+    },
+  } as never)
+
+  manager.createPane('pane-1', 'https://example.com')
+  listeners.get('did-navigate')?.({}, 'https://devspace.example/history')
+
+  assert.equal(historyCalls.length, 1)
+  assert.equal(historyCalls[0]?.title, 'https://devspace.example/history')
+
+  listeners.get('page-title-updated')?.({}, 'Fresh page title')
+
+  assert.equal(historyCalls.length, 2)
+  assert.equal(historyCalls[1]?.title, 'Fresh page title')
+  assert.equal(historyCalls[1]?.visitedAt, historyCalls[0]?.visitedAt)
+})

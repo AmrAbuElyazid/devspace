@@ -5,37 +5,17 @@ import { useSettingsStore } from './store/settings-store'
 import { useBrowserStore } from './store/browser-store'
 import { useTheme } from './hooks/useTheme'
 import { useDragAndDrop, DragContext } from './hooks/useDragAndDrop'
+import { getActiveFocusedBrowserPane, getSplitShortcutTargetPaneId } from './lib/browser-shortcuts'
+import { findWorkspaceIdForPane } from './lib/browser-pane-routing'
 import Sidebar from './components/Sidebar'
 import TabBar from './components/TabBar'
 import SplitLayout from './components/SplitLayout'
 import SettingsPage from './components/SettingsPage'
 import type { BrowserBridgeListeners, BrowserBridgeUnsubscribe } from '../shared/types'
-import type { SplitNode } from './types/workspace'
 import { ToastViewport } from './components/ui/toast'
 import { FolderClosed } from 'lucide-react'
 import { findFolder } from './lib/sidebar-tree'
-import type { BrowserConfig, Pane } from './types/workspace'
-
-function findFirstLeaf(node: SplitNode): string | null {
-  if (node.type === 'leaf') return node.paneId
-  if (node.children.length > 0) return findFirstLeaf(node.children[0])
-  return null
-}
-
-function getActiveFocusedBrowserPane(): Pane | null {
-  const store = useWorkspaceStore.getState()
-  const ws = store.workspaces.find((workspace) => workspace.id === store.activeWorkspaceId)
-  if (!ws) return null
-
-  const tab = ws.tabs.find((nextTab) => nextTab.id === ws.activeTabId)
-  if (!tab) return null
-
-  const paneId = tab.focusedPaneId || findFirstLeaf(tab.root)
-  if (!paneId) return null
-
-  const pane = store.panes[paneId]
-  return pane?.type === 'browser' ? pane : null
-}
+import type { BrowserConfig } from './types/workspace'
 
 function clampZoom(zoom: number): number {
   return Math.min(3, Math.max(0.25, Number(zoom.toFixed(2))))
@@ -52,6 +32,10 @@ function subscribeToBrowserEvents(listeners: BrowserBridgeListeners): BrowserBri
     disposers.push(window.api.browser.onPermissionRequest(listeners.onPermissionRequest))
   }
 
+  if (listeners.onOpenInNewTabRequest) {
+    disposers.push(window.api.browser.onOpenInNewTabRequest(listeners.onOpenInNewTabRequest))
+  }
+
   return () => {
     for (const dispose of disposers) {
       dispose()
@@ -66,6 +50,7 @@ export default function App(): JSX.Element {
   const setPendingPermissionRequest = useBrowserStore((s) => s.setPendingPermissionRequest)
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
   const updateBrowserPaneZoom = useWorkspaceStore((s) => s.updateBrowserPaneZoom)
+  const openBrowserTab = useWorkspaceStore((s) => s.openBrowserTab)
 
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
@@ -91,8 +76,15 @@ export default function App(): JSX.Element {
         })
       },
       onPermissionRequest: setPendingPermissionRequest,
+      onOpenInNewTabRequest: (request) => {
+        const state = useWorkspaceStore.getState()
+        const workspaceId = findWorkspaceIdForPane(state.workspaces, request.paneId)
+        if (workspaceId) {
+          openBrowserTab(workspaceId, request.url)
+        }
+      },
     })
-  }, [handleRuntimeStateChange, setPendingPermissionRequest, updateBrowserPaneZoom, updatePaneConfig])
+  }, [handleRuntimeStateChange, openBrowserTab, setPendingPermissionRequest, updateBrowserPaneZoom, updatePaneConfig])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {
@@ -140,7 +132,7 @@ export default function App(): JSX.Element {
         e.preventDefault()
         const tab = ws.tabs.find((t) => t.id === ws.activeTabId)
         if (tab) {
-          const targetPaneId = tab.focusedPaneId || findFirstLeaf(tab.root)
+          const targetPaneId = getSplitShortcutTargetPaneId(tab)
           if (targetPaneId) store.splitPane(ws.id, tab.id, targetPaneId, 'horizontal')
         }
         return
@@ -149,7 +141,7 @@ export default function App(): JSX.Element {
         e.preventDefault()
         const tab = ws.tabs.find((t) => t.id === ws.activeTabId)
         if (tab) {
-          const targetPaneId = tab.focusedPaneId || findFirstLeaf(tab.root)
+          const targetPaneId = getSplitShortcutTargetPaneId(tab)
           if (targetPaneId) store.splitPane(ws.id, tab.id, targetPaneId, 'vertical')
         }
         return
@@ -165,7 +157,7 @@ export default function App(): JSX.Element {
         return
       }
 
-      const browserPane = getActiveFocusedBrowserPane()
+      const browserPane = getActiveFocusedBrowserPane(store)
       if (!browserPane) {
         return
       }

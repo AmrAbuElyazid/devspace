@@ -103,6 +103,10 @@ const bridge: DevspaceBridge = {
     toggleDevTools: (paneId) => ipcRenderer.invoke('browser:toggleDevTools', paneId),
     showContextMenu: (paneId, position) => ipcRenderer.invoke('browser:showContextMenu', paneId, position),
     resolvePermission: (requestToken, decision) => ipcRenderer.invoke('browser:resolvePermission', requestToken, decision),
+    listChromeProfiles: () => ipcRenderer.invoke('browser:listChromeProfiles'),
+    importChrome: (profilePath, mode) => ipcRenderer.invoke('browser:importChrome', profilePath, mode),
+    importSafari: (mode) => ipcRenderer.invoke('browser:importSafari', mode),
+    detectSafariAccess: (mode) => ipcRenderer.invoke('browser:detectSafariAccess', mode),
     onStateChange: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]): void => {
         callback(state)
@@ -119,6 +123,24 @@ const bridge: DevspaceBridge = {
       ipcRenderer.on('browser:permissionRequested', listener)
       return () => {
         ipcRenderer.removeListener('browser:permissionRequested', listener)
+      }
+    },
+    onContextMenuRequest: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, request: Parameters<typeof callback>[0]): void => {
+        callback(request)
+      }
+      ipcRenderer.on('browser:contextMenuRequested', listener)
+      return () => {
+        ipcRenderer.removeListener('browser:contextMenuRequested', listener)
+      }
+    },
+    onOpenInNewTabRequest: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, request: Parameters<typeof callback>[0]): void => {
+        callback(request)
+      }
+      ipcRenderer.on('browser:openInNewTabRequested', listener)
+      return () => {
+        ipcRenderer.removeListener('browser:openInNewTabRequested', listener)
       }
     },
   }

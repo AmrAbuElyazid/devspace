@@ -151,7 +151,54 @@ test('persists zoom changes independently from url persistence', () => {
   })
 
   assert.deepEqual(persistedUrls, [{ paneId: 'pane-1', url: 'https://example.com' }])
-  assert.deepEqual(persistedZooms, [{ paneId: 'pane-1', zoom: 1 }, { paneId: 'pane-1', zoom: 1.25 }])
+  assert.deepEqual(persistedZooms, [{ paneId: 'pane-1', zoom: 1.25 }])
+})
+
+test('does not persist initial runtime zoom before a user-driven zoom change', () => {
+  const store = createBrowserStore()
+  const persistedZooms: Array<{ paneId: string; zoom: number }> = []
+
+  store.getState().handleRuntimeStateChange({
+    paneId: 'pane-1',
+    url: 'https://example.com',
+    title: 'Example',
+    faviconUrl: null,
+    isLoading: false,
+    canGoBack: false,
+    canGoForward: false,
+    isSecure: true,
+    securityLabel: 'Secure',
+    currentZoom: 1,
+    find: null,
+  }, {
+    persistUrlChange: () => {},
+    persistCommittedNavigation: true,
+    persistZoomChange: (paneId, zoom) => {
+      persistedZooms.push({ paneId, zoom })
+    },
+  })
+
+  store.getState().handleRuntimeStateChange({
+    paneId: 'pane-1',
+    url: 'https://example.com',
+    title: 'Example',
+    faviconUrl: null,
+    isLoading: false,
+    canGoBack: false,
+    canGoForward: false,
+    isSecure: true,
+    securityLabel: 'Secure',
+    currentZoom: 1.25,
+    find: null,
+  }, {
+    persistUrlChange: () => {},
+    persistCommittedNavigation: true,
+    persistZoomChange: (paneId, zoom) => {
+      persistedZooms.push({ paneId, zoom })
+    },
+  })
+
+  assert.deepEqual(persistedZooms, [{ paneId: 'pane-1', zoom: 1.25 }])
 })
 
 test('find bar focus and visibility are tracked per pane', () => {

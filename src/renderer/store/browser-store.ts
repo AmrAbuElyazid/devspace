@@ -59,7 +59,11 @@ export function createBrowserStore() {
       if (options.persistCommittedNavigation && previousUrl !== runtimeState.url) {
         options.persistUrlChange(runtimeState.paneId, runtimeState.url)
       }
-      if (options.persistZoomChange && previousZoom !== runtimeState.currentZoom) {
+      if (
+        options.persistZoomChange
+        && previousRuntimeState
+        && previousZoom !== runtimeState.currentZoom
+      ) {
         options.persistZoomChange(runtimeState.paneId, runtimeState.currentZoom)
       }
     },

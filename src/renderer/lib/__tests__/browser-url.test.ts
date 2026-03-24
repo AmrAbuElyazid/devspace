@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { normalizeBrowserInput } from '../browser-url'
+import { buildSearchUrl, getAddressBarSubmitValue, normalizeBrowserInput } from '../browser-url'
 
 test('adds https for domain-like input', () => {
   assert.equal(normalizeBrowserInput('example.com'), 'https://example.com')
@@ -36,4 +36,20 @@ test('keeps explicit schemes unchanged', () => {
   assert.equal(normalizeBrowserInput('https://example.com/a'), 'https://example.com/a')
   assert.equal(normalizeBrowserInput('about:blank'), 'about:blank')
   assert.equal(normalizeBrowserInput('mailto:test@example.com'), 'mailto:test@example.com')
+})
+
+test('buildSearchUrl always creates a web search for url-like text', () => {
+  assert.equal(
+    buildSearchUrl('example.com/docs'),
+    'https://www.google.com/search?q=example.com%2Fdocs',
+  )
+  assert.equal(
+    buildSearchUrl('https://devspace.example'),
+    'https://www.google.com/search?q=https%3A%2F%2Fdevspace.example',
+  )
+})
+
+test('getAddressBarSubmitValue prefers the live input value over stale state', () => {
+  assert.equal(getAddressBarSubmitValue('typed.dev', 'https://current.example'), 'typed.dev')
+  assert.equal(getAddressBarSubmitValue(undefined, 'https://current.example'), 'https://current.example')
 })

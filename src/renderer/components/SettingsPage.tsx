@@ -2,6 +2,7 @@ import { X } from 'lucide-react'
 import { useSettingsStore } from '../store/settings-store'
 import { Kbd } from './ui/kbd'
 import { Button } from './ui/button'
+import BrowserImportPanel from './browser/BrowserImportPanel'
 
 const shortcuts = [
   { keys: '⌘N', action: 'New workspace' },
@@ -103,6 +104,12 @@ export default function SettingsPage(): JSX.Element {
               onChange={(v) => updateSetting('editorTabSize', v as number)}
             />
           </SettingRow>
+        </section>
+
+        {/* Keyboard Shortcuts */}
+        <section>
+          <SectionTitle>Browser</SectionTitle>
+          <BrowserImportPanel />
         </section>
 
         {/* Keyboard Shortcuts */}

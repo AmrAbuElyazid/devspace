@@ -5,6 +5,9 @@ import { PtyManager } from './pty-manager'
 import { registerIpcHandlers } from './ipc-handlers'
 import { BrowserSessionManager } from './browser/browser-session-manager'
 import { BrowserPaneManager } from './browser/browser-pane-manager'
+import { BrowserHistoryService } from './browser/browser-history-service'
+import { BrowserImportService } from './browser/browser-import-service'
+import { installWindowZoomReset } from './window-zoom'
 
 // Sync shell environment before app is ready (macOS GUI apps don't inherit login shell env)
 syncShellEnvironment()
@@ -22,6 +25,13 @@ process.on('unhandledRejection', (reason) => {
 })
 
 function createWindow(): void {
+  const browserHistoryService = new BrowserHistoryService({
+    appDataPath: app.getPath('userData'),
+  })
+  const browserImportService = new BrowserImportService({
+    sessionManager: browserSessionManager,
+    historyService: browserHistoryService,
+  })
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -49,6 +59,7 @@ function createWindow(): void {
     removeChildView: (view) => mainWindow.contentView.removeChildView(view),
     sendToRenderer: (channel, payload) => mainWindow.webContents.send(channel, payload),
     getSession: () => browserSessionManager.getSession(),
+    historyService: browserHistoryService,
   })
 
   browserSessionManager.installHandlers({
@@ -65,7 +76,8 @@ function createWindow(): void {
     },
   })
 
-  registerIpcHandlers(mainWindow, ptyManager, browserPaneManager)
+  registerIpcHandlers(mainWindow, ptyManager, browserPaneManager, browserImportService)
+  installWindowZoomReset(mainWindow.webContents)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()

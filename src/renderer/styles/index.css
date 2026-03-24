@@ -864,6 +864,169 @@
   margin-bottom: 10px;
 }
 
+.browser-import-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.browser-import-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--background);
+  overflow: hidden;
+}
+
+.browser-import-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px 14px;
+  border-bottom: 1px solid var(--border-faint);
+}
+
+.browser-import-card-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.browser-import-card-copy {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--foreground-muted);
+}
+
+.browser-import-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px 18px;
+}
+
+.browser-import-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.browser-import-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--foreground-faint);
+}
+
+.browser-import-segmented {
+  display: inline-flex;
+  gap: 2px;
+  width: fit-content;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.browser-import-segmented-option {
+  min-width: 84px;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--foreground-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.browser-import-segmented-option[data-active='true'] {
+  background: var(--background);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px var(--border-faint);
+}
+
+.browser-import-select {
+  width: min(320px, 100%);
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  color: var(--foreground);
+  outline: none;
+}
+
+.browser-import-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  color: var(--foreground-muted);
+  font-size: 12px;
+}
+
+.browser-import-note[data-variant='warning'] {
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border));
+  background: color-mix(in srgb, var(--warning) 8%, var(--background));
+  color: var(--foreground);
+}
+
+.browser-import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.browser-import-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  color: var(--foreground-muted);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+.browser-import-status[data-status='success'] {
+  border-color: color-mix(in srgb, var(--success) 30%, var(--border));
+  color: var(--foreground);
+}
+
+.browser-import-status[data-status='error'] {
+  border-color: color-mix(in srgb, var(--destructive) 26%, var(--border));
+  color: var(--foreground);
+}
+
+.browser-import-status-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .browser-import-note {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .browser-import-segmented {
+    width: 100%;
+  }
+
+  .browser-import-segmented-option {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 /* ─── Allotment (Split Pane Sash) ────────────────────────────────────── */
 .split-view-view > .sash-container > .sash {
   background-color: var(--border) !important;
