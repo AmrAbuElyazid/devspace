@@ -101,6 +101,47 @@ export class BrowserSessionManager {
     return this.sessionModule.fromPartition(BROWSER_PARTITION)
   }
 
+  /**
+   * Convert session cookies (no expiry) into persistent cookies so auth
+   * tokens survive app restarts.  Session cookies are ephemeral by design
+   * in Chromium — without this, VS Code web logs the user out on every
+   * quit because its auth cookies have no Expires header.
+   */
+  persistSessionCookies(): void {
+    const ses = this.getSession()
+    const cookies = ses.cookies as {
+      on?: (event: string, listener: (...args: unknown[]) => void) => void
+      get?: (filter: Record<string, unknown>) => Promise<Array<Record<string, unknown>>>
+      set?: (details: Record<string, unknown>) => Promise<void>
+    }
+
+    if (typeof cookies.on !== 'function' || typeof cookies.set !== 'function') return
+
+    // 30 days from now, in seconds since epoch
+    const thirtyDays = () => Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60
+
+    cookies.on('changed', (_event: unknown, cookie: Record<string, unknown>, _cause: unknown, removed: unknown) => {
+      if (removed) return
+      // Only process session cookies (those without an expiration)
+      if (cookie.session !== true) return
+
+      const url = `http${cookie.secure ? 's' : ''}://${cookie.domain as string}${cookie.path as string || '/'}`
+      void (cookies.set as (d: Record<string, unknown>) => Promise<void>)({
+        url,
+        name: cookie.name,
+        value: cookie.value,
+        domain: cookie.domain,
+        path: cookie.path,
+        secure: cookie.secure,
+        httpOnly: cookie.httpOnly,
+        sameSite: cookie.sameSite,
+        expirationDate: thirtyDays(),
+      }).catch(() => {
+        // Silently ignore — some cookies can't be re-set (e.g. __Host- prefixed)
+      })
+    })
+  }
+
   installHandlers(deps?: BrowserSessionManagerDeps): void {
     const ses = this.getSession()
     const log = deps?.log ?? ((message: string, meta?: Record<string, unknown>) => {

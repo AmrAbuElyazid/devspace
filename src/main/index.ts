@@ -64,6 +64,7 @@ function createWindow(): void {
     historyService: browserHistoryService,
   })
 
+  browserSessionManager.persistSessionCookies()
   browserSessionManager.installHandlers({
     resolvePaneIdForWebContents: (webContentsId) => browserPaneManager.resolvePaneIdForWebContents(webContentsId),
     requestBrowserPermission: (request, resolve) => {
