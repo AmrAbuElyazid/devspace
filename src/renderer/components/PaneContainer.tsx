@@ -34,6 +34,7 @@ const PaneContent = memo(function PaneContent({
   tabId,
   isVisible,
   hideNativeView,
+  isFocused,
 }: {
   paneId: string
   pane: { type: PaneType; config: unknown }
@@ -41,12 +42,21 @@ const PaneContent = memo(function PaneContent({
   tabId: string
   isVisible: boolean
   hideNativeView: boolean
+  isFocused: boolean
 }): ReactElement {
   switch (pane.type) {
     case 'empty':
       return <EmptyPane paneId={paneId} workspaceId={workspaceId} tabId={tabId} />
     case 'terminal':
-      return <TerminalPane paneId={paneId} config={(pane.config ?? {}) as TerminalConfig} />
+      return (
+        <TerminalPane
+          paneId={paneId}
+          config={(pane.config ?? {}) as TerminalConfig}
+          isVisible={isVisible}
+          hideNativeView={hideNativeView}
+          isFocused={isFocused}
+        />
+      )
     case 'editor':
       return <EditorPane paneId={paneId} config={(pane.config ?? {}) as EditorConfig} />
     case 'browser':
@@ -191,6 +201,7 @@ export default function PaneContainer({
           tabId={tabId}
           isVisible={isVisibleTab}
           hideNativeView={Boolean(shouldHideBrowserNativeView)}
+          isFocused={isFocused}
         />
         {dropOverlay}
       </div>
@@ -265,6 +276,7 @@ export default function PaneContainer({
           tabId={tabId}
           isVisible={isVisibleTab}
           hideNativeView={Boolean(shouldHideBrowserNativeView)}
+          isFocused={isFocused}
         />
       </div>
       {dropOverlay}

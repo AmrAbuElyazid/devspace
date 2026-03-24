@@ -1,7 +1,7 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { syncShellEnvironment } from './shell-env'
-import { PtyManager } from './pty-manager'
+import { TerminalManager } from './terminal-manager'
 import { registerIpcHandlers } from './ipc-handlers'
 import { BrowserSessionManager } from './browser/browser-session-manager'
 import { BrowserPaneManager } from './browser/browser-pane-manager'
@@ -12,7 +12,7 @@ import { installWindowZoomReset } from './window-zoom'
 // Sync shell environment before app is ready (macOS GUI apps don't inherit login shell env)
 syncShellEnvironment()
 
-const ptyManager = new PtyManager()
+const terminalManager = new TerminalManager()
 const browserSessionManager = new BrowserSessionManager()
 
 // Global error handlers
@@ -80,7 +80,8 @@ function createWindow(): void {
     },
   })
 
-  registerIpcHandlers(mainWindow, ptyManager, browserPaneManager, browserImportService)
+  terminalManager.init(mainWindow)
+  registerIpcHandlers(mainWindow, terminalManager, browserPaneManager, browserImportService)
   installWindowZoomReset(mainWindow.webContents)
 
   mainWindow.on('ready-to-show', () => {
@@ -97,6 +98,43 @@ function createWindow(): void {
 app.whenReady().then(() => {
   createWindow()
 
+  // Set application menu with Edit menu for native view responder chain
+  const menuTemplate: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' },
+      ],
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        { role: 'close' },
+      ],
+    },
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate))
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
@@ -111,5 +149,5 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  ptyManager.destroyAll()
+  terminalManager.destroyAll()
 })

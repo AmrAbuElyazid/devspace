@@ -6,33 +6,32 @@ const { contextBridge, ipcRenderer } = getElectronBridge()
 const bridge: DevspaceBridge = {
   platform: process.platform,
 
-  pty: {
-    create: (options) => ipcRenderer.invoke('pty:create', options),
-    write: (ptyId, data) => ipcRenderer.send('pty:write', ptyId, data),
-    resize: (ptyId, cols, rows) => ipcRenderer.send('pty:resize', ptyId, cols, rows),
-    destroy: (ptyId) => ipcRenderer.send('pty:destroy', ptyId),
-    onData: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, ptyId: string, data: string): void => {
-        callback(ptyId, data)
+  terminal: {
+    create: (surfaceId, options) => ipcRenderer.invoke('terminal:create', surfaceId, options),
+    destroy: (surfaceId) => ipcRenderer.invoke('terminal:destroy', surfaceId),
+    show: (surfaceId) => ipcRenderer.invoke('terminal:show', surfaceId),
+    hide: (surfaceId) => ipcRenderer.invoke('terminal:hide', surfaceId),
+    focus: (surfaceId) => ipcRenderer.invoke('terminal:focus', surfaceId),
+    setBounds: (surfaceId, bounds) => ipcRenderer.invoke('terminal:setBounds', surfaceId, bounds),
+    setVisibleSurfaces: (surfaceIds) => ipcRenderer.invoke('terminal:setVisibleSurfaces', surfaceIds),
+    onTitleChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, surfaceId: string, title: string): void => {
+        callback(surfaceId, title)
       }
-      ipcRenderer.on('pty:data', listener)
+      ipcRenderer.on('terminal:titleChanged', listener)
       return () => {
-        ipcRenderer.removeListener('pty:data', listener)
+        ipcRenderer.removeListener('terminal:titleChanged', listener)
       }
     },
-    onExit: (callback) => {
-      const listener = (
-        _event: Electron.IpcRendererEvent,
-        ptyId: string,
-        exitCode: number
-      ): void => {
-        callback(ptyId, exitCode)
+    onClosed: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, surfaceId: string): void => {
+        callback(surfaceId)
       }
-      ipcRenderer.on('pty:exit', listener)
+      ipcRenderer.on('terminal:closed', listener)
       return () => {
-        ipcRenderer.removeListener('pty:exit', listener)
+        ipcRenderer.removeListener('terminal:closed', listener)
       }
-    }
+    },
   },
 
   window: {

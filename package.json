@@ -7,7 +7,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "postinstall": "chmod +x node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper 2>/dev/null; electron-vite postinstall 2>/dev/null; true"
+    "postinstall": "electron-vite postinstall 2>/dev/null; true",
+    "rebuild-native": "cd native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=arm64 --dist-url=https://electronjs.org/headers"
   },
   "dependencies": {
     "@base-ui-components/react": "^1.0.0-rc.0",
@@ -16,15 +17,14 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@steipete/sweet-cookie": "^0.2.0",
-    "@xterm/addon-fit": "^0.11.0",
-    "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "nanoid": "^5.1.5",
-    "node-pty": "^1.0.0",
+    "node-addon-api": "^8.6.0",
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
     "@monaco-editor/react": "^4.7.0",
+    "node-gyp": "^12.2.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

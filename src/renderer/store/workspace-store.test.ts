@@ -29,8 +29,8 @@ test('cleanupPaneResources destroys browser panes and clears runtime state', () 
     },
     'pane-1',
     {
-      destroyPty: () => {
-        throw new Error('unexpected PTY cleanup')
+      destroyTerminal: () => {
+        throw new Error('unexpected terminal cleanup')
       },
       destroyBrowser: (paneId) => {
         destroyedPaneIds.push(paneId)

@@ -4,3 +4,12 @@ dist/
 .DS_Store
 *.log
 .worktrees/
+
+# Native addon build artifacts
+native/build/
+
+# Ghostty source checkout (used by build script)
+.ghostty-src/
+
+# Large binary deps (libghostty static lib)
+deps/libghostty/lib/
