@@ -4,13 +4,13 @@ import { createBrowserStore } from './browser-store'
 
 test('updates runtime state by paneId', () => {
   const store = createBrowserStore()
-  store.getState().upsertRuntimeState({ paneId: 'pane-1', url: 'https://a.com', title: 'A', faviconUrl: null, isLoading: false, canGoBack: false, canGoForward: false, isSecure: true, securityLabel: 'Secure', currentZoom: 1, find: null })
+  store.getState().upsertRuntimeState({ paneId: 'pane-1', url: 'https://a.com', title: 'A', faviconUrl: null, isLoading: false, canGoBack: false, canGoForward: false, isSecure: true, securityLabel: 'Secure', currentZoom: 1, find: null, failure: null })
   assert.equal(store.getState().runtimeByPaneId['pane-1']?.title, 'A')
 })
 
 test('clears runtime state by paneId', () => {
   const store = createBrowserStore()
-  store.getState().upsertRuntimeState({ paneId: 'pane-1', url: 'https://a.com', title: 'A', faviconUrl: null, isLoading: false, canGoBack: false, canGoForward: false, isSecure: true, securityLabel: 'Secure', currentZoom: 1, find: null })
+  store.getState().upsertRuntimeState({ paneId: 'pane-1', url: 'https://a.com', title: 'A', faviconUrl: null, isLoading: false, canGoBack: false, canGoForward: false, isSecure: true, securityLabel: 'Secure', currentZoom: 1, find: null, failure: null })
 
   store.getState().clearRuntimeState('pane-1')
 
@@ -33,10 +33,47 @@ test('tracks and clears pending permission requests', () => {
   assert.equal(store.getState().pendingPermissionRequest, null)
 })
 
+test('replacing a pending permission request returns the previous request token', () => {
+  const store = createBrowserStore()
+  const firstRequest = {
+    paneId: 'pane-1',
+    origin: 'https://a.com',
+    permissionType: 'camera' as const,
+    requestToken: 'token-1',
+  }
+  const secondRequest = {
+    paneId: 'pane-2',
+    origin: 'https://b.com',
+    permissionType: 'microphone' as const,
+    requestToken: 'token-2',
+  }
+
+  assert.equal(store.getState().setPendingPermissionRequest(firstRequest), null)
+  assert.equal(store.getState().setPendingPermissionRequest(secondRequest), 'token-1')
+  assert.deepEqual(store.getState().pendingPermissionRequest, secondRequest)
+})
+
+test('clears a pending permission request when its pane runtime is removed', () => {
+  const store = createBrowserStore()
+  const request = {
+    paneId: 'pane-1',
+    origin: 'https://a.com',
+    permissionType: 'camera' as const,
+    requestToken: 'token-1',
+  }
+
+  store.getState().upsertRuntimeState({ paneId: 'pane-1', url: 'https://a.com', title: 'A', faviconUrl: null, isLoading: false, canGoBack: false, canGoForward: false, isSecure: true, securityLabel: 'Secure', currentZoom: 1, find: null, failure: null })
+  store.getState().setPendingPermissionRequest(request)
+
+  store.getState().clearRuntimeState('pane-1')
+
+  assert.equal(store.getState().pendingPermissionRequest, null)
+})
+
 test('handles runtime state changes and only persists changed urls', () => {
   const store = createBrowserStore()
   const persisted: Array<{ paneId: string; url: string }> = []
-  const runtimeState = { paneId: 'pane-1', url: 'https://a.com', title: 'A', faviconUrl: null, isLoading: false, canGoBack: false, canGoForward: false, isSecure: true, securityLabel: 'Secure', currentZoom: 1, find: null } as const
+  const runtimeState = { paneId: 'pane-1', url: 'https://a.com', title: 'A', faviconUrl: null, isLoading: false, canGoBack: false, canGoForward: false, isSecure: true, securityLabel: 'Secure', currentZoom: 1, find: null, failure: null } as const
 
   store.getState().handleRuntimeStateChange(runtimeState, {
     persistUrlChange: (paneId, url) => {
@@ -71,6 +108,7 @@ test('does not persist uncommitted navigation targets', () => {
     securityLabel: 'Secure',
     currentZoom: 1,
     find: null,
+    failure: null,
   }, {
     persistUrlChange: (paneId, url) => {
       persisted.push({ paneId, url })
@@ -90,6 +128,7 @@ test('does not persist uncommitted navigation targets', () => {
     securityLabel: 'Secure',
     currentZoom: 1,
     find: null,
+    failure: null,
   }, {
     persistUrlChange: (paneId, url) => {
       persisted.push({ paneId, url })
@@ -118,6 +157,7 @@ test('persists zoom changes independently from url persistence', () => {
     securityLabel: 'Secure',
     currentZoom: 1,
     find: null,
+    failure: null,
   }, {
     persistUrlChange: (paneId, url) => {
       persistedUrls.push({ paneId, url })
@@ -140,6 +180,7 @@ test('persists zoom changes independently from url persistence', () => {
     securityLabel: 'Secure',
     currentZoom: 1.25,
     find: null,
+    failure: null,
   }, {
     persistUrlChange: (paneId, url) => {
       persistedUrls.push({ paneId, url })
@@ -170,6 +211,7 @@ test('does not persist initial runtime zoom before a user-driven zoom change', (
     securityLabel: 'Secure',
     currentZoom: 1,
     find: null,
+    failure: null,
   }, {
     persistUrlChange: () => {},
     persistCommittedNavigation: true,
@@ -190,6 +232,7 @@ test('does not persist initial runtime zoom before a user-driven zoom change', (
     securityLabel: 'Secure',
     currentZoom: 1.25,
     find: null,
+    failure: null,
   }, {
     persistUrlChange: () => {},
     persistCommittedNavigation: true,

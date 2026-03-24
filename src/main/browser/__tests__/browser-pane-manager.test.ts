@@ -128,6 +128,63 @@ test('failed navigation does not replace the committed runtime url', () => {
   const runtimeState = manager.getRuntimeState('pane-1')
   assert.equal(runtimeState?.url, 'https://example.com')
   assert.equal(runtimeState?.title, 'NAME_NOT_RESOLVED')
+  assert.deepEqual(runtimeState?.failure, {
+    kind: 'navigation',
+    detail: 'NAME_NOT_RESOLVED',
+    url: 'https://bad.example',
+  })
+})
+
+test('did-stop-loading does not clear an existing navigation failure state', () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>()
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        on: (event: string, listener: (...args: unknown[]) => void) => {
+          listeners.set(event, listener)
+        },
+        loadURL: () => Promise.resolve(),
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  listeners.get('did-fail-load')?.({}, -105, 'NAME_NOT_RESOLVED', 'https://bad.example', true)
+  listeners.get('did-stop-loading')?.()
+
+  const runtimeState = manager.getRuntimeState('pane-1')
+  assert.deepEqual(runtimeState?.failure, {
+    kind: 'navigation',
+    detail: 'NAME_NOT_RESOLVED',
+    url: 'https://bad.example',
+  })
+})
+
+test('aborted main-frame loads do not create a final navigation failure state', () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>()
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        on: (event: string, listener: (...args: unknown[]) => void) => {
+          listeners.set(event, listener)
+        },
+        loadURL: () => Promise.resolve(),
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  listeners.get('did-fail-load')?.({}, -3, 'ERR_ABORTED', 'https://example.com/next', true)
+
+  const runtimeState = manager.getRuntimeState('pane-1')
+  assert.equal(runtimeState?.failure, null)
+  assert.equal(runtimeState?.url, 'https://example.com')
 })
 
 test('explicit certificate error security state is preserved on runtime patch', () => {
@@ -143,6 +200,30 @@ test('explicit certificate error security state is preserved on runtime patch', 
   const runtimeState = manager.getRuntimeState('pane-1')
   assert.equal(runtimeState?.isSecure, false)
   assert.equal(runtimeState?.securityLabel, 'Certificate error')
+})
+
+test('reportFailure preserves the last committed url for certificate-style navigation failures', () => {
+  const manager = makeManager()
+
+  manager.createPane('pane-1', 'https://example.com')
+  manager.reportFailure('pane-1', {
+    kind: 'navigation',
+    detail: 'Certificate error',
+    url: 'https://expired.badssl.com/',
+  }, {
+    title: 'Certificate error',
+    isSecure: false,
+    securityLabel: 'Certificate error',
+  })
+
+  const runtimeState = manager.getRuntimeState('pane-1')
+  assert.equal(runtimeState?.url, 'https://example.com')
+  assert.equal(runtimeState?.title, 'Certificate error')
+  assert.deepEqual(runtimeState?.failure, {
+    kind: 'navigation',
+    detail: 'Certificate error',
+    url: 'https://expired.badssl.com/',
+  })
 })
 
 test('find result updates active and total matches', () => {
@@ -393,6 +474,131 @@ test('window.open requests are denied and emitted as open-in-new-tab requests', 
       paneId: 'pane-1',
       url: 'https://devspace.example/new-tab',
     },
+  })
+})
+
+test('destroying a pane denies any pending permission request for that pane', () => {
+  let resolvedDecision: string | undefined
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        id: 91,
+        loadURL: () => Promise.resolve(),
+        close: () => {},
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  manager.requestPermission({
+    paneId: 'pane-1',
+    origin: 'https://camera.example',
+    permissionType: 'camera',
+    requestToken: 'token-1',
+  }, (decision) => {
+    resolvedDecision = decision
+  })
+
+  manager.destroyPane('pane-1')
+
+  assert.equal(resolvedDecision, 'deny')
+})
+
+test('permission requests are emitted to the renderer and resolved later', () => {
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = []
+  let resolvedDecision: string | undefined
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        loadURL: () => Promise.resolve(),
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload })
+    },
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  manager.requestPermission({
+    paneId: 'pane-1',
+    origin: 'https://camera.example',
+    permissionType: 'camera',
+    requestToken: 'token-1',
+  }, (decision) => {
+    resolvedDecision = decision
+  })
+
+  assert.deepEqual(rendererMessages.at(-1), {
+    channel: 'browser:permissionRequested',
+    payload: {
+      paneId: 'pane-1',
+      origin: 'https://camera.example',
+      permissionType: 'camera',
+      requestToken: 'token-1',
+    },
+  })
+
+  manager.resolvePermission('token-1', 'allow-for-session')
+
+  assert.equal(resolvedDecision, 'allow-for-session')
+})
+
+test('retrying a navigation clears the last browser failure state', () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>()
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        on: (event: string, listener: (...args: unknown[]) => void) => {
+          listeners.set(event, listener)
+        },
+        loadURL: () => Promise.resolve(),
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  listeners.get('did-fail-load')?.({}, -105, 'NAME_NOT_RESOLVED', 'https://bad.example', true)
+
+  assert.equal(manager.getRuntimeState('pane-1')?.failure?.kind, 'navigation')
+
+  manager.navigate('pane-1', 'https://retry.example')
+
+  const runtimeState = manager.getRuntimeState('pane-1')
+  assert.equal(runtimeState?.isLoading, true)
+  assert.equal(runtimeState?.failure, null)
+})
+
+test('render-process-gone marks the pane as crashed', () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>()
+  const manager = new BrowserPaneManager({
+    createView: () => ({
+      webContents: {
+        on: (event: string, listener: (...args: unknown[]) => void) => {
+          listeners.set(event, listener)
+        },
+        loadURL: () => Promise.resolve(),
+      },
+    }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  })
+
+  manager.createPane('pane-1', 'https://example.com')
+  listeners.get('render-process-gone')?.({}, { reason: 'crashed', exitCode: 9 })
+
+  assert.deepEqual(manager.getRuntimeState('pane-1')?.failure, {
+    kind: 'crash',
+    detail: 'crashed',
+    url: 'https://example.com',
   })
 })
 

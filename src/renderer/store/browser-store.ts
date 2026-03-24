@@ -18,7 +18,7 @@ interface BrowserStoreState {
     },
   ) => void
   clearRuntimeState: (paneId: string) => void
-  setPendingPermissionRequest: (request: BrowserPermissionRequest) => void
+  setPendingPermissionRequest: (request: BrowserPermissionRequest) => string | null
   clearPendingPermissionRequest: () => void
   toggleFindBar: (paneId: string) => void
   openFindBar: (paneId: string) => void
@@ -73,12 +73,16 @@ export function createBrowserStore() {
         const findBarOpenByPaneId = { ...state.findBarOpenByPaneId }
         const addressBarFocusTokenByPaneId = { ...state.addressBarFocusTokenByPaneId }
         const findBarFocusTokenByPaneId = { ...state.findBarFocusTokenByPaneId }
+        const pendingPermissionRequest = state.pendingPermissionRequest?.paneId === paneId
+          ? null
+          : state.pendingPermissionRequest
         delete runtimeByPaneId[paneId]
         delete findBarOpenByPaneId[paneId]
         delete addressBarFocusTokenByPaneId[paneId]
         delete findBarFocusTokenByPaneId[paneId]
         return {
           runtimeByPaneId,
+          pendingPermissionRequest,
           findBarOpenByPaneId,
           addressBarFocusTokenByPaneId,
           findBarFocusTokenByPaneId,
@@ -86,7 +90,9 @@ export function createBrowserStore() {
       })
     },
     setPendingPermissionRequest: (request) => {
+      const previousRequestToken = get().pendingPermissionRequest?.requestToken ?? null
       set({ pendingPermissionRequest: request })
+      return previousRequestToken
     },
     clearPendingPermissionRequest: () => {
       set({ pendingPermissionRequest: null })

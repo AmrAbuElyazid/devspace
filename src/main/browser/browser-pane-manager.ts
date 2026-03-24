@@ -3,8 +3,10 @@ import type {
   BrowserBounds,
   BrowserContextMenuRequest,
   BrowserContextMenuTarget,
+  BrowserFailureState,
   BrowserOpenInNewTabRequest,
   BrowserFindState,
+  BrowserPermissionRequest,
   BrowserPermissionDecision,
   BrowserRuntimeState,
   BrowserStopFindAction,
@@ -71,6 +73,7 @@ function createInitialRuntimeState(paneId: string, initialUrl: string): BrowserR
     ...getSecurityState(initialUrl),
     currentZoom: 1,
     find: null,
+    failure: null,
   }
 }
 
@@ -104,10 +107,17 @@ type FoundInPageResult = {
   matches?: number
 }
 
+type PendingPermissionResolution = (decision: BrowserPermissionDecision) => void
+type PendingPermissionRequest = {
+  paneId: string
+  resolve: PendingPermissionResolution
+}
+
 export class BrowserPaneManager implements BrowserPaneController {
   private readonly panes = new Map<string, BrowserPaneRecord>()
   private readonly paneIdByWebContentsId = new Map<number, string>()
   private readonly pendingHistoryVisits = new Map<string, PendingHistoryVisit>()
+  private readonly pendingPermissionResolutions = new Map<string, PendingPermissionRequest>()
   private readonly createView: NonNullable<BrowserPaneManagerDeps['createView']>
 
   constructor(private readonly deps: BrowserPaneManagerDeps) {
@@ -144,6 +154,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     this.hidePane(paneId)
+    this.denyPendingPermissionsForPane(paneId)
     this.panes.delete(paneId)
     this.pendingHistoryVisits.delete(paneId)
     const webContentsId = pane.view.webContents?.id
@@ -217,6 +228,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     pane.runtimeState.isLoading = true
+    pane.runtimeState.failure = null
     this.emitStateChange(pane)
 
     const loadURL = pane.view.webContents?.loadURL
@@ -379,8 +391,45 @@ export class BrowserPaneManager implements BrowserPaneController {
     // Placeholder for later browser context-menu wiring.
   }
 
-  resolvePermission(_requestToken: string, _decision: BrowserPermissionDecision): void {
-    // Placeholder for later permission-response wiring.
+  requestPermission(
+    request: BrowserPermissionRequest,
+    resolve: (decision: BrowserPermissionDecision) => void,
+  ): void {
+    this.pendingPermissionResolutions.set(request.requestToken, {
+      paneId: request.paneId,
+      resolve,
+    })
+    this.deps.sendToRenderer('browser:permissionRequested', request)
+  }
+
+  resolvePermission(requestToken: string, decision: BrowserPermissionDecision): void {
+    const pendingRequest = this.pendingPermissionResolutions.get(requestToken)
+    if (!pendingRequest) {
+      return
+    }
+
+    this.pendingPermissionResolutions.delete(requestToken)
+    pendingRequest.resolve(decision)
+  }
+
+  reportFailure(
+    paneId: string,
+    failure: BrowserFailureState,
+    options?: { title?: string; isSecure?: boolean; securityLabel?: string | null },
+  ): void {
+    const pane = this.panes.get(paneId)
+    if (!pane) {
+      return
+    }
+
+    this.applyRuntimePatch(paneId, {
+      title: options?.title ?? pane.runtimeState.title,
+      faviconUrl: null,
+      isLoading: false,
+      ...(options?.isSecure !== undefined ? { isSecure: options.isSecure } : {}),
+      ...(options?.securityLabel !== undefined ? { securityLabel: options.securityLabel } : {}),
+      failure,
+    })
   }
 
   getRuntimeState(paneId: string): BrowserRuntimeState | undefined {
@@ -440,7 +489,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     webContents.on('did-start-loading', () => {
-      this.applyRuntimePatch(pane.runtimeState.paneId, { isLoading: true })
+      this.applyRuntimePatch(pane.runtimeState.paneId, { isLoading: true, failure: null })
     })
 
     webContents.on('did-stop-loading', () => {
@@ -460,6 +509,7 @@ export class BrowserPaneManager implements BrowserPaneController {
         canGoBack: pane.runtimeState.canGoBack,
         canGoForward: pane.runtimeState.canGoForward,
         isLoading: false,
+        failure: null,
       })
     })
 
@@ -470,6 +520,7 @@ export class BrowserPaneManager implements BrowserPaneController {
         url,
         canGoBack: pane.runtimeState.canGoBack,
         canGoForward: pane.runtimeState.canGoForward,
+        failure: null,
       })
     })
 
@@ -533,6 +584,13 @@ export class BrowserPaneManager implements BrowserPaneController {
         return
       }
 
+      if (errorCode === -3) {
+        this.applyRuntimePatch(pane.runtimeState.paneId, {
+          isLoading: false,
+        })
+        return
+      }
+
       const securityPatch = errorCode <= -200 && errorCode >= -299
         ? { isSecure: false, securityLabel: 'Certificate error' as const }
         : {}
@@ -544,7 +602,25 @@ export class BrowserPaneManager implements BrowserPaneController {
         isLoading: false,
         canGoBack: pane.runtimeState.canGoBack,
         canGoForward: pane.runtimeState.canGoForward,
+        failure: {
+          kind: 'navigation',
+          detail: errorDescription || 'Navigation failed',
+          url: validatedURL,
+        },
         ...securityPatch,
+      })
+    })
+
+    webContents.on('render-process-gone', (_event: unknown, details: { reason?: string }) => {
+      this.applyRuntimePatch(pane.runtimeState.paneId, {
+        title: 'Browser pane crashed',
+        faviconUrl: null,
+        isLoading: false,
+        failure: {
+          kind: 'crash',
+          detail: details.reason ?? 'gone',
+          url: pane.runtimeState.url,
+        },
       })
     })
   }
@@ -589,5 +665,16 @@ export class BrowserPaneManager implements BrowserPaneController {
       visitedAt: pendingVisit.visitedAt,
       source: 'devspace',
     })
+  }
+
+  private denyPendingPermissionsForPane(paneId: string): void {
+    for (const [requestToken, pendingRequest] of this.pendingPermissionResolutions.entries()) {
+      if (pendingRequest.paneId !== paneId) {
+        continue
+      }
+
+      this.pendingPermissionResolutions.delete(requestToken)
+      pendingRequest.resolve('deny')
+    }
   }
 }

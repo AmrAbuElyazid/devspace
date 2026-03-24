@@ -64,12 +64,16 @@ function createWindow(): void {
 
   browserSessionManager.installHandlers({
     resolvePaneIdForWebContents: (webContentsId) => browserPaneManager.resolvePaneIdForWebContents(webContentsId),
+    requestBrowserPermission: (request, resolve) => {
+      browserPaneManager.requestPermission(request, resolve)
+    },
     reportCertificateError: (paneId, url) => {
-      browserPaneManager.applyRuntimePatch(paneId, {
+      browserPaneManager.reportFailure(paneId, {
+        kind: 'navigation',
+        detail: 'Certificate error',
         url,
+      }, {
         title: 'Certificate error',
-        faviconUrl: null,
-        isLoading: false,
         isSecure: false,
         securityLabel: 'Certificate error',
       })

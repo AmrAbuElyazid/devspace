@@ -821,6 +821,48 @@
   animation: browser-loading 1.5s ease-in-out infinite;
 }
 
+.browser-permission-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+  position: relative;
+  z-index: 2;
+}
+
+.browser-permission-prompt h2 {
+  margin: 0 0 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.browser-permission-prompt p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.browser-permission-eyebrow {
+  margin-bottom: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--accent) 60%, var(--foreground));
+}
+
+.browser-permission-actions,
+.browser-failure-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .browser-failure-surface {
   position: absolute;
   inset: 0;
@@ -852,7 +894,7 @@
 .browser-failure-card p {
   font-size: 12px;
   color: var(--muted-foreground);
-  margin: 0 0 16px;
+  margin: 0 0 10px;
 }
 
 .browser-failure-eyebrow {
@@ -862,6 +904,13 @@
   text-transform: uppercase;
   color: var(--warning);
   margin-bottom: 10px;
+}
+
+@media (max-width: 720px) {
+  .browser-permission-prompt {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 .browser-import-panel {

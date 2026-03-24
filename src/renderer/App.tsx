@@ -48,6 +48,7 @@ export default function App(): JSX.Element {
 
   const handleRuntimeStateChange = useBrowserStore((s) => s.handleRuntimeStateChange)
   const setPendingPermissionRequest = useBrowserStore((s) => s.setPendingPermissionRequest)
+  const clearPendingPermissionRequest = useBrowserStore((s) => s.clearPendingPermissionRequest)
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
   const updateBrowserPaneZoom = useWorkspaceStore((s) => s.updateBrowserPaneZoom)
   const openBrowserTab = useWorkspaceStore((s) => s.openBrowserTab)
@@ -75,7 +76,12 @@ export default function App(): JSX.Element {
           },
         })
       },
-      onPermissionRequest: setPendingPermissionRequest,
+      onPermissionRequest: (request) => {
+        const replacedRequestToken = setPendingPermissionRequest(request)
+        if (replacedRequestToken) {
+          void window.api.browser.resolvePermission(replacedRequestToken, 'deny')
+        }
+      },
       onOpenInNewTabRequest: (request) => {
         const state = useWorkspaceStore.getState()
         const workspaceId = findWorkspaceIdForPane(state.workspaces, request.paneId)
@@ -84,7 +90,7 @@ export default function App(): JSX.Element {
         }
       },
     })
-  }, [handleRuntimeStateChange, openBrowserTab, setPendingPermissionRequest, updateBrowserPaneZoom, updatePaneConfig])
+  }, [clearPendingPermissionRequest, handleRuntimeStateChange, openBrowserTab, setPendingPermissionRequest, updateBrowserPaneZoom, updatePaneConfig])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent): void => {

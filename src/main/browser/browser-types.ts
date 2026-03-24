@@ -2,6 +2,8 @@ import type { Session, View, WebContentsView, WebContentsViewConstructorOptions 
 import type {
   BrowserFindInPageOptions,
   BrowserBounds,
+  BrowserFailureState,
+  BrowserPermissionRequest,
   BrowserPermissionDecision,
   BrowserRuntimeState,
   BrowserStopFindAction,
@@ -37,6 +39,7 @@ export type BrowserRuntimePatch = Partial<
     | 'securityLabel'
     | 'currentZoom'
     | 'find'
+    | 'failure'
   >
 >
 
@@ -63,5 +66,7 @@ export interface BrowserPaneController {
   toggleDevTools(paneId: string): void
   applyFindResult(paneId: string, result: { query: string; activeMatch: number; totalMatches: number }): void
   showContextMenu(paneId: string, position?: { x: number; y: number }): void
+  requestPermission(request: BrowserPermissionRequest, resolve: (decision: BrowserPermissionDecision) => void): void
   resolvePermission(requestToken: string, decision: BrowserPermissionDecision): void
+  reportFailure(paneId: string, failure: BrowserFailureState, options?: { title?: string; isSecure?: boolean; securityLabel?: string | null }): void
 }
