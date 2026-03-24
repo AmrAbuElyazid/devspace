@@ -213,6 +213,9 @@ const defaultPaneCleanupDeps: PaneCleanupDeps = {
     void window.api.browser.destroy(paneId)
     markBrowserPaneDestroyed(paneId)
   },
+  destroyEditor: (paneId) => {
+    void window.api.editor.stop(paneId)
+  },
   clearBrowserRuntime: (paneId) => {
     useBrowserStore.getState().clearRuntimeState(paneId)
   },

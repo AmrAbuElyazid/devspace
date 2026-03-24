@@ -11,7 +11,7 @@ interface EmptyPaneProps {
 
 const options: { type: PaneType; label: string; desc: string; icon: ElementType; defaultConfig: PaneConfig }[] = [
   { type: 'terminal', label: 'Terminal', desc: 'Shell session', icon: Terminal, defaultConfig: { cwd: undefined } },
-  { type: 'editor', label: 'Editor', desc: 'Code editor', icon: FileCode, defaultConfig: {} },
+  { type: 'editor', label: 'VS Code', desc: 'Code editor', icon: FileCode, defaultConfig: {} },
   { type: 'browser', label: 'Browser', desc: 'Web preview', icon: Globe, defaultConfig: { url: 'https://google.com' } },
 ]
 

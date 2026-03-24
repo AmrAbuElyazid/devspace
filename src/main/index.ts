@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu } from 'electron'
 import { join } from 'path'
 import { syncShellEnvironment } from './shell-env'
 import { TerminalManager } from './terminal-manager'
+import { VscodeServerManager } from './vscode-server'
 import { registerIpcHandlers } from './ipc-handlers'
 import { BrowserSessionManager } from './browser/browser-session-manager'
 import { BrowserPaneManager } from './browser/browser-pane-manager'
@@ -13,6 +14,7 @@ import { installWindowZoomReset } from './window-zoom'
 syncShellEnvironment()
 
 const terminalManager = new TerminalManager()
+let vscodeServerManager: VscodeServerManager
 const browserSessionManager = new BrowserSessionManager()
 
 // Global error handlers
@@ -81,7 +83,7 @@ function createWindow(): void {
   })
 
   terminalManager.init(mainWindow)
-  registerIpcHandlers(mainWindow, terminalManager, browserPaneManager, browserImportService)
+  registerIpcHandlers(mainWindow, terminalManager, browserPaneManager, vscodeServerManager, browserImportService)
   installWindowZoomReset(mainWindow.webContents)
 
   mainWindow.on('ready-to-show', () => {
@@ -96,6 +98,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  vscodeServerManager = new VscodeServerManager()
   createWindow()
 
   // Set application menu with Edit menu for native view responder chain.
@@ -199,4 +202,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   terminalManager.destroyAll()
+  vscodeServerManager.stopAll()
 })

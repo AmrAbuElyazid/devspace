@@ -9,9 +9,7 @@ interface SettingsState {
   defaultShell: string
   terminalScrollback: number
   terminalCursorStyle: 'block' | 'underline' | 'bar'
-  editorWordWrap: boolean
-  editorMinimap: boolean
-  editorTabSize: number
+
   setTheme: (theme: 'light' | 'dark' | 'system') => void
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
@@ -30,9 +28,7 @@ export const useSettingsStore = create<SettingsState>()(
       defaultShell: '',
       terminalScrollback: 5000,
       terminalCursorStyle: 'block' as const,
-      editorWordWrap: true,
-      editorMinimap: true,
-      editorTabSize: 2,
+
 
       setTheme(theme) {
         set({ theme })
