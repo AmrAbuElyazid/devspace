@@ -619,8 +619,7 @@
 /* ─── Pane Focus Ring ────────────────────────────────────────────────── */
 
 .pane-focus-ring {
-  border: 1px solid var(--border-faint);
-  border-radius: 3px;
+  border: 1px solid var(--border);
   transition: border-color 150ms ease;
 }
 .pane-focus-ring.pane-focused {
@@ -1077,13 +1076,9 @@
 }
 
 /* ─── Allotment (Split Pane Sash) ────────────────────────────────────── */
-.split-view-view > .sash-container > .sash {
-  background-color: var(--border) !important;
-  transition: background-color 150ms ease !important;
-}
-.split-view-view > .sash-container > .sash:hover,
-.split-view-view > .sash-container > .sash.active {
-  background-color: var(--accent) !important;
+/* Override Allotment's blue sash hover color with the app accent. */
+:root {
+  --focus-border: var(--accent);
 }
 
 /* ─── Toast Animations ───────────────────────────────────────────────── */

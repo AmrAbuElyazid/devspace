@@ -6,6 +6,34 @@ const { contextBridge, ipcRenderer } = getElectronBridge()
 const bridge: DevspaceBridge = {
   platform: process.platform,
 
+  app: {
+    onAction: (callback) => {
+      const channels = [
+        'app:new-tab', 'app:close-tab', 'app:new-workspace',
+        'app:toggle-sidebar', 'app:toggle-settings',
+        'app:split-right', 'app:split-down', 'app:switch-tab',
+        'app:browser-focus-url', 'app:browser-reload',
+        'app:browser-back', 'app:browser-forward', 'app:browser-find',
+        'app:browser-zoom-in', 'app:browser-zoom-out', 'app:browser-zoom-reset',
+        'app:browser-devtools',
+      ]
+      const listener = (_event: Electron.IpcRendererEvent, ...args: unknown[]): void => {
+        // The channel name is not passed to the listener, so we use per-channel listeners
+      }
+      const disposers: (() => void)[] = []
+      for (const channel of channels) {
+        const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]): void => {
+          callback(channel, ...args)
+        }
+        ipcRenderer.on(channel, handler)
+        disposers.push(() => ipcRenderer.removeListener(channel, handler))
+      }
+      return () => {
+        for (const dispose of disposers) dispose()
+      }
+    },
+  },
+
   terminal: {
     create: (surfaceId, options) => ipcRenderer.invoke('terminal:create', surfaceId, options),
     destroy: (surfaceId) => ipcRenderer.invoke('terminal:destroy', surfaceId),
@@ -14,6 +42,7 @@ const bridge: DevspaceBridge = {
     focus: (surfaceId) => ipcRenderer.invoke('terminal:focus', surfaceId),
     setBounds: (surfaceId, bounds) => ipcRenderer.invoke('terminal:setBounds', surfaceId, bounds),
     setVisibleSurfaces: (surfaceIds) => ipcRenderer.invoke('terminal:setVisibleSurfaces', surfaceIds),
+    blur: () => ipcRenderer.invoke('terminal:blur'),
     onTitleChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, surfaceId: string, title: string): void => {
         callback(surfaceId, title)

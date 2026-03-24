@@ -18,6 +18,7 @@ interface PaneContainerProps {
   paneId: string
   workspaceId: string
   tabId: string
+  overlayActive: boolean
 }
 
 const paneTypeIcons: Record<PaneType, ElementType> = {
@@ -76,6 +77,7 @@ export default function PaneContainer({
   paneId,
   workspaceId,
   tabId,
+  overlayActive,
 }: PaneContainerProps): ReactElement | null {
   const pane = useWorkspaceStore((s) => s.panes[paneId])
   const splitPane = useWorkspaceStore((s) => s.splitPane)
@@ -99,7 +101,7 @@ export default function PaneContainer({
   // Without this check, pointerWithin matches hidden pane zones, causing
   // the overlay to render on invisible elements and merges into wrong tabs.
   const isVisibleTab = workspaceId === activeWorkspaceId && tabId === activeWs?.activeTabId
-  const shouldHideBrowserNativeView = shouldHideBrowserNativeViewForDrag(activeDrag, isVisibleTab)
+  const shouldHideNativeView = overlayActive || shouldHideBrowserNativeViewForDrag(activeDrag, isVisibleTab)
   const canAcceptTabDrop =
     activeDrag?.type === 'tab' &&
     isVisibleTab &&
@@ -200,7 +202,7 @@ export default function PaneContainer({
           workspaceId={workspaceId}
           tabId={tabId}
           isVisible={isVisibleTab}
-          hideNativeView={Boolean(shouldHideBrowserNativeView)}
+          hideNativeView={Boolean(shouldHideNativeView)}
           isFocused={isFocused}
         />
         {dropOverlay}
@@ -275,7 +277,7 @@ export default function PaneContainer({
           workspaceId={workspaceId}
           tabId={tabId}
           isVisible={isVisibleTab}
-          hideNativeView={Boolean(shouldHideBrowserNativeView)}
+          hideNativeView={Boolean(shouldHideNativeView)}
           isFocused={isFocused}
         />
       </div>
