@@ -64,9 +64,6 @@ function createWindow(): void {
     historyService: browserHistoryService,
   })
 
-  browserSessionManager.persistSessionCookies()
-  browserSessionManager.installCorsOverrides()
-  browserSessionManager.registerSecretKeyHandler()
   browserSessionManager.installHandlers({
     resolvePaneIdForWebContents: (webContentsId) => browserPaneManager.resolvePaneIdForWebContents(webContentsId),
     requestBrowserPermission: (request, resolve) => {
@@ -102,6 +99,13 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   vscodeServerManager = new VscodeServerManager()
+
+  // Session-level setup — runs once, NOT per-window.
+  // protocol.handle('http', ...) can only be registered once per session.
+  browserSessionManager.persistSessionCookies()
+  browserSessionManager.installCorsOverrides()
+  browserSessionManager.registerSecretKeyHandler()
+
   createWindow()
 
   // Set application menu with Edit menu for native view responder chain.
