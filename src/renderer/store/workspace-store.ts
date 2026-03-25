@@ -3,12 +3,13 @@ import { nanoid } from 'nanoid'
 import type {
   Workspace,
   SidebarNode,
-  Tab,
   Pane,
   PaneType,
   PaneConfig,
   SplitNode,
   SplitDirection,
+  PaneGroup,
+  PaneGroupTab,
 } from '../types/workspace'
 import {
   findSidebarNode,
@@ -29,28 +30,28 @@ import type { BrowserConfig } from '../types/workspace'
 // Tree helper functions (pure)
 // ---------------------------------------------------------------------------
 
-export function findParentOfPane(
+export function findParentOfGroup(
   root: SplitNode,
-  paneId: string,
+  groupId: string,
 ): { parent: SplitNode; index: number } | null {
   if (root.type === 'leaf') return null
 
   for (let i = 0; i < root.children.length; i++) {
     const child = root.children[i]
-    if (child.type === 'leaf' && child.paneId === paneId) {
+    if (child.type === 'leaf' && child.groupId === groupId) {
       return { parent: root, index: i }
     }
     if (child.type === 'branch') {
-      const result = findParentOfPane(child, paneId)
+      const result = findParentOfGroup(child, groupId)
       if (result) return result
     }
   }
   return null
 }
 
-export function collectPaneIds(root: SplitNode): string[] {
-  if (root.type === 'leaf') return [root.paneId]
-  return root.children.flatMap(collectPaneIds)
+export function collectGroupIds(root: SplitNode): string[] {
+  if (root.type === 'leaf') return [root.groupId]
+  return root.children.flatMap(collectGroupIds)
 }
 
 export function simplifyTree(node: SplitNode): SplitNode {
@@ -68,9 +69,9 @@ export function simplifyTree(node: SplitNode): SplitNode {
   return simplified
 }
 
-export function removePaneFromTree(root: SplitNode, paneId: string): SplitNode | null {
+export function removeGroupFromTree(root: SplitNode, groupId: string): SplitNode | null {
   if (root.type === 'leaf') {
-    return root.paneId === paneId ? null : root
+    return root.groupId === groupId ? null : root
   }
 
   const newChildren: SplitNode[] = []
@@ -79,7 +80,7 @@ export function removePaneFromTree(root: SplitNode, paneId: string): SplitNode |
 
   for (let i = 0; i < root.children.length; i++) {
     const child = root.children[i]
-    const result = removePaneFromTree(child, paneId)
+    const result = removeGroupFromTree(child, groupId)
     if (result !== null) {
       newChildren.push(result)
       newSizes.push(root.sizes[i])
@@ -88,7 +89,7 @@ export function removePaneFromTree(root: SplitNode, paneId: string): SplitNode |
     }
   }
 
-  // Pane not found in this subtree — return unchanged
+  // Group not found in this subtree — return unchanged
   if (removedIndex === -1) return root
 
   if (newChildren.length === 0) return null
@@ -107,22 +108,49 @@ export function removePaneFromTree(root: SplitNode, paneId: string): SplitNode |
   return simplifyTree(branch)
 }
 
-// Replace a leaf matching `targetPaneId` with `replacement` (immutable).
+// Replace a leaf matching `targetGroupId` with `replacement` (immutable).
 function replaceLeafInTree(
   node: SplitNode,
-  targetPaneId: string,
+  targetGroupId: string,
   replacement: SplitNode,
 ): SplitNode {
   if (node.type === 'leaf') {
-    return node.paneId === targetPaneId ? replacement : node
+    return node.groupId === targetGroupId ? replacement : node
   }
 
   return {
     ...node,
     children: node.children.map((child) =>
-      replaceLeafInTree(child, targetPaneId, replacement),
+      replaceLeafInTree(child, targetGroupId, replacement),
     ),
   }
+}
+
+// Returns the first leaf's groupId in a tree.
+export function findFirstGroupId(node: SplitNode): string | null {
+  if (node.type === 'leaf') return node.groupId
+  for (const child of node.children) {
+    const gid = findFirstGroupId(child)
+    if (gid) return gid
+  }
+  return null
+}
+
+// Finds a sibling groupId for focus transfer when a group is being removed.
+export function findSiblingGroupId(root: SplitNode, groupId: string): string | null {
+  const parentResult = findParentOfGroup(root, groupId)
+  if (!parentResult || parentResult.parent.type !== 'branch') return null
+
+  const siblings = parentResult.parent.children
+  // Prefer previous sibling, else next
+  const siblingIndex = parentResult.index > 0 ? parentResult.index - 1 : 1
+  if (siblingIndex >= 0 && siblingIndex < siblings.length) {
+    const sibling = siblings[siblingIndex]
+    return sibling.type === 'leaf'
+      ? sibling.groupId
+      : findFirstGroupId(sibling)
+  }
+  return null
 }
 
 // Navigate to a branch node via a path of child indices and update its sizes.
@@ -162,46 +190,21 @@ function createEmptyPane(): Pane {
   }
 }
 
-function createDefaultTab(name: string, pane: Pane): Tab {
+function createPaneGroup(pane: Pane): PaneGroup {
+  const tabId = nanoid()
+  return {
+    id: nanoid(),
+    tabs: [{ id: tabId, paneId: pane.id }],
+    activeTabId: tabId,
+  }
+}
+
+function createDefaultWorkspace(name: string, group: PaneGroup): Workspace {
   return {
     id: nanoid(),
     name,
-    root: { type: 'leaf', paneId: pane.id },
-    focusedPaneId: pane.id,
-  }
-}
-
-function findFirstLeafPaneId(node: SplitNode): string | null {
-  if (node.type === 'leaf') {
-    return node.paneId
-  }
-
-  for (const child of node.children) {
-    const paneId = findFirstLeafPaneId(child)
-    if (paneId) {
-      return paneId
-    }
-  }
-
-  return null
-}
-
-export function normalizeFocusedPaneIds(workspaces: Workspace[]): Workspace[] {
-  return workspaces.map((workspace) => ({
-    ...workspace,
-    tabs: workspace.tabs.map((tab) => ({
-      ...tab,
-      focusedPaneId: tab.focusedPaneId ?? findFirstLeafPaneId(tab.root),
-    })),
-  }))
-}
-
-function createDefaultWorkspace(name: string, tab: Tab): Workspace {
-  return {
-    id: nanoid(),
-    name,
-    tabs: [tab],
-    activeTabId: tab.id,
+    root: { type: 'leaf', groupId: group.id },
+    focusedGroupId: group.id,
   }
 }
 
@@ -225,10 +228,18 @@ const defaultPaneCleanupDeps: PaneCleanupDeps = {
 // Store
 // ---------------------------------------------------------------------------
 
+const titleForType: Record<PaneType, string> = {
+  terminal: 'Terminal',
+  browser: 'Browser',
+  editor: 'Editor',
+  empty: 'Empty',
+}
+
 interface WorkspaceState {
   workspaces: Workspace[]
   activeWorkspaceId: string
   panes: Record<string, Pane>
+  paneGroups: Record<string, PaneGroup>
   sidebarTree: SidebarNode[]
 
   // Workspace CRUD
@@ -246,19 +257,22 @@ interface WorkspaceState {
   expandFolder: (folderId: string) => void
 
   // Focus
-  setFocusedPane: (workspaceId: string, tabId: string, paneId: string) => void
+  setFocusedGroup: (workspaceId: string, groupId: string) => void
 
-  // Tab CRUD
-  addTab: (workspaceId: string, name?: string) => void
-  openBrowserTab: (workspaceId: string, url: string) => void
-  removeTab: (workspaceId: string, tabId: string) => void
-  renameTab: (workspaceId: string, tabId: string, name: string) => void
-  setActiveTab: (workspaceId: string, tabId: string) => void
+  // Group tab CRUD
+  addGroupTab: (workspaceId: string, groupId: string) => void
+  removeGroupTab: (workspaceId: string, groupId: string, tabId: string) => void
+  setActiveGroupTab: (workspaceId: string, groupId: string, tabId: string) => void
+  reorderGroupTabs: (workspaceId: string, groupId: string, fromIndex: number, toIndex: number) => void
+  moveTabToGroup: (workspaceId: string, srcGroupId: string, tabId: string, destGroupId: string, insertIndex?: number) => void
 
-  // Tab DnD actions
-  reorderTabs: (workspaceId: string, fromIndex: number, toIndex: number) => void
-  moveTabToWorkspace: (fromWorkspaceId: string, tabId: string, toWorkspaceId: string, toIndex?: number) => void
-  mergeTabIntoSplit: (sourceWorkspaceId: string, sourceTabId: string, targetWorkspaceId: string, targetTabId: string, targetPaneId: string, side: 'left' | 'right' | 'top' | 'bottom') => void
+  // Browser in group
+  openBrowserInGroup: (workspaceId: string, groupId: string, url: string) => void
+
+  // Split operations
+  splitGroup: (workspaceId: string, groupId: string, direction: SplitDirection) => void
+  closeGroup: (workspaceId: string, groupId: string) => void
+  updateSplitSizes: (workspaceId: string, nodePath: number[], sizes: number[]) => void
 
   // Pane operations
   addPane: (type: PaneType, config?: Partial<PaneConfig>) => string
@@ -267,22 +281,6 @@ interface WorkspaceState {
   updateBrowserPaneZoom: (paneId: string, zoom: number) => void
   updatePaneTitle: (paneId: string, title: string) => void
   changePaneType: (paneId: string, type: PaneType, config?: PaneConfig) => void
-
-  // Split operations
-  splitPane: (
-    workspaceId: string,
-    tabId: string,
-    targetPaneId: string,
-    direction: SplitDirection,
-    newPaneType?: PaneType,
-  ) => void
-  closePane: (workspaceId: string, tabId: string, paneId: string) => void
-  updateSplitSizes: (
-    workspaceId: string,
-    tabId: string,
-    nodePath: number[],
-    sizes: number[],
-  ) => void
 }
 
 // ---------------------------------------------------------------------------
@@ -292,46 +290,162 @@ interface WorkspaceState {
 const PERSIST_KEY = 'devspace-workspaces'
 const PERSIST_DEBOUNCE_MS = 500
 
-function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'sidebarTree'> | null {
+// Migration: detect old persisted format and convert to new model
+function migratePersistedState(persisted: Record<string, unknown>): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'paneGroups' | 'sidebarTree'> | null {
+  const oldWorkspaces = persisted.workspaces as Array<Record<string, unknown>> | undefined
+  if (!oldWorkspaces || oldWorkspaces.length === 0) return null
+
+  // Detect old format: workspace has `tabs` array and no `root`
+  const firstWs = oldWorkspaces[0]
+  if (!firstWs.tabs || firstWs.root) return null // Not old format
+
+  const newPanes: Record<string, Pane> = { ...(persisted.panes as Record<string, Pane> ?? {}) }
+  const newPaneGroups: Record<string, PaneGroup> = {}
+  const newWorkspaces: Workspace[] = []
+
+  for (const oldWs of oldWorkspaces) {
+    const oldTabs = oldWs.tabs as Array<{
+      id: string
+      name: string
+      root: SplitNode
+      focusedPaneId: string | null
+    }>
+
+    if (!oldTabs || oldTabs.length === 0) continue
+
+    // Find the active tab
+    const activeTabId = oldWs.activeTabId as string
+    const activeTab = oldTabs.find((t) => t.id === activeTabId) ?? oldTabs[0]
+
+    // Convert the active tab's tree: each leaf { type: 'leaf', paneId } -> { type: 'leaf', groupId }
+    // Each leaf pane gets its own PaneGroup
+    const firstGroupId: string[] = []
+
+    function convertTree(node: unknown): SplitNode {
+      const n = node as Record<string, unknown>
+      if (n.type === 'leaf') {
+        const paneId = n.paneId as string
+        // Ensure the pane exists; create empty fallback if missing
+        if (!newPanes[paneId]) {
+          newPanes[paneId] = {
+            id: paneId,
+            type: 'empty',
+            title: 'Empty',
+            config: {},
+          }
+        }
+        const group = createPaneGroup(newPanes[paneId])
+        newPaneGroups[group.id] = group
+        firstGroupId.push(group.id)
+        return { type: 'leaf', groupId: group.id }
+      }
+
+      // Branch node
+      return {
+        type: 'branch',
+        direction: n.direction as SplitDirection,
+        children: (n.children as unknown[]).map(convertTree),
+        sizes: n.sizes as number[],
+      }
+    }
+
+    const newRoot = convertTree(activeTab.root)
+
+    // Consolidate inactive tab panes into the first group as additional tabs
+    const targetGroupId = firstGroupId[0]
+    if (targetGroupId) {
+      for (const oldTab of oldTabs) {
+        if (oldTab.id === activeTab.id) continue
+        // Collect all pane IDs from this inactive tab's tree
+        const inactivePaneIds = collectOldPaneIds(oldTab.root)
+        for (const paneId of inactivePaneIds) {
+          if (!newPanes[paneId]) {
+            newPanes[paneId] = {
+              id: paneId,
+              type: 'empty',
+              title: 'Empty',
+              config: {},
+            }
+          }
+          const newTabEntry: PaneGroupTab = { id: nanoid(), paneId }
+          newPaneGroups[targetGroupId].tabs.push(newTabEntry)
+        }
+      }
+    }
+
+    const ws: Workspace = {
+      id: oldWs.id as string,
+      name: oldWs.name as string,
+      root: newRoot,
+      focusedGroupId: firstGroupId[0] ?? null,
+    }
+    newWorkspaces.push(ws)
+  }
+
+  if (newWorkspaces.length === 0) return null
+
+  return {
+    workspaces: newWorkspaces,
+    activeWorkspaceId: persisted.activeWorkspaceId as string,
+    panes: newPanes,
+    paneGroups: newPaneGroups,
+    sidebarTree: persisted.sidebarTree as SidebarNode[],
+  }
+}
+
+// Helper to collect paneIds from old-format SplitNode trees (with paneId leaves)
+function collectOldPaneIds(node: unknown): string[] {
+  const n = node as Record<string, unknown>
+  if (n.type === 'leaf') return [n.paneId as string]
+  return ((n.children as unknown[]) ?? []).flatMap(collectOldPaneIds)
+}
+
+function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'paneGroups' | 'sidebarTree'> | null {
   try {
     const raw = localStorage.getItem(PERSIST_KEY)
     if (!raw) return null
     const persisted = JSON.parse(raw)
     // If persisted data has old format (no sidebarTree), ignore it (fresh start)
     if (!persisted.sidebarTree) return null
-    return {
-      workspaces: normalizeFocusedPaneIds(persisted.workspaces),
-      activeWorkspaceId: persisted.activeWorkspaceId,
-      panes: persisted.panes ?? {},
-      sidebarTree: persisted.sidebarTree,
+
+    // Check if this is the new format (has paneGroups)
+    if (persisted.paneGroups) {
+      return {
+        workspaces: persisted.workspaces,
+        activeWorkspaceId: persisted.activeWorkspaceId,
+        panes: persisted.panes ?? {},
+        paneGroups: persisted.paneGroups,
+        sidebarTree: persisted.sidebarTree,
+      }
     }
+
+    // Try to migrate from old format
+    const migrated = migratePersistedState(persisted)
+    if (migrated) return migrated
+
+    // Can't migrate, return null for fresh start
+    return null
   } catch {
     return null
   }
 }
 
 // Build initial state — hydrate from localStorage or create defaults
-function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'sidebarTree'> {
+function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'paneGroups' | 'sidebarTree'> {
   const persisted = loadPersistedState()
   if (persisted) {
     return persisted
   }
   const pane = createEmptyPane()
-  const tab = createDefaultTab('Tab 1', pane)
-  const ws = createDefaultWorkspace('Workspace 1', tab)
+  const group = createPaneGroup(pane)
+  const ws = createDefaultWorkspace('Workspace 1', group)
   return {
     workspaces: [ws],
     activeWorkspaceId: ws.id,
     panes: { [pane.id]: pane },
+    paneGroups: { [group.id]: group },
     sidebarTree: [{ type: 'workspace' as const, workspaceId: ws.id }],
   }
-}
-
-const titleForType: Record<PaneType, string> = {
-  terminal: 'Terminal',
-  browser: 'Browser',
-  editor: 'Editor',
-  empty: 'Empty',
 }
 
 export const useWorkspaceStore = create<WorkspaceState>()(
@@ -344,13 +458,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       addWorkspace: (name) => {
         const pane = createEmptyPane()
-        const tab = createDefaultTab('Tab 1', pane)
+        const group = createPaneGroup(pane)
         const wsName = name ?? `Workspace ${get().workspaces.length + 1}`
-        const ws = createDefaultWorkspace(wsName, tab)
+        const ws = createDefaultWorkspace(wsName, group)
         set((state) => ({
           workspaces: [...state.workspaces, ws],
           activeWorkspaceId: ws.id,
           panes: { ...state.panes, [pane.id]: pane },
+          paneGroups: { ...state.paneGroups, [group.id]: group },
           sidebarTree: [...state.sidebarTree, { type: 'workspace' as const, workspaceId: ws.id }],
         }))
       },
@@ -360,16 +475,20 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const ws = state.workspaces.find((w) => w.id === id)
         if (!ws) return
 
-        const paneIdsToDestroy: string[] = []
-        for (const tab of ws.tabs) {
-          paneIdsToDestroy.push(...collectPaneIds(tab.root))
-        }
-        for (const paneId of paneIdsToDestroy) {
-          cleanupPaneResources(state.panes, paneId, defaultPaneCleanupDeps)
-        }
+        // Collect all group IDs and clean up all panes in each group
+        const groupIds = collectGroupIds(ws.root)
         const newPanes = { ...state.panes }
-        for (const paneId of paneIdsToDestroy) {
-          delete newPanes[paneId]
+        const newPaneGroups = { ...state.paneGroups }
+
+        for (const gid of groupIds) {
+          const group = newPaneGroups[gid]
+          if (group) {
+            for (const tab of group.tabs) {
+              cleanupPaneResources(state.panes, tab.paneId, defaultPaneCleanupDeps)
+              delete newPanes[tab.paneId]
+            }
+            delete newPaneGroups[gid]
+          }
         }
 
         const [newTree] = removeSidebarNode(state.sidebarTree, id, 'workspace')
@@ -377,13 +496,15 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
         if (remaining.length === 0) {
           const newPane = createEmptyPane()
-          const newTab = createDefaultTab('Tab 1', newPane)
-          const newWs = createDefaultWorkspace('Workspace 1', newTab)
+          const newGroup = createPaneGroup(newPane)
+          const newWs = createDefaultWorkspace('Workspace 1', newGroup)
           newPanes[newPane.id] = newPane
+          newPaneGroups[newGroup.id] = newGroup
           set({
             workspaces: [newWs],
             activeWorkspaceId: newWs.id,
             panes: newPanes,
+            paneGroups: newPaneGroups,
             sidebarTree: [...newTree, { type: 'workspace' as const, workspaceId: newWs.id }],
           })
           return
@@ -399,6 +520,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           workspaces: remaining,
           activeWorkspaceId: newActiveId,
           panes: newPanes,
+          paneGroups: newPaneGroups,
           sidebarTree: newTree,
         })
       },
@@ -416,128 +538,393 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       // -------------------------------------------------------------------
-      // Tab CRUD
+      // Focus
       // -------------------------------------------------------------------
 
-      addTab(workspaceId, name) {
-        const { workspaces, panes } = get()
+      setFocusedGroup(workspaceId, groupId) {
+        set({
+          workspaces: get().workspaces.map((w) =>
+            w.id === workspaceId
+              ? { ...w, focusedGroupId: groupId }
+              : w,
+          ),
+        })
+      },
+
+      // -------------------------------------------------------------------
+      // Group tab CRUD
+      // -------------------------------------------------------------------
+
+      addGroupTab(workspaceId, groupId) {
+        const { paneGroups, panes } = get()
+        const group = paneGroups[groupId]
+        if (!group) return
+
+        const pane = createEmptyPane()
+        const newTab: PaneGroupTab = { id: nanoid(), paneId: pane.id }
+
+        set({
+          panes: { ...panes, [pane.id]: pane },
+          paneGroups: {
+            ...paneGroups,
+            [groupId]: {
+              ...group,
+              tabs: [...group.tabs, newTab],
+              activeTabId: newTab.id,
+            },
+          },
+        })
+      },
+
+      removeGroupTab(workspaceId, groupId, tabId) {
+        const state = get()
+        const ws = state.workspaces.find((w) => w.id === workspaceId)
+        if (!ws) return
+
+        const group = state.paneGroups[groupId]
+        if (!group) return
+
+        const tab = group.tabs.find((t) => t.id === tabId)
+        if (!tab) return
+
+        // Cleanup the pane for this tab
+        cleanupPaneResources(state.panes, tab.paneId, defaultPaneCleanupDeps)
+        const newPanes = { ...state.panes }
+        delete newPanes[tab.paneId]
+
+        const remainingTabs = group.tabs.filter((t) => t.id !== tabId)
+
+        if (remainingTabs.length === 0) {
+          // Last tab in group
+          const allGroupIds = collectGroupIds(ws.root)
+
+          if (allGroupIds.length > 1) {
+            // Multiple groups exist: remove this group from the tree
+            const newRoot = removeGroupFromTree(ws.root, groupId)
+            const simplifiedRoot = newRoot ? simplifyTree(newRoot) : null
+
+            if (!simplifiedRoot) {
+              // Shouldn't happen if allGroupIds.length > 1, but handle gracefully
+              const emptyPane = createEmptyPane()
+              newPanes[emptyPane.id] = emptyPane
+              const newGroup = createPaneGroup(emptyPane)
+              const newPaneGroups = { ...state.paneGroups }
+              delete newPaneGroups[groupId]
+              newPaneGroups[newGroup.id] = newGroup
+
+              set({
+                workspaces: state.workspaces.map((w) =>
+                  w.id === workspaceId
+                    ? { ...w, root: { type: 'leaf', groupId: newGroup.id }, focusedGroupId: newGroup.id }
+                    : w,
+                ),
+                panes: newPanes,
+                paneGroups: newPaneGroups,
+              })
+              return
+            }
+
+            // Transfer focus
+            const newFocusedGroupId = ws.focusedGroupId === groupId
+              ? findSiblingGroupId(ws.root, groupId) ?? findFirstGroupId(simplifiedRoot)
+              : ws.focusedGroupId
+
+            const newPaneGroups = { ...state.paneGroups }
+            delete newPaneGroups[groupId]
+
+            set({
+              workspaces: state.workspaces.map((w) =>
+                w.id === workspaceId
+                  ? { ...w, root: simplifiedRoot, focusedGroupId: newFocusedGroupId }
+                  : w,
+              ),
+              panes: newPanes,
+              paneGroups: newPaneGroups,
+            })
+          } else {
+            // Only group — replace with empty pane tab
+            const emptyPane = createEmptyPane()
+            newPanes[emptyPane.id] = emptyPane
+            const newTab: PaneGroupTab = { id: nanoid(), paneId: emptyPane.id }
+
+            set({
+              workspaces: state.workspaces.map((w) =>
+                w.id === workspaceId ? w : w,
+              ),
+              panes: newPanes,
+              paneGroups: {
+                ...state.paneGroups,
+                [groupId]: {
+                  ...group,
+                  tabs: [newTab],
+                  activeTabId: newTab.id,
+                },
+              },
+            })
+          }
+          return
+        }
+
+        // Not the last tab — just remove and update activeTabId if needed
+        let newActiveTabId = group.activeTabId
+        if (group.activeTabId === tabId) {
+          const removedIndex = group.tabs.findIndex((t) => t.id === tabId)
+          newActiveTabId = remainingTabs[Math.min(removedIndex, remainingTabs.length - 1)]?.id ?? remainingTabs[0].id
+        }
+
+        set({
+          panes: newPanes,
+          paneGroups: {
+            ...state.paneGroups,
+            [groupId]: {
+              ...group,
+              tabs: remainingTabs,
+              activeTabId: newActiveTabId,
+            },
+          },
+        })
+      },
+
+      setActiveGroupTab(workspaceId, groupId, tabId) {
+        const { paneGroups } = get()
+        const group = paneGroups[groupId]
+        if (!group) return
+
+        set({
+          paneGroups: {
+            ...paneGroups,
+            [groupId]: { ...group, activeTabId: tabId },
+          },
+        })
+      },
+
+      reorderGroupTabs(workspaceId, groupId, fromIndex, toIndex) {
+        const { paneGroups } = get()
+        const group = paneGroups[groupId]
+        if (!group) return
+
+        const tabs = [...group.tabs]
+        const [moved] = tabs.splice(fromIndex, 1)
+        if (!moved) return
+        tabs.splice(toIndex, 0, moved)
+
+        set({
+          paneGroups: {
+            ...paneGroups,
+            [groupId]: { ...group, tabs },
+          },
+        })
+      },
+
+      moveTabToGroup(workspaceId, srcGroupId, tabId, destGroupId, insertIndex) {
+        const state = get()
+        const ws = state.workspaces.find((w) => w.id === workspaceId)
+        if (!ws) return
+
+        const srcGroup = state.paneGroups[srcGroupId]
+        const destGroup = state.paneGroups[destGroupId]
+        if (!srcGroup || !destGroup) return
+        if (srcGroupId === destGroupId) return
+
+        const tab = srcGroup.tabs.find((t) => t.id === tabId)
+        if (!tab) return
+
+        const remainingSrcTabs = srcGroup.tabs.filter((t) => t.id !== tabId)
+
+        const destTabs = [...destGroup.tabs]
+        const idx = insertIndex !== undefined ? Math.min(insertIndex, destTabs.length) : destTabs.length
+        destTabs.splice(idx, 0, tab)
+
+        const newPaneGroups = { ...state.paneGroups }
+        let newWorkspaces = state.workspaces
+        let newPanes = state.panes
+
+        // Update destination group
+        newPaneGroups[destGroupId] = {
+          ...destGroup,
+          tabs: destTabs,
+          activeTabId: tab.id,
+        }
+
+        if (remainingSrcTabs.length === 0) {
+          // Source group is now empty
+          const allGroupIds = collectGroupIds(ws.root)
+
+          if (allGroupIds.length > 1) {
+            // Remove the empty source group from the tree
+            const newRoot = removeGroupFromTree(ws.root, srcGroupId)
+            const simplifiedRoot = newRoot ? simplifyTree(newRoot) : ws.root
+
+            const newFocusedGroupId = ws.focusedGroupId === srcGroupId
+              ? destGroupId
+              : ws.focusedGroupId
+
+            delete newPaneGroups[srcGroupId]
+
+            newWorkspaces = state.workspaces.map((w) =>
+              w.id === workspaceId
+                ? { ...w, root: simplifiedRoot, focusedGroupId: newFocusedGroupId }
+                : w,
+            )
+          } else {
+            // Only group left — add empty pane tab
+            const emptyPane = createEmptyPane()
+            newPanes = { ...state.panes, [emptyPane.id]: emptyPane }
+            const emptyTab: PaneGroupTab = { id: nanoid(), paneId: emptyPane.id }
+
+            newPaneGroups[srcGroupId] = {
+              ...srcGroup,
+              tabs: [emptyTab],
+              activeTabId: emptyTab.id,
+            }
+          }
+        } else {
+          // Update source group activeTabId if needed
+          let srcActiveTabId = srcGroup.activeTabId
+          if (srcGroup.activeTabId === tabId) {
+            srcActiveTabId = remainingSrcTabs[0].id
+          }
+
+          newPaneGroups[srcGroupId] = {
+            ...srcGroup,
+            tabs: remainingSrcTabs,
+            activeTabId: srcActiveTabId,
+          }
+        }
+
+        set({
+          workspaces: newWorkspaces,
+          panes: newPanes,
+          paneGroups: newPaneGroups,
+        })
+      },
+
+      // -------------------------------------------------------------------
+      // Browser in group
+      // -------------------------------------------------------------------
+
+      openBrowserInGroup(workspaceId, groupId, url) {
+        const state = get()
+        const group = state.paneGroups[groupId]
+        if (!group) return
+
+        const paneId = get().addPane('browser', { url })
+        const newTab: PaneGroupTab = { id: nanoid(), paneId }
+
+        set({
+          paneGroups: {
+            ...get().paneGroups,
+            [groupId]: {
+              ...get().paneGroups[groupId],
+              tabs: [...get().paneGroups[groupId].tabs, newTab],
+              activeTabId: newTab.id,
+            },
+          },
+        })
+      },
+
+      // -------------------------------------------------------------------
+      // Split operations
+      // -------------------------------------------------------------------
+
+      splitGroup(workspaceId, groupId, direction) {
+        const { workspaces, panes, paneGroups } = get()
         const ws = workspaces.find((w) => w.id === workspaceId)
         if (!ws) return
 
-        const pane = createEmptyPane()
-        const tab = createDefaultTab(
-          name ?? `Tab ${ws.tabs.length + 1}`,
-          pane,
-        )
+        const newPane = createEmptyPane()
+        const newGroup = createPaneGroup(newPane)
+
+        const replacement: SplitNode = {
+          type: 'branch',
+          direction,
+          children: [
+            { type: 'leaf', groupId },
+            { type: 'leaf', groupId: newGroup.id },
+          ],
+          sizes: [50, 50],
+        }
 
         set({
           workspaces: workspaces.map((w) =>
             w.id === workspaceId
-              ? { ...w, tabs: [...w.tabs, tab], activeTabId: tab.id }
+              ? {
+                  ...w,
+                  root: replaceLeafInTree(w.root, groupId, replacement),
+                  focusedGroupId: newGroup.id,
+                }
               : w,
           ),
-          panes: { ...panes, [pane.id]: pane },
+          panes: { ...panes, [newPane.id]: newPane },
+          paneGroups: { ...paneGroups, [newGroup.id]: newGroup },
         })
       },
 
-      openBrowserTab(workspaceId, url) {
-        const { workspaces, panes } = get()
-        const ws = workspaces.find((workspace) => workspace.id === workspaceId)
+      closeGroup(workspaceId, groupId) {
+        const state = get()
+        const ws = state.workspaces.find((w) => w.id === workspaceId)
         if (!ws) return
 
-        const paneId = get().addPane('browser', { url })
-        const tab = createDefaultTab(`Tab ${ws.tabs.length + 1}`, get().panes[paneId] ?? {
-          id: paneId,
-          type: 'browser',
-          title: titleForType.browser,
-          config: { url },
-        })
+        const group = state.paneGroups[groupId]
+        if (!group) return
 
-        set({
-          workspaces: get().workspaces.map((workspace) =>
-            workspace.id === workspaceId
-              ? {
-                  ...workspace,
-                  tabs: [...workspace.tabs, tab],
-                  activeTabId: tab.id,
-                }
-              : workspace,
-          ),
-          panes: get().panes,
-        })
-      },
-
-      removeTab(workspaceId, tabId) {
-        const { workspaces, panes } = get()
-        const ws = workspaces.find((w) => w.id === workspaceId)
-        if (!ws) return
-
-        const tab = ws.tabs.find((t) => t.id === tabId)
-        if (!tab) return
-
-        // Destroy PTYs and clean up panes
-        const paneIdsToRemove = collectPaneIds(tab.root)
-        for (const pid of paneIdsToRemove) {
-          cleanupPaneResources(panes, pid, defaultPaneCleanupDeps)
-        }
-        const newPanes = { ...panes }
-        for (const pid of paneIdsToRemove) {
-          delete newPanes[pid]
+        // Cleanup all panes in the group
+        const newPanes = { ...state.panes }
+        for (const tab of group.tabs) {
+          cleanupPaneResources(state.panes, tab.paneId, defaultPaneCleanupDeps)
+          delete newPanes[tab.paneId]
         }
 
-        const remainingTabs = ws.tabs.filter((t) => t.id !== tabId)
+        const allGroupIds = collectGroupIds(ws.root)
+        const newPaneGroups = { ...state.paneGroups }
 
-        if (remainingTabs.length === 0) {
-          // Must always have at least one tab
-          const pane = createEmptyPane()
-          const newTab = createDefaultTab('Tab 1', pane)
-          newPanes[pane.id] = pane
+        if (allGroupIds.length <= 1) {
+          // Last group — create fresh empty group
+          const emptyPane = createEmptyPane()
+          newPanes[emptyPane.id] = emptyPane
+          const freshGroup = createPaneGroup(emptyPane)
+          delete newPaneGroups[groupId]
+          newPaneGroups[freshGroup.id] = freshGroup
 
           set({
-            workspaces: workspaces.map((w) =>
+            workspaces: state.workspaces.map((w) =>
               w.id === workspaceId
-                ? { ...w, tabs: [newTab], activeTabId: newTab.id }
+                ? { ...w, root: { type: 'leaf', groupId: freshGroup.id }, focusedGroupId: freshGroup.id }
                 : w,
             ),
             panes: newPanes,
+            paneGroups: newPaneGroups,
           })
           return
         }
 
-        let newActiveTabId = ws.activeTabId
-        if (ws.activeTabId === tabId) {
-          newActiveTabId = remainingTabs[0].id
-        }
+        // Multiple groups — remove from tree and transfer focus
+        const newFocusedGroupId = ws.focusedGroupId === groupId
+          ? findSiblingGroupId(ws.root, groupId) ?? findFirstGroupId(ws.root)
+          : ws.focusedGroupId
+
+        const newRoot = removeGroupFromTree(ws.root, groupId)
+        const simplifiedRoot = newRoot ? simplifyTree(newRoot) : ws.root
+
+        delete newPaneGroups[groupId]
 
         set({
-          workspaces: workspaces.map((w) =>
+          workspaces: state.workspaces.map((w) =>
             w.id === workspaceId
-              ? { ...w, tabs: remainingTabs, activeTabId: newActiveTabId }
+              ? { ...w, root: simplifiedRoot, focusedGroupId: newFocusedGroupId }
               : w,
           ),
           panes: newPanes,
+          paneGroups: newPaneGroups,
         })
       },
 
-      renameTab(workspaceId, tabId, name) {
+      updateSplitSizes(workspaceId, nodePath, sizes) {
         set({
           workspaces: get().workspaces.map((w) =>
             w.id === workspaceId
-              ? {
-                  ...w,
-                  tabs: w.tabs.map((t) =>
-                    t.id === tabId ? { ...t, name } : t,
-                  ),
-                }
+              ? { ...w, root: updateSizesAtPath(w.root, nodePath, sizes) }
               : w,
-          ),
-        })
-      },
-
-      setActiveTab(workspaceId, tabId) {
-        set({
-          workspaces: get().workspaces.map((w) =>
-            w.id === workspaceId ? { ...w, activeTabId: tabId } : w,
           ),
         })
       },
@@ -636,129 +1023,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       // -------------------------------------------------------------------
-      // Split operations
-      // -------------------------------------------------------------------
-
-      splitPane(workspaceId, tabId, targetPaneId, direction, newPaneType) {
-        const { workspaces, panes } = get()
-        const paneType = newPaneType ?? 'empty'
-
-        const newPane: Pane = {
-          id: nanoid(),
-          type: paneType,
-          title: titleForType[paneType],
-          config: {},
-        }
-
-        const replacement: SplitNode = {
-          type: 'branch',
-          direction,
-          children: [
-            { type: 'leaf', paneId: targetPaneId },
-            { type: 'leaf', paneId: newPane.id },
-          ],
-          sizes: [50, 50],
-        }
-
-        set({
-          workspaces: workspaces.map((w) =>
-            w.id === workspaceId
-              ? {
-                  ...w,
-                  tabs: w.tabs.map((t) =>
-                    t.id === tabId
-                      ? {
-                          ...t,
-                          root: replaceLeafInTree(t.root, targetPaneId, replacement),
-                        }
-                      : t,
-                  ),
-                }
-              : w,
-          ),
-          panes: { ...panes, [newPane.id]: newPane },
-        })
-      },
-
-      closePane(workspaceId, tabId, paneId) {
-        const { workspaces, panes } = get()
-        const ws = workspaces.find((w) => w.id === workspaceId)
-        if (!ws) return
-
-        const tab = ws.tabs.find((t) => t.id === tabId)
-        if (!tab) return
-
-        // Find sibling pane ID before removing (for focus transfer)
-        let siblingPaneId: string | null = null
-        if (tab.focusedPaneId === paneId) {
-          const parentResult = findParentOfPane(tab.root, paneId)
-          if (parentResult && parentResult.parent.type === 'branch') {
-            const siblings = parentResult.parent.children
-            // Prefer previous sibling, else next
-            const siblingIndex = parentResult.index > 0 ? parentResult.index - 1 : 1
-            if (siblingIndex < siblings.length && siblingIndex >= 0) {
-              const sibling = siblings[siblingIndex]
-              siblingPaneId = sibling.type === 'leaf'
-                ? sibling.paneId
-                : collectPaneIds(sibling)[0] || null
-            }
-          }
-        }
-
-        cleanupPaneResources(panes, paneId, defaultPaneCleanupDeps)
-
-        const newPanes = { ...panes }
-        delete newPanes[paneId]
-
-        let newRoot = removePaneFromTree(tab.root, paneId)
-
-        if (newRoot === null) {
-          // Last pane removed — replace with a fresh empty pane
-          const emptyPane = createEmptyPane()
-          newPanes[emptyPane.id] = emptyPane
-          newRoot = { type: 'leaf', paneId: emptyPane.id }
-          siblingPaneId = emptyPane.id
-        }
-
-        set({
-          workspaces: workspaces.map((w) =>
-            w.id === workspaceId
-              ? {
-                  ...w,
-                  tabs: w.tabs.map((t) =>
-                    t.id === tabId
-                      ? {
-                          ...t,
-                          root: newRoot,
-                          focusedPaneId: tab.focusedPaneId === paneId ? siblingPaneId : t.focusedPaneId,
-                        }
-                      : t,
-                  ),
-                }
-              : w,
-          ),
-          panes: newPanes,
-        })
-      },
-
-      updateSplitSizes(workspaceId, tabId, nodePath, sizes) {
-        set({
-          workspaces: get().workspaces.map((w) =>
-            w.id === workspaceId
-              ? {
-                  ...w,
-                  tabs: w.tabs.map((t) =>
-                    t.id === tabId
-                      ? { ...t, root: updateSizesAtPath(t.root, nodePath, sizes) }
-                      : t,
-                  ),
-                }
-              : w,
-          ),
-        })
-      },
-
-      // -------------------------------------------------------------------
       // Sidebar tree actions
       // -------------------------------------------------------------------
 
@@ -809,134 +1073,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           sidebarTree: updateFolderInTree(state.sidebarTree, folderId, { collapsed: false }),
         }))
       },
-
-      // -------------------------------------------------------------------
-      // Focus
-      // -------------------------------------------------------------------
-
-      setFocusedPane(workspaceId, tabId, paneId) {
-        set({
-          workspaces: get().workspaces.map((w) =>
-            w.id === workspaceId
-              ? {
-                  ...w,
-                  tabs: w.tabs.map((t) =>
-                    t.id === tabId ? { ...t, focusedPaneId: paneId } : t,
-                  ),
-                }
-              : w,
-          ),
-        })
-      },
-
-      // -------------------------------------------------------------------
-      // Tab DnD actions
-      // -------------------------------------------------------------------
-
-      reorderTabs: (workspaceId, fromIndex, toIndex) => {
-        set((state) => ({
-          workspaces: state.workspaces.map((ws) => {
-            if (ws.id !== workspaceId) return ws
-            const tabs = [...ws.tabs]
-            const [moved] = tabs.splice(fromIndex, 1)
-            if (!moved) return ws
-            tabs.splice(toIndex, 0, moved)
-            return { ...ws, tabs }
-          }),
-        }))
-      },
-
-      moveTabToWorkspace: (fromWorkspaceId, tabId, toWorkspaceId, toIndex) => {
-        set((state) => {
-          const fromWs = state.workspaces.find((w) => w.id === fromWorkspaceId)
-          const toWs = state.workspaces.find((w) => w.id === toWorkspaceId)
-          if (!fromWs || !toWs) return state
-          const tab = fromWs.tabs.find((t) => t.id === tabId)
-          if (!tab) return state
-          if (fromWorkspaceId === toWorkspaceId) return state
-
-          const remainingTabs = fromWs.tabs.filter((t) => t.id !== tabId)
-          let sourceTabs = remainingTabs
-          let newPanes = state.panes
-          if (sourceTabs.length === 0) {
-            const emptyPane = createEmptyPane()
-            const emptyTab = createDefaultTab('Tab 1', emptyPane)
-            sourceTabs = [emptyTab]
-            newPanes = { ...newPanes, [emptyPane.id]: emptyPane }
-          }
-
-          let sourceActiveTabId = fromWs.activeTabId
-          if (sourceActiveTabId === tabId) {
-            sourceActiveTabId = sourceTabs[0].id
-          }
-
-          const targetTabs = [...toWs.tabs]
-          const insertIndex = toIndex !== undefined ? Math.min(toIndex, targetTabs.length) : targetTabs.length
-          targetTabs.splice(insertIndex, 0, tab)
-
-          return {
-            workspaces: state.workspaces.map((ws) => {
-              if (ws.id === fromWorkspaceId) return { ...ws, tabs: sourceTabs, activeTabId: sourceActiveTabId }
-              if (ws.id === toWorkspaceId) return { ...ws, tabs: targetTabs, activeTabId: tab.id }
-              return ws
-            }),
-            activeWorkspaceId: toWorkspaceId,
-            panes: newPanes,
-          }
-        })
-      },
-
-      mergeTabIntoSplit: (sourceWorkspaceId, sourceTabId, targetWorkspaceId, targetTabId, targetPaneId, side) => {
-        set((state) => {
-          const sourceWs = state.workspaces.find((w) => w.id === sourceWorkspaceId)
-          const targetWs = state.workspaces.find((w) => w.id === targetWorkspaceId)
-          if (!sourceWs || !targetWs) return state
-          const sourceTab = sourceWs.tabs.find((t) => t.id === sourceTabId)
-          const targetTab = targetWs.tabs.find((t) => t.id === targetTabId)
-          if (!sourceTab || !targetTab) return state
-          if (sourceWorkspaceId === targetWorkspaceId && sourceTabId === targetTabId) return state
-
-          const newContent: SplitNode = sourceTab.root
-          const direction: SplitDirection = (side === 'left' || side === 'right') ? 'horizontal' : 'vertical'
-          const existingLeaf: SplitNode = { type: 'leaf', paneId: targetPaneId }
-          const children: SplitNode[] = (side === 'left' || side === 'top')
-            ? [newContent, existingLeaf]
-            : [existingLeaf, newContent]
-          const replacement: SplitNode = { type: 'branch', direction, children, sizes: [50, 50] }
-          const newTargetRoot = replaceLeafInTree(targetTab.root, targetPaneId, replacement)
-
-          const remainingSourceTabs = sourceWs.tabs.filter((t) => t.id !== sourceTabId)
-          let sourceTabs = remainingSourceTabs
-          let newPanes = state.panes
-          if (sourceTabs.length === 0) {
-            const emptyPane = createEmptyPane()
-            const emptyTab = createDefaultTab('Tab 1', emptyPane)
-            sourceTabs = [emptyTab]
-            newPanes = { ...newPanes, [emptyPane.id]: emptyPane }
-          }
-          let sourceActiveTabId = sourceWs.activeTabId
-          if (sourceActiveTabId === sourceTabId) {
-            sourceActiveTabId = sourceTabs[0].id
-          }
-
-          return {
-            workspaces: state.workspaces.map((ws) => {
-              if (ws.id === sourceWorkspaceId && ws.id === targetWorkspaceId) {
-                const tabs = sourceTabs.map((t) =>
-                  t.id === targetTabId ? { ...t, root: newTargetRoot } : t
-                )
-                return { ...ws, tabs, activeTabId: sourceActiveTabId }
-              }
-              if (ws.id === sourceWorkspaceId) return { ...ws, tabs: sourceTabs, activeTabId: sourceActiveTabId }
-              if (ws.id === targetWorkspaceId) {
-                return { ...ws, tabs: ws.tabs.map((t) => t.id === targetTabId ? { ...t, root: newTargetRoot } : t) }
-              }
-              return ws
-            }),
-            panes: newPanes,
-          }
-        })
-      },
     }),
 )
 
@@ -952,6 +1088,7 @@ function persistState(state: WorkspaceState): void {
     activeWorkspaceId: state.activeWorkspaceId,
     sidebarTree: state.sidebarTree,
     panes: state.panes,
+    paneGroups: state.paneGroups,
   }
   try {
     localStorage.setItem(PERSIST_KEY, JSON.stringify(data))
