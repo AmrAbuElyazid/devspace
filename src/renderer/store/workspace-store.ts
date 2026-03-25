@@ -917,8 +917,85 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         })
       },
 
-      moveTabToWorkspace(_srcWorkspaceId, _srcGroupId, _tabId, _destWorkspaceId) {
-        // Will be implemented in Task 4
+      moveTabToWorkspace(srcWorkspaceId, srcGroupId, tabId, destWorkspaceId) {
+        const state = get()
+        const srcWs = state.workspaces.find((w) => w.id === srcWorkspaceId)
+        const destWs = state.workspaces.find((w) => w.id === destWorkspaceId)
+        if (!srcWs || !destWs || srcWorkspaceId === destWorkspaceId) return
+
+        const srcGroup = state.paneGroups[srcGroupId]
+        if (!srcGroup) return
+
+        const tab = srcGroup.tabs.find((t) => t.id === tabId)
+        if (!tab) return
+
+        // Find destination group
+        const destGroupId = destWs.focusedGroupId ?? findFirstGroupId(destWs.root)
+        if (!destGroupId) return
+        const destGroup = state.paneGroups[destGroupId]
+        if (!destGroup) return
+
+        // Add tab to destination group (new PaneGroupTab referencing same paneId)
+        const newTab: PaneGroupTab = { id: nanoid(), paneId: tab.paneId }
+        const destTabs = [...destGroup.tabs, newTab]
+
+        const newPaneGroups = {
+          ...state.paneGroups,
+          [destGroupId]: { ...destGroup, tabs: destTabs, activeTabId: newTab.id },
+        }
+
+        // Remove tab from source group
+        const remainingSrcTabs = srcGroup.tabs.filter((t) => t.id !== tabId)
+        let newWorkspaces = state.workspaces
+        let newPanes = state.panes
+
+        if (remainingSrcTabs.length === 0) {
+          const allGroupIds = collectGroupIds(srcWs.root)
+
+          if (allGroupIds.length > 1) {
+            // Remove empty source group from tree
+            const newRoot = removeGroupFromTree(srcWs.root, srcGroupId)
+            const simplifiedRoot = newRoot ? simplifyTree(newRoot) : srcWs.root
+
+            const newFocusedGroupId = srcWs.focusedGroupId === srcGroupId
+              ? findSiblingGroupId(srcWs.root, srcGroupId) ?? findFirstGroupId(simplifiedRoot)
+              : srcWs.focusedGroupId
+
+            delete newPaneGroups[srcGroupId]
+
+            newWorkspaces = state.workspaces.map((w) =>
+              w.id === srcWorkspaceId
+                ? { ...w, root: simplifiedRoot, focusedGroupId: newFocusedGroupId }
+                : w,
+            )
+          } else {
+            // Only group — add empty pane tab
+            const emptyPane = createEmptyPane()
+            newPanes = { ...state.panes, [emptyPane.id]: emptyPane }
+            const emptyTab: PaneGroupTab = { id: nanoid(), paneId: emptyPane.id }
+            newPaneGroups[srcGroupId] = {
+              ...srcGroup,
+              tabs: [emptyTab],
+              activeTabId: emptyTab.id,
+            }
+          }
+        } else {
+          let srcActiveTabId = srcGroup.activeTabId
+          if (srcGroup.activeTabId === tabId) {
+            srcActiveTabId = remainingSrcTabs[0].id
+          }
+          newPaneGroups[srcGroupId] = {
+            ...srcGroup,
+            tabs: remainingSrcTabs,
+            activeTabId: srcActiveTabId,
+          }
+        }
+
+        set({
+          workspaces: newWorkspaces,
+          panes: newPanes,
+          paneGroups: newPaneGroups,
+        })
       },
 
       // -------------------------------------------------------------------
