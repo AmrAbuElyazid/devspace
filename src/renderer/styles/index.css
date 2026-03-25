@@ -723,6 +723,12 @@
   flex-shrink: 0;
 }
 
+.group-tabbar-drag-spacer {
+  flex: 1 1 auto;
+  min-width: 20px;
+  height: 100%;
+}
+
 .tabbar-ctl-btn {
   width: 22px;
   height: 20px;
