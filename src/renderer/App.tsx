@@ -100,7 +100,7 @@ export default function App(): JSX.Element {
       },
       onOpenInNewTabRequest: (request) => {
         const state = useWorkspaceStore.getState()
-        const workspaceId = findWorkspaceIdForPane(state.workspaces, request.paneId)
+        const workspaceId = findWorkspaceIdForPane(state.workspaces, request.paneId, state.paneGroups)
         if (workspaceId) {
           openBrowserTab(workspaceId, request.url)
         }

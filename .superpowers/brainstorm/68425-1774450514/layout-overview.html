@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Devspace Tab Redesign</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+
+  :root {
+    --bg: #1a1a1c;
+    --bg-sidebar: #161618;
+    --bg-tabbar: #1e1e20;
+    --bg-content: #0d0d0f;
+    --bg-tab: transparent;
+    --bg-tab-active: #0d0d0f;
+    --border: #2a2a2e;
+    --border-focus: #d4a043;
+    --text: #e0e0e4;
+    --text-muted: #7a7a80;
+    --text-tab: #8a8a90;
+    --text-tab-active: #e0e0e4;
+    --accent: #d4a043;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    line-height: 1.4;
+  }
+
+  .page-header {
+    background: #111113;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .page-header h1 { font-size: 13px; font-weight: 500; color: var(--text-muted); }
+  .page-header .status { font-size: 11px; color: #34c759; }
+
+  .main { flex: 1; overflow-y: auto; padding: 24px; }
+
+  h2 { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  .subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 24px; }
+
+  /* ===== MOCKUP ===== */
+  .mockup-frame {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .mockup-label {
+    background: #111113;
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .mockup-inner {
+    display: flex;
+    height: 420px;
+  }
+
+  /* Sidebar */
+  .m-sidebar {
+    width: 180px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    padding: 8px 0;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .m-sidebar-section {
+    padding: 4px 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 8px;
+  }
+  .m-sidebar-item {
+    padding: 5px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .m-sidebar-item.active {
+    color: var(--text);
+    background: rgba(255,255,255,0.05);
+  }
+  .m-sidebar-item .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* Content area */
+  .m-content {
+    flex: 1;
+    display: flex;
+    min-width: 0;
+  }
+
+  /* Split pane */
+  .m-split-pane {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    position: relative;
+  }
+  .m-split-pane + .m-split-pane {
+    border-left: 1px solid var(--border);
+  }
+  .m-split-pane.focused > .m-pane-tabbar {
+    border-bottom-color: var(--border-focus);
+  }
+
+  /* Per-pane tab bar */
+  .m-pane-tabbar {
+    height: 30px;
+    background: var(--bg-tabbar);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    gap: 0;
+    flex-shrink: 0;
+  }
+  .m-pane-tabbar.focused-bar {
+    border-bottom: 1.5px solid var(--border-focus);
+  }
+
+  .m-tab {
+    height: 24px;
+    padding: 0 10px;
+    font-size: 11px;
+    color: var(--text-tab);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    position: relative;
+  }
+  .m-tab:hover {
+    background: rgba(255,255,255,0.04);
+  }
+  .m-tab.active {
+    color: var(--text-tab-active);
+    background: rgba(255,255,255,0.07);
+  }
+  .m-tab .tab-icon {
+    font-size: 10px;
+    opacity: 0.6;
+  }
+  .m-tab .tab-close {
+    font-size: 9px;
+    opacity: 0.3;
+    margin-left: 2px;
+  }
+  .m-tab.active .tab-close {
+    opacity: 0.5;
+  }
+
+  .m-tab-add {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    border-radius: 4px;
+    cursor: pointer;
+    margin-left: 2px;
+    opacity: 0.5;
+  }
+
+  .m-tabbar-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding-right: 4px;
+  }
+  .m-tabbar-action {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.5;
+  }
+
+  /* Pane content */
+  .m-pane-content {
+    flex: 1;
+    background: var(--bg-content);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 16px;
+    position: relative;
+  }
+
+  .m-terminal-content {
+    align-items: flex-start;
+    justify-content: flex-start;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 12px;
+  }
+  .m-terminal-line {
+    font-size: 11px;
+    line-height: 1.5;
+  }
+  .m-terminal-line .prompt {
+    color: #6bba6b;
+  }
+  .m-terminal-line .cmd {
+    color: var(--text);
+  }
+  .m-terminal-line .output {
+    color: var(--text-muted);
+  }
+  .m-cursor {
+    display: inline-block;
+    width: 7px;
+    height: 13px;
+    background: var(--accent);
+    animation: blink 1s step-end infinite;
+    vertical-align: text-bottom;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* Empty pane */
+  .m-empty-pane {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .m-empty-buttons {
+    display: flex;
+    gap: 8px;
+  }
+  .m-empty-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  /* Resize handle */
+  .m-sash {
+    width: 4px;
+    background: transparent;
+    cursor: col-resize;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .m-sash:hover {
+    background: var(--accent);
+  }
+
+  /* Annotations */
+  .annotation {
+    position: absolute;
+    font-size: 10px;
+    color: var(--accent);
+    background: rgba(212, 160, 67, 0.1);
+    border: 1px solid rgba(212, 160, 67, 0.3);
+    border-radius: 4px;
+    padding: 2px 6px;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* Description list */
+  .details {
+    margin-top: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .detail-card {
+    background: #1e1e20;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .detail-card h4 {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: var(--text);
+  }
+  .detail-card p {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .callout {
+    background: rgba(212, 160, 67, 0.08);
+    border: 1px solid rgba(212, 160, 67, 0.2);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-top: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .callout strong { color: var(--accent); }
+</style>
+</head>
+<body>
+  <div class="page-header">
+    <h1>Devspace — Tab System Redesign</h1>
+    <div class="status">Brainstorming</div>
+  </div>
+  <div class="main">
+    <h2>Proposed Layout: Per-Split Tab Groups</h2>
+    <p class="subtitle">No global tab bar. Each split pane has its own compact tab bar with always-visible controls.</p>
+
+    <!-- Main mockup -->
+    <div class="mockup-frame">
+      <div class="mockup-label">Two splits — left focused, right has 3 tabs</div>
+      <div class="mockup-inner">
+
+        <!-- Sidebar -->
+        <div class="m-sidebar">
+          <div class="m-sidebar-section">Workspaces</div>
+          <div class="m-sidebar-item active">
+            <span class="dot"></span> devspace
+          </div>
+          <div class="m-sidebar-item">
+            <span class="dot" style="background:#636366"></span> personal
+          </div>
+          <div class="m-sidebar-section">Quick Links</div>
+          <div class="m-sidebar-item">GitHub</div>
+          <div class="m-sidebar-item">Vercel</div>
+        </div>
+
+        <!-- Content: two splits -->
+        <div class="m-content">
+
+          <!-- Left split (focused) -->
+          <div class="m-split-pane focused" style="flex: 1.2;">
+            <div class="m-pane-tabbar focused-bar">
+              <div class="m-tab active">
+                <span class="tab-icon">▸</span>
+                zsh
+                <span class="tab-close">×</span>
+              </div>
+              <div class="m-tab">
+                <span class="tab-icon">▸</span>
+                node
+                <span class="tab-close">×</span>
+              </div>
+              <div class="m-tab-add">+</div>
+              <div class="m-tabbar-actions">
+                <div class="m-tabbar-action" title="Split Right">⫿</div>
+                <div class="m-tabbar-action" title="Split Down">⊟</div>
+              </div>
+            </div>
+            <div class="m-pane-content m-terminal-content">
+              <div class="m-terminal-line"><span class="prompt">~/devspace $</span> <span class="cmd">bun run dev</span></div>
+              <div class="m-terminal-line"><span class="output">$ electron-vite dev</span></div>
+              <div class="m-terminal-line"><span class="output">vite v6.1.0 dev server running</span></div>
+              <div class="m-terminal-line"><span class="output">  → Local: http://localhost:5173/</span></div>
+              <div class="m-terminal-line"><span class="output">  → ready in 342ms</span></div>
+              <div class="m-terminal-line"><span class="prompt">~/devspace $</span> <span class="m-cursor"></span></div>
+              <div class="annotation" style="bottom:8px;right:8px;">Focused split — accent border on tab bar</div>
+            </div>
+          </div>
+
+          <div class="m-sash"></div>
+
+          <!-- Right split -->
+          <div class="m-split-pane" style="flex: 0.8;">
+            <div class="m-pane-tabbar">
+              <div class="m-tab">
+                <span class="tab-icon">▸</span>
+                tests
+                <span class="tab-close">×</span>
+              </div>
+              <div class="m-tab active">
+                <span class="tab-icon">◈</span>
+                Editor
+                <span class="tab-close">×</span>
+              </div>
+              <div class="m-tab">
+                <span class="tab-icon">◉</span>
+                Docs
+                <span class="tab-close">×</span>
+              </div>
+              <div class="m-tab-add">+</div>
+              <div class="m-tabbar-actions">
+                <div class="m-tabbar-action" title="Split Right">⫿</div>
+                <div class="m-tabbar-action" title="Split Down">⊟</div>
+                <div class="m-tabbar-action" title="Close Split">×</div>
+              </div>
+            </div>
+            <div class="m-pane-content">
+              <div class="m-empty-pane" style="opacity: 0.5;">
+                <span style="font-size: 14px;">VS Code Editor</span>
+                <span style="font-size: 10px;">~/devspace/src/main/index.ts</span>
+              </div>
+              <div class="annotation" style="top:8px;right:8px;">Unfocused — no accent border</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Second mockup: with vertical split -->
+    <div class="mockup-frame">
+      <div class="mockup-label">Nested splits — right side split vertically into two</div>
+      <div class="mockup-inner">
+
+        <div class="m-sidebar">
+          <div class="m-sidebar-section">Workspaces</div>
+          <div class="m-sidebar-item active"><span class="dot"></span> devspace</div>
+        </div>
+
+        <div class="m-content">
+          <!-- Left: wide terminal -->
+          <div class="m-split-pane" style="flex: 1.3;">
+            <div class="m-pane-tabbar">
+              <div class="m-tab active">
+                <span class="tab-icon">▸</span>
+                zsh
+                <span class="tab-close">×</span>
+              </div>
+              <div class="m-tab-add">+</div>
+              <div class="m-tabbar-actions">
+                <div class="m-tabbar-action">⫿</div>
+                <div class="m-tabbar-action">⊟</div>
+              </div>
+            </div>
+            <div class="m-pane-content m-terminal-content">
+              <div class="m-terminal-line"><span class="prompt">~ $</span> <span class="m-cursor"></span></div>
+            </div>
+          </div>
+
+          <div class="m-sash"></div>
+
+          <!-- Right: vertically stacked -->
+          <div class="m-split-pane" style="flex: 0.7; flex-direction: column;">
+            <!-- Top sub-split -->
+            <div style="flex: 1; display: flex; flex-direction: column; border-bottom: 1px solid var(--border);">
+              <div class="m-pane-tabbar focused-bar">
+                <div class="m-tab active">
+                  <span class="tab-icon">◉</span>
+                  localhost
+                  <span class="tab-close">×</span>
+                </div>
+                <div class="m-tab-add">+</div>
+                <div class="m-tabbar-actions">
+                  <div class="m-tabbar-action">⫿</div>
+                  <div class="m-tabbar-action">⊟</div>
+                  <div class="m-tabbar-action">×</div>
+                </div>
+              </div>
+              <div class="m-pane-content" style="font-size: 10px;">
+                Browser preview
+              </div>
+            </div>
+            <!-- Bottom sub-split -->
+            <div style="flex: 1; display: flex; flex-direction: column;">
+              <div class="m-pane-tabbar">
+                <div class="m-tab active">
+                  <span class="tab-icon">▸</span>
+                  logs
+                  <span class="tab-close">×</span>
+                </div>
+                <div class="m-tab-add">+</div>
+                <div class="m-tabbar-actions">
+                  <div class="m-tabbar-action">⫿</div>
+                  <div class="m-tabbar-action">⊟</div>
+                  <div class="m-tabbar-action">×</div>
+                </div>
+              </div>
+              <div class="m-pane-content m-terminal-content">
+                <div class="m-terminal-line"><span class="output">[vite] page reload</span></div>
+                <div class="m-terminal-line"><span class="output">[vite] hmr update /src/App.tsx</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Key design points -->
+    <div class="details">
+      <div class="detail-card">
+        <h4>Compact Tab Bar (30px)</h4>
+        <p>Shorter than current 44px global bar. 11px font. Tabs are pill-shaped, minimal chrome. Active tab has subtle background.</p>
+      </div>
+      <div class="detail-card">
+        <h4>Always-Visible Controls</h4>
+        <p>Split and close buttons permanently in the tab bar's right side. No hover gating. Solves the native-view-over-DOM problem.</p>
+      </div>
+      <div class="detail-card">
+        <h4>Focus = Accent Border</h4>
+        <p>Only the focused split shows an accent-colored bottom border on its tab bar. Click any split to focus it. No hover effects on other splits.</p>
+      </div>
+      <div class="detail-card">
+        <h4>Close Split Button</h4>
+        <p>× button only appears when there are 2+ splits. Closing a split closes all its tabs. Single-pane workspaces don't show ×.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Data model change:</strong> Currently Workspace → Tabs → SplitTree → Panes. New model: Workspace → SplitTree → each leaf is a <strong>PaneGroup</strong> with its own tabs. The "Tab" concept moves from workspace-level to split-group-level.
+    </div>
+
+  </div>
+</body>
+</html>

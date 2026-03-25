@@ -1,10 +1,16 @@
-import type { Workspace } from '../types/workspace'
-import { collectPaneIds } from '../store/workspace-store'
+import type { Workspace, PaneGroup, SplitNode } from '../types/workspace'
+import { collectGroupIds } from '../store/workspace-store'
 
-export function findWorkspaceIdForPane(workspaces: Workspace[], paneId: string): string | null {
+export function findWorkspaceIdForPane(
+  workspaces: Workspace[],
+  paneId: string,
+  paneGroups: Record<string, PaneGroup>,
+): string | null {
   for (const workspace of workspaces) {
-    for (const tab of workspace.tabs) {
-      if (collectPaneIds(tab.root).includes(paneId)) {
+    const groupIds = collectGroupIds(workspace.root)
+    for (const groupId of groupIds) {
+      const group = paneGroups[groupId]
+      if (group?.tabs.some((t) => t.paneId === paneId)) {
         return workspace.id
       }
     }
