@@ -52,7 +52,7 @@ export function useDragAndDrop() {
   const collisionDetection: CollisionDetection = useCallback((args) => {
     const pointerCollisions = pointerWithin(args)
     if (pointerCollisions.length > 0) {
-      // Prioritize group-tab targets over pane-edge targets
+      // Prioritize group-tab targets over pane-drop targets
       const tabTargets = pointerCollisions.filter(
         (c) => (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type === 'group-tab'
       )
@@ -65,11 +65,11 @@ export function useDragAndDrop() {
         }
       )
       if (sidebarTargets.length > 0) return sidebarTargets
-      // Remaining pointerWithin hits (includes pane-edge — valid here since
+      // Remaining pointerWithin hits (includes pane-drop — valid here since
       // the pointer IS inside the zone rect)
       return pointerCollisions
     }
-    // closestCenter fallback — EXCLUDE pane-edge zones. Edge zones require
+    // closestCenter fallback — EXCLUDE pane-drop zones. Drop zones require
     // strict pointer containment (pointerWithin), not proximity.
     const centerCollisions = closestCenter(args)
     return centerCollisions.filter(
