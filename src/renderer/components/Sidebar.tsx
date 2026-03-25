@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useMemo } from 'react'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { Plus, Settings, ChevronDown, ChevronRight, FolderClosed } from 'lucide-react'
+import { Plus, Settings, ChevronDown, ChevronRight, ChevronLeft, FolderClosed, Search, X } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { useSettingsStore } from '../store/settings-store'
 import { Button } from './ui/button'
@@ -124,6 +124,7 @@ function SortableFolderItem({
   isEditing,
   editingId,
   editingType,
+  filteredWorkspaceIds,
   onToggle,
   onStartEditingFolder,
   onStartEditingWorkspace,
@@ -143,6 +144,7 @@ function SortableFolderItem({
   isEditing: boolean
   editingId: string | null
   editingType: 'workspace' | 'folder' | null
+  filteredWorkspaceIds: Set<string> | null
   onToggle: () => void
   onStartEditingFolder: (id: string) => void
   onStartEditingWorkspace: (id: string) => void
@@ -186,6 +188,9 @@ function SortableFolderItem({
   const showDragOver = isOver && !isDragging && isSidebarDrag && insertPosition === null
   const insertClass = insertPosition === 'before' ? 'sidebar-insert-before' : insertPosition === 'after' ? 'sidebar-insert-after' : ''
 
+  // When filtering, force folders expanded
+  const isExpanded = filteredWorkspaceIds ? true : !folder.collapsed
+
   return (
     <div style={{ opacity: isDragging ? 0.4 : undefined }}>
       <div
@@ -213,7 +218,7 @@ function SortableFolderItem({
         {...attributes}
         {...listeners}
       >
-        {folder.collapsed ? (
+        {!isExpanded ? (
           <ChevronRight size={10} />
         ) : (
           <ChevronDown size={10} />
@@ -234,13 +239,14 @@ function SortableFolderItem({
         )}
       </div>
 
-      {!folder.collapsed && (
+      {isExpanded && (
         <SidebarTreeLevel
           nodes={folder.children}
           parentFolderId={folder.id}
           depth={depth + 1}
           editingId={editingId}
           editingType={editingType}
+          filteredWorkspaceIds={filteredWorkspaceIds}
           onStartEditingFolder={onStartEditingFolder}
           onStartEditingWorkspace={onStartEditingWorkspace}
           onRenameFolder={onRenameFolder}
@@ -268,6 +274,7 @@ function SidebarTreeLevel({
   depth,
   editingId,
   editingType,
+  filteredWorkspaceIds,
   onStartEditingFolder,
   onStartEditingWorkspace,
   onRenameFolder,
@@ -285,6 +292,7 @@ function SidebarTreeLevel({
   depth: number
   editingId: string | null
   editingType: 'workspace' | 'folder' | null
+  filteredWorkspaceIds: Set<string> | null
   onStartEditingFolder: (id: string) => void
   onStartEditingWorkspace: (id: string) => void
   onRenameFolder: (id: string, name: string) => void
@@ -308,6 +316,8 @@ function SidebarTreeLevel({
     <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
       {nodes.map((node) => {
         if (node.type === 'workspace') {
+          // Skip if filtered out
+          if (filteredWorkspaceIds && !filteredWorkspaceIds.has(node.workspaceId)) return null
           const ws = workspaces.find((w) => w.id === node.workspaceId)
           if (!ws) return null
           return (
@@ -338,6 +348,7 @@ function SidebarTreeLevel({
             isEditing={editingId === node.id && editingType === 'folder'}
             editingId={editingId}
             editingType={editingType}
+            filteredWorkspaceIds={filteredWorkspaceIds}
             onToggle={() => toggleFolderCollapsed(node.id)}
             onStartEditingFolder={onStartEditingFolder}
             onStartEditingWorkspace={onStartEditingWorkspace}
@@ -374,12 +385,45 @@ export default function Sidebar(): JSX.Element {
   const renameFolder = useWorkspaceStore((s) => s.renameFolder)
   const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed)
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen)
+  const sidebarWidth = useSettingsStore((s) => s.sidebarWidth)
+  const setSidebarWidth = useSettingsStore((s) => s.setSidebarWidth)
+  const toggleSidebar = useSettingsStore((s) => s.toggleSidebar)
 
   const activeDrag = useDragContext()
+
+  const [searchQuery, setSearchQuery] = useState('')
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingType, setEditingType] = useState<'workspace' | 'folder' | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
+  const [isResizing, setIsResizing] = useState(false)
+  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null)
+
+  const filteredWorkspaceIds = useMemo(() => {
+    if (!searchQuery.trim()) return null // null = show all
+    const q = searchQuery.toLowerCase()
+    return new Set(workspaces.filter((ws) => ws.name.toLowerCase().includes(q)).map((ws) => ws.id))
+  }, [searchQuery, workspaces])
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    resizeRef.current = { startX: e.clientX, startWidth: sidebarWidth }
+    setIsResizing(true)
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!resizeRef.current) return
+      const delta = ev.clientX - resizeRef.current.startX
+      setSidebarWidth(resizeRef.current.startWidth + delta)
+    }
+    const onMouseUp = () => {
+      setIsResizing(false)
+      resizeRef.current = null
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+  }, [sidebarWidth, setSidebarWidth])
 
   const startEditingWorkspace = useCallback((id: string) => {
     setEditingId(id)
@@ -429,15 +473,43 @@ export default function Sidebar(): JSX.Element {
   }, [startEditingFolder, addWorkspace, addFolder, removeFolder])
 
   return (
-    <div className={`sidebar ${!sidebarOpen ? 'sidebar-collapsed' : ''}`}>
+    <div
+      className={`sidebar ${!sidebarOpen ? 'sidebar-collapsed' : ''} ${isResizing ? 'sidebar-resizing' : ''}`}
+      style={sidebarOpen ? { width: sidebarWidth, minWidth: sidebarWidth } : undefined}
+    >
       {/* Header — drag region with traffic light space + branding */}
       <div className="sidebar-header drag-region">
         <span className="sidebar-label no-drag">DevSpace</span>
+        <button
+          className="sidebar-collapse-btn no-drag"
+          onClick={toggleSidebar}
+          title="Toggle sidebar (⌘B)"
+        >
+          <ChevronLeft size={14} />
+        </button>
+      </div>
+
+      {/* Search bar */}
+      <div className="sidebar-search">
+        <Search size={12} className="sidebar-search-icon" />
+        <input
+          type="text"
+          placeholder="Search workspaces..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Escape') setSearchQuery('') }}
+          className="sidebar-search-input no-drag"
+        />
+        {searchQuery && (
+          <button className="sidebar-search-clear no-drag" onClick={() => setSearchQuery('')}>
+            <X size={10} />
+          </button>
+        )}
       </div>
 
       {/* Section label + add button */}
-      <div className="flex items-center justify-between px-4 pb-1 shrink-0">
-        <span className="sidebar-label" style={{ fontSize: 10 }}>Workspaces</span>
+      <div className="sidebar-section-header">
+        <span className="sidebar-label">Workspaces</span>
         <Tooltip content="New workspace" shortcut="⌘N">
           <Button
             variant="ghost"
@@ -458,6 +530,7 @@ export default function Sidebar(): JSX.Element {
           depth={0}
           editingId={editingId}
           editingType={editingType}
+          filteredWorkspaceIds={filteredWorkspaceIds}
           onStartEditingFolder={startEditingFolder}
           onStartEditingWorkspace={startEditingWorkspace}
           onRenameFolder={(id, name) => renameFolder(id, name)}
@@ -502,6 +575,10 @@ export default function Sidebar(): JSX.Element {
           <Settings size={15} />
         </button>
       </div>
+
+      {sidebarOpen && (
+        <div className="sidebar-resize-handle" onMouseDown={handleResizeStart} />
+      )}
     </div>
   )
 }
