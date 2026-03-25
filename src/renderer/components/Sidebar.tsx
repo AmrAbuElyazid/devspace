@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { Plus, Settings, ChevronDown, ChevronRight, ChevronLeft, FolderClosed, Search, X } from 'lucide-react'
-import { useWorkspaceStore } from '../store/workspace-store'
+import { Plus, Settings, ChevronDown, ChevronRight, ChevronLeft, FolderClosed, Search, X, Star } from 'lucide-react'
+import { useWorkspaceStore, collectGroupIds } from '../store/workspace-store'
 import { useSettingsStore } from '../store/settings-store'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
@@ -10,8 +10,55 @@ import { AlertDialog } from './ui/alert-dialog'
 import { InlineRenameInput } from './ui/InlineRenameInput'
 import { useInsertionIndicator } from '../hooks/useInsertionIndicator'
 import type { ContextMenuItem } from '../../shared/types'
-import type { SidebarNode } from '../types/workspace'
+import type { SidebarNode, Workspace, Pane, PaneGroup, TerminalConfig, EditorConfig } from '../types/workspace'
 import { useDragContext } from '../hooks/useDragAndDrop'
+
+// ---------------------------------------------------------------------------
+// Utility: format relative time
+// ---------------------------------------------------------------------------
+
+function formatRelativeTime(timestamp: number): string {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000)
+  if (seconds < 60) return 'now'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
+// ---------------------------------------------------------------------------
+// Utility: compute workspace metadata string
+// ---------------------------------------------------------------------------
+
+function getWorkspaceMetadata(ws: Workspace, panes: Record<string, Pane>, paneGroups: Record<string, PaneGroup>): string {
+  const groupIds = collectGroupIds(ws.root)
+  let paneCount = 0
+  let primaryDir = ''
+  for (const gid of groupIds) {
+    const group = paneGroups[gid]
+    if (!group) continue
+    for (const tab of group.tabs) {
+      const pane = panes[tab.paneId]
+      if (!pane || pane.type === 'empty') continue
+      paneCount++
+      if (!primaryDir && pane.type === 'terminal') {
+        const cwd = (pane.config as TerminalConfig).cwd
+        if (cwd) primaryDir = cwd.replace(/^\/Users\/[^/]+/, '~')
+      }
+      if (!primaryDir && pane.type === 'editor') {
+        const folder = (pane.config as EditorConfig).folderPath
+        if (folder) primaryDir = folder.replace(/^\/Users\/[^/]+/, '~')
+      }
+    }
+  }
+  const parts: string[] = []
+  if (paneCount > 0) parts.push(`${paneCount} pane${paneCount > 1 ? 's' : ''}`)
+  if (primaryDir) parts.push(primaryDir)
+  parts.push(formatRelativeTime(ws.lastActiveAt))
+  return parts.join(' \u00b7 ')
+}
 
 // ---------------------------------------------------------------------------
 // SortableWorkspaceItem
@@ -24,6 +71,7 @@ function SortableWorkspaceItem({
   isActive,
   isEditing,
   name,
+  metadata,
   onSelect,
   onStartEditing,
   onRename,
@@ -36,6 +84,7 @@ function SortableWorkspaceItem({
   isActive: boolean
   isEditing: boolean
   name: string
+  metadata: string
   onSelect: () => void
   onStartEditing: () => void
   onRename: (name: string) => void
@@ -87,28 +136,30 @@ function SortableWorkspaceItem({
       {...attributes}
       {...listeners}
     >
-      <span
-        style={{
-          width: 7,
-          height: 7,
-          borderRadius: '50%',
-          background: isActive ? 'var(--accent)' : 'var(--foreground-faint)',
-          flexShrink: 0,
-        }}
-      />
-      {isEditing ? (
-        <InlineRenameInput
-          initialValue={name}
-          onCommit={(newName) => {
-            onRename(newName)
-            onStopEditing()
-          }}
-          onCancel={onStopEditing}
-          className="text-[13px]"
-        />
-      ) : (
-        <span className="flex-1 truncate">{name}</span>
-      )}
+      <div className="ws-item-content">
+        <div className="ws-item-row">
+          <span
+            className="ws-dot"
+            style={{
+              background: isActive ? 'var(--accent)' : 'var(--foreground-faint)',
+            }}
+          />
+          {isEditing ? (
+            <InlineRenameInput
+              initialValue={name}
+              onCommit={(newName) => {
+                onRename(newName)
+                onStopEditing()
+              }}
+              onCancel={onStopEditing}
+              className="text-[13px]"
+            />
+          ) : (
+            <span className="flex-1 truncate">{name}</span>
+          )}
+        </div>
+        {!isEditing && metadata && <div className="ws-meta">{metadata}</div>}
+      </div>
     </div>
   )
 }
@@ -306,6 +357,8 @@ function SidebarTreeLevel({
   setDeleteTarget: (id: string | null) => void
 }): JSX.Element {
   const workspaces = useWorkspaceStore((s) => s.workspaces)
+  const panes = useWorkspaceStore((s) => s.panes)
+  const paneGroups = useWorkspaceStore((s) => s.paneGroups)
   const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed)
 
   const sortableIds = nodes.map((n) =>
@@ -320,6 +373,7 @@ function SidebarTreeLevel({
           if (filteredWorkspaceIds && !filteredWorkspaceIds.has(node.workspaceId)) return null
           const ws = workspaces.find((w) => w.id === node.workspaceId)
           if (!ws) return null
+          const metadata = getWorkspaceMetadata(ws, panes, paneGroups)
           return (
             <SortableWorkspaceItem
               key={`ws-${ws.id}`}
@@ -329,6 +383,7 @@ function SidebarTreeLevel({
               isActive={ws.id === activeWorkspaceId}
               isEditing={editingId === ws.id && editingType === 'workspace'}
               name={ws.name}
+              metadata={metadata}
               onSelect={() => onSelectWorkspace(ws.id)}
               onStartEditing={() => onStartEditingWorkspace(ws.id)}
               onRename={(name) => onRenameWorkspace(ws.id, name)}
@@ -384,12 +439,20 @@ export default function Sidebar(): JSX.Element {
   const removeFolder = useWorkspaceStore((s) => s.removeFolder)
   const renameFolder = useWorkspaceStore((s) => s.renameFolder)
   const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed)
+  const togglePinWorkspace = useWorkspaceStore((s) => s.togglePinWorkspace)
+  const panes = useWorkspaceStore((s) => s.panes)
+  const paneGroups = useWorkspaceStore((s) => s.paneGroups)
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen)
   const sidebarWidth = useSettingsStore((s) => s.sidebarWidth)
   const setSidebarWidth = useSettingsStore((s) => s.setSidebarWidth)
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar)
 
   const activeDrag = useDragContext()
+
+  const pinnedWorkspaces = useMemo(
+    () => workspaces.filter((ws) => ws.pinned),
+    [workspaces],
+  )
 
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -442,8 +505,12 @@ export default function Sidebar(): JSX.Element {
 
   const handleWorkspaceContextMenu = useCallback(async (e: React.MouseEvent, workspaceId: string) => {
     e.preventDefault()
+    const ws = workspaces.find((w) => w.id === workspaceId)
+    if (!ws) return
+
     const items: ContextMenuItem[] = [
       { id: 'rename', label: 'Rename' },
+      { id: 'pin', label: ws.pinned ? 'Unpin' : 'Pin' },
       { id: 'new-folder', label: 'New Folder...' },
       ...(workspaces.length > 1 ? [{ id: 'delete', label: 'Delete', destructive: true }] : []),
     ]
@@ -452,9 +519,10 @@ export default function Sidebar(): JSX.Element {
     if (!result) return
 
     if (result === 'rename') startEditingWorkspace(workspaceId)
+    else if (result === 'pin') togglePinWorkspace(workspaceId)
     else if (result === 'new-folder') addFolder('New Folder')
     else if (result === 'delete') setDeleteTarget(workspaceId)
-  }, [workspaces, startEditingWorkspace, addFolder])
+  }, [workspaces, startEditingWorkspace, addFolder, togglePinWorkspace])
 
   const handleFolderContextMenu = useCallback(async (e: React.MouseEvent, folderId: string) => {
     e.preventDefault()
@@ -506,6 +574,34 @@ export default function Sidebar(): JSX.Element {
           </button>
         )}
       </div>
+
+      {/* Pinned section */}
+      {pinnedWorkspaces.length > 0 && (
+        <>
+          <div className="sidebar-section-header">
+            <span className="sidebar-label">Pinned</span>
+          </div>
+          <div className="sidebar-pinned-list">
+            {pinnedWorkspaces.map((ws) => (
+              <div
+                key={`pinned-${ws.id}`}
+                className={`ws-item ${ws.id === activeWorkspaceId ? 'ws-item-active' : ''}`}
+                onClick={() => setActiveWorkspace(ws.id)}
+                onContextMenu={(e) => handleWorkspaceContextMenu(e, ws.id)}
+              >
+                <Star size={10} className="pinned-star" />
+                <span
+                  className="ws-dot"
+                  style={{
+                    background: ws.id === activeWorkspaceId ? 'var(--accent)' : 'var(--foreground-faint)',
+                  }}
+                />
+                <span className="flex-1 truncate" style={{ fontSize: 13 }}>{ws.name}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Section label + add button */}
       <div className="sidebar-section-header">
