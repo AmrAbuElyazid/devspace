@@ -9,8 +9,10 @@ interface SettingsState {
   terminalScrollback: number
   terminalCursorStyle: 'block' | 'underline' | 'bar'
   keepVscodeServerRunning: boolean
+  sidebarWidth: number
 
   toggleSidebar: () => void
+  setSidebarWidth: (width: number) => void
   setSidebarOpen: (open: boolean) => void
   toggleSettings: () => void
   setSettingsOpen: (open: boolean) => void
@@ -27,6 +29,7 @@ export const useSettingsStore = create<SettingsState>()(
       terminalScrollback: 5000,
       terminalCursorStyle: 'block' as const,
       keepVscodeServerRunning: true,
+      sidebarWidth: 220,
 
       toggleSidebar() {
         set((s) => ({ sidebarOpen: !s.sidebarOpen }))
@@ -34,6 +37,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       setSidebarOpen(open) {
         set({ sidebarOpen: open })
+      },
+
+      setSidebarWidth(width) {
+        set({ sidebarWidth: Math.max(160, Math.min(400, width)) })
       },
 
       toggleSettings() {
