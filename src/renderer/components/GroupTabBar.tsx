@@ -1,7 +1,8 @@
 import { useCallback } from 'react'
-import { Terminal, FileCode, Globe, Square, Plus, Columns2, Rows2, X } from 'lucide-react'
+import { Terminal, FileCode, Globe, Square, Plus, Columns2, Rows2, X, Menu } from 'lucide-react'
 import { SortableContext, useSortable, horizontalListSortingStrategy } from '@dnd-kit/sortable'
 import { useWorkspaceStore, collectGroupIds } from '../store/workspace-store'
+import { useSettingsStore } from '../store/settings-store'
 import { Button } from './ui/button'
 import type { PaneGroup, PaneType } from '../types/workspace'
 import type { DragItemData } from '../types/dnd'
@@ -18,6 +19,7 @@ interface GroupTabBarProps {
   groupId: string
   workspaceId: string
   isFocused: boolean
+  isTopLeftGroup?: boolean
 }
 
 function SortableGroupTab({
@@ -69,18 +71,41 @@ function SortableGroupTab({
   )
 }
 
-export default function GroupTabBar({ group, groupId, workspaceId, isFocused }: GroupTabBarProps) {
+export default function GroupTabBar({ group, groupId, workspaceId, isFocused, isTopLeftGroup }: GroupTabBarProps) {
   const addGroupTab = useWorkspaceStore((s) => s.addGroupTab)
   const removeGroupTab = useWorkspaceStore((s) => s.removeGroupTab)
   const setActiveGroupTab = useWorkspaceStore((s) => s.setActiveGroupTab)
   const splitGroup = useWorkspaceStore((s) => s.splitGroup)
   const closeGroup = useWorkspaceStore((s) => s.closeGroup)
+  const addWorkspace = useWorkspaceStore((s) => s.addWorkspace)
+  const toggleSidebar = useSettingsStore((s) => s.toggleSidebar)
   const wsRoot = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.root)
 
   const hasMultipleGroups = wsRoot ? collectGroupIds(wsRoot).length > 1 : false
 
   return (
     <div className={`group-tabbar ${isFocused ? 'group-focused' : ''}`}>
+      {isTopLeftGroup && (
+        <>
+          <div className="tabbar-traffic-zone drag-region" />
+          <div className="tabbar-inline-controls">
+            <button
+              className="tabbar-ctl-btn no-drag"
+              onClick={toggleSidebar}
+              title="Open sidebar (⌘B)"
+            >
+              <Menu size={13} />
+            </button>
+            <button
+              className="tabbar-ctl-btn no-drag"
+              onClick={() => addWorkspace()}
+              title="New workspace (⌘N)"
+            >
+              <Plus size={13} />
+            </button>
+          </div>
+        </>
+      )}
       <SortableContext items={group.tabs.map((t) => `gtab-${t.id}`)} strategy={horizontalListSortingStrategy}>
         {group.tabs.map((tab) => (
           <SortableGroupTab

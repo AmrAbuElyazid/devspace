@@ -55,6 +55,7 @@ export default function App(): JSX.Element {
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const settingsOpen = useSettingsStore((s) => s.settingsOpen)
+  const sidebarOpen = useSettingsStore((s) => s.sidebarOpen)
   const keepVscodeServerRunning = useSettingsStore((s) => s.keepVscodeServerRunning)
 
   const dnd = useDragAndDrop()
@@ -299,6 +300,7 @@ export default function App(): JSX.Element {
                       node={ws.root}
                       workspaceId={ws.id}
                       overlayActive={overlayActive}
+                      sidebarOpen={sidebarOpen}
                     />
                   </div>
                 )
