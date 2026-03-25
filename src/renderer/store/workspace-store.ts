@@ -22,6 +22,7 @@ import {
   collectWorkspaceIds,
 } from '../lib/sidebar-tree'
 import { cleanupPaneResources, type PaneCleanupDeps } from '../lib/pane-cleanup'
+import type { DropSide } from '../types/dnd'
 import { markBrowserPaneDestroyed } from '../lib/browser-pane-session'
 import { useBrowserStore } from './browser-store'
 import type { BrowserConfig } from '../types/workspace'
@@ -274,6 +275,8 @@ interface WorkspaceState {
   setActiveGroupTab: (workspaceId: string, groupId: string, tabId: string) => void
   reorderGroupTabs: (workspaceId: string, groupId: string, fromIndex: number, toIndex: number) => void
   moveTabToGroup: (workspaceId: string, srcGroupId: string, tabId: string, destGroupId: string, insertIndex?: number) => void
+  splitGroupWithTab: (workspaceId: string, srcGroupId: string, tabId: string, targetGroupId: string, side: DropSide) => void
+  moveTabToWorkspace: (srcWorkspaceId: string, srcGroupId: string, tabId: string, destWorkspaceId: string) => void
 
   // Browser in group
   openBrowserInGroup: (workspaceId: string, groupId: string, url: string) => void
@@ -824,6 +827,98 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           panes: newPanes,
           paneGroups: newPaneGroups,
         })
+      },
+
+      splitGroupWithTab(workspaceId, srcGroupId, tabId, targetGroupId, side) {
+        const state = get()
+        const ws = state.workspaces.find((w) => w.id === workspaceId)
+        if (!ws) return
+
+        const srcGroup = state.paneGroups[srcGroupId]
+        if (!srcGroup || !state.paneGroups[targetGroupId]) return
+
+        const tab = srcGroup.tabs.find((t) => t.id === tabId)
+        if (!tab) return
+
+        // Create new group containing only the moved tab
+        const newTabId = nanoid()
+        const newGroup: PaneGroup = {
+          id: nanoid(),
+          tabs: [{ id: newTabId, paneId: tab.paneId }],
+          activeTabId: newTabId,
+        }
+
+        // Build the split: direction from side, child order from side
+        const direction: SplitDirection = (side === 'left' || side === 'right') ? 'horizontal' : 'vertical'
+        const newLeaf: SplitNode = { type: 'leaf', groupId: newGroup.id }
+        const targetLeaf: SplitNode = { type: 'leaf', groupId: targetGroupId }
+        const children: SplitNode[] = (side === 'left' || side === 'top')
+          ? [newLeaf, targetLeaf]
+          : [targetLeaf, newLeaf]
+
+        const replacement: SplitNode = {
+          type: 'branch',
+          direction,
+          children,
+          sizes: [50, 50],
+        }
+
+        let newRoot = replaceLeafInTree(ws.root, targetGroupId, replacement)
+        const newPaneGroups = { ...state.paneGroups, [newGroup.id]: newGroup }
+        let newWorkspaces = state.workspaces
+        let newPanes = state.panes
+
+        // Remove tab from source group
+        const remainingSrcTabs = srcGroup.tabs.filter((t) => t.id !== tabId)
+
+        if (remainingSrcTabs.length === 0) {
+          // Source group is now empty
+          if (srcGroupId !== targetGroupId) {
+            // Different groups: remove source leaf from the tree entirely
+            const cleaned = removeGroupFromTree(newRoot, srcGroupId)
+            newRoot = cleaned ? simplifyTree(cleaned) : newRoot
+            delete newPaneGroups[srcGroupId]
+          } else {
+            // Same group: the target leaf was replaced by a branch that still
+            // contains a leaf for srcGroupId — populate it with an empty pane
+            // so the leaf isn't orphaned.
+            const emptyPane = createEmptyPane()
+            newPanes = { ...state.panes, [emptyPane.id]: emptyPane }
+            const emptyTab: PaneGroupTab = { id: nanoid(), paneId: emptyPane.id }
+            newPaneGroups[srcGroupId] = {
+              ...srcGroup,
+              tabs: [emptyTab],
+              activeTabId: emptyTab.id,
+            }
+          }
+        } else {
+          // Update source group
+          let srcActiveTabId = srcGroup.activeTabId
+          if (srcGroup.activeTabId === tabId) {
+            srcActiveTabId = remainingSrcTabs[0].id
+          }
+          newPaneGroups[srcGroupId] = {
+            ...srcGroup,
+            tabs: remainingSrcTabs,
+            activeTabId: srcActiveTabId,
+          }
+        }
+
+        newWorkspaces = state.workspaces.map((w) =>
+          w.id === workspaceId
+            ? { ...w, root: newRoot, focusedGroupId: newGroup.id }
+            : w,
+        )
+
+        set({
+          workspaces: newWorkspaces,
+          panes: newPanes,
+          paneGroups: newPaneGroups,
+        })
+      },
+
+      moveTabToWorkspace(_srcWorkspaceId, _srcGroupId, _tabId, _destWorkspaceId) {
+        // Will be implemented in Task 4
       },
 
       // -------------------------------------------------------------------
