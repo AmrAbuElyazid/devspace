@@ -1,7 +1,9 @@
 import { useCallback } from 'react'
 import { Terminal, FileCode, Globe, Square, Plus, Columns2, Rows2, X, Menu } from 'lucide-react'
 import { SortableContext, useSortable, horizontalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { useWorkspaceStore, collectGroupIds } from '../store/workspace-store'
+import { useDragContext } from '../hooks/useDragAndDrop'
 import { useSettingsStore } from '../store/settings-store'
 import { Button } from './ui/button'
 import type { PaneGroup, PaneType } from '../types/workspace'
@@ -40,10 +42,20 @@ function SortableGroupTab({
   onClose: () => void
 }) {
   const pane = useWorkspaceStore((s) => s.panes[paneId])
-  const { attributes, listeners, setNodeRef, isDragging } = useSortable({
+  const activeDrag = useDragContext()
+  const { attributes, listeners, setNodeRef, isDragging, isOver, transform, transition } = useSortable({
     id: `gtab-${tabId}`,
     data: { type: 'group-tab', workspaceId, groupId, tabId } satisfies DragItemData,
   })
+
+  const baseTransition = 'background-color 100ms ease, color 100ms ease'
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition: transition ? `${transition}, ${baseTransition}` : undefined,
+    opacity: isDragging ? 0.4 : undefined,
+  }
+
+  const isDropTarget = isOver && !isDragging && activeDrag?.type === 'group-tab'
 
   const Icon = pane ? typeIcons[pane.type] : Square
 
@@ -51,7 +63,8 @@ function SortableGroupTab({
     <div
       ref={setNodeRef}
       data-sortable-id={`gtab-${tabId}`}
-      className={`group-tab ${isActive ? 'group-tab-active' : ''} ${isDragging ? 'group-tab-dragging' : ''}`}
+      className={`group-tab ${isActive ? 'group-tab-active' : ''} ${isDropTarget ? 'group-tab-drop-target' : ''}`}
+      style={style}
       onClick={onSelect}
       onMouseDown={(e) => {
         if (e.button === 1) { e.preventDefault(); onClose() }
