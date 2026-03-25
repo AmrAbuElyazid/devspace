@@ -9,6 +9,7 @@ interface SettingsState {
   defaultShell: string
   terminalScrollback: number
   terminalCursorStyle: 'block' | 'underline' | 'bar'
+  keepVscodeServerRunning: boolean
 
   setTheme: (theme: 'light' | 'dark' | 'system') => void
   toggleSidebar: () => void
@@ -28,7 +29,7 @@ export const useSettingsStore = create<SettingsState>()(
       defaultShell: '',
       terminalScrollback: 5000,
       terminalCursorStyle: 'block' as const,
-
+      keepVscodeServerRunning: true,
 
       setTheme(theme) {
         set({ theme })

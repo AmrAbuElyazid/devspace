@@ -56,12 +56,18 @@ export default function App(): JSX.Element {
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const settingsOpen = useSettingsStore((s) => s.settingsOpen)
+  const keepVscodeServerRunning = useSettingsStore((s) => s.keepVscodeServerRunning)
 
   const dnd = useDragAndDrop()
   const { activeDrag } = dnd
 
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId)
   const activeTab = activeWorkspace?.tabs.find((t) => t.id === activeWorkspace.activeTabId)
+
+  // Sync keepVscodeServerRunning to main process on mount and change.
+  useEffect(() => {
+    window.api?.editor?.setKeepServerRunning(keepVscodeServerRunning)
+  }, [keepVscodeServerRunning])
 
   // When a full-screen overlay (settings, dialog) is active, native views
   // must be hidden so the DOM overlay is visible.  Also resign first

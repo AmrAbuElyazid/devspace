@@ -22,6 +22,7 @@ export default function SettingsPage(): JSX.Element {
   const {
     theme, setTheme,
     fontSize, defaultShell, terminalScrollback, terminalCursorStyle,
+    keepVscodeServerRunning,
     updateSetting, setSettingsOpen,
   } = useSettingsStore()
 
@@ -91,6 +92,12 @@ export default function SettingsPage(): JSX.Element {
             <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
               VS Code (code serve-web)
             </span>
+          </SettingRow>
+          <SettingRow label="Keep editor server running after quit">
+            <Toggle
+              checked={keepVscodeServerRunning}
+              onChange={(v) => updateSetting('keepVscodeServerRunning', v)}
+            />
           </SettingRow>
         </section>
 
