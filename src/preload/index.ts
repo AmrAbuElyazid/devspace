@@ -97,20 +97,6 @@ const bridge: DevspaceBridge = {
     show: (items, position) => ipcRenderer.invoke('contextMenu:show', items, position),
   },
 
-  theme: {
-    set: (theme) => ipcRenderer.send('theme:set', theme),
-    getNativeTheme: () => ipcRenderer.invoke('theme:getNativeTheme'),
-    onNativeThemeChange: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, theme: 'light' | 'dark'): void => {
-        callback(theme)
-      }
-      ipcRenderer.on('theme:nativeThemeChange', listener)
-      return () => {
-        ipcRenderer.removeListener('theme:nativeThemeChange', listener)
-      }
-    }
-  },
-
   editor: {
     isAvailable: () => ipcRenderer.invoke('editor:isAvailable'),
     start: (paneId, folderPath) => ipcRenderer.invoke('editor:start', paneId, folderPath),

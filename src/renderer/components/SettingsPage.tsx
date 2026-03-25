@@ -20,7 +20,6 @@ const shortcuts = [
 
 export default function SettingsPage(): JSX.Element {
   const {
-    theme, setTheme,
     fontSize, defaultShell, terminalScrollback, terminalCursorStyle,
     keepVscodeServerRunning,
     updateSetting, setSettingsOpen,
@@ -43,17 +42,6 @@ export default function SettingsPage(): JSX.Element {
         {/* Appearance */}
         <section>
           <SectionTitle>Appearance</SectionTitle>
-          <SettingRow label="Theme">
-            <SegmentedControl
-              options={[
-                { label: 'Light', value: 'light' as const },
-                { label: 'System', value: 'system' as const },
-                { label: 'Dark', value: 'dark' as const },
-              ]}
-              value={theme}
-              onChange={(v) => setTheme(v as 'light' | 'dark' | 'system')}
-            />
-          </SettingRow>
           <SettingRow label="Font size">
             <NumberInput value={fontSize} onChange={(v) => updateSetting('fontSize', v)} min={10} max={24} />
           </SettingRow>

@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 interface SettingsState {
-  theme: 'light' | 'dark' | 'system'
   sidebarOpen: boolean
   settingsOpen: boolean
   fontSize: number
@@ -11,7 +10,6 @@ interface SettingsState {
   terminalCursorStyle: 'block' | 'underline' | 'bar'
   keepVscodeServerRunning: boolean
 
-  setTheme: (theme: 'light' | 'dark' | 'system') => void
   toggleSidebar: () => void
   setSidebarOpen: (open: boolean) => void
   toggleSettings: () => void
@@ -22,7 +20,6 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
-      theme: 'system',
       sidebarOpen: true,
       settingsOpen: false,
       fontSize: 13,
@@ -30,10 +27,6 @@ export const useSettingsStore = create<SettingsState>()(
       terminalScrollback: 5000,
       terminalCursorStyle: 'block' as const,
       keepVscodeServerRunning: true,
-
-      setTheme(theme) {
-        set({ theme })
-      },
 
       toggleSidebar() {
         set((s) => ({ sidebarOpen: !s.sidebarOpen }))

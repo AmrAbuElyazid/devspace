@@ -62,11 +62,6 @@ export interface DevspaceBridge {
   contextMenu: {
     show: <T extends string>(items: ContextMenuItem<T>[], position?: { x: number; y: number }) => Promise<T | null>
   }
-  theme: {
-    set: (theme: 'light' | 'dark' | 'system') => void
-    getNativeTheme: () => Promise<'light' | 'dark'>
-    onNativeThemeChange: (callback: (theme: 'light' | 'dark') => void) => () => void
-  }
   editor: {
     isAvailable: () => Promise<boolean>
     start: (paneId: string, folderPath: string) => Promise<{ url: string } | { error: string }>

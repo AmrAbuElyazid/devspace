@@ -17,11 +17,6 @@ mock.module('electron', () => ({
   shell: {
     openExternal: () => {},
   },
-  nativeTheme: {
-    themeSource: 'system',
-    shouldUseDarkColors: false,
-    on: () => {},
-  },
   Menu: {
     buildFromTemplate: () => ({ popup: () => {} }),
   },
