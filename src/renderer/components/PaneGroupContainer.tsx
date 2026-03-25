@@ -1,50 +1,23 @@
-import { memo, useState, useRef, useCallback, useEffect, type ReactElement } from 'react'
+import { memo, useRef, useCallback, useEffect, type ReactElement } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { shouldHideBrowserNativeViewForDrag } from '../lib/browser-pane-visibility'
 import { useWorkspaceStore, getTopLeftGroupId } from '../store/workspace-store'
 import { useDragContext } from '../hooks/useDragAndDrop'
 import GroupTabBar from './GroupTabBar'
 import type { PaneType, TerminalConfig, EditorConfig, BrowserConfig } from '../types/workspace'
-import type { DropSide } from '../types/dnd'
 
 // Import the actual pane content components
 import EmptyPane from './EmptyPane'
 import TerminalPane from './TerminalPane'
 import EditorPane from './EditorPane'
 import BrowserPane from './BrowserPane'
-
-/**
- * Computes the closest edge (left/right/top/bottom) from pointer position
- * relative to a bounding rect. Closest edge wins — no dead zones.
- */
-function computeClosestSide(
-  clientX: number,
-  clientY: number,
-  rect: DOMRect,
-): DropSide {
-  const relX = (clientX - rect.left) / rect.width
-  const relY = (clientY - rect.top) / rect.height
-
-  const distLeft = relX
-  const distRight = 1 - relX
-  const distTop = relY
-  const distBottom = 1 - relY
-
-  const minDist = Math.min(distLeft, distRight, distTop, distBottom)
-
-  if (minDist === distLeft) return 'left'
-  if (minDist === distRight) return 'right'
-  if (minDist === distTop) return 'top'
-  return 'bottom'
-}
-
-function PaneContentDropZone({ groupId, workspaceId }: { groupId: string; workspaceId: string }) {
-  const [hoveredSide, setHoveredSide] = useState<DropSide | null>(null)
+function PaneContentDropZone({ groupId, workspaceId, enabled, previewSide }: { groupId: string; workspaceId: string; enabled: boolean; previewSide: 'left' | 'right' | 'top' | 'bottom' | null }) {
   const zoneRef = useRef<HTMLDivElement | null>(null)
 
   const { setNodeRef, isOver } = useDroppable({
     id: `pane-drop-${groupId}`,
-    data: { type: 'pane-drop', workspaceId, groupId },
+    disabled: !enabled,
+    data: { type: 'pane-drop', workspaceId, groupId, visible: enabled },
   })
 
   const mergedRef = useCallback(
@@ -55,22 +28,15 @@ function PaneContentDropZone({ groupId, workspaceId }: { groupId: string; worksp
     [setNodeRef],
   )
 
-  const handlePointerMove = useCallback((e: React.PointerEvent) => {
-    if (!zoneRef.current) return
-    const rect = zoneRef.current.getBoundingClientRect()
-    setHoveredSide(computeClosestSide(e.clientX, e.clientY, rect))
-  }, [])
-
   return (
     <div
       ref={mergedRef}
       className="pane-drop-zone-overlay"
-      style={{ pointerEvents: 'auto' }}
+      style={{ pointerEvents: enabled ? 'auto' : 'none' }}
       data-drop-zone={groupId}
-      onPointerMove={handlePointerMove}
     >
-      {isOver && hoveredSide && (
-        <div className={`pane-drop-zone-half ${hoveredSide}`} />
+      {isOver && previewSide && (
+        <div className={`pane-drop-zone-half ${previewSide}`} />
       )}
     </div>
   )
@@ -81,6 +47,7 @@ interface PaneGroupContainerProps {
   workspaceId: string
   overlayActive: boolean
   sidebarOpen: boolean
+  dndEnabled: boolean
 }
 
 // Memoized inner component that renders the right content based on pane type
@@ -143,6 +110,7 @@ export default function PaneGroupContainer({
   workspaceId,
   overlayActive,
   sidebarOpen,
+  dndEnabled,
 }: PaneGroupContainerProps): ReactElement | null {
   const group = useWorkspaceStore((s) => s.paneGroups[groupId])
   const topLeftGroupId = useWorkspaceStore((s) => {
@@ -158,10 +126,11 @@ export default function PaneGroupContainer({
   })
   const setFocusedGroup = useWorkspaceStore((s) => s.setFocusedGroup)
 
-  const activeDrag = useDragContext()
+  const { activeDrag, dropIntent } = useDragContext()
   const isVisibleWorkspace = workspaceId === activeWorkspaceId
   const isFocused = focusedGroupId === groupId
   const shouldHideNative = overlayActive || shouldHideBrowserNativeViewForDrag(activeDrag, isVisibleWorkspace)
+  const previewSide = dropIntent?.kind === 'split-group' && dropIntent.targetGroupId === groupId ? dropIntent.side : null
 
   const handleFocus = useCallback(() => {
     setFocusedGroup(workspaceId, groupId)
@@ -178,16 +147,17 @@ export default function PaneGroupContainer({
 
   return (
     <div className="pane-group" onMouseDown={handleFocus}>
-      <GroupTabBar
-        group={group}
-        groupId={groupId}
-        workspaceId={workspaceId}
-        isFocused={isFocused}
-        isTopLeftGroup={isTopLeftGroup}
-      />
+        <GroupTabBar
+          group={group}
+          groupId={groupId}
+          workspaceId={workspaceId}
+          isFocused={isFocused}
+          isTopLeftGroup={isTopLeftGroup}
+          dndEnabled={dndEnabled}
+        />
       <div className="pane-group-content">
         {activeDrag?.type === 'group-tab' && (
-          <PaneContentDropZone groupId={groupId} workspaceId={workspaceId} />
+          <PaneContentDropZone groupId={groupId} workspaceId={workspaceId} enabled={dndEnabled} previewSide={previewSide} />
         )}
         {group.tabs.map((tab) => {
           const isActiveTab = tab.id === group.activeTabId

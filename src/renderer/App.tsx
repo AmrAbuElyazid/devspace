@@ -59,7 +59,7 @@ export default function App(): JSX.Element {
   const keepVscodeServerRunning = useSettingsStore((s) => s.keepVscodeServerRunning)
 
   const dnd = useDragAndDrop()
-  const { activeDrag } = dnd
+  const { activeDrag, dropIntent } = dnd
 
   // Sync keepVscodeServerRunning to main process on mount and change.
   useEffect(() => {
@@ -276,11 +276,12 @@ export default function App(): JSX.Element {
       sensors={dnd.sensors}
       collisionDetection={dnd.collisionDetection}
       onDragStart={dnd.onDragStart}
+      onDragMove={dnd.onDragMove}
       onDragOver={dnd.onDragOver}
       onDragEnd={dnd.onDragEnd}
       onDragCancel={dnd.onDragCancel}
     >
-      <DragContext.Provider value={activeDrag}>
+      <DragContext.Provider value={{ activeDrag, dropIntent }}>
         <div className="app-shell" data-dragging={activeDrag ? 'true' : undefined}>
           <Sidebar />
           <div className="app-main">
@@ -301,6 +302,7 @@ export default function App(): JSX.Element {
                       workspaceId={ws.id}
                       overlayActive={overlayActive}
                       sidebarOpen={sidebarOpen}
+                      dndEnabled={isVisible}
                     />
                   </div>
                 )

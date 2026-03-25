@@ -26,6 +26,7 @@ import type { DropSide } from '../types/dnd'
 import { markBrowserPaneDestroyed } from '../lib/browser-pane-session'
 import { useBrowserStore } from './browser-store'
 import type { BrowserConfig } from '../types/workspace'
+import { validateWorkspaceGraph } from '../lib/workspace-graph'
 
 // ---------------------------------------------------------------------------
 // Tree helper functions (pure)
@@ -53,6 +54,10 @@ export function findParentOfGroup(
 export function collectGroupIds(root: SplitNode): string[] {
   if (root.type === 'leaf') return [root.groupId]
   return root.children.flatMap(collectGroupIds)
+}
+
+function treeHasGroup(root: SplitNode, groupId: string): boolean {
+  return collectGroupIds(root).includes(groupId)
 }
 
 /** Walk children[0] at each branch level to find the top-left leaf group. */
@@ -118,21 +123,22 @@ export function removeGroupFromTree(root: SplitNode, groupId: string): SplitNode
 
   const newChildren: SplitNode[] = []
   const newSizes: number[] = []
-  let removedIndex = -1
+  let changed = false
 
   for (let i = 0; i < root.children.length; i++) {
     const child = root.children[i]
     const result = removeGroupFromTree(child, groupId)
     if (result !== null) {
+      if (result !== child) changed = true
       newChildren.push(result)
       newSizes.push(root.sizes[i])
     } else {
-      removedIndex = i
+      changed = true
     }
   }
 
   // Group not found in this subtree — return unchanged
-  if (removedIndex === -1) return root
+  if (!changed) return root
 
   if (newChildren.length === 0) return null
 
@@ -517,7 +523,17 @@ function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorksp
 function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'paneGroups' | 'sidebarTree'> {
   const persisted = loadPersistedState()
   if (persisted) {
-    return persisted
+    const validation = validateWorkspaceGraph({
+      activeWorkspaceId: persisted.activeWorkspaceId,
+      workspaces: persisted.workspaces,
+      paneGroups: persisted.paneGroups,
+      panes: persisted.panes,
+    })
+    if (!validation.valid) {
+      console.warn(`[WorkspaceStore] Discarding invalid persisted state: ${validation.reason}`)
+    } else {
+      return persisted
+    }
   }
   const pane = createEmptyPane()
   const group = createPaneGroup(pane)
@@ -638,6 +654,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       // -------------------------------------------------------------------
 
       setFocusedGroup(workspaceId, groupId) {
+        const workspace = get().workspaces.find((w) => w.id === workspaceId)
+        if (!workspace || !treeHasGroup(workspace.root, groupId)) return
+
         set({
           workspaces: get().workspaces.map((w) =>
             w.id === workspaceId
@@ -652,7 +671,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       // -------------------------------------------------------------------
 
       addGroupTab(workspaceId, groupId) {
-        const { paneGroups, panes } = get()
+        const { paneGroups, panes, workspaces } = get()
+        const workspace = workspaces.find((w) => w.id === workspaceId)
+        if (!workspace || !treeHasGroup(workspace.root, groupId)) return
         const group = paneGroups[groupId]
         if (!group) return
 
@@ -676,6 +697,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const state = get()
         const ws = state.workspaces.find((w) => w.id === workspaceId)
         if (!ws) return
+        if (!treeHasGroup(ws.root, groupId)) return
 
         const group = state.paneGroups[groupId]
         if (!group) return
@@ -779,9 +801,12 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       setActiveGroupTab(workspaceId, groupId, tabId) {
-        const { paneGroups } = get()
+        const { paneGroups, workspaces } = get()
+        const workspace = workspaces.find((w) => w.id === workspaceId)
+        if (!workspace || !treeHasGroup(workspace.root, groupId)) return
         const group = paneGroups[groupId]
         if (!group) return
+        if (!group.tabs.some((tab) => tab.id === tabId)) return
 
         set({
           paneGroups: {
@@ -792,7 +817,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       reorderGroupTabs(workspaceId, groupId, fromIndex, toIndex) {
-        const { paneGroups } = get()
+        const { paneGroups, workspaces } = get()
+        const workspace = workspaces.find((w) => w.id === workspaceId)
+        if (!workspace || !treeHasGroup(workspace.root, groupId)) return
         const group = paneGroups[groupId]
         if (!group) return
 
@@ -813,6 +840,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const state = get()
         const ws = state.workspaces.find((w) => w.id === workspaceId)
         if (!ws) return
+        if (!treeHasGroup(ws.root, srcGroupId) || !treeHasGroup(ws.root, destGroupId)) return
 
         const srcGroup = state.paneGroups[srcGroupId]
         const destGroup = state.paneGroups[destGroupId]
@@ -896,6 +924,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const state = get()
         const ws = state.workspaces.find((w) => w.id === workspaceId)
         if (!ws) return
+        if (!treeHasGroup(ws.root, srcGroupId) || !treeHasGroup(ws.root, targetGroupId)) return
 
         const srcGroup = state.paneGroups[srcGroupId]
         if (!srcGroup || !state.paneGroups[targetGroupId]) return
@@ -985,6 +1014,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const srcWs = state.workspaces.find((w) => w.id === srcWorkspaceId)
         const destWs = state.workspaces.find((w) => w.id === destWorkspaceId)
         if (!srcWs || !destWs || srcWorkspaceId === destWorkspaceId) return
+        if (!treeHasGroup(srcWs.root, srcGroupId)) return
 
         const srcGroup = state.paneGroups[srcGroupId]
         if (!srcGroup) return
@@ -993,7 +1023,9 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         if (!tab) return
 
         // Find destination group
-        const destGroupId = destWs.focusedGroupId ?? findFirstGroupId(destWs.root)
+        const destGroupId = destWs.focusedGroupId && treeHasGroup(destWs.root, destWs.focusedGroupId)
+          ? destWs.focusedGroupId
+          : findFirstGroupId(destWs.root)
         if (!destGroupId) return
         const destGroup = state.paneGroups[destGroupId]
         if (!destGroup) return
@@ -1067,6 +1099,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
 
       openBrowserInGroup(workspaceId, groupId, url) {
         const state = get()
+        const workspace = state.workspaces.find((w) => w.id === workspaceId)
+        if (!workspace || !treeHasGroup(workspace.root, groupId)) return
         const group = state.paneGroups[groupId]
         if (!group) return
 
@@ -1093,6 +1127,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const { workspaces, panes, paneGroups } = get()
         const ws = workspaces.find((w) => w.id === workspaceId)
         if (!ws) return
+        if (!treeHasGroup(ws.root, groupId)) return
 
         const newPane = createEmptyPane()
         const newGroup = createPaneGroup(newPane)
@@ -1126,6 +1161,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         const state = get()
         const ws = state.workspaces.find((w) => w.id === workspaceId)
         if (!ws) return
+        if (!treeHasGroup(ws.root, groupId)) return
 
         const group = state.paneGroups[groupId]
         if (!group) return
