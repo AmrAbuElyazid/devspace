@@ -647,3 +647,97 @@ test('splitGroupWithTab removes src group when last tab moved and multiple group
   const allIds = collectGroupIds(s3.workspaces.find((w) => w.id === wsId)!.root)
   assert.ok(!allIds.includes(groupId))
 })
+
+// ── moveTabToWorkspace ──
+
+test('moveTabToWorkspace moves tab from one workspace to another', () => {
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('Source')
+  useWorkspaceStore.getState().addWorkspace('Dest')
+  const state = useWorkspaceStore.getState()
+  const srcWs = state.workspaces[0]
+  const destWs = state.workspaces[1]
+  const srcGroupId = srcWs.root.type === 'leaf' ? srcWs.root.groupId : ''
+  const destGroupId = destWs.root.type === 'leaf' ? destWs.root.groupId : ''
+
+  // Add a second tab to source
+  useWorkspaceStore.getState().addGroupTab(srcWs.id, srcGroupId)
+  const s2 = useWorkspaceStore.getState()
+  const srcGroup = s2.paneGroups[srcGroupId]
+  assert.equal(srcGroup.tabs.length, 2)
+  const tabToMove = srcGroup.tabs[1]
+  const movedPaneId = tabToMove.paneId
+
+  useWorkspaceStore.getState().moveTabToWorkspace(srcWs.id, srcGroupId, tabToMove.id, destWs.id)
+
+  const s3 = useWorkspaceStore.getState()
+  // Source group should have 1 tab
+  assert.equal(s3.paneGroups[srcGroupId].tabs.length, 1)
+  // Dest group should have 2 tabs (original empty + moved)
+  assert.equal(s3.paneGroups[destGroupId].tabs.length, 2)
+  // The moved pane should be in the dest group
+  assert.ok(s3.paneGroups[destGroupId].tabs.some((t) => t.paneId === movedPaneId))
+  // The pane itself should still exist in the global panes map
+  assert.ok(s3.panes[movedPaneId])
+})
+
+test('moveTabToWorkspace collapses empty source group when multiple exist', () => {
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('Source')
+  useWorkspaceStore.getState().addWorkspace('Dest')
+  const state = useWorkspaceStore.getState()
+  const srcWs = state.workspaces[0]
+  const destWs = state.workspaces[1]
+  const srcGroupId = srcWs.root.type === 'leaf' ? srcWs.root.groupId : ''
+
+  // Create a split in source workspace
+  useWorkspaceStore.getState().splitGroup(srcWs.id, srcGroupId, 'horizontal')
+  const s2 = useWorkspaceStore.getState()
+  const srcWs2 = s2.workspaces.find((w) => w.id === srcWs.id)!
+  assert.equal(srcWs2.root.type, 'branch')
+
+  // Move the only tab from srcGroupId to dest workspace
+  const srcGroup = s2.paneGroups[srcGroupId]
+  const tabToMove = srcGroup.tabs[0]
+
+  useWorkspaceStore.getState().moveTabToWorkspace(srcWs.id, srcGroupId, tabToMove.id, destWs.id)
+
+  const s3 = useWorkspaceStore.getState()
+  // Source group should be deleted from paneGroups
+  assert.equal(s3.paneGroups[srcGroupId], undefined)
+  // Source workspace tree should be simplified (single leaf)
+  const srcWs3 = s3.workspaces.find((w) => w.id === srcWs.id)!
+  assert.equal(srcWs3.root.type, 'leaf')
+})
+
+test('moveTabToWorkspace adds empty pane when only group becomes empty', () => {
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('Source')
+  useWorkspaceStore.getState().addWorkspace('Dest')
+  const state = useWorkspaceStore.getState()
+  const srcWs = state.workspaces[0]
+  const destWs = state.workspaces[1]
+  const srcGroupId = srcWs.root.type === 'leaf' ? srcWs.root.groupId : ''
+
+  // Source has only 1 group with 1 tab (default empty pane)
+  // Add a real tab then move it
+  useWorkspaceStore.getState().addGroupTab(srcWs.id, srcGroupId)
+  const s2 = useWorkspaceStore.getState()
+  // Remove the first (empty) tab so we have just 1 tab
+  const firstTab = s2.paneGroups[srcGroupId].tabs[0]
+  useWorkspaceStore.getState().removeGroupTab(srcWs.id, srcGroupId, firstTab.id)
+
+  const s3 = useWorkspaceStore.getState()
+  const srcGroup = s3.paneGroups[srcGroupId]
+  assert.equal(srcGroup.tabs.length, 1)
+  const tabToMove = srcGroup.tabs[0]
+
+  useWorkspaceStore.getState().moveTabToWorkspace(srcWs.id, srcGroupId, tabToMove.id, destWs.id)
+
+  const s4 = useWorkspaceStore.getState()
+  // Source group should still exist with an empty pane tab
+  assert.ok(s4.paneGroups[srcGroupId])
+  assert.equal(s4.paneGroups[srcGroupId].tabs.length, 1)
+  const replacementPane = s4.panes[s4.paneGroups[srcGroupId].tabs[0].paneId]
+  assert.equal(replacementPane.type, 'empty')
+})
