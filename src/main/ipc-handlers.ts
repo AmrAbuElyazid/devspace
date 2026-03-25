@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell, nativeTheme, BrowserWindow, Menu } from 'electron'
+import { ipcMain, dialog, shell, BrowserWindow, Menu } from 'electron'
 import { readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import type { TerminalManager } from './terminal-manager'
@@ -483,19 +483,4 @@ export function registerIpcHandlers(
     }
   })
 
-  safeOn('theme:set', (_event, theme: 'light' | 'dark' | 'system') => {
-    nativeTheme.themeSource = theme
-  })
-
-  safeHandle('theme:getNativeTheme', () => {
-    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
-  })
-
-  nativeTheme.on('updated', () => {
-    if (mainWindow.isDestroyed()) return
-    mainWindow.webContents.send(
-      'theme:nativeThemeChange',
-      nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
-    )
-  })
 }
