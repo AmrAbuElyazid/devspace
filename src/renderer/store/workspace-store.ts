@@ -678,9 +678,6 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             const newTab: PaneGroupTab = { id: nanoid(), paneId: emptyPane.id }
 
             set({
-              workspaces: state.workspaces.map((w) =>
-                w.id === workspaceId ? w : w,
-              ),
               panes: newPanes,
               paneGroups: {
                 ...state.paneGroups,
