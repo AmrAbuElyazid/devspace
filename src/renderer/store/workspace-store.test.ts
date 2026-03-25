@@ -9,6 +9,7 @@ import {
   simplifyTree,
   findFirstGroupId,
   findSiblingGroupId,
+  repairTree,
 } from './workspace-store'
 
 /**
@@ -740,4 +741,80 @@ test('moveTabToWorkspace adds empty pane when only group becomes empty', () => {
   assert.equal(s4.paneGroups[srcGroupId].tabs.length, 1)
   const replacementPane = s4.panes[s4.paneGroups[srcGroupId].tabs[0].paneId]
   assert.equal(replacementPane.type, 'empty')
+})
+
+// ── repairTree ──
+
+test('repairTree removes orphaned leaves from branch', () => {
+  const root = {
+    type: 'branch' as const,
+    direction: 'horizontal' as const,
+    children: [
+      { type: 'leaf' as const, groupId: 'valid-group' },
+      { type: 'leaf' as const, groupId: 'orphan-group' },
+    ],
+    sizes: [50, 50],
+  }
+  const validGroups = new Set(['valid-group'])
+  const repaired = repairTree(root, validGroups)
+  assert.deepStrictEqual(repaired, { type: 'leaf', groupId: 'valid-group' })
+})
+
+test('repairTree preserves valid tree unchanged', () => {
+  const root = {
+    type: 'branch' as const,
+    direction: 'horizontal' as const,
+    children: [
+      { type: 'leaf' as const, groupId: 'g1' },
+      { type: 'leaf' as const, groupId: 'g2' },
+    ],
+    sizes: [50, 50],
+  }
+  const validGroups = new Set(['g1', 'g2'])
+  const repaired = repairTree(root, validGroups)
+  assert.deepStrictEqual(repaired, root)
+})
+
+test('repairTree handles deeply nested orphans', () => {
+  const root = {
+    type: 'branch' as const,
+    direction: 'horizontal' as const,
+    children: [
+      { type: 'leaf' as const, groupId: 'g1' },
+      {
+        type: 'branch' as const,
+        direction: 'vertical' as const,
+        children: [
+          { type: 'leaf' as const, groupId: 'orphan1' },
+          { type: 'leaf' as const, groupId: 'g2' },
+        ],
+        sizes: [50, 50],
+      },
+    ],
+    sizes: [50, 50],
+  }
+  const validGroups = new Set(['g1', 'g2'])
+  const repaired = repairTree(root, validGroups)
+  assert.ok(repaired)
+  assert.equal(repaired!.type, 'branch')
+  if (repaired!.type === 'branch') {
+    assert.equal(repaired!.children.length, 2)
+    assert.deepStrictEqual(repaired!.children[0], { type: 'leaf', groupId: 'g1' })
+    assert.deepStrictEqual(repaired!.children[1], { type: 'leaf', groupId: 'g2' })
+  }
+})
+
+test('repairTree returns null when all leaves orphaned', () => {
+  const root = {
+    type: 'branch' as const,
+    direction: 'horizontal' as const,
+    children: [
+      { type: 'leaf' as const, groupId: 'orphan1' },
+      { type: 'leaf' as const, groupId: 'orphan2' },
+    ],
+    sizes: [50, 50],
+  }
+  const validGroups = new Set<string>()
+  const repaired = repairTree(root, validGroups)
+  assert.equal(repaired, null)
 })
