@@ -44,6 +44,33 @@ function getWorkspace(id: string) {
   return useWorkspaceStore.getState().workspaces.find((w) => w.id === id)
 }
 
+function getLeafGroupIds(workspaceId: string): string[] {
+  const workspace = getWorkspace(workspaceId)
+  assert.ok(workspace)
+  return collectGroupIds(workspace.root)
+}
+
+function setupFourGroupWorkspace(): { wsId: string; groupIds: string[] } {
+  const wsId = setupWorkspace('Four Group Workspace')
+  const workspace = getWorkspace(wsId)
+  assert.ok(workspace)
+  const originalGroupId = workspace.focusedGroupId
+  assert.ok(originalGroupId)
+
+  useWorkspaceStore.getState().splitGroup(wsId, originalGroupId, 'horizontal')
+  useWorkspaceStore.getState().splitGroup(wsId, originalGroupId, 'vertical')
+
+  const afterLeftSplit = getWorkspace(wsId)
+  assert.ok(afterLeftSplit)
+  const groupIdsAfterLeftSplit = collectGroupIds(afterLeftSplit.root)
+  const rightGroupId = groupIdsAfterLeftSplit.find((groupId) => groupId !== originalGroupId && groupId !== afterLeftSplit.focusedGroupId)
+  assert.ok(rightGroupId)
+
+  useWorkspaceStore.getState().splitGroup(wsId, rightGroupId, 'vertical')
+
+  return { wsId, groupIds: getLeafGroupIds(wsId) }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -817,4 +844,206 @@ test('repairTree returns null when all leaves orphaned', () => {
   const validGroups = new Set<string>()
   const repaired = repairTree(root, validGroups)
   assert.equal(repaired, null)
+})
+
+test('splitGroup ignores group ids that do not belong to the workspace', () => {
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('WS A')
+  useWorkspaceStore.getState().addWorkspace('WS B')
+
+  const state = useWorkspaceStore.getState()
+  const wsA = state.workspaces[0]
+  const wsB = state.workspaces[1]
+  const wsAGroupId = wsA.root.type === 'leaf' ? wsA.root.groupId : ''
+  const wsBGroupId = wsB.root.type === 'leaf' ? wsB.root.groupId : ''
+  const paneGroupCountBefore = Object.keys(state.paneGroups).length
+
+  useWorkspaceStore.getState().splitGroup(wsA.id, wsBGroupId, 'horizontal')
+
+  const nextState = useWorkspaceStore.getState()
+  const nextWsA = nextState.workspaces.find((workspace) => workspace.id === wsA.id)
+
+  assert.ok(nextWsA)
+  assert.deepEqual(nextWsA.root, wsA.root)
+  assert.equal(nextWsA.focusedGroupId, wsAGroupId)
+  assert.equal(Object.keys(nextState.paneGroups).length, paneGroupCountBefore)
+})
+
+test('setFocusedGroup ignores group ids outside the workspace tree', () => {
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('WS A')
+  useWorkspaceStore.getState().addWorkspace('WS B')
+
+  const state = useWorkspaceStore.getState()
+  const wsA = state.workspaces[0]
+  const wsB = state.workspaces[1]
+  const wsAGroupId = wsA.root.type === 'leaf' ? wsA.root.groupId : ''
+  const wsBGroupId = wsB.root.type === 'leaf' ? wsB.root.groupId : ''
+
+  useWorkspaceStore.getState().setFocusedGroup(wsA.id, wsBGroupId)
+
+  const nextWsA = useWorkspaceStore.getState().workspaces.find((workspace) => workspace.id === wsA.id)
+  assert.ok(nextWsA)
+  assert.equal(nextWsA.focusedGroupId, wsAGroupId)
+})
+
+test('moveTabToGroup ignores destination groups from another workspace', () => {
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('Source')
+  useWorkspaceStore.getState().addWorkspace('Dest')
+
+  const state = useWorkspaceStore.getState()
+  const srcWs = state.workspaces[0]
+  const destWs = state.workspaces[1]
+  const srcGroupId = srcWs.root.type === 'leaf' ? srcWs.root.groupId : ''
+  const destGroupId = destWs.root.type === 'leaf' ? destWs.root.groupId : ''
+
+  useWorkspaceStore.getState().addGroupTab(srcWs.id, srcGroupId)
+  const srcGroupBefore = useWorkspaceStore.getState().paneGroups[srcGroupId]
+  const destGroupBefore = useWorkspaceStore.getState().paneGroups[destGroupId]
+  const movedTab = srcGroupBefore.tabs[1]
+
+  useWorkspaceStore.getState().moveTabToGroup(srcWs.id, srcGroupId, movedTab.id, destGroupId, 0)
+
+  const nextState = useWorkspaceStore.getState()
+  assert.equal(nextState.paneGroups[srcGroupId].tabs.length, srcGroupBefore.tabs.length)
+  assert.equal(nextState.paneGroups[destGroupId].tabs.length, destGroupBefore.tabs.length)
+  assert.ok(nextState.paneGroups[srcGroupId].tabs.some((tab) => tab.id === movedTab.id))
+})
+
+test('splitGroupWithTab ignores target groups outside the source workspace', () => {
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('Source')
+  useWorkspaceStore.getState().addWorkspace('Other')
+
+  const state = useWorkspaceStore.getState()
+  const srcWs = state.workspaces[0]
+  const otherWs = state.workspaces[1]
+  const srcGroupId = srcWs.root.type === 'leaf' ? srcWs.root.groupId : ''
+  const otherGroupId = otherWs.root.type === 'leaf' ? otherWs.root.groupId : ''
+
+  useWorkspaceStore.getState().addGroupTab(srcWs.id, srcGroupId)
+  const srcGroupBefore = useWorkspaceStore.getState().paneGroups[srcGroupId]
+  const tabToMove = srcGroupBefore.tabs[1]
+  const paneGroupCountBefore = Object.keys(useWorkspaceStore.getState().paneGroups).length
+
+  useWorkspaceStore.getState().splitGroupWithTab(srcWs.id, srcGroupId, tabToMove.id, otherGroupId, 'right')
+
+  const nextState = useWorkspaceStore.getState()
+  const nextSrcWs = nextState.workspaces.find((workspace) => workspace.id === srcWs.id)
+  assert.ok(nextSrcWs)
+  assert.deepEqual(nextSrcWs.root, srcWs.root)
+  assert.equal(nextState.paneGroups[srcGroupId].tabs.length, srcGroupBefore.tabs.length)
+  assert.equal(Object.keys(nextState.paneGroups).length, paneGroupCountBefore)
+})
+
+test('moveTabToWorkspace falls back to the first valid destination group when focus is invalid', () => {
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('Source')
+  useWorkspaceStore.getState().addWorkspace('Dest')
+
+  const state = useWorkspaceStore.getState()
+  const srcWs = state.workspaces[0]
+  const destWs = state.workspaces[1]
+  const srcGroupId = srcWs.root.type === 'leaf' ? srcWs.root.groupId : ''
+  const destGroupId = destWs.root.type === 'leaf' ? destWs.root.groupId : ''
+
+  useWorkspaceStore.getState().addGroupTab(srcWs.id, srcGroupId)
+  const tabToMove = useWorkspaceStore.getState().paneGroups[srcGroupId].tabs[1]
+
+  useWorkspaceStore.setState({
+    workspaces: useWorkspaceStore.getState().workspaces.map((workspace) =>
+      workspace.id === destWs.id
+        ? { ...workspace, focusedGroupId: 'missing-group' }
+        : workspace,
+    ),
+  })
+
+  useWorkspaceStore.getState().moveTabToWorkspace(srcWs.id, srcGroupId, tabToMove.id, destWs.id)
+
+  const nextState = useWorkspaceStore.getState()
+  assert.ok(nextState.paneGroups[destGroupId].tabs.some((tab) => tab.paneId === tabToMove.paneId))
+})
+
+test('removeGroupTab on a nested last-tab group does not leave orphaned leaves', () => {
+  const { wsId, groupIds } = setupFourGroupWorkspace()
+  assert.equal(groupIds.length, 4)
+
+  const removedGroupId = groupIds[groupIds.length - 1]
+  const group = useWorkspaceStore.getState().paneGroups[removedGroupId]
+  assert.ok(group)
+  assert.equal(group.tabs.length, 1)
+
+  useWorkspaceStore.getState().removeGroupTab(wsId, removedGroupId, group.tabs[0].id)
+
+  const remainingGroupIds = getLeafGroupIds(wsId)
+  assert.equal(remainingGroupIds.includes(removedGroupId), false)
+  assert.equal(useWorkspaceStore.getState().paneGroups[removedGroupId], undefined)
+  for (const groupId of remainingGroupIds) {
+    assert.ok(useWorkspaceStore.getState().paneGroups[groupId])
+  }
+})
+
+test('moveTabToWorkspace from a nested last-tab group does not leave orphaned leaves', () => {
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('Source')
+  useWorkspaceStore.getState().addWorkspace('Dest')
+
+  const srcWsId = useWorkspaceStore.getState().workspaces[0].id
+  const destWsId = useWorkspaceStore.getState().workspaces[1].id
+
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('Source')
+  const { wsId, groupIds } = setupFourGroupWorkspace()
+  useWorkspaceStore.getState().addWorkspace('Dest')
+
+  const sourceWsId = wsId
+  const destWorkspace = useWorkspaceStore.getState().workspaces.find((workspace) => workspace.id !== sourceWsId)
+  assert.ok(destWorkspace)
+
+  const removedGroupId = groupIds[groupIds.length - 1]
+  const group = useWorkspaceStore.getState().paneGroups[removedGroupId]
+  assert.ok(group)
+
+  useWorkspaceStore.getState().moveTabToWorkspace(sourceWsId, removedGroupId, group.tabs[0].id, destWorkspace.id)
+
+  const remainingGroupIds = getLeafGroupIds(sourceWsId)
+  assert.equal(remainingGroupIds.includes(removedGroupId), false)
+  assert.equal(useWorkspaceStore.getState().paneGroups[removedGroupId], undefined)
+  for (const groupId of remainingGroupIds) {
+    assert.ok(useWorkspaceStore.getState().paneGroups[groupId])
+  }
+})
+
+test('closing both panes on the left side of a 2x2 layout collapses to the right column', () => {
+  const { wsId, groupIds } = setupFourGroupWorkspace()
+  assert.equal(groupIds.length, 4)
+
+  const [topLeftGroupId, bottomLeftGroupId, topRightGroupId, bottomRightGroupId] = groupIds
+  const topLeftGroup = useWorkspaceStore.getState().paneGroups[topLeftGroupId]
+  const bottomLeftGroup = useWorkspaceStore.getState().paneGroups[bottomLeftGroupId]
+  assert.ok(topLeftGroup)
+  assert.ok(bottomLeftGroup)
+
+  useWorkspaceStore.getState().closeGroup(wsId, topLeftGroupId)
+  useWorkspaceStore.getState().closeGroup(wsId, bottomLeftGroupId)
+
+  const remainingGroupIds = getLeafGroupIds(wsId)
+  assert.deepEqual(remainingGroupIds, [topRightGroupId, bottomRightGroupId])
+  assert.equal(useWorkspaceStore.getState().paneGroups[topLeftGroupId], undefined)
+  assert.equal(useWorkspaceStore.getState().paneGroups[bottomLeftGroupId], undefined)
+  assert.ok(useWorkspaceStore.getState().paneGroups[topRightGroupId])
+  assert.ok(useWorkspaceStore.getState().paneGroups[bottomRightGroupId])
+
+  const workspace = getWorkspace(wsId)
+  assert.ok(workspace)
+  assert.deepEqual(workspace.root, {
+    type: 'branch',
+    direction: 'vertical',
+    children: [
+      { type: 'leaf', groupId: topRightGroupId },
+      { type: 'leaf', groupId: bottomRightGroupId },
+    ],
+    sizes: [50, 50],
+  })
 })

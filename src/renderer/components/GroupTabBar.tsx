@@ -22,6 +22,7 @@ interface GroupTabBarProps {
   workspaceId: string
   isFocused: boolean
   isTopLeftGroup?: boolean
+  dndEnabled: boolean
 }
 
 function SortableGroupTab({
@@ -30,6 +31,7 @@ function SortableGroupTab({
   groupId,
   workspaceId,
   isActive,
+  dndEnabled,
   onSelect,
   onClose,
 }: {
@@ -38,13 +40,15 @@ function SortableGroupTab({
   groupId: string
   workspaceId: string
   isActive: boolean
+  dndEnabled: boolean
   onSelect: () => void
   onClose: () => void
 }) {
   const pane = useWorkspaceStore((s) => s.panes[paneId])
-  const activeDrag = useDragContext()
+  const { activeDrag } = useDragContext()
   const { attributes, listeners, setNodeRef, isDragging, isOver, transform, transition } = useSortable({
     id: `gtab-${tabId}`,
+    disabled: !dndEnabled,
     data: { type: 'group-tab', workspaceId, groupId, tabId } satisfies DragItemData,
   })
 
@@ -84,7 +88,7 @@ function SortableGroupTab({
   )
 }
 
-export default function GroupTabBar({ group, groupId, workspaceId, isFocused, isTopLeftGroup }: GroupTabBarProps) {
+export default function GroupTabBar({ group, groupId, workspaceId, isFocused, isTopLeftGroup, dndEnabled }: GroupTabBarProps) {
   const addGroupTab = useWorkspaceStore((s) => s.addGroupTab)
   const removeGroupTab = useWorkspaceStore((s) => s.removeGroupTab)
   const setActiveGroupTab = useWorkspaceStore((s) => s.setActiveGroupTab)
@@ -128,6 +132,7 @@ export default function GroupTabBar({ group, groupId, workspaceId, isFocused, is
             groupId={groupId}
             workspaceId={workspaceId}
             isActive={tab.id === group.activeTabId}
+            dndEnabled={dndEnabled}
             onSelect={() => setActiveGroupTab(workspaceId, groupId, tab.id)}
             onClose={() => removeGroupTab(workspaceId, groupId, tab.id)}
           />

@@ -5,11 +5,20 @@ import { useWorkspaceStore } from '../store/workspace-store'
 import PaneGroupContainer from './PaneGroupContainer'
 import type { SplitNode } from '../types/workspace'
 
+function getNodeIdentity(node: SplitNode): string {
+  if (node.type === 'leaf') {
+    return `leaf:${node.groupId}`
+  }
+
+  return `branch:${node.direction}:[${node.children.map(getNodeIdentity).join(',')}]`
+}
+
 interface SplitLayoutProps {
   node: SplitNode
   workspaceId: string
   overlayActive: boolean
   sidebarOpen: boolean
+  dndEnabled: boolean
   path?: number[]
 }
 
@@ -18,6 +27,7 @@ export default function SplitLayout({
   workspaceId,
   overlayActive,
   sidebarOpen,
+  dndEnabled,
   path = [],
 }: SplitLayoutProps): JSX.Element {
   const updateSplitSizes = useWorkspaceStore((s) => s.updateSplitSizes)
@@ -42,17 +52,19 @@ export default function SplitLayout({
 
   if (node.type === 'leaf') {
     return (
-      <PaneGroupContainer
-        groupId={node.groupId}
-        workspaceId={workspaceId}
-        overlayActive={overlayActive}
-        sidebarOpen={sidebarOpen}
-      />
-    )
+        <PaneGroupContainer
+          groupId={node.groupId}
+          workspaceId={workspaceId}
+          overlayActive={overlayActive}
+          sidebarOpen={sidebarOpen}
+          dndEnabled={dndEnabled}
+        />
+      )
   }
 
   return (
     <Allotment
+      key={getNodeIdentity(node)}
       vertical={node.direction === 'vertical'}
       defaultSizes={node.sizes}
       onChange={handleChange}
@@ -66,6 +78,7 @@ export default function SplitLayout({
             workspaceId={workspaceId}
             overlayActive={overlayActive}
             sidebarOpen={sidebarOpen}
+            dndEnabled={dndEnabled}
             path={[...path, i]}
           />
         </Allotment.Pane>

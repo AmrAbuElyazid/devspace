@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
+import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Plus, Settings, ChevronDown, ChevronRight, ChevronLeft, FolderClosed, Search, X, Star } from 'lucide-react'
 import { useWorkspaceStore, collectGroupIds } from '../store/workspace-store'
@@ -91,7 +92,7 @@ function SortableWorkspaceItem({
   onStopEditing: () => void
   onContextMenu: (e: React.MouseEvent) => void
 }): JSX.Element {
-  const activeDrag = useDragContext()
+  const { activeDrag } = useDragContext()
   const mergedRef = useRef<HTMLDivElement | null>(null)
 
   const {
@@ -102,7 +103,7 @@ function SortableWorkspaceItem({
     isOver,
   } = useSortable({
     id: `ws-${workspaceId}`,
-    data: { type: 'sidebar-workspace' as const, workspaceId, parentFolderId },
+    data: { type: 'sidebar-workspace' as const, workspaceId, parentFolderId, visible: true },
   })
 
   const setRef = useCallback(
@@ -167,6 +168,46 @@ function SortableWorkspaceItem({
   )
 }
 
+function PinnedWorkspaceItem({
+  workspaceId,
+  isActive,
+  name,
+  onSelect,
+  onContextMenu,
+}: {
+  workspaceId: string
+  isActive: boolean
+  name: string
+  onSelect: () => void
+  onContextMenu: (e: React.MouseEvent) => void
+}): JSX.Element {
+  const { activeDrag } = useDragContext()
+  const { setNodeRef, isOver } = useDroppable({
+    id: `pinned-ws-${workspaceId}`,
+    data: { type: 'sidebar-workspace' as const, workspaceId, parentFolderId: null, visible: true },
+  })
+
+  const isTabDropTarget = isOver && activeDrag?.type === 'group-tab' && activeDrag.workspaceId !== workspaceId
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`ws-item ${isActive ? 'ws-item-active' : ''} ${isTabDropTarget ? 'ws-item-tab-drop' : ''}`}
+      onClick={onSelect}
+      onContextMenu={onContextMenu}
+    >
+      <Star size={10} className="pinned-star" />
+      <span
+        className="ws-dot"
+        style={{
+          background: isActive ? 'var(--accent)' : 'var(--foreground-faint)',
+        }}
+      />
+      <span className="flex-1 truncate" style={{ fontSize: 13 }}>{name}</span>
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------------------
 // SortableFolderItem
 // ---------------------------------------------------------------------------
@@ -222,7 +263,7 @@ function SortableFolderItem({
     isOver,
   } = useSortable({
     id: `folder-${folder.id}`,
-    data: { type: 'sidebar-folder' as const, folderId: folder.id, parentFolderId },
+    data: { type: 'sidebar-folder' as const, folderId: folder.id, parentFolderId, visible: true },
   })
 
   const setFolderRef = useCallback(
@@ -234,7 +275,7 @@ function SortableFolderItem({
   )
 
   // Folder uses edge zones (0.25 threshold): edges show insertion line, center shows folder highlight
-  const activeDragCtx = useDragContext()
+  const { activeDrag: activeDragCtx } = useDragContext()
   const isSidebarDrag = activeDragCtx?.type === 'sidebar-workspace' || activeDragCtx?.type === 'sidebar-folder'
   const insertPosition = useInsertionIndicator(isOver && !isDragging && isSidebarDrag, false, folderRef, 'vertical', 0.25)
 
@@ -450,7 +491,7 @@ export default function Sidebar(): JSX.Element {
   const setSidebarWidth = useSettingsStore((s) => s.setSidebarWidth)
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar)
 
-  const activeDrag = useDragContext()
+  const { activeDrag } = useDragContext()
 
   const pinnedWorkspaces = useMemo(
     () => workspaces.filter((ws) => ws.pinned),
@@ -586,21 +627,14 @@ export default function Sidebar(): JSX.Element {
           </div>
           <div className="sidebar-pinned-list">
             {pinnedWorkspaces.map((ws) => (
-              <div
+              <PinnedWorkspaceItem
                 key={`pinned-${ws.id}`}
-                className={`ws-item ${ws.id === activeWorkspaceId ? 'ws-item-active' : ''}`}
-                onClick={() => setActiveWorkspace(ws.id)}
+                workspaceId={ws.id}
+                isActive={ws.id === activeWorkspaceId}
+                name={ws.name}
+                onSelect={() => setActiveWorkspace(ws.id)}
                 onContextMenu={(e) => handleWorkspaceContextMenu(e, ws.id)}
-              >
-                <Star size={10} className="pinned-star" />
-                <span
-                  className="ws-dot"
-                  style={{
-                    background: ws.id === activeWorkspaceId ? 'var(--accent)' : 'var(--foreground-faint)',
-                  }}
-                />
-                <span className="flex-1 truncate" style={{ fontSize: 13 }}>{ws.name}</span>
-              </div>
+              />
             ))}
           </div>
         </>

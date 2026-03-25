@@ -4,23 +4,87 @@ import {
   useSensor,
   PointerSensor,
   type DragStartEvent,
+  type DragMoveEvent,
   type DragEndEvent,
   type DragOverEvent,
   type CollisionDetection,
+  type CollisionDescriptor,
   pointerWithin,
   closestCenter,
 } from '@dnd-kit/core'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { findFolder } from '../lib/sidebar-tree'
-import type { DragItemData, DropSide } from '../types/dnd'
+import { filterCollisionsForActiveDrag } from '../lib/dnd-collision-filter'
+import { resolveTabDropIntent, type TabDropIntent, type TabDropTarget } from '../lib/tab-dnd-intent'
+import type { DragItemData } from '../types/dnd'
 import type { SidebarNode } from '../types/workspace'
 
 // React context to share activeDrag state without prop drilling
-export const DragContext = createContext<DragItemData | null>(null)
+export const DragContext = createContext<{ activeDrag: DragItemData | null; dropIntent: TabDropIntent | null }>({ activeDrag: null, dropIntent: null })
 export const useDragContext = () => useContext(DragContext)
+
+function getPointerPosition(event: { activatorEvent: Event; delta: { x: number; y: number } }): { x: number; y: number } | null {
+  if (!(event.activatorEvent instanceof PointerEvent)) return null
+
+  return {
+    x: event.activatorEvent.clientX + event.delta.x,
+    y: event.activatorEvent.clientY + event.delta.y,
+  }
+}
+
+function collisionToDropTarget(collision: CollisionDescriptor): TabDropTarget | null {
+  const data = collision.data?.droppableContainer?.data?.current as Record<string, unknown> | undefined
+  const rect = collision.data?.droppableContainer?.rect.current
+  if (!data || !rect) return null
+
+  const visible = data.visible !== false
+  const targetRect = {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height,
+  }
+
+  switch (data.type) {
+    case 'group-tab':
+      return {
+        kind: 'group-tab',
+        workspaceId: data.workspaceId as string,
+        groupId: data.groupId as string,
+        tabId: data.tabId as string,
+        visible,
+        rect: targetRect,
+      }
+    case 'pane-drop':
+      return {
+        kind: 'pane-drop',
+        workspaceId: data.workspaceId as string,
+        groupId: data.groupId as string,
+        visible,
+        rect: targetRect,
+      }
+    case 'sidebar-workspace':
+      return {
+        kind: 'sidebar-workspace',
+        workspaceId: data.workspaceId as string,
+        visible,
+        rect: targetRect,
+      }
+    case 'sidebar-folder':
+      return {
+        kind: 'sidebar-folder',
+        folderId: data.folderId as string,
+        visible,
+        rect: targetRect,
+      }
+    default:
+      return null
+  }
+}
 
 export function useDragAndDrop() {
   const [activeDrag, setActiveDrag] = useState<DragItemData | null>(null)
+  const [dropIntent, setDropIntent] = useState<TabDropIntent | null>(null)
   const folderExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hoveredFolderIdRef = useRef<string | null>(null)
 
@@ -52,30 +116,15 @@ export function useDragAndDrop() {
   const collisionDetection: CollisionDetection = useCallback((args) => {
     const pointerCollisions = pointerWithin(args)
     if (pointerCollisions.length > 0) {
-      // Prioritize group-tab targets over pane-drop targets
-      const tabTargets = pointerCollisions.filter(
-        (c) => (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type === 'group-tab'
-      )
-      if (tabTargets.length > 0) return tabTargets
-      // Then sidebar targets
-      const sidebarTargets = pointerCollisions.filter(
-        (c) => {
-          const t = (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type
-          return t === 'sidebar-workspace' || t === 'sidebar-folder'
-        }
-      )
-      if (sidebarTargets.length > 0) return sidebarTargets
-      // Remaining pointerWithin hits (includes pane-drop — valid here since
-      // the pointer IS inside the zone rect)
-      return pointerCollisions
+      return filterCollisionsForActiveDrag(activeDrag, pointerCollisions as CollisionDescriptor[])
     }
     // closestCenter fallback — EXCLUDE pane-drop zones. Drop zones require
     // strict pointer containment (pointerWithin), not proximity.
     const centerCollisions = closestCenter(args)
-    return centerCollisions.filter(
+    return filterCollisionsForActiveDrag(activeDrag, centerCollisions.filter(
       (c) => (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type !== 'pane-drop'
-    )
-  }, [])
+    ) as CollisionDescriptor[])
+  }, [activeDrag])
 
   const clearFolderExpandTimer = useCallback(() => {
     if (folderExpandTimerRef.current) {
@@ -88,6 +137,35 @@ export function useDragAndDrop() {
   const onDragStart = useCallback((event: DragStartEvent) => {
     const data = event.active.data.current as DragItemData
     setActiveDrag(data)
+    setDropIntent(null)
+  }, [])
+
+  const onDragMove = useCallback((event: DragMoveEvent) => {
+    const dragData = event.active.data.current as DragItemData
+    if (!dragData || dragData.type !== 'group-tab') {
+      setDropIntent(null)
+      return
+    }
+
+    const pointer = getPointerPosition(event)
+    if (!pointer) {
+      setDropIntent(null)
+      return
+    }
+
+    const targets = (event.collisions ?? [])
+      .map((collision) => collisionToDropTarget(collision as CollisionDescriptor))
+      .filter((target): target is TabDropTarget => target !== null)
+
+    setDropIntent(resolveTabDropIntent({
+      active: {
+        workspaceId: dragData.workspaceId,
+        groupId: dragData.groupId,
+        tabId: dragData.tabId,
+      },
+      pointer,
+      overTargets: targets,
+    }))
   }, [])
 
   const onDragOver = useCallback((event: DragOverEvent) => {
@@ -119,6 +197,8 @@ export function useDragAndDrop() {
     const { active, over } = event
     setActiveDrag(null)
     clearFolderExpandTimer()
+    const currentDropIntent = dropIntent
+    setDropIntent(null)
 
     if (!over) return
 
@@ -128,14 +208,6 @@ export function useDragAndDrop() {
     const dropType = dropData.type as string
 
     const state = store.getState()
-
-    // Helper: compute final pointer position from the drag event
-    const pointerPos = event.activatorEvent instanceof PointerEvent
-      ? {
-          x: (event.activatorEvent as PointerEvent).clientX + event.delta.x,
-          y: (event.activatorEvent as PointerEvent).clientY + event.delta.y,
-        }
-      : null
 
     // Helper: determine if pointer is in the "after" half of an element
     function isInsertAfter(sortableId: string, axis: 'vertical' | 'horizontal'): boolean {
@@ -263,44 +335,55 @@ export function useDragAndDrop() {
       return
     }
 
-    // ── group-tab → pane-drop (drag-to-split) ──
-    if (dragData.type === 'group-tab' && dropType === 'pane-drop') {
-      const targetGroupId = dropData.groupId as string
-      if (!pointerPos) return
+    if (dragData.type === 'group-tab' && currentDropIntent) {
+      if (currentDropIntent.kind === 'split-group') {
+        state.splitGroupWithTab(
+          currentDropIntent.workspaceId,
+          currentDropIntent.sourceGroupId,
+          currentDropIntent.sourceTabId,
+          currentDropIntent.targetGroupId,
+          currentDropIntent.side,
+        )
+        return
+      }
 
-      // Compute which edge the pointer is closest to
-      const dropEl = document.querySelector(`[data-drop-zone="${targetGroupId}"]`)
-      if (!dropEl) return
-      const rect = dropEl.getBoundingClientRect()
+      if (currentDropIntent.kind === 'move-to-workspace') {
+        state.moveTabToWorkspace(
+          currentDropIntent.sourceWorkspaceId,
+          currentDropIntent.sourceGroupId,
+          currentDropIntent.sourceTabId,
+          currentDropIntent.targetWorkspaceId,
+        )
+        return
+      }
 
-      const relX = (pointerPos.x - rect.left) / rect.width
-      const relY = (pointerPos.y - rect.top) / rect.height
-      const distLeft = relX
-      const distRight = 1 - relX
-      const distTop = relY
-      const distBottom = 1 - relY
-      const minDist = Math.min(distLeft, distRight, distTop, distBottom)
+      if (currentDropIntent.kind === 'move-to-group-tab') {
+        const srcGroupId = currentDropIntent.sourceGroupId
+        const destGroupId = currentDropIntent.targetGroupId
+        const srcTabId = currentDropIntent.sourceTabId
+        const destTabId = currentDropIntent.targetTabId
 
-      let side: DropSide
-      if (minDist === distLeft) side = 'left'
-      else if (minDist === distRight) side = 'right'
-      else if (minDist === distTop) side = 'top'
-      else side = 'bottom'
-
-      state.splitGroupWithTab(
-        dragData.workspaceId,
-        dragData.groupId,
-        dragData.tabId,
-        targetGroupId,
-        side,
-      )
-      return
+        if (srcGroupId === destGroupId) {
+          const group = state.paneGroups[srcGroupId]
+          if (!group) return
+          const fromIndex = group.tabs.findIndex((t) => t.id === srcTabId)
+          const toIndex = group.tabs.findIndex((t) => t.id === destTabId)
+          if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return
+          state.reorderGroupTabs(dragData.workspaceId, srcGroupId, fromIndex, toIndex)
+        } else {
+          const destGroup = state.paneGroups[destGroupId]
+          if (!destGroup) return
+          const insertIndex = destGroup.tabs.findIndex((t) => t.id === destTabId)
+          state.moveTabToGroup(dragData.workspaceId, srcGroupId, srcTabId, destGroupId, insertIndex !== -1 ? insertIndex : undefined)
+        }
+        return
+      }
     }
 
     // ── group-tab → sidebar-workspace (cross-workspace move) ──
     if (dragData.type === 'group-tab' && dropType === 'sidebar-workspace') {
       const destWorkspaceId = dropData.workspaceId as string
-      if (dragData.workspaceId === destWorkspaceId) return // same workspace = no-op
+      if (dragData.workspaceId === destWorkspaceId) return
       state.moveTabToWorkspace(
         dragData.workspaceId,
         dragData.groupId,
@@ -309,10 +392,11 @@ export function useDragAndDrop() {
       )
       return
     }
-  }, [clearFolderExpandTimer])
+  }, [clearFolderExpandTimer, dropIntent])
 
   const onDragCancel = useCallback(() => {
     setActiveDrag(null)
+    setDropIntent(null)
     clearFolderExpandTimer()
   }, [clearFolderExpandTimer])
 
@@ -320,7 +404,9 @@ export function useDragAndDrop() {
     sensors,
     collisionDetection,
     activeDrag,
+    dropIntent,
     onDragStart,
+    onDragMove,
     onDragOver,
     onDragEnd,
     onDragCancel,
