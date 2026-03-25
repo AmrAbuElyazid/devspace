@@ -77,6 +77,10 @@ export default function App(): JSX.Element {
   }, [overlayActive])
 
   useEffect(() => {
+    window.api.window.setSidebarOpen(sidebarOpen)
+  }, [sidebarOpen])
+
+  useEffect(() => {
     return subscribeToBrowserEvents({
       onStateChange: (state) => {
         handleRuntimeStateChange(state, {

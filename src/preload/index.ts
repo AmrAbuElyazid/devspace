@@ -67,6 +67,7 @@ const bridge: DevspaceBridge = {
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
     close: () => ipcRenderer.send('window:close'),
+    setSidebarOpen: (open) => ipcRenderer.send('window:setSidebarOpen', open),
     isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
     onMaximizeChange: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, maximized: boolean): void => {

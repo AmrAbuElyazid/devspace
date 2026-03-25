@@ -3,13 +3,16 @@ import { expect, mock, test } from 'bun:test'
 const handlers = new Map()
 const controllerCalls = []
 const browserImportCalls = []
+const mainWindowCalls = []
 
 mock.module('electron', () => ({
   ipcMain: {
     handle: (channel, handler) => {
       handlers.set(channel, handler)
     },
-    on: () => {},
+    on: (channel, handler) => {
+      handlers.set(channel, handler)
+    },
   },
   dialog: {
     showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
@@ -41,6 +44,9 @@ registerIpcHandlers(
     isMaximized: () => false,
     unmaximize: () => {},
     maximize: () => {},
+    setWindowButtonPosition: (position) => {
+      mainWindowCalls.push(['setWindowButtonPosition', position])
+    },
     close: () => {},
   },
   {
@@ -140,4 +146,16 @@ test('browser import IPC rejects Chrome profile paths outside discovered profile
 
   expect(result).toEqual({ ok: false, code: 'INVALID_CHROME_PROFILE', importedCookies: 0, importedHistory: 0 })
   expect(browserImportCalls).toEqual([])
+})
+
+test('window setSidebarOpen IPC updates native traffic light position', async () => {
+  mainWindowCalls.length = 0
+
+  await handlers.get('window:setSidebarOpen')({}, false)
+  await handlers.get('window:setSidebarOpen')({}, true)
+
+  expect(mainWindowCalls).toEqual([
+    ['setWindowButtonPosition', { x: 16, y: 11 }],
+    ['setWindowButtonPosition', { x: 16, y: 18 }],
+  ])
 })

@@ -9,6 +9,7 @@ import { BrowserPaneManager } from './browser/browser-pane-manager'
 import { BrowserHistoryService } from './browser/browser-history-service'
 import { BrowserImportService } from './browser/browser-import-service'
 import { installWindowZoomReset } from './window-zoom'
+import { getTrafficLightPosition } from './window-chrome'
 
 // Sync shell environment before app is ready (macOS GUI apps don't inherit login shell env)
 syncShellEnvironment()
@@ -41,7 +42,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 16, y: 18 },
+    trafficLightPosition: getTrafficLightPosition(true),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
