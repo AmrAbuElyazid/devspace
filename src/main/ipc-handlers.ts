@@ -18,6 +18,7 @@ import {
   validateFilePath,
   getSafeExternalUrl
 } from './validation'
+import { getTrafficLightPosition } from './window-chrome'
 
 const registeredHandlers = new Set<string>()
 
@@ -173,6 +174,11 @@ export function registerIpcHandlers(
 
   safeOn('window:close', () => {
     mainWindow.close()
+  })
+
+  safeOn('window:setSidebarOpen', (_event, open) => {
+    if (typeof open !== 'boolean') return
+    mainWindow.setWindowButtonPosition(getTrafficLightPosition(open))
   })
 
   safeHandle('window:isMaximized', () => {

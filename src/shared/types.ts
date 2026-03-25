@@ -45,6 +45,7 @@ export interface DevspaceBridge {
     minimize: () => void
     maximize: () => void
     close: () => void
+    setSidebarOpen: (open: boolean) => void
     isMaximized: () => Promise<boolean>
     onMaximizeChange: (callback: (maximized: boolean) => void) => () => void
   }
