@@ -12,7 +12,7 @@ import {
 } from '@dnd-kit/core'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { findFolder } from '../lib/sidebar-tree'
-import type { DragItemData } from '../types/dnd'
+import type { DragItemData, DropSide } from '../types/dnd'
 import type { SidebarNode } from '../types/workspace'
 
 // React context to share activeDrag state without prop drilling
@@ -45,7 +45,22 @@ export function useDragAndDrop() {
   // sortable items (not inside any rect but close enough for reorder).
   const collisionDetection: CollisionDetection = useCallback((args) => {
     const pointerCollisions = pointerWithin(args)
-    if (pointerCollisions.length > 0) return pointerCollisions
+    if (pointerCollisions.length > 0) {
+      // Prioritize group-tab targets over pane-edge targets
+      const tabTargets = pointerCollisions.filter(
+        (c) => (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type === 'group-tab'
+      )
+      if (tabTargets.length > 0) return tabTargets
+      // Then sidebar targets
+      const sidebarTargets = pointerCollisions.filter(
+        (c) => {
+          const t = (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type
+          return t === 'sidebar-workspace' || t === 'sidebar-folder'
+        }
+      )
+      if (sidebarTargets.length > 0) return sidebarTargets
+      return pointerCollisions
+    }
     return closestCenter(args)
   }, [])
 
@@ -232,6 +247,33 @@ export function useDragAndDrop() {
         const insertIndex = destGroup.tabs.findIndex((t) => t.id === destTabId)
         state.moveTabToGroup(dragData.workspaceId, srcGroupId, srcTabId, destGroupId, insertIndex !== -1 ? insertIndex : undefined)
       }
+      return
+    }
+
+    // ── group-tab → pane-edge (drag-to-split) ──
+    if (dragData.type === 'group-tab' && dropType === 'pane-edge') {
+      const targetGroupId = dropData.groupId as string
+      const side = dropData.side as DropSide
+      state.splitGroupWithTab(
+        dragData.workspaceId,
+        dragData.groupId,
+        dragData.tabId,
+        targetGroupId,
+        side,
+      )
+      return
+    }
+
+    // ── group-tab → sidebar-workspace (cross-workspace move) ──
+    if (dragData.type === 'group-tab' && dropType === 'sidebar-workspace') {
+      const destWorkspaceId = dropData.workspaceId as string
+      if (dragData.workspaceId === destWorkspaceId) return // same workspace = no-op
+      state.moveTabToWorkspace(
+        dragData.workspaceId,
+        dragData.groupId,
+        dragData.tabId,
+        destWorkspaceId,
+      )
       return
     }
   }, [clearFolderExpandTimer])
