@@ -269,7 +269,7 @@ export function useDragAndDrop() {
         const rect = paneEl.getBoundingClientRect()
         side = computeDropSide(pointerPos.x, pointerPos.y, rect)
       } else if (dropData.side) {
-        // Fallback: read the side tracked by PaneContainer's pointermove listener
+        // Fallback: read the side tracked by the drop zone's pointermove listener
         side = dropData.side as DropSide
       }
 

@@ -1,12 +1,12 @@
 import { type ElementType } from 'react'
 import { Terminal, FileCode, Globe, X } from 'lucide-react'
-import { useWorkspaceStore } from '../store/workspace-store'
+import { useWorkspaceStore, collectGroupIds } from '../store/workspace-store'
 import type { PaneType, PaneConfig } from '../types/workspace'
 
 interface EmptyPaneProps {
   paneId: string
   workspaceId: string
-  tabId: string
+  groupId: string
 }
 
 const options: { type: PaneType; label: string; desc: string; icon: ElementType; defaultConfig: PaneConfig }[] = [
@@ -15,15 +15,33 @@ const options: { type: PaneType; label: string; desc: string; icon: ElementType;
   { type: 'browser', label: 'Browser', desc: 'Web preview', icon: Globe, defaultConfig: { url: 'https://google.com' } },
 ]
 
-export default function EmptyPane({ paneId, workspaceId, tabId }: EmptyPaneProps): JSX.Element {
+export default function EmptyPane({ paneId, workspaceId, groupId }: EmptyPaneProps): JSX.Element {
   const changePaneType = useWorkspaceStore((s) => s.changePaneType)
-  const closePane = useWorkspaceStore((s) => s.closePane)
+  const removeGroupTab = useWorkspaceStore((s) => s.removeGroupTab)
+  const closeGroup = useWorkspaceStore((s) => s.closeGroup)
+  const group = useWorkspaceStore((s) => s.paneGroups[groupId])
+  const wsRoot = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.root)
+
+  const handleClose = () => {
+    // Find the tab that references this pane
+    const tab = group?.tabs.find((t) => t.paneId === paneId)
+    if (!tab) return
+
+    // If this is the only tab in the only group, close the group (which will
+    // replace it with a fresh empty pane). Otherwise remove the tab.
+    const hasMultipleGroups = wsRoot ? collectGroupIds(wsRoot).length > 1 : false
+    if (group.tabs.length === 1 && hasMultipleGroups) {
+      closeGroup(workspaceId, groupId)
+    } else {
+      removeGroupTab(workspaceId, groupId, tab.id)
+    }
+  }
 
   return (
     <div className="empty-pane relative">
       {/* Close button */}
       <button
-        onClick={() => closePane(workspaceId, tabId, paneId)}
+        onClick={handleClose}
         className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded transition-colors"
         style={{ color: 'var(--foreground-faint)' }}
         onMouseEnter={(e) => {

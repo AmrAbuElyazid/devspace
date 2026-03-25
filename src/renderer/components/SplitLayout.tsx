@@ -2,13 +2,12 @@ import { useCallback, useEffect, useRef } from 'react'
 import { Allotment } from 'allotment'
 import 'allotment/dist/style.css'
 import { useWorkspaceStore } from '../store/workspace-store'
-import PaneContainer from './PaneContainer'
+import PaneGroupContainer from './PaneGroupContainer'
 import type { SplitNode } from '../types/workspace'
 
 interface SplitLayoutProps {
   node: SplitNode
   workspaceId: string
-  tabId: string
   overlayActive: boolean
   path?: number[]
 }
@@ -16,7 +15,6 @@ interface SplitLayoutProps {
 export default function SplitLayout({
   node,
   workspaceId,
-  tabId,
   overlayActive,
   path = [],
 }: SplitLayoutProps): JSX.Element {
@@ -28,10 +26,10 @@ export default function SplitLayout({
       if (!sizes) return
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current)
       debounceTimerRef.current = setTimeout(() => {
-        updateSplitSizes(workspaceId, tabId, path, sizes)
+        updateSplitSizes(workspaceId, path, sizes)
       }, 100)
     },
-    [updateSplitSizes, workspaceId, tabId, path],
+    [updateSplitSizes, workspaceId, path],
   )
 
   useEffect(() => {
@@ -42,10 +40,9 @@ export default function SplitLayout({
 
   if (node.type === 'leaf') {
     return (
-      <PaneContainer
-        paneId={node.paneId}
+      <PaneGroupContainer
+        groupId={node.groupId}
         workspaceId={workspaceId}
-        tabId={tabId}
         overlayActive={overlayActive}
       />
     )
@@ -59,12 +56,11 @@ export default function SplitLayout({
     >
       {node.children.map((child, i) => (
         <Allotment.Pane
-          key={child.type === 'leaf' ? child.paneId : `branch-${i}-${child.direction}`}
+          key={child.type === 'leaf' ? child.groupId : `branch-${i}-${child.direction}`}
         >
           <SplitLayout
             node={child}
             workspaceId={workspaceId}
-            tabId={tabId}
             overlayActive={overlayActive}
             path={[...path, i]}
           />

@@ -626,6 +626,171 @@
   border-color: var(--accent-border);
 }
 
+/* ─── Pane Group ─────────────────────────────────────────────────────── */
+
+.pane-group {
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  transition: border-color 150ms ease;
+}
+
+/* Pane group content: stacked layers using visibility, not display:none,
+   so native views (xterm, WebContentsView) keep their canvas dimensions. */
+.pane-group-content {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pane-tab-layer {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  z-index: 0;
+}
+
+.pane-tab-layer[data-active] {
+  visibility: visible;
+  z-index: 1;
+}
+
+/* ─── Group Tab Bar ──────────────────────────────────────────────────── */
+
+.group-tabbar {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  gap: 1px;
+  overflow-x: auto;
+  user-select: none;
+}
+
+.group-tabbar.group-focused {
+  border-bottom-color: var(--accent-border);
+}
+
+.group-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  max-width: 140px;
+  position: relative;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.group-tab:hover {
+  background: var(--surface-hover);
+  color: var(--foreground);
+}
+
+.group-tab-active {
+  background: var(--accent-muted);
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.group-tab-dragging {
+  opacity: 0.4;
+}
+
+.group-tab .tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 100ms ease, background-color 100ms ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.group-tab:hover .tab-close,
+.group-tab-active .tab-close {
+  opacity: 0.5;
+}
+
+.group-tab .tab-close:hover {
+  opacity: 1;
+  background: var(--surface-hover);
+}
+
+.group-tabbar-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 100ms ease;
+  padding: 0;
+}
+
+.group-tabbar-add:hover {
+  background: var(--surface-hover);
+  color: var(--foreground);
+}
+
+.group-tabbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 100ms ease;
+}
+
+.group-tabbar:hover .group-tabbar-actions,
+.group-focused .group-tabbar-actions {
+  opacity: 1;
+}
+
+.group-tabbar-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: all 100ms ease;
+  padding: 0;
+}
+
+.group-tabbar-action:hover {
+  background: var(--surface-hover);
+  color: var(--foreground);
+}
+
 /* ─── Empty Pane ─────────────────────────────────────────────────────── */
 
 .empty-pane {
