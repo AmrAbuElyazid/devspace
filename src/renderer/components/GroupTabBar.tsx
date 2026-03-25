@@ -9,6 +9,15 @@ import { Button } from './ui/button'
 import type { PaneGroup, PaneType } from '../types/workspace'
 import type { DragItemData } from '../types/dnd'
 
+export function handleTabBarWindowZoomDoubleClick(
+  event: Pick<React.MouseEvent, 'detail' | 'stopPropagation'>,
+  deps: { maximize: () => void } = { maximize: () => window.api.window.maximize() },
+): void {
+  if (event.detail !== 2) return
+  event.stopPropagation()
+  deps.maximize()
+}
+
 const typeIcons: Record<PaneType, typeof Terminal> = {
   terminal: Terminal,
   editor: FileCode,
@@ -138,6 +147,12 @@ export default function GroupTabBar({ group, groupId, workspaceId, isFocused, is
           />
         ))}
       </SortableContext>
+
+      <div
+        className="group-tabbar-drag-spacer drag-region"
+        onDoubleClick={(event) => handleTabBarWindowZoomDoubleClick(event)}
+        title="Drag window"
+      />
 
       <button
         className="group-tabbar-add no-drag"
