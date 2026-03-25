@@ -76,6 +76,41 @@ export function simplifyTree(node: SplitNode): SplitNode {
   return simplified
 }
 
+/**
+ * Remove tree leaves whose groupId is not in `validGroupIds`.
+ * Returns the repaired tree, or null if every leaf was orphaned.
+ */
+export function repairTree(node: SplitNode, validGroupIds: Set<string>): SplitNode | null {
+  if (node.type === 'leaf') {
+    return validGroupIds.has(node.groupId) ? node : null
+  }
+
+  const newChildren: SplitNode[] = []
+  const newSizes: number[] = []
+
+  for (let i = 0; i < node.children.length; i++) {
+    const result = repairTree(node.children[i], validGroupIds)
+    if (result !== null) {
+      newChildren.push(result)
+      newSizes.push(node.sizes[i])
+    }
+  }
+
+  if (newChildren.length === 0) return null
+  if (newChildren.length === 1) return newChildren[0]
+
+  // Re-normalize sizes
+  const sizeSum = newSizes.reduce((a, b) => a + b, 0)
+  const normalizedSizes = newSizes.map((s) => (s / sizeSum) * 100)
+
+  return {
+    type: 'branch',
+    direction: node.direction,
+    children: newChildren,
+    sizes: normalizedSizes,
+  }
+}
+
 export function removeGroupFromTree(root: SplitNode, groupId: string): SplitNode | null {
   if (root.type === 'leaf') {
     return root.groupId === groupId ? null : root
@@ -430,8 +465,36 @@ function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorksp
         pinned: ws.pinned ?? false,
         lastActiveAt: ws.lastActiveAt ?? Date.now(),
       }))
+
+      // Repair any orphaned tree leaves
+      const validGroupIds = new Set(Object.keys(persisted.paneGroups))
+      const repairedWorkspaces = workspaces.map((ws) => {
+        const repaired = repairTree(ws.root, validGroupIds)
+        if (!repaired) {
+          // Entire tree was orphaned — create a fresh group
+          const emptyPane = createEmptyPane()
+          const freshGroup = createPaneGroup(emptyPane)
+          persisted.panes[emptyPane.id] = emptyPane
+          persisted.paneGroups[freshGroup.id] = freshGroup
+          return {
+            ...ws,
+            root: { type: 'leaf' as const, groupId: freshGroup.id },
+            focusedGroupId: freshGroup.id,
+          }
+        }
+        if (repaired !== ws.root) {
+          // Tree was repaired — update focusedGroupId if it points to a removed group
+          const remainingGroups = collectGroupIds(repaired)
+          const focusedGroupId = ws.focusedGroupId && remainingGroups.includes(ws.focusedGroupId)
+            ? ws.focusedGroupId
+            : findFirstGroupId(repaired)
+          return { ...ws, root: repaired, focusedGroupId }
+        }
+        return ws
+      })
+
       return {
-        workspaces,
+        workspaces: repairedWorkspaces,
         activeWorkspaceId: persisted.activeWorkspaceId,
         panes: persisted.panes ?? {},
         paneGroups: persisted.paneGroups,
