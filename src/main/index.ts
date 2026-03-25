@@ -65,6 +65,8 @@ function createWindow(): void {
   })
 
   browserSessionManager.persistSessionCookies()
+  browserSessionManager.installCorsOverrides()
+  browserSessionManager.registerSecretKeyHandler()
   browserSessionManager.installHandlers({
     resolvePaneIdForWebContents: (webContentsId) => browserPaneManager.resolvePaneIdForWebContents(webContentsId),
     requestBrowserPermission: (request, resolve) => {
@@ -84,7 +86,7 @@ function createWindow(): void {
   })
 
   terminalManager.init(mainWindow)
-  registerIpcHandlers(mainWindow, terminalManager, browserPaneManager, vscodeServerManager, browserImportService)
+  registerIpcHandlers(mainWindow, terminalManager, browserPaneManager, vscodeServerManager, browserImportService, browserSessionManager)
   installWindowZoomReset(mainWindow.webContents)
 
   mainWindow.on('ready-to-show', () => {
@@ -201,7 +203,15 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
+let isQuitting = false
+app.on('before-quit', (event) => {
   terminalManager.destroyAll()
-  vscodeServerManager.stopAll()
+  if (isQuitting) return // already shutting down, let quit proceed
+  isQuitting = true
+  // stopAll() is async — prevent immediate quit, wait for graceful
+  // shutdown, then re-trigger quit.
+  event.preventDefault()
+  vscodeServerManager.stopAll().finally(() => {
+    app.quit()
+  })
 })

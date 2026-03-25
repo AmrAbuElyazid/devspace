@@ -9,7 +9,7 @@
     "preview": "electron-vite preview",
     "postinstall": "electron-vite postinstall 2>/dev/null; true",
     "rebuild-native": "cd native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=arm64 --dist-url=https://electronjs.org/headers",
-    "dist": "bun run build && bun run rebuild-native && bunx electron-builder --mac --arm64 --dir"
+    "dist": "electron-vite build && cd native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=arm64 --dist-url=https://electronjs.org/headers && cd .. && bunx electron-builder --mac --arm64 --dir"
   },
   "build": {
     "appId": "com.devspace.app",
