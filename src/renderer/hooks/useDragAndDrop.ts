@@ -44,10 +44,10 @@ export function useDragAndDrop() {
   // closestCenter fallback handles the case where pointer is between
   // sortable items (not inside any rect but close enough for reorder).
   // Collision detection: pointerWithin for all targets, closestCenter fallback
-  // for sortable items only. pane-edge zones use strict containment — they
-  // ONLY match when the pointer is physically inside the 25% edge zone.
-  // closestCenter must never return pane-edge zones, otherwise dragging between
-  // tabs (where pointer isn't inside any tab rect) would match an edge zone
+  // for sortable items only. pane-drop zones use strict containment — they
+  // ONLY match when the pointer is physically inside the drop zone.
+  // closestCenter must never return pane-drop zones, otherwise dragging between
+  // tabs (where pointer isn't inside any tab rect) would match a drop zone
   // by proximity and trigger an unintended split.
   const collisionDetection: CollisionDetection = useCallback((args) => {
     const pointerCollisions = pointerWithin(args)
@@ -73,7 +73,7 @@ export function useDragAndDrop() {
     // strict pointer containment (pointerWithin), not proximity.
     const centerCollisions = closestCenter(args)
     return centerCollisions.filter(
-      (c) => (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type !== 'pane-edge'
+      (c) => (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type !== 'pane-drop'
     )
   }, [])
 
@@ -263,10 +263,30 @@ export function useDragAndDrop() {
       return
     }
 
-    // ── group-tab → pane-edge (drag-to-split) ──
-    if (dragData.type === 'group-tab' && dropType === 'pane-edge') {
+    // ── group-tab → pane-drop (drag-to-split) ──
+    if (dragData.type === 'group-tab' && dropType === 'pane-drop') {
       const targetGroupId = dropData.groupId as string
-      const side = dropData.side as DropSide
+      if (!pointerPos) return
+
+      // Compute which edge the pointer is closest to
+      const dropEl = document.querySelector(`[data-drop-zone="${targetGroupId}"]`)
+      if (!dropEl) return
+      const rect = dropEl.getBoundingClientRect()
+
+      const relX = (pointerPos.x - rect.left) / rect.width
+      const relY = (pointerPos.y - rect.top) / rect.height
+      const distLeft = relX
+      const distRight = 1 - relX
+      const distTop = relY
+      const distBottom = 1 - relY
+      const minDist = Math.min(distLeft, distRight, distTop, distBottom)
+
+      let side: DropSide
+      if (minDist === distLeft) side = 'left'
+      else if (minDist === distRight) side = 'right'
+      else if (minDist === distTop) side = 'top'
+      else side = 'bottom'
+
       state.splitGroupWithTab(
         dragData.workspaceId,
         dragData.groupId,
