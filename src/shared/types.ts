@@ -71,6 +71,7 @@ export interface DevspaceBridge {
     isAvailable: () => Promise<boolean>
     start: (paneId: string, folderPath: string) => Promise<{ url: string } | { error: string }>
     stop: (paneId: string) => Promise<void>
+    setKeepServerRunning: (keep: boolean) => void
   }
   browser: BrowserBridge
 }

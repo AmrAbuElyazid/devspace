@@ -143,6 +143,11 @@ export function registerIpcHandlers(
     browserPaneManager.destroyPane(paneId)
   })
 
+  safeOn('editor:setKeepServerRunning', (_event, keep: unknown) => {
+    if (typeof keep !== 'boolean') return
+    vscodeServerManager.keepRunning = keep
+  })
+
   // Terminal event forwarding to renderer
   terminalManager.onTitleChanged((surfaceId, title) => {
     mainWindow.webContents.send('terminal:titleChanged', surfaceId, title)

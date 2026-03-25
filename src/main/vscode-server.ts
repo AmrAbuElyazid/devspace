@@ -80,6 +80,9 @@ export class VscodeServerManager {
    */
   private startLock: Promise<unknown> = Promise.resolve()
 
+  /** Whether to leave the server running after app quit (default: true). */
+  keepRunning = true
+
   constructor(serverDataDir?: string) {
     this.serverDataDir = serverDataDir || join(homedir(), '.devspace', 'vscode-server-data')
     mkdirSync(this.serverDataDir, { recursive: true })
@@ -136,6 +139,11 @@ export class VscodeServerManager {
       return this.addFolder(folder)
     }
 
+    // Try to reuse a server left running from a previous session.
+    if (await this.reuseRunningServer()) {
+      return this.addFolder(folder)
+    }
+
     // No server running — acquire the port (possibly killing a stale process).
     await this.acquirePort()
 
@@ -180,6 +188,22 @@ export class VscodeServerManager {
 
     console.log(`[vscode-server] started on port ${VSCODE_PORT}`)
     return this.addFolder(folder)
+  }
+
+  /**
+   * Probe port 18562 for a responsive VS Code server left running from
+   * a previous session.  Returns true if found and adopted.
+   */
+  private async reuseRunningServer(): Promise<boolean> {
+    if (await isPortFree(VSCODE_PORT)) return false
+
+    try {
+      await waitForServer(`http://127.0.0.1:${VSCODE_PORT}`, 3000, 200)
+      console.log(`[vscode-server] reusing existing server on port ${VSCODE_PORT}`)
+      return true
+    } catch {
+      return false
+    }
   }
 
   /** Create a folder entry pointing at the shared server. */
@@ -261,8 +285,20 @@ export class VscodeServerManager {
 
     if (!child) return
 
+    if (this.keepRunning) {
+      console.log(`[vscode-server] leaving server running (keepRunning=true)`)
+      return
+    }
+
     console.log(`[vscode-server] stopping server (SIGTERM)`)
     await this.gracefulKill(child, timeoutMs)
+
+    // Also kill orphaned code-tunn child that survives parent death.
+    try {
+      execSync(`lsof -ti:${VSCODE_PORT} | xargs kill -9 2>/dev/null`, { stdio: 'ignore' })
+    } catch {
+      // Ignore
+    }
   }
 
   private gracefulKill(child: ChildProcess, timeoutMs: number): Promise<void> {
