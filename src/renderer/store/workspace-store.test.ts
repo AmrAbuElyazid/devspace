@@ -511,3 +511,139 @@ test('setActiveWorkspace updates lastActiveAt', () => {
   // WS B was not switched to, so its lastActiveAt should not have changed
   // (it was set when addWorkspace created it, and again when addWorkspace calls setActiveWorkspace implicitly via set)
 })
+
+// ── splitGroupWithTab ──
+
+test('splitGroupWithTab splits target group and moves tab', () => {
+  const wsId = setupWorkspace()
+  const state = useWorkspaceStore.getState()
+  const ws = state.workspaces.find((w) => w.id === wsId)!
+  const groupId = ws.root.type === 'leaf' ? ws.root.groupId : ''
+  const group = state.paneGroups[groupId]
+
+  // Add a second tab to the group
+  useWorkspaceStore.getState().addGroupTab(wsId, groupId)
+  const s2 = useWorkspaceStore.getState()
+  const g2 = s2.paneGroups[groupId]
+  assert.equal(g2.tabs.length, 2)
+
+  const tabToMove = g2.tabs[1]
+
+  // Split right: should create a new group to the right of the target
+  useWorkspaceStore.getState().splitGroupWithTab(wsId, groupId, tabToMove.id, groupId, 'right')
+
+  const s3 = useWorkspaceStore.getState()
+  const ws3 = s3.workspaces.find((w) => w.id === wsId)!
+  assert.equal(ws3.root.type, 'branch')
+  if (ws3.root.type !== 'branch') return
+  assert.equal(ws3.root.direction, 'horizontal')
+  assert.equal(ws3.root.children.length, 2)
+
+  // Original group should have 1 tab remaining
+  const origGroup = s3.paneGroups[groupId]
+  assert.equal(origGroup.tabs.length, 1)
+
+  // New group should have the moved tab
+  const newGroupId = ws3.root.children[1].type === 'leaf' ? ws3.root.children[1].groupId : ''
+  const newGroup = s3.paneGroups[newGroupId]
+  assert.ok(newGroup)
+  assert.equal(newGroup.tabs.length, 1)
+  assert.equal(newGroup.tabs[0].paneId, tabToMove.paneId)
+
+  // Focus should be on the new group
+  assert.equal(ws3.focusedGroupId, newGroupId)
+})
+
+test('splitGroupWithTab with left side puts new group first', () => {
+  const wsId = setupWorkspace()
+  const state = useWorkspaceStore.getState()
+  const ws = state.workspaces.find((w) => w.id === wsId)!
+  const groupId = ws.root.type === 'leaf' ? ws.root.groupId : ''
+
+  // Add second tab
+  useWorkspaceStore.getState().addGroupTab(wsId, groupId)
+  const g = useWorkspaceStore.getState().paneGroups[groupId]
+  const tabToMove = g.tabs[1]
+
+  useWorkspaceStore.getState().splitGroupWithTab(wsId, groupId, tabToMove.id, groupId, 'left')
+
+  const s = useWorkspaceStore.getState()
+  const ws2 = s.workspaces.find((w) => w.id === wsId)!
+  assert.equal(ws2.root.type, 'branch')
+  if (ws2.root.type !== 'branch') return
+
+  // New group should be FIRST child (left)
+  const firstGroupId = ws2.root.children[0].type === 'leaf' ? ws2.root.children[0].groupId : ''
+  assert.notEqual(firstGroupId, groupId)
+  assert.equal(ws2.focusedGroupId, firstGroupId)
+})
+
+test('splitGroupWithTab with single tab on same group populates src with empty pane', () => {
+  const wsId = setupWorkspace()
+  const state = useWorkspaceStore.getState()
+  const ws = state.workspaces.find((w) => w.id === wsId)!
+  const groupId = ws.root.type === 'leaf' ? ws.root.groupId : ''
+
+  // Group has only 1 tab — split it onto itself
+  const group = state.paneGroups[groupId]
+  assert.equal(group.tabs.length, 1)
+  const tabToMove = group.tabs[0]
+
+  useWorkspaceStore.getState().splitGroupWithTab(wsId, groupId, tabToMove.id, groupId, 'right')
+
+  const s = useWorkspaceStore.getState()
+  const ws2 = s.workspaces.find((w) => w.id === wsId)!
+  assert.equal(ws2.root.type, 'branch')
+  if (ws2.root.type !== 'branch') return
+  assert.equal(ws2.root.direction, 'horizontal')
+  assert.equal(ws2.root.children.length, 2)
+
+  // The original group (left child) should still exist with an empty pane tab
+  const leftGroupId = ws2.root.children[0].type === 'leaf' ? ws2.root.children[0].groupId : ''
+  assert.equal(leftGroupId, groupId)
+  const origGroup = s.paneGroups[groupId]
+  assert.ok(origGroup, 'original group must still exist in paneGroups')
+  assert.equal(origGroup.tabs.length, 1)
+  const emptyPane = s.panes[origGroup.tabs[0].paneId]
+  assert.ok(emptyPane)
+  assert.equal(emptyPane.type, 'empty')
+
+  // The new group (right child) should have the moved tab's pane
+  const rightGroupId = ws2.root.children[1].type === 'leaf' ? ws2.root.children[1].groupId : ''
+  assert.notEqual(rightGroupId, groupId)
+  const newGroup = s.paneGroups[rightGroupId]
+  assert.ok(newGroup)
+  assert.equal(newGroup.tabs.length, 1)
+  assert.equal(newGroup.tabs[0].paneId, tabToMove.paneId)
+
+  // Focus on the new group
+  assert.equal(ws2.focusedGroupId, rightGroupId)
+})
+
+test('splitGroupWithTab removes src group when last tab moved and multiple groups', () => {
+  const wsId = setupWorkspace()
+  const state = useWorkspaceStore.getState()
+  const ws = state.workspaces.find((w) => w.id === wsId)!
+  const groupId = ws.root.type === 'leaf' ? ws.root.groupId : ''
+
+  // Split to create a second group
+  useWorkspaceStore.getState().splitGroup(wsId, groupId, 'horizontal')
+  const s2 = useWorkspaceStore.getState()
+  const ws2 = s2.workspaces.find((w) => w.id === wsId)!
+  assert.equal(ws2.root.type, 'branch')
+  if (ws2.root.type !== 'branch') return
+  const secondGroupId = ws2.root.children[1].type === 'leaf' ? ws2.root.children[1].groupId : ''
+
+  // Now splitGroupWithTab: move the only tab from groupId to create a split on secondGroupId
+  const srcGroup = s2.paneGroups[groupId]
+  const tabToMove = srcGroup.tabs[0]
+
+  useWorkspaceStore.getState().splitGroupWithTab(wsId, groupId, tabToMove.id, secondGroupId, 'bottom')
+
+  const s3 = useWorkspaceStore.getState()
+  // srcGroup should be gone from paneGroups
+  assert.equal(s3.paneGroups[groupId], undefined)
+  // Tree should be simplified (no more reference to groupId)
+  const allIds = collectGroupIds(s3.workspaces.find((w) => w.id === wsId)!.root)
+  assert.ok(!allIds.includes(groupId))
+})
