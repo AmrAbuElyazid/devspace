@@ -611,8 +611,9 @@
   font-weight: 500;
 }
 
-.group-tab-dragging {
-  opacity: 0.4;
+.group-tab-drop-target {
+  background: var(--accent-muted);
+  outline: 1px solid var(--border);
 }
 
 .group-tab .tab-close {

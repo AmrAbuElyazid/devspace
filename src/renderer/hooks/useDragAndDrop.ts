@@ -210,14 +210,28 @@ export function useDragAndDrop() {
       return
     }
 
-    // ── group-tab → group-tab (cross-group tab move) ──
-    // Intra-group reorder is handled by SortableContext in GroupTabBar.
-    // Here we only handle cross-group moves.
+    // ── group-tab → group-tab ──
     if (dragData.type === 'group-tab' && dropType === 'group-tab') {
       const srcGroupId = dragData.groupId
       const destGroupId = dropData.groupId as string
-      if (srcGroupId === destGroupId) return // intra-group reorder handled by SortableContext
-      state.moveTabToGroup(dragData.workspaceId, srcGroupId, dragData.tabId, destGroupId)
+      const srcTabId = dragData.tabId
+      const destTabId = dropData.tabId as string
+
+      if (srcGroupId === destGroupId) {
+        // Intra-group reorder
+        const group = state.paneGroups[srcGroupId]
+        if (!group) return
+        const fromIndex = group.tabs.findIndex((t) => t.id === srcTabId)
+        const toIndex = group.tabs.findIndex((t) => t.id === destTabId)
+        if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return
+        state.reorderGroupTabs(dragData.workspaceId, srcGroupId, fromIndex, toIndex)
+      } else {
+        // Cross-group move — insert at position of target tab
+        const destGroup = state.paneGroups[destGroupId]
+        if (!destGroup) return
+        const insertIndex = destGroup.tabs.findIndex((t) => t.id === destTabId)
+        state.moveTabToGroup(dragData.workspaceId, srcGroupId, srcTabId, destGroupId, insertIndex !== -1 ? insertIndex : undefined)
+      }
       return
     }
   }, [clearFolderExpandTimer])
