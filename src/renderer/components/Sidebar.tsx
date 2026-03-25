@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useMemo } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { Plus, Settings, ChevronDown, ChevronRight, ChevronLeft, FolderClosed, Search, X, Star } from 'lucide-react'
+import { Plus, Settings, ChevronDown, ChevronRight, ChevronLeft, FolderClosed, Search, X } from 'lucide-react'
 import { useWorkspaceStore, collectGroupIds } from '../store/workspace-store'
 import { useSettingsStore } from '../store/settings-store'
 import { Button } from './ui/button'
@@ -13,6 +13,8 @@ import { useInsertionIndicator } from '../hooks/useInsertionIndicator'
 import type { ContextMenuItem } from '../../shared/types'
 import type { SidebarNode, Workspace, Pane, PaneGroup, TerminalConfig, EditorConfig } from '../types/workspace'
 import { useDragContext } from '../hooks/useDragAndDrop'
+import type { SidebarContainer } from '../types/dnd'
+import { findSidebarNode } from '../lib/sidebar-tree'
 
 // ---------------------------------------------------------------------------
 // Utility: format relative time
@@ -67,6 +69,7 @@ function getWorkspaceMetadata(ws: Workspace, panes: Record<string, Pane>, paneGr
 
 function SortableWorkspaceItem({
   workspaceId,
+  container,
   parentFolderId,
   depth,
   isActive,
@@ -80,6 +83,7 @@ function SortableWorkspaceItem({
   onContextMenu,
 }: {
   workspaceId: string
+  container: SidebarContainer
   parentFolderId: string | null
   depth: number
   isActive: boolean
@@ -103,7 +107,7 @@ function SortableWorkspaceItem({
     isOver,
   } = useSortable({
     id: `ws-${workspaceId}`,
-    data: { type: 'sidebar-workspace' as const, workspaceId, parentFolderId, visible: true },
+    data: { type: 'sidebar-workspace' as const, workspaceId, container, parentFolderId, visible: true },
   })
 
   const setRef = useCallback(
@@ -168,52 +172,13 @@ function SortableWorkspaceItem({
   )
 }
 
-function PinnedWorkspaceItem({
-  workspaceId,
-  isActive,
-  name,
-  onSelect,
-  onContextMenu,
-}: {
-  workspaceId: string
-  isActive: boolean
-  name: string
-  onSelect: () => void
-  onContextMenu: (e: React.MouseEvent) => void
-}): JSX.Element {
-  const { activeDrag } = useDragContext()
-  const { setNodeRef, isOver } = useDroppable({
-    id: `pinned-ws-${workspaceId}`,
-    data: { type: 'sidebar-workspace' as const, workspaceId, parentFolderId: null, visible: true },
-  })
-
-  const isTabDropTarget = isOver && activeDrag?.type === 'group-tab' && activeDrag.workspaceId !== workspaceId
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={`ws-item ${isActive ? 'ws-item-active' : ''} ${isTabDropTarget ? 'ws-item-tab-drop' : ''}`}
-      onClick={onSelect}
-      onContextMenu={onContextMenu}
-    >
-      <Star size={10} className="pinned-star" />
-      <span
-        className="ws-dot"
-        style={{
-          background: isActive ? 'var(--accent)' : 'var(--foreground-faint)',
-        }}
-      />
-      <span className="flex-1 truncate" style={{ fontSize: 13 }}>{name}</span>
-    </div>
-  )
-}
-
 // ---------------------------------------------------------------------------
 // SortableFolderItem
 // ---------------------------------------------------------------------------
 
 function SortableFolderItem({
   folder,
+  container,
   parentFolderId,
   depth,
   isEditing,
@@ -230,10 +195,15 @@ function SortableFolderItem({
   onContextMenuWorkspace,
   onSelectWorkspace,
   activeWorkspaceId,
+  workspaces,
+  panes,
+  paneGroups,
+  toggleFolderCollapsed,
   deleteTarget,
   setDeleteTarget,
 }: {
   folder: SidebarNode & { type: 'folder' }
+  container: SidebarContainer
   parentFolderId: string | null
   depth: number
   isEditing: boolean
@@ -250,6 +220,10 @@ function SortableFolderItem({
   onContextMenuWorkspace: (e: React.MouseEvent, workspaceId: string) => void
   onSelectWorkspace: (id: string) => void
   activeWorkspaceId: string
+  workspaces: Workspace[]
+  panes: Record<string, Pane>
+  paneGroups: Record<string, PaneGroup>
+  toggleFolderCollapsed: (folderId: string) => void
   deleteTarget: string | null
   setDeleteTarget: (id: string | null) => void
 }): JSX.Element {
@@ -263,7 +237,7 @@ function SortableFolderItem({
     isOver,
   } = useSortable({
     id: `folder-${folder.id}`,
-    data: { type: 'sidebar-folder' as const, folderId: folder.id, parentFolderId, visible: true },
+    data: { type: 'sidebar-folder' as const, folderId: folder.id, container, parentFolderId, visible: true },
   })
 
   const setFolderRef = useCallback(
@@ -337,6 +311,7 @@ function SortableFolderItem({
       {isExpanded && (
         <SidebarTreeLevel
           nodes={folder.children}
+          container={container}
           parentFolderId={folder.id}
           depth={depth + 1}
           editingId={editingId}
@@ -351,6 +326,10 @@ function SortableFolderItem({
           onContextMenuWorkspace={onContextMenuWorkspace}
           onSelectWorkspace={onSelectWorkspace}
           activeWorkspaceId={activeWorkspaceId}
+          workspaces={workspaces}
+          panes={panes}
+          paneGroups={paneGroups}
+          toggleFolderCollapsed={toggleFolderCollapsed}
           deleteTarget={deleteTarget}
           setDeleteTarget={setDeleteTarget}
         />
@@ -363,8 +342,9 @@ function SortableFolderItem({
 // SidebarTreeLevel — recursive level renderer
 // ---------------------------------------------------------------------------
 
-function SidebarTreeLevel({
+export function SidebarTreeLevel({
   nodes,
+  container,
   parentFolderId,
   depth,
   editingId,
@@ -379,10 +359,15 @@ function SidebarTreeLevel({
   onContextMenuWorkspace,
   onSelectWorkspace,
   activeWorkspaceId,
+  workspaces,
+  panes,
+  paneGroups,
+  toggleFolderCollapsed,
   deleteTarget,
   setDeleteTarget,
 }: {
   nodes: SidebarNode[]
+  container: SidebarContainer
   parentFolderId: string | null
   depth: number
   editingId: string | null
@@ -397,14 +382,13 @@ function SidebarTreeLevel({
   onContextMenuWorkspace: (e: React.MouseEvent, workspaceId: string) => void
   onSelectWorkspace: (id: string) => void
   activeWorkspaceId: string
+  workspaces: Workspace[]
+  panes: Record<string, Pane>
+  paneGroups: Record<string, PaneGroup>
+  toggleFolderCollapsed: (folderId: string) => void
   deleteTarget: string | null
   setDeleteTarget: (id: string | null) => void
 }): JSX.Element {
-  const workspaces = useWorkspaceStore((s) => s.workspaces)
-  const panes = useWorkspaceStore((s) => s.panes)
-  const paneGroups = useWorkspaceStore((s) => s.paneGroups)
-  const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed)
-
   const sortableIds = nodes.map((n) =>
     n.type === 'workspace' ? `ws-${n.workspaceId}` : `folder-${n.id}`,
   )
@@ -422,6 +406,7 @@ function SidebarTreeLevel({
             <SortableWorkspaceItem
               key={`ws-${ws.id}`}
               workspaceId={ws.id}
+              container={container}
               parentFolderId={parentFolderId}
               depth={depth}
               isActive={ws.id === activeWorkspaceId}
@@ -442,6 +427,7 @@ function SidebarTreeLevel({
           <SortableFolderItem
             key={`folder-${node.id}`}
             folder={node}
+            container={container}
             parentFolderId={parentFolderId}
             depth={depth}
             isEditing={editingId === node.id && editingType === 'folder'}
@@ -458,6 +444,10 @@ function SidebarTreeLevel({
             onContextMenuWorkspace={onContextMenuWorkspace}
             onSelectWorkspace={onSelectWorkspace}
             activeWorkspaceId={activeWorkspaceId}
+            workspaces={workspaces}
+            panes={panes}
+            paneGroups={paneGroups}
+            toggleFolderCollapsed={toggleFolderCollapsed}
             deleteTarget={deleteTarget}
             setDeleteTarget={setDeleteTarget}
           />
@@ -478,12 +468,15 @@ export default function Sidebar(): JSX.Element {
   const removeWorkspace = useWorkspaceStore((s) => s.removeWorkspace)
   const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace)
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace)
+  const pinnedSidebarNodes = useWorkspaceStore((s) => s.pinnedSidebarNodes)
   const sidebarTree = useWorkspaceStore((s) => s.sidebarTree)
   const addFolder = useWorkspaceStore((s) => s.addFolder)
   const removeFolder = useWorkspaceStore((s) => s.removeFolder)
   const renameFolder = useWorkspaceStore((s) => s.renameFolder)
   const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed)
   const togglePinWorkspace = useWorkspaceStore((s) => s.togglePinWorkspace)
+  const pinFolder = useWorkspaceStore((s) => s.pinFolder)
+  const unpinFolder = useWorkspaceStore((s) => s.unpinFolder)
   const panes = useWorkspaceStore((s) => s.panes)
   const paneGroups = useWorkspaceStore((s) => s.paneGroups)
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen)
@@ -492,11 +485,6 @@ export default function Sidebar(): JSX.Element {
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar)
 
   const { activeDrag } = useDragContext()
-
-  const pinnedWorkspaces = useMemo(
-    () => workspaces.filter((ws) => ws.pinned),
-    [workspaces],
-  )
 
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -511,6 +499,24 @@ export default function Sidebar(): JSX.Element {
     const q = searchQuery.toLowerCase()
     return new Set(workspaces.filter((ws) => ws.name.toLowerCase().includes(q)).map((ws) => ws.id))
   }, [searchQuery, workspaces])
+
+  const workspaceContainer = useCallback((workspaceId: string): SidebarContainer => {
+    return findSidebarNode(pinnedSidebarNodes, workspaceId, 'workspace') ? 'pinned' : 'main'
+  }, [pinnedSidebarNodes])
+
+  const folderContainer = useCallback((folderId: string): SidebarContainer => {
+    return findSidebarNode(pinnedSidebarNodes, folderId, 'folder') ? 'pinned' : 'main'
+  }, [pinnedSidebarNodes])
+
+  const isSidebarDrag = activeDrag?.type === 'sidebar-workspace' || activeDrag?.type === 'sidebar-folder'
+  const { setNodeRef: setPinnedRootRef, isOver: isPinnedRootOver } = useDroppable({
+    id: 'sidebar-root-pinned',
+    data: { type: 'sidebar-root' as const, container: 'pinned', visible: true },
+  })
+  const { setNodeRef: setMainRootRef, isOver: isMainRootOver } = useDroppable({
+    id: 'sidebar-root-main',
+    data: { type: 'sidebar-root' as const, container: 'main', visible: true },
+  })
 
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -551,10 +557,11 @@ export default function Sidebar(): JSX.Element {
     e.preventDefault()
     const ws = workspaces.find((w) => w.id === workspaceId)
     if (!ws) return
+    const isPinned = workspaceContainer(workspaceId) === 'pinned'
 
     const items: ContextMenuItem[] = [
       { id: 'rename', label: 'Rename' },
-      { id: 'pin', label: ws.pinned ? 'Unpin' : 'Pin' },
+      { id: 'pin', label: isPinned ? 'Unpin' : 'Pin' },
       { id: 'new-folder', label: 'New Folder...' },
       ...(workspaces.length > 1 ? [{ id: 'delete', label: 'Delete', destructive: true }] : []),
     ]
@@ -566,12 +573,15 @@ export default function Sidebar(): JSX.Element {
     else if (result === 'pin') togglePinWorkspace(workspaceId)
     else if (result === 'new-folder') addFolder('New Folder')
     else if (result === 'delete') setDeleteTarget(workspaceId)
-  }, [workspaces, startEditingWorkspace, addFolder, togglePinWorkspace])
+  }, [workspaces, workspaceContainer, startEditingWorkspace, addFolder, togglePinWorkspace])
 
   const handleFolderContextMenu = useCallback(async (e: React.MouseEvent, folderId: string) => {
     e.preventDefault()
+    const container = folderContainer(folderId)
+    const isPinned = container === 'pinned'
     const items: ContextMenuItem[] = [
       { id: 'rename', label: 'Rename Folder' },
+      { id: 'pin', label: isPinned ? 'Unpin' : 'Pin' },
       { id: 'add-workspace', label: 'Add Workspace' },
       { id: 'add-subfolder', label: 'Add Sub-folder' },
       { id: 'delete', label: 'Delete Folder', destructive: true },
@@ -579,10 +589,14 @@ export default function Sidebar(): JSX.Element {
 
     const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY })
     if (result === 'rename') startEditingFolder(folderId)
-    else if (result === 'add-workspace') addWorkspace()
-    else if (result === 'add-subfolder') addFolder('New Folder', folderId)
+    else if (result === 'pin') {
+      if (isPinned) unpinFolder(folderId)
+      else pinFolder(folderId)
+    }
+    else if (result === 'add-workspace') addWorkspace(undefined, folderId, container)
+    else if (result === 'add-subfolder') addFolder('New Folder', folderId, container)
     else if (result === 'delete') removeFolder(folderId)
-  }, [startEditingFolder, addWorkspace, addFolder, removeFolder])
+  }, [folderContainer, startEditingFolder, addWorkspace, addFolder, removeFolder, pinFolder, unpinFolder])
 
   return (
     <div
@@ -620,22 +634,39 @@ export default function Sidebar(): JSX.Element {
       </div>
 
       {/* Pinned section */}
-      {pinnedWorkspaces.length > 0 && (
+      {(pinnedSidebarNodes.length > 0 || isSidebarDrag) && (
         <>
           <div className="sidebar-section-header">
             <span className="sidebar-label">Pinned</span>
           </div>
-          <div className="sidebar-pinned-list">
-            {pinnedWorkspaces.map((ws) => (
-              <PinnedWorkspaceItem
-                key={`pinned-${ws.id}`}
-                workspaceId={ws.id}
-                isActive={ws.id === activeWorkspaceId}
-                name={ws.name}
-                onSelect={() => setActiveWorkspace(ws.id)}
-                onContextMenu={(e) => handleWorkspaceContextMenu(e, ws.id)}
-              />
-            ))}
+          <div
+            ref={setPinnedRootRef}
+            className={`sidebar-pinned-list ${isSidebarDrag && isPinnedRootOver ? 'sidebar-item-drag-over-folder' : ''}`}
+          >
+            <SidebarTreeLevel
+              nodes={pinnedSidebarNodes}
+              container="pinned"
+              parentFolderId={null}
+              depth={0}
+              editingId={editingId}
+              editingType={editingType}
+              filteredWorkspaceIds={filteredWorkspaceIds}
+              onStartEditingFolder={startEditingFolder}
+              onStartEditingWorkspace={startEditingWorkspace}
+              onRenameFolder={(id, name) => renameFolder(id, name)}
+              onRenameWorkspace={(id, name) => renameWorkspace(id, name)}
+              onStopEditing={stopEditing}
+            onContextMenuFolder={handleFolderContextMenu}
+            onContextMenuWorkspace={handleWorkspaceContextMenu}
+            onSelectWorkspace={(id) => setActiveWorkspace(id)}
+            activeWorkspaceId={activeWorkspaceId}
+            workspaces={workspaces}
+            panes={panes}
+            paneGroups={paneGroups}
+            toggleFolderCollapsed={toggleFolderCollapsed}
+            deleteTarget={deleteTarget}
+            setDeleteTarget={setDeleteTarget}
+          />
           </div>
         </>
       )}
@@ -656,27 +687,34 @@ export default function Sidebar(): JSX.Element {
       </div>
 
       {/* Sidebar tree with DnD */}
-      <ScrollArea className="ws-list">
-        <SidebarTreeLevel
-          nodes={sidebarTree}
-          parentFolderId={null}
-          depth={0}
-          editingId={editingId}
-          editingType={editingType}
-          filteredWorkspaceIds={filteredWorkspaceIds}
-          onStartEditingFolder={startEditingFolder}
-          onStartEditingWorkspace={startEditingWorkspace}
-          onRenameFolder={(id, name) => renameFolder(id, name)}
-          onRenameWorkspace={(id, name) => renameWorkspace(id, name)}
-          onStopEditing={stopEditing}
-          onContextMenuFolder={handleFolderContextMenu}
-          onContextMenuWorkspace={handleWorkspaceContextMenu}
-          onSelectWorkspace={(id) => setActiveWorkspace(id)}
-          activeWorkspaceId={activeWorkspaceId}
-          deleteTarget={deleteTarget}
-          setDeleteTarget={setDeleteTarget}
-        />
-      </ScrollArea>
+      <div ref={setMainRootRef} className={isSidebarDrag && isMainRootOver ? 'sidebar-item-drag-over-folder' : ''}>
+        <ScrollArea className="ws-list">
+          <SidebarTreeLevel
+            nodes={sidebarTree}
+            container="main"
+            parentFolderId={null}
+            depth={0}
+            editingId={editingId}
+            editingType={editingType}
+            filteredWorkspaceIds={filteredWorkspaceIds}
+            onStartEditingFolder={startEditingFolder}
+            onStartEditingWorkspace={startEditingWorkspace}
+            onRenameFolder={(id, name) => renameFolder(id, name)}
+            onRenameWorkspace={(id, name) => renameWorkspace(id, name)}
+            onStopEditing={stopEditing}
+            onContextMenuFolder={handleFolderContextMenu}
+            onContextMenuWorkspace={handleWorkspaceContextMenu}
+            onSelectWorkspace={(id) => setActiveWorkspace(id)}
+            activeWorkspaceId={activeWorkspaceId}
+            workspaces={workspaces}
+            panes={panes}
+            paneGroups={paneGroups}
+            toggleFolderCollapsed={toggleFolderCollapsed}
+            deleteTarget={deleteTarget}
+            setDeleteTarget={setDeleteTarget}
+          />
+        </ScrollArea>
+      </div>
 
       {/* Delete confirmation dialog */}
       <AlertDialog

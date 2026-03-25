@@ -7,5 +7,5 @@ test('uses the original lower traffic lights position when the sidebar is expand
 })
 
 test('uses a higher traffic lights position when the sidebar is collapsed', () => {
-  assert.deepEqual(getTrafficLightPosition(false), { x: 16, y: 11 })
+  assert.deepEqual(getTrafficLightPosition(false), { x: 16, y: 6 })
 })

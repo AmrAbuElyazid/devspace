@@ -11,6 +11,7 @@ import {
   findSiblingGroupId,
   repairTree,
 } from './workspace-store'
+import { findFolder } from '../lib/sidebar-tree'
 
 /**
  * Reset the workspace store to a clean initial state suitable for tests.
@@ -24,6 +25,7 @@ function resetWorkspaceStore(): void {
     activeWorkspaceId: '',
     panes: {},
     paneGroups: {},
+    pinnedSidebarNodes: [],
     sidebarTree: [],
   })
 }
@@ -475,39 +477,244 @@ test('migration from old format preserves panes', () => {
 })
 
 // ---------------------------------------------------------------------------
-// pinned & lastActiveAt tests
+// sidebar organization & lastActiveAt tests
 // ---------------------------------------------------------------------------
 
-test('new workspaces have pinned: false and a recent lastActiveAt', () => {
+test('new workspaces have a recent lastActiveAt', () => {
   const before = Date.now()
   const wsId = setupWorkspace()
   const after = Date.now()
 
   const ws = getWorkspace(wsId)
   assert.ok(ws)
-  assert.equal(ws.pinned, false)
   assert.ok(ws.lastActiveAt >= before, 'lastActiveAt should be >= time before creation')
   assert.ok(ws.lastActiveAt <= after, 'lastActiveAt should be <= time after creation')
 })
 
-test('togglePinWorkspace toggles pinned', () => {
+test('pinWorkspace moves the workspace node from main tree to pinned nodes', () => {
   const wsId = setupWorkspace()
 
-  const wsBefore = getWorkspace(wsId)
-  assert.ok(wsBefore)
-  assert.equal(wsBefore.pinned, false)
+  useWorkspaceStore.getState().pinWorkspace(wsId)
 
-  useWorkspaceStore.getState().togglePinWorkspace(wsId)
+  const state = useWorkspaceStore.getState()
+  assert.deepEqual(state.pinnedSidebarNodes, [{ type: 'workspace', workspaceId: wsId }])
+  assert.deepEqual(state.sidebarTree, [])
+})
 
-  const wsAfterPin = getWorkspace(wsId)
-  assert.ok(wsAfterPin)
-  assert.equal(wsAfterPin.pinned, true)
+test('unpinWorkspace moves the workspace node back to the root tree without duplication', () => {
+  const wsId = setupWorkspace()
+  useWorkspaceStore.getState().pinWorkspace(wsId)
 
-  useWorkspaceStore.getState().togglePinWorkspace(wsId)
+  useWorkspaceStore.getState().unpinWorkspace(wsId)
 
-  const wsAfterUnpin = getWorkspace(wsId)
-  assert.ok(wsAfterUnpin)
-  assert.equal(wsAfterUnpin.pinned, false)
+  const state = useWorkspaceStore.getState()
+  assert.deepEqual(state.pinnedSidebarNodes, [])
+  assert.deepEqual(state.sidebarTree, [{ type: 'workspace', workspaceId: wsId }])
+})
+
+test('pinFolder moves a folder node into pinned nodes', () => {
+  const wsId = setupWorkspace()
+  const folderId = useWorkspaceStore.getState().addFolder('Pinned Folder')
+
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: wsId,
+    nodeType: 'workspace',
+    sourceContainer: 'main',
+    targetContainer: 'main',
+    targetParentId: folderId,
+    targetIndex: 0,
+  })
+
+  useWorkspaceStore.getState().pinFolder(folderId)
+
+  const state = useWorkspaceStore.getState()
+  assert.deepEqual(state.sidebarTree, [])
+  assert.equal(state.pinnedSidebarNodes.length, 1)
+  assert.equal(state.pinnedSidebarNodes[0]?.type, 'folder')
+  if (state.pinnedSidebarNodes[0]?.type === 'folder') {
+    assert.equal(state.pinnedSidebarNodes[0].id, folderId)
+    assert.deepEqual(state.pinnedSidebarNodes[0].children, [{ type: 'workspace', workspaceId: wsId }])
+  }
+})
+
+test('unpinFolder moves the folder node back to the main root', () => {
+  const wsId = setupWorkspace()
+  const folderId = useWorkspaceStore.getState().addFolder('Pinned Folder')
+
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: wsId,
+    nodeType: 'workspace',
+    sourceContainer: 'main',
+    targetContainer: 'main',
+    targetParentId: folderId,
+    targetIndex: 0,
+  })
+
+  useWorkspaceStore.getState().pinFolder(folderId)
+  useWorkspaceStore.getState().unpinFolder(folderId)
+
+  const state = useWorkspaceStore.getState()
+  assert.deepEqual(state.pinnedSidebarNodes, [])
+  assert.equal(state.sidebarTree.length, 1)
+  assert.equal(state.sidebarTree[0]?.type, 'folder')
+})
+
+test('addWorkspace with a parent folder inserts into that folder in its owning container', () => {
+  resetWorkspaceStore()
+  const folderId = useWorkspaceStore.getState().addFolder('Main Folder')
+
+  useWorkspaceStore.getState().addWorkspace('Nested Workspace', folderId, 'main')
+
+  const folder = findFolder(useWorkspaceStore.getState().sidebarTree, folderId)
+  assert.ok(folder)
+  assert.equal(folder.children.length, 1)
+  assert.deepEqual(folder.children[0], { type: 'workspace', workspaceId: useWorkspaceStore.getState().activeWorkspaceId })
+})
+
+test('moveSidebarNode moves a workspace from one folder to another', () => {
+  const firstWsId = setupWorkspace('WS A')
+  useWorkspaceStore.getState().addWorkspace('WS B')
+  const secondWsId = useWorkspaceStore.getState().activeWorkspaceId
+  const sourceFolderId = useWorkspaceStore.getState().addFolder('Source Folder')
+  const targetFolderId = useWorkspaceStore.getState().addFolder('Target Folder')
+
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: firstWsId,
+    nodeType: 'workspace',
+    sourceContainer: 'main',
+    targetContainer: 'main',
+    targetParentId: sourceFolderId,
+    targetIndex: 0,
+  })
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: secondWsId,
+    nodeType: 'workspace',
+    sourceContainer: 'main',
+    targetContainer: 'main',
+    targetParentId: targetFolderId,
+    targetIndex: 0,
+  })
+
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: firstWsId,
+    nodeType: 'workspace',
+    sourceContainer: 'main',
+    targetContainer: 'main',
+    targetParentId: targetFolderId,
+    targetIndex: 1,
+  })
+
+  const sourceFolder = findFolder(useWorkspaceStore.getState().sidebarTree, sourceFolderId)
+  const targetFolder = findFolder(useWorkspaceStore.getState().sidebarTree, targetFolderId)
+  assert.ok(sourceFolder)
+  assert.ok(targetFolder)
+  assert.deepEqual(sourceFolder.children, [])
+  assert.deepEqual(targetFolder.children, [
+    { type: 'workspace', workspaceId: secondWsId },
+    { type: 'workspace', workspaceId: firstWsId },
+  ])
+})
+
+test('moveSidebarNode moves a workspace from a folder back to root', () => {
+  const wsId = setupWorkspace()
+  const folderId = useWorkspaceStore.getState().addFolder('Folder')
+
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: wsId,
+    nodeType: 'workspace',
+    sourceContainer: 'main',
+    targetContainer: 'main',
+    targetParentId: folderId,
+    targetIndex: 0,
+  })
+
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: wsId,
+    nodeType: 'workspace',
+    sourceContainer: 'main',
+    targetContainer: 'main',
+    targetParentId: null,
+    targetIndex: 1,
+  })
+
+  const state = useWorkspaceStore.getState()
+  const folder = findFolder(state.sidebarTree, folderId)
+  assert.ok(folder)
+  assert.deepEqual(folder.children, [])
+  assert.deepEqual(state.sidebarTree[1], { type: 'workspace', workspaceId: wsId })
+})
+
+test('moveSidebarNode adjusts same-parent downward reorders to the intended sibling position', () => {
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('WS A')
+  const wsAId = useWorkspaceStore.getState().activeWorkspaceId
+  useWorkspaceStore.getState().addWorkspace('WS B')
+  const wsBId = useWorkspaceStore.getState().activeWorkspaceId
+  useWorkspaceStore.getState().addWorkspace('WS C')
+  const wsCId = useWorkspaceStore.getState().activeWorkspaceId
+
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: wsAId,
+    nodeType: 'workspace',
+    sourceContainer: 'main',
+    targetContainer: 'main',
+    targetParentId: null,
+    targetIndex: 2,
+  })
+
+  assert.deepEqual(useWorkspaceStore.getState().sidebarTree, [
+    { type: 'workspace', workspaceId: wsBId },
+    { type: 'workspace', workspaceId: wsAId },
+    { type: 'workspace', workspaceId: wsCId },
+  ])
+})
+
+test('moveSidebarNode moves a workspace from pinned into a folder', () => {
+  const wsId = setupWorkspace()
+  const folderId = useWorkspaceStore.getState().addFolder('Folder')
+  useWorkspaceStore.getState().pinWorkspace(wsId)
+
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: wsId,
+    nodeType: 'workspace',
+    sourceContainer: 'pinned',
+    targetContainer: 'main',
+    targetParentId: folderId,
+    targetIndex: 0,
+  })
+
+  const state = useWorkspaceStore.getState()
+  assert.deepEqual(state.pinnedSidebarNodes, [])
+  const folder = findFolder(state.sidebarTree, folderId)
+  assert.ok(folder)
+  assert.deepEqual(folder.children, [{ type: 'workspace', workspaceId: wsId }])
+})
+
+test('moveSidebarNode rejects cyclic folder moves', () => {
+  const wsId = setupWorkspace()
+  const parentFolderId = useWorkspaceStore.getState().addFolder('Parent')
+  const childFolderId = useWorkspaceStore.getState().addFolder('Child', parentFolderId)
+
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: wsId,
+    nodeType: 'workspace',
+    sourceContainer: 'main',
+    targetContainer: 'main',
+    targetParentId: childFolderId,
+    targetIndex: 0,
+  })
+
+  const before = useWorkspaceStore.getState().sidebarTree
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: parentFolderId,
+    nodeType: 'folder',
+    sourceContainer: 'main',
+    targetContainer: 'main',
+    targetParentId: childFolderId,
+    targetIndex: 1,
+  })
+
+  assert.deepEqual(useWorkspaceStore.getState().sidebarTree, before)
 })
 
 test('setActiveWorkspace updates lastActiveAt', () => {
