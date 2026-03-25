@@ -465,6 +465,43 @@
   opacity: 1;
 }
 
+.sidebar-pinned-list {
+  padding: 0 6px 4px;
+}
+
+.pinned-star {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.ws-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ws-meta {
+  font-size: 10px;
+  color: var(--foreground-faint);
+  padding-left: 14px;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ─── Sidebar Footer ────────────────────────────────────────────────── */
 
 .sidebar-footer {
