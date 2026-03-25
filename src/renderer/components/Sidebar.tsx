@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef } from 'react'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { useDroppable } from '@dnd-kit/core'
 import { Plus, Settings, ChevronDown, ChevronRight, FolderClosed } from 'lucide-react'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { useSettingsStore } from '../store/settings-store'
@@ -57,19 +56,12 @@ function SortableWorkspaceItem({
     data: { type: 'sidebar-workspace' as const, workspaceId, parentFolderId },
   })
 
-  const { setNodeRef: setDropRef, isOver: isTabOver } = useDroppable({
-    id: `ws-drop-${workspaceId}`,
-    data: { type: 'sidebar-workspace-target', workspaceId },
-    disabled: activeDrag?.type !== 'tab',
-  })
-
   const setRef = useCallback(
     (el: HTMLDivElement | null) => {
       mergedRef.current = el
       setSortableRef(el)
-      setDropRef(el)
     },
-    [setSortableRef, setDropRef],
+    [setSortableRef],
   )
 
   // Insertion line indicator — items stay in place, line shows where drop will go
@@ -81,11 +73,6 @@ function SortableWorkspaceItem({
     opacity: isDragging ? 0.4 : undefined,
   }
 
-  // Show drop target highlight when dragging a tab from a DIFFERENT workspace.
-  // Check both isTabOver (separate droppable) and isOver (sortable) since pointerWithin
-  // may match either — typically the sortable wins because it registers first.
-  const showDropTarget = (isTabOver || isOver) && activeDrag?.type === 'tab' && activeDrag.workspaceId !== workspaceId
-
   const insertClass = insertPosition === 'before' ? 'sidebar-insert-before' : insertPosition === 'after' ? 'sidebar-insert-after' : ''
 
   return (
@@ -93,7 +80,7 @@ function SortableWorkspaceItem({
       ref={setRef}
       style={style}
       data-sortable-id={`ws-${workspaceId}`}
-      className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''} ${showDropTarget ? 'sidebar-workspace-drop-target' : ''} ${insertClass}`}
+      className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''} ${insertClass}`}
       onClick={() => { if (!isEditing) onSelect() }}
       onDoubleClick={onStartEditing}
       onContextMenu={onContextMenu}
