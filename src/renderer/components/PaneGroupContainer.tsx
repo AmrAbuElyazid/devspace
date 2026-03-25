@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, type ReactElement } from 'react'
+import { memo, useState, useRef, useCallback, useEffect, type ReactElement } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { shouldHideBrowserNativeViewForDrag } from '../lib/browser-pane-visibility'
 import { useWorkspaceStore, getTopLeftGroupId } from '../store/workspace-store'
@@ -13,30 +13,66 @@ import TerminalPane from './TerminalPane'
 import EditorPane from './EditorPane'
 import BrowserPane from './BrowserPane'
 
-const SIDES: DropSide[] = ['left', 'right', 'top', 'bottom']
+/**
+ * Computes the closest edge (left/right/top/bottom) from pointer position
+ * relative to a bounding rect. Closest edge wins — no dead zones.
+ */
+function computeClosestSide(
+  clientX: number,
+  clientY: number,
+  rect: DOMRect,
+): DropSide {
+  const relX = (clientX - rect.left) / rect.width
+  const relY = (clientY - rect.top) / rect.height
 
-function PaneEdgeDropZone({ groupId, workspaceId, side }: { groupId: string; workspaceId: string; side: DropSide }) {
+  const distLeft = relX
+  const distRight = 1 - relX
+  const distTop = relY
+  const distBottom = 1 - relY
+
+  const minDist = Math.min(distLeft, distRight, distTop, distBottom)
+
+  if (minDist === distLeft) return 'left'
+  if (minDist === distRight) return 'right'
+  if (minDist === distTop) return 'top'
+  return 'bottom'
+}
+
+function PaneContentDropZone({ groupId, workspaceId }: { groupId: string; workspaceId: string }) {
+  const [hoveredSide, setHoveredSide] = useState<DropSide | null>(null)
+  const zoneRef = useRef<HTMLDivElement | null>(null)
+
   const { setNodeRef, isOver } = useDroppable({
-    id: `edge-${groupId}-${side}`,
-    data: { type: 'pane-edge', workspaceId, groupId, side },
+    id: `pane-drop-${groupId}`,
+    data: { type: 'pane-drop', workspaceId, groupId },
   })
 
-  // Detection zone: 25% depth from edge, covers full extent of that side
-  const zoneStyle: React.CSSProperties = {
-    position: 'absolute',
-    zIndex: 11,
-    pointerEvents: 'auto',
-    ...(side === 'left'   ? { top: 0, left: 0, bottom: 0, width: '25%' } : {}),
-    ...(side === 'right'  ? { top: 0, right: 0, bottom: 0, width: '25%' } : {}),
-    ...(side === 'top'    ? { top: 0, left: 0, right: 0, height: '25%' } : {}),
-    ...(side === 'bottom' ? { bottom: 0, left: 0, right: 0, height: '25%' } : {}),
-  }
+  const mergedRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      zoneRef.current = el
+      setNodeRef(el)
+    },
+    [setNodeRef],
+  )
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!zoneRef.current) return
+    const rect = zoneRef.current.getBoundingClientRect()
+    setHoveredSide(computeClosestSide(e.clientX, e.clientY, rect))
+  }, [])
 
   return (
-    <>
-      <div ref={setNodeRef} style={zoneStyle} />
-      {isOver && <div className={`pane-drop-zone-half ${side}`} />}
-    </>
+    <div
+      ref={mergedRef}
+      className="pane-drop-zone-overlay"
+      style={{ pointerEvents: 'auto' }}
+      data-drop-zone={groupId}
+      onPointerMove={handlePointerMove}
+    >
+      {isOver && hoveredSide && (
+        <div className={`pane-drop-zone-half ${hoveredSide}`} />
+      )}
+    </div>
   )
 }
 
@@ -151,16 +187,7 @@ export default function PaneGroupContainer({
       />
       <div className="pane-group-content">
         {activeDrag?.type === 'group-tab' && (
-          <div className="pane-drop-zone-overlay" style={{ pointerEvents: 'auto' }}>
-            {SIDES.map((side) => (
-              <PaneEdgeDropZone
-                key={side}
-                groupId={groupId}
-                workspaceId={workspaceId}
-                side={side}
-              />
-            ))}
-          </div>
+          <PaneContentDropZone groupId={groupId} workspaceId={workspaceId} />
         )}
         {group.tabs.map((tab) => {
           const isActiveTab = tab.id === group.activeTabId
