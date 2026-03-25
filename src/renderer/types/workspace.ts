@@ -27,14 +27,18 @@ export interface Pane {
 export type SplitDirection = 'horizontal' | 'vertical'
 
 export type SplitNode =
-  | { type: 'leaf'; paneId: string }
+  | { type: 'leaf'; groupId: string }
   | { type: 'branch'; direction: SplitDirection; children: SplitNode[]; sizes: number[] }
 
-export interface Tab {
+export interface PaneGroupTab {
   id: string
-  name: string
-  root: SplitNode
-  focusedPaneId: string | null
+  paneId: string
+}
+
+export interface PaneGroup {
+  id: string
+  tabs: PaneGroupTab[]
+  activeTabId: string
 }
 
 export type SidebarNode =
@@ -44,6 +48,6 @@ export type SidebarNode =
 export interface Workspace {
   id: string
   name: string
-  tabs: Tab[]
-  activeTabId: string
+  root: SplitNode
+  focusedGroupId: string | null
 }
