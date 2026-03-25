@@ -43,6 +43,12 @@ export function useDragAndDrop() {
   //
   // closestCenter fallback handles the case where pointer is between
   // sortable items (not inside any rect but close enough for reorder).
+  // Collision detection: pointerWithin for all targets, closestCenter fallback
+  // for sortable items only. pane-edge zones use strict containment — they
+  // ONLY match when the pointer is physically inside the 25% edge zone.
+  // closestCenter must never return pane-edge zones, otherwise dragging between
+  // tabs (where pointer isn't inside any tab rect) would match an edge zone
+  // by proximity and trigger an unintended split.
   const collisionDetection: CollisionDetection = useCallback((args) => {
     const pointerCollisions = pointerWithin(args)
     if (pointerCollisions.length > 0) {
@@ -59,9 +65,16 @@ export function useDragAndDrop() {
         }
       )
       if (sidebarTargets.length > 0) return sidebarTargets
+      // Remaining pointerWithin hits (includes pane-edge — valid here since
+      // the pointer IS inside the zone rect)
       return pointerCollisions
     }
-    return closestCenter(args)
+    // closestCenter fallback — EXCLUDE pane-edge zones. Edge zones require
+    // strict pointer containment (pointerWithin), not proximity.
+    const centerCollisions = closestCenter(args)
+    return centerCollisions.filter(
+      (c) => (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type !== 'pane-edge'
+    )
   }, [])
 
   const clearFolderExpandTimer = useCallback(() => {
