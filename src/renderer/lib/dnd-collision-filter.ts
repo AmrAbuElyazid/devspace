@@ -31,6 +31,6 @@ export function filterCollisionsForActiveDrag(
 
   return collisions.filter((collision) => {
     const type = droppableType(collision)
-    return type === 'sidebar-folder' || type === 'sidebar-workspace'
+    return type === 'sidebar-folder' || type === 'sidebar-workspace' || type === 'sidebar-root'
   })
 }

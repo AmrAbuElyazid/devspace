@@ -58,6 +58,8 @@ test('sidebar drags ignore pane-drop collisions entirely', () => {
   const active: DragItemData = {
     type: 'sidebar-workspace',
     workspaceId: 'ws-a',
+    container: 'main',
+    parentFolderId: null,
   }
 
   const filtered = filterCollisionsForActiveDrag(active, [
@@ -66,4 +68,21 @@ test('sidebar drags ignore pane-drop collisions entirely', () => {
   ])
 
   assert.deepEqual(filtered.map((entry) => entry.id), ['folder-1'])
+})
+
+test('sidebar drags keep pinned-root and main-root collisions', () => {
+  const active: DragItemData = {
+    type: 'sidebar-workspace',
+    workspaceId: 'ws-a',
+    container: 'main',
+    parentFolderId: null,
+  }
+
+  const filtered = filterCollisionsForActiveDrag(active, [
+    collision('sidebar-root', 'sidebar-root-main'),
+    collision('sidebar-root', 'sidebar-root-pinned'),
+    collision('pane-drop', 'pane-drop-group-b'),
+  ])
+
+  assert.deepEqual(filtered.map((entry) => entry.id), ['sidebar-root-main', 'sidebar-root-pinned'])
 })

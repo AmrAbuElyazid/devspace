@@ -201,3 +201,17 @@ export function collectWorkspaceIds(tree: SidebarNode[]): string[] {
   }
   return ids
 }
+
+/**
+ * Collect all folder IDs referenced in the tree.
+ */
+export function collectFolderIds(tree: SidebarNode[]): string[] {
+  const ids: string[] = []
+  for (const node of tree) {
+    if (node.type === 'folder') {
+      ids.push(node.id)
+      ids.push(...collectFolderIds(node.children))
+    }
+  }
+  return ids
+}

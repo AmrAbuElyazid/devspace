@@ -27,6 +27,7 @@ import { markBrowserPaneDestroyed } from '../lib/browser-pane-session'
 import { useBrowserStore } from './browser-store'
 import type { BrowserConfig } from '../types/workspace'
 import { validateWorkspaceGraph } from '../lib/workspace-graph'
+import { normalizeSidebarPersistence } from '../lib/sidebar-organization'
 
 // ---------------------------------------------------------------------------
 // Tree helper functions (pure)
@@ -253,9 +254,27 @@ function createDefaultWorkspace(name: string, group: PaneGroup): Workspace {
     name,
     root: { type: 'leaf', groupId: group.id },
     focusedGroupId: group.id,
-    pinned: false,
     lastActiveAt: Date.now(),
   }
+}
+
+type SidebarContainer = 'main' | 'pinned'
+
+function getSidebarNodesForContainer(
+  state: Pick<WorkspaceState, 'sidebarTree' | 'pinnedSidebarNodes'>,
+  container: SidebarContainer,
+): SidebarNode[] {
+  return container === 'main' ? state.sidebarTree : state.pinnedSidebarNodes
+}
+
+function locateSidebarNodeContainer(
+  state: Pick<WorkspaceState, 'sidebarTree' | 'pinnedSidebarNodes'>,
+  nodeId: string,
+  nodeType: 'workspace' | 'folder',
+): SidebarContainer | null {
+  if (findSidebarNode(state.sidebarTree, nodeId, nodeType)) return 'main'
+  if (findSidebarNode(state.pinnedSidebarNodes, nodeId, nodeType)) return 'pinned'
+  return null
 }
 
 const defaultPaneCleanupDeps: PaneCleanupDeps = {
@@ -290,18 +309,31 @@ interface WorkspaceState {
   activeWorkspaceId: string
   panes: Record<string, Pane>
   paneGroups: Record<string, PaneGroup>
+  pinnedSidebarNodes: SidebarNode[]
   sidebarTree: SidebarNode[]
 
   // Workspace CRUD
-  addWorkspace: (name?: string) => void
+  addWorkspace: (name?: string, parentFolderId?: string | null, container?: SidebarContainer) => void
   removeWorkspace: (id: string) => void
   renameWorkspace: (id: string, name: string) => void
   setActiveWorkspace: (id: string) => void
   togglePinWorkspace: (id: string) => void
+  pinWorkspace: (id: string) => void
+  unpinWorkspace: (id: string) => void
+  pinFolder: (folderId: string) => void
+  unpinFolder: (folderId: string) => void
 
   // Sidebar tree actions
   reorderSidebarNode: (nodeId: string, nodeType: 'workspace' | 'folder', targetParentId: string | null, targetIndex: number) => void
-  addFolder: (name: string, parentId?: string | null) => string
+  moveSidebarNode: (args: {
+    nodeId: string
+    nodeType: 'workspace' | 'folder'
+    sourceContainer: SidebarContainer
+    targetContainer: SidebarContainer
+    targetParentId: string | null
+    targetIndex: number
+  }) => void
+  addFolder: (name: string, parentId?: string | null, container?: SidebarContainer) => string
   removeFolder: (folderId: string) => void
   renameFolder: (folderId: string, name: string) => void
   toggleFolderCollapsed: (folderId: string) => void
@@ -344,7 +376,7 @@ const PERSIST_KEY = 'devspace-workspaces'
 const PERSIST_DEBOUNCE_MS = 500
 
 // Migration: detect old persisted format and convert to new model
-function migratePersistedState(persisted: Record<string, unknown>): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'paneGroups' | 'sidebarTree'> | null {
+function migratePersistedState(persisted: Record<string, unknown>): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'paneGroups' | 'pinnedSidebarNodes' | 'sidebarTree'> | null {
   const oldWorkspaces = persisted.workspaces as Array<Record<string, unknown>> | undefined
   if (!oldWorkspaces || oldWorkspaces.length === 0) return null
 
@@ -431,7 +463,6 @@ function migratePersistedState(persisted: Record<string, unknown>): Pick<Workspa
       name: oldWs.name as string,
       root: newRoot,
       focusedGroupId: firstGroupId[0] ?? null,
-      pinned: false,
       lastActiveAt: Date.now(),
     }
     newWorkspaces.push(ws)
@@ -444,6 +475,7 @@ function migratePersistedState(persisted: Record<string, unknown>): Pick<Workspa
     activeWorkspaceId: persisted.activeWorkspaceId as string,
     panes: newPanes,
     paneGroups: newPaneGroups,
+    pinnedSidebarNodes: [],
     sidebarTree: persisted.sidebarTree as SidebarNode[],
   }
 }
@@ -455,7 +487,7 @@ function collectOldPaneIds(node: unknown): string[] {
   return ((n.children as unknown[]) ?? []).flatMap(collectOldPaneIds)
 }
 
-function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'paneGroups' | 'sidebarTree'> | null {
+function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'paneGroups' | 'pinnedSidebarNodes' | 'sidebarTree'> | null {
   try {
     const raw = localStorage.getItem(PERSIST_KEY)
     if (!raw) return null
@@ -465,10 +497,8 @@ function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorksp
 
     // Check if this is the new format (has paneGroups)
     if (persisted.paneGroups) {
-      // Fill in missing pinned/lastActiveAt fields for workspaces saved before these fields existed
-      const workspaces = (persisted.workspaces as Workspace[]).map((ws) => ({
+      const workspaces = (persisted.workspaces as Array<Workspace & { pinned?: boolean }>).map((ws) => ({
         ...ws,
-        pinned: ws.pinned ?? false,
         lastActiveAt: ws.lastActiveAt ?? Date.now(),
       }))
 
@@ -499,12 +529,19 @@ function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorksp
         return ws
       })
 
+      const normalizedSidebar = normalizeSidebarPersistence({
+        workspaces: repairedWorkspaces,
+        pinnedSidebarNodes: (persisted.pinnedSidebarNodes as SidebarNode[] | undefined) ?? [],
+        sidebarTree: persisted.sidebarTree as SidebarNode[],
+      })
+
       return {
         workspaces: repairedWorkspaces,
         activeWorkspaceId: persisted.activeWorkspaceId,
         panes: persisted.panes ?? {},
         paneGroups: persisted.paneGroups,
-        sidebarTree: persisted.sidebarTree,
+        pinnedSidebarNodes: normalizedSidebar.pinnedSidebarNodes,
+        sidebarTree: normalizedSidebar.sidebarTree,
       }
     }
 
@@ -520,7 +557,7 @@ function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorksp
 }
 
 // Build initial state — hydrate from localStorage or create defaults
-function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'paneGroups' | 'sidebarTree'> {
+function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspaceId' | 'panes' | 'paneGroups' | 'pinnedSidebarNodes' | 'sidebarTree'> {
   const persisted = loadPersistedState()
   if (persisted) {
     const validation = validateWorkspaceGraph({
@@ -543,6 +580,7 @@ function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspa
     activeWorkspaceId: ws.id,
     panes: { [pane.id]: pane },
     paneGroups: { [group.id]: group },
+    pinnedSidebarNodes: [],
     sidebarTree: [{ type: 'workspace' as const, workspaceId: ws.id }],
   }
 }
@@ -555,18 +593,29 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       // Workspace CRUD
       // -------------------------------------------------------------------
 
-      addWorkspace: (name) => {
+      addWorkspace: (name, parentFolderId = null, container = 'main') => {
         const pane = createEmptyPane()
         const group = createPaneGroup(pane)
         const wsName = name ?? `Workspace ${get().workspaces.length + 1}`
         const ws = createDefaultWorkspace(wsName, group)
-        set((state) => ({
-          workspaces: [...state.workspaces, ws],
-          activeWorkspaceId: ws.id,
-          panes: { ...state.panes, [pane.id]: pane },
-          paneGroups: { ...state.paneGroups, [group.id]: group },
-          sidebarTree: [...state.sidebarTree, { type: 'workspace' as const, workspaceId: ws.id }],
-        }))
+        set((state) => {
+          const targetNodes = getSidebarNodesForContainer(state, container)
+          const insertedNodes = insertSidebarNode(
+            targetNodes,
+            { type: 'workspace' as const, workspaceId: ws.id },
+            parentFolderId,
+            parentFolderId === null ? targetNodes.length : Infinity,
+          )
+
+          return {
+            workspaces: [...state.workspaces, ws],
+            activeWorkspaceId: ws.id,
+            panes: { ...state.panes, [pane.id]: pane },
+            paneGroups: { ...state.paneGroups, [group.id]: group },
+            sidebarTree: container === 'main' ? insertedNodes : state.sidebarTree,
+            pinnedSidebarNodes: container === 'pinned' ? insertedNodes : state.pinnedSidebarNodes,
+          }
+        })
       },
 
       removeWorkspace: (id) => {
@@ -591,6 +640,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
         }
 
         const [newTree] = removeSidebarNode(state.sidebarTree, id, 'workspace')
+        const [newPinnedTree] = removeSidebarNode(state.pinnedSidebarNodes, id, 'workspace')
         const remaining = state.workspaces.filter((w) => w.id !== id)
 
         if (remaining.length === 0) {
@@ -604,6 +654,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             activeWorkspaceId: newWs.id,
             panes: newPanes,
             paneGroups: newPaneGroups,
+            pinnedSidebarNodes: [],
             sidebarTree: [...newTree, { type: 'workspace' as const, workspaceId: newWs.id }],
           })
           return
@@ -620,6 +671,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           activeWorkspaceId: newActiveId,
           panes: newPanes,
           paneGroups: newPaneGroups,
+          pinnedSidebarNodes: newPinnedTree,
           sidebarTree: newTree,
         })
       },
@@ -642,10 +694,64 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       togglePinWorkspace(id) {
-        set({
-          workspaces: get().workspaces.map((w) =>
-            w.id === id ? { ...w, pinned: !w.pinned } : w,
-          ),
+        const state = get()
+        const container = locateSidebarNodeContainer(state, id, 'workspace')
+        if (container === 'pinned') {
+          state.unpinWorkspace(id)
+        } else if (container === 'main') {
+          state.pinWorkspace(id)
+        }
+      },
+
+      pinWorkspace(id) {
+        const state = get()
+        if (locateSidebarNodeContainer(state, id, 'workspace') !== 'main') return
+        state.moveSidebarNode({
+          nodeId: id,
+          nodeType: 'workspace',
+          sourceContainer: 'main',
+          targetContainer: 'pinned',
+          targetParentId: null,
+          targetIndex: state.pinnedSidebarNodes.length,
+        })
+      },
+
+      unpinWorkspace(id) {
+        const state = get()
+        if (locateSidebarNodeContainer(state, id, 'workspace') !== 'pinned') return
+        state.moveSidebarNode({
+          nodeId: id,
+          nodeType: 'workspace',
+          sourceContainer: 'pinned',
+          targetContainer: 'main',
+          targetParentId: null,
+          targetIndex: state.sidebarTree.length,
+        })
+      },
+
+      pinFolder(folderId) {
+        const state = get()
+        if (locateSidebarNodeContainer(state, folderId, 'folder') !== 'main') return
+        state.moveSidebarNode({
+          nodeId: folderId,
+          nodeType: 'folder',
+          sourceContainer: 'main',
+          targetContainer: 'pinned',
+          targetParentId: null,
+          targetIndex: state.pinnedSidebarNodes.length,
+        })
+      },
+
+      unpinFolder(folderId) {
+        const state = get()
+        if (locateSidebarNodeContainer(state, folderId, 'folder') !== 'pinned') return
+        state.moveSidebarNode({
+          nodeId: folderId,
+          nodeType: 'folder',
+          sourceContainer: 'pinned',
+          targetContainer: 'main',
+          targetParentId: null,
+          targetIndex: state.sidebarTree.length,
         })
       },
 
@@ -1324,51 +1430,119 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       // Sidebar tree actions
       // -------------------------------------------------------------------
 
-      reorderSidebarNode: (nodeId, nodeType, targetParentId, targetIndex) => {
+      moveSidebarNode: ({ nodeId, nodeType, sourceContainer, targetContainer, targetParentId, targetIndex }) => {
         set((state) => {
+          const sourceNodes = getSidebarNodesForContainer(state, sourceContainer)
+          const targetNodes = getSidebarNodesForContainer(state, targetContainer)
+          const sameContainer = sourceContainer === targetContainer
+
+          const sourceParentId = (() => {
+            const node = findSidebarNode(sourceNodes, nodeId, nodeType)
+            return node?.parentFolderId ?? null
+          })()
+
+          const sourceSiblingNodes = sourceParentId === null
+            ? sourceNodes
+            : findFolder(sourceNodes, sourceParentId)?.children ?? []
+
+          const sourceIndex = sourceSiblingNodes.findIndex((child) => {
+            if (nodeType === 'workspace') {
+              return child.type === 'workspace' && child.workspaceId === nodeId
+            }
+            return child.type === 'folder' && child.id === nodeId
+          })
+
           if (nodeType === 'folder' && targetParentId !== null) {
             if (nodeId === targetParentId) return state
-            if (isDescendant(state.sidebarTree, nodeId, targetParentId)) return state
+            if (sameContainer && isDescendant(sourceNodes, nodeId, targetParentId)) return state
           }
-          const [treeAfterRemove, removed] = removeSidebarNode(state.sidebarTree, nodeId, nodeType)
+
+          const [sourceAfterRemove, removed] = removeSidebarNode(sourceNodes, nodeId, nodeType)
           if (!removed) return state
-          const newTree = insertSidebarNode(treeAfterRemove, removed, targetParentId, targetIndex)
-          return { sidebarTree: newTree }
+
+          const insertionBase = sourceContainer === targetContainer ? sourceAfterRemove : targetNodes
+          const adjustedTargetIndex = sameContainer && sourceParentId === targetParentId && sourceIndex !== -1 && sourceIndex < targetIndex
+            ? targetIndex - 1
+            : targetIndex
+          const targetAfterInsert = insertSidebarNode(insertionBase, removed, targetParentId, adjustedTargetIndex)
+
+          return {
+            sidebarTree:
+              targetContainer === 'main'
+                ? targetAfterInsert
+                : sourceContainer === 'main'
+                  ? sourceAfterRemove
+                  : state.sidebarTree,
+            pinnedSidebarNodes:
+              targetContainer === 'pinned'
+                ? targetAfterInsert
+                : sourceContainer === 'pinned'
+                  ? sourceAfterRemove
+                  : state.pinnedSidebarNodes,
+          }
         })
       },
 
-      addFolder: (name, parentId = null) => {
+      reorderSidebarNode: (nodeId, nodeType, targetParentId, targetIndex) => {
+        get().moveSidebarNode({
+          nodeId,
+          nodeType,
+          sourceContainer: 'main',
+          targetContainer: 'main',
+          targetParentId,
+          targetIndex,
+        })
+      },
+
+      addFolder: (name, parentId = null, container = 'main') => {
         const id = nanoid()
         const folderNode: SidebarNode = { type: 'folder', id, name, collapsed: false, children: [] }
-        set((state) => ({
-          sidebarTree: insertSidebarNode(state.sidebarTree, folderNode, parentId, parentId === null ? state.sidebarTree.length : Infinity),
-        }))
+        set((state) => {
+          const targetNodes = getSidebarNodesForContainer(state, container)
+          const insertedNodes = insertSidebarNode(
+            targetNodes,
+            folderNode,
+            parentId,
+            parentId === null ? targetNodes.length : Infinity,
+          )
+
+          return {
+            sidebarTree: container === 'main' ? insertedNodes : state.sidebarTree,
+            pinnedSidebarNodes: container === 'pinned' ? insertedNodes : state.pinnedSidebarNodes,
+          }
+        })
         return id
       },
 
       removeFolder: (folderId) => {
         set((state) => ({
           sidebarTree: removeFolderPromoteChildren(state.sidebarTree, folderId),
+          pinnedSidebarNodes: removeFolderPromoteChildren(state.pinnedSidebarNodes, folderId),
         }))
       },
 
       renameFolder: (folderId, name) => {
         set((state) => ({
           sidebarTree: updateFolderInTree(state.sidebarTree, folderId, { name }),
+          pinnedSidebarNodes: updateFolderInTree(state.pinnedSidebarNodes, folderId, { name }),
         }))
       },
 
       toggleFolderCollapsed: (folderId) => {
         set((state) => {
-          const folder = findFolder(state.sidebarTree, folderId)
+          const folder = findFolder(state.sidebarTree, folderId) ?? findFolder(state.pinnedSidebarNodes, folderId)
           if (!folder) return state
-          return { sidebarTree: updateFolderInTree(state.sidebarTree, folderId, { collapsed: !folder.collapsed }) }
+          return {
+            sidebarTree: updateFolderInTree(state.sidebarTree, folderId, { collapsed: !folder.collapsed }),
+            pinnedSidebarNodes: updateFolderInTree(state.pinnedSidebarNodes, folderId, { collapsed: !folder.collapsed }),
+          }
         })
       },
 
       expandFolder: (folderId) => {
         set((state) => ({
           sidebarTree: updateFolderInTree(state.sidebarTree, folderId, { collapsed: false }),
+          pinnedSidebarNodes: updateFolderInTree(state.pinnedSidebarNodes, folderId, { collapsed: false }),
         }))
       },
     }),
@@ -1384,6 +1558,7 @@ function persistState(state: WorkspaceState): void {
   const data = {
     workspaces: state.workspaces,
     activeWorkspaceId: state.activeWorkspaceId,
+    pinnedSidebarNodes: state.pinnedSidebarNodes,
     sidebarTree: state.sidebarTree,
     panes: state.panes,
     paneGroups: state.paneGroups,

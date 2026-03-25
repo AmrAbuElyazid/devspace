@@ -155,7 +155,7 @@ test('window setSidebarOpen IPC updates native traffic light position', async ()
   await handlers.get('window:setSidebarOpen')({}, true)
 
   expect(mainWindowCalls).toEqual([
-    ['setWindowButtonPosition', { x: 16, y: 11 }],
+    ['setWindowButtonPosition', { x: 16, y: 6 }],
     ['setWindowButtonPosition', { x: 16, y: 18 }],
   ])
 })

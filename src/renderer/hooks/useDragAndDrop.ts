@@ -15,8 +15,9 @@ import {
 import { useWorkspaceStore } from '../store/workspace-store'
 import { findFolder } from '../lib/sidebar-tree'
 import { filterCollisionsForActiveDrag } from '../lib/dnd-collision-filter'
+import { resolveSidebarDrop } from '../lib/sidebar-drop-resolution'
 import { resolveTabDropIntent, type TabDropIntent, type TabDropTarget } from '../lib/tab-dnd-intent'
-import type { DragItemData } from '../types/dnd'
+import type { DragItemData, SidebarContainer } from '../types/dnd'
 import type { SidebarNode } from '../types/workspace'
 
 // React context to share activeDrag state without prop drilling
@@ -87,6 +88,7 @@ export function useDragAndDrop() {
   const [dropIntent, setDropIntent] = useState<TabDropIntent | null>(null)
   const folderExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hoveredFolderIdRef = useRef<string | null>(null)
+  const pointerPosRef = useRef<{ x: number; y: number } | null>(null)
 
   const store = useWorkspaceStore
 
@@ -142,12 +144,14 @@ export function useDragAndDrop() {
 
   const onDragMove = useCallback((event: DragMoveEvent) => {
     const dragData = event.active.data.current as DragItemData
+    const pointer = getPointerPosition(event)
+    pointerPosRef.current = pointer
+
     if (!dragData || dragData.type !== 'group-tab') {
       setDropIntent(null)
       return
     }
 
-    const pointer = getPointerPosition(event)
     if (!pointer) {
       setDropIntent(null)
       return
@@ -198,6 +202,8 @@ export function useDragAndDrop() {
     setActiveDrag(null)
     clearFolderExpandTimer()
     const currentDropIntent = dropIntent
+    const pointerPos = pointerPosRef.current
+    pointerPosRef.current = null
     setDropIntent(null)
 
     if (!over) return
@@ -209,104 +215,87 @@ export function useDragAndDrop() {
 
     const state = store.getState()
 
-    // Helper: determine if pointer is in the "after" half of an element
-    function isInsertAfter(sortableId: string, axis: 'vertical' | 'horizontal'): boolean {
-      if (!pointerPos) return true // fallback: insert after
-      const el = document.querySelector(`[data-sortable-id="${sortableId}"]`)
-      if (!el) return true
-      const rect = el.getBoundingClientRect()
-      if (axis === 'vertical') {
-        return (pointerPos.y - rect.top) / rect.height > 0.5
-      }
-      return (pointerPos.x - rect.left) / rect.width > 0.5
-    }
-
-    // Helper: for folders, determine if pointer is in the center zone (drop-into)
-    // vs edge zones (reorder). Uses 0.25 threshold matching the useInsertionIndicator hook.
-    function isFolderCenterZone(sortableId: string): boolean {
-      if (!pointerPos) return true
-      const el = document.querySelector(`[data-sortable-id="${sortableId}"]`)
-      if (!el) return true
-      const rect = el.getBoundingClientRect()
-      const relY = (pointerPos.y - rect.top) / rect.height
-      return relY >= 0.25 && relY <= 0.75
-    }
-
     // ── Sidebar item → Sidebar item (reorder / move between levels / drop into folder) ──
     const isSidebarDrag = dragData.type === 'sidebar-workspace' || dragData.type === 'sidebar-folder'
-    const isSidebarDrop = dropType === 'sidebar-workspace' || dropType === 'sidebar-folder'
+    const isSidebarDrop = dropType === 'sidebar-workspace' || dropType === 'sidebar-folder' || dropType === 'sidebar-root'
 
-    if (isSidebarDrag && isSidebarDrop) {
+    if (isSidebarDrag && isSidebarDrop && pointerPos) {
       const nodeId = dragData.type === 'sidebar-workspace' ? dragData.workspaceId : dragData.folderId
       const nodeType = dragData.type === 'sidebar-workspace' ? 'workspace' : 'folder'
 
-      if (dropType === 'sidebar-folder') {
-        const targetFolderId = dropData.folderId as string
-        if (nodeType === 'folder' && nodeId === targetFolderId) return
-
-        // Check if pointer is in the center zone (drop INTO folder) or edge zone (reorder)
-        if (isFolderCenterZone(`folder-${targetFolderId}`)) {
-          // Center zone → insert as last child of folder
-          const folder = findFolder(state.sidebarTree as SidebarNode[], targetFolderId)
-          const index = folder ? folder.children.length : 0
-          state.reorderSidebarNode(nodeId, nodeType, targetFolderId, index)
-          state.expandFolder(targetFolderId)
-        } else {
-          // Edge zone → reorder next to the folder in its parent
-          const overParentFolderId = (dropData.parentFolderId as string | null) ?? null
-          const sidebarTree = state.sidebarTree as SidebarNode[]
-          const parentChildren = overParentFolderId === null
-            ? sidebarTree
-            : findFolder(sidebarTree, overParentFolderId)?.children ?? sidebarTree
-
-          const overIndex = parentChildren.findIndex(
-            (child) => child.type === 'folder' && child.id === targetFolderId,
-          )
-          const insertAfter = isInsertAfter(`folder-${targetFolderId}`, 'vertical')
-          let targetIndex = insertAfter ? overIndex + 1 : overIndex
-
-          // Adjust for same-parent removal
-          const dragParentId = (active.data.current as Record<string, unknown>).parentFolderId as string | null ?? null
-          if (dragParentId === overParentFolderId) {
-            const dragOrigIndex = parentChildren.findIndex((child) => {
-              if (nodeType === 'workspace') return child.type === 'workspace' && child.workspaceId === nodeId
-              return child.type === 'folder' && child.id === nodeId
-            })
-            if (dragOrigIndex !== -1 && dragOrigIndex < targetIndex) targetIndex--
-          }
-
-          state.reorderSidebarNode(nodeId, nodeType, overParentFolderId, targetIndex)
-        }
-      } else {
-        // Dropped ON a workspace → insert before/after based on pointer position
-        const overParentFolderId = (dropData.parentFolderId as string | null) ?? null
-        const overWsId = dropData.workspaceId as string
-
-        const sidebarTree = state.sidebarTree as SidebarNode[]
-        const parentChildren = overParentFolderId === null
-          ? sidebarTree
-          : findFolder(sidebarTree, overParentFolderId)?.children ?? sidebarTree
-
-        let overIndex = parentChildren.findIndex(
-          (child) => child.type === 'workspace' && child.workspaceId === overWsId,
-        )
-        if (overIndex === -1) overIndex = parentChildren.length
-
-        const insertAfter = isInsertAfter(`ws-${overWsId}`, 'vertical')
-        let targetIndex = insertAfter ? overIndex + 1 : overIndex
-
-        // Adjust for same-parent removal
-        const dragParentId = (active.data.current as Record<string, unknown>).parentFolderId as string | null ?? null
-        if (dragParentId === overParentFolderId) {
-          const dragOrigIndex = parentChildren.findIndex((child) => {
-            if (nodeType === 'workspace') return child.type === 'workspace' && child.workspaceId === nodeId
-            return child.type === 'folder' && child.id === nodeId
-          })
-          if (dragOrigIndex !== -1 && dragOrigIndex < targetIndex) targetIndex--
-        }
-
-        state.reorderSidebarNode(nodeId, nodeType, overParentFolderId, targetIndex)
+      const sourceContainer = dragData.container
+      const makeSiblings = (nodes: SidebarNode[], parentFolderId: string | null): string[] => {
+        const siblings = parentFolderId === null
+          ? nodes
+          : findFolder(nodes, parentFolderId)?.children ?? []
+        return siblings.map((child) => child.type === 'workspace' ? child.workspaceId : child.id)
       }
+
+      const mainNodes = state.sidebarTree as SidebarNode[]
+      const pinnedNodes = (state.pinnedSidebarNodes ?? []) as SidebarNode[]
+      const targetContainer = ((dropData.container as SidebarContainer | undefined)
+        ?? (dragData.container as SidebarContainer))
+      const targetNodes = targetContainer === 'main' ? mainNodes : pinnedNodes
+
+      const resolution = resolveSidebarDrop({
+        active: dragData,
+        over: dropType === 'sidebar-root'
+          ? { type: 'sidebar-root', container: targetContainer }
+          : dropType === 'sidebar-folder'
+            ? {
+                type: 'sidebar-folder',
+                folderId: dropData.folderId as string,
+                container: targetContainer,
+                parentFolderId: (dropData.parentFolderId as string | null) ?? null,
+              }
+            : {
+                type: 'sidebar-workspace',
+                workspaceId: dropData.workspaceId as string,
+                container: targetContainer,
+                parentFolderId: (dropData.parentFolderId as string | null) ?? null,
+              },
+        pointer: pointerPos,
+        rects: dropType === 'sidebar-folder'
+          ? {
+              [`folder-${dropData.folderId as string}`]: (over.rect as DOMRect),
+            }
+          : dropType === 'sidebar-workspace'
+            ? {
+                [`ws-${dropData.workspaceId as string}`]: (over.rect as DOMRect),
+              }
+            : undefined,
+        siblingIds: {
+          main: dropType === 'sidebar-root'
+            ? makeSiblings(mainNodes, null)
+            : makeSiblings(mainNodes, ((dropData.parentFolderId as string | null) ?? null)),
+          pinned: dropType === 'sidebar-root'
+            ? makeSiblings(pinnedNodes, null)
+            : makeSiblings(pinnedNodes, ((dropData.parentFolderId as string | null) ?? null)),
+        },
+        folderChildCounts: dropType === 'sidebar-folder'
+          ? {
+              [dropData.folderId as string]: (findFolder(targetNodes, dropData.folderId as string)?.children.length ?? 0),
+            }
+          : undefined,
+        rootCounts: {
+          main: mainNodes.length,
+          pinned: pinnedNodes.length,
+        },
+      })
+
+      if (!resolution) return
+      if (dropType === 'sidebar-folder' && resolution.targetParentId === dropData.folderId) {
+        state.expandFolder(dropData.folderId as string)
+      }
+
+      state.moveSidebarNode({
+        nodeId,
+        nodeType,
+        sourceContainer,
+        targetContainer: resolution.targetContainer,
+        targetParentId: resolution.targetParentId,
+        targetIndex: resolution.targetIndex,
+      })
       return
     }
 
@@ -397,6 +386,7 @@ export function useDragAndDrop() {
   const onDragCancel = useCallback(() => {
     setActiveDrag(null)
     setDropIntent(null)
+    pointerPosRef.current = null
     clearFolderExpandTimer()
   }, [clearFolderExpandTimer])
 
