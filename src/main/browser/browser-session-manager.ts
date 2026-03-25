@@ -1,6 +1,7 @@
 import type { Session } from 'electron'
 import { randomUUID } from 'node:crypto'
 import type { BrowserPermissionDecision, BrowserPermissionRequest, BrowserPermissionType } from '../../shared/browser'
+import { getSecretKey, SECRET_KEY_ENDPOINT } from '../vscode-secret-key'
 
 export const BROWSER_PARTITION = 'persist:devspace-global-browser'
 
@@ -302,6 +303,117 @@ export class BrowserSessionManager {
         callback(false)
       })
     }
+  }
+
+  /**
+   * Override CORS response headers for all requests in the browser session.
+   *
+   * VS Code Settings Sync, GitHub auth, and Microsoft login endpoints don't
+   * include `http://127.0.0.1:PORT` in their `Access-Control-Allow-Origin`.
+   * Since this session is isolated to devspace browser panes, we can safely
+   * inject permissive CORS headers on every response.
+   */
+  installCorsOverrides(): void {
+    const ses = this.getSession()
+
+    ses.webRequest.onHeadersReceived((details, callback) => {
+      const headers = { ...details.responseHeaders }
+
+      // Strip any existing CORS headers (case-insensitive) so we don't
+      // end up with duplicates or conflicting values.
+      for (const key of Object.keys(headers)) {
+        if (key.toLowerCase().startsWith('access-control-')) {
+          delete headers[key]
+        }
+      }
+
+      // Derive the requesting origin from the referrer, falling back to
+      // our fixed VS Code server origin.
+      let origin = 'http://127.0.0.1:18562'
+      if (details.referrer) {
+        try {
+          origin = new URL(details.referrer).origin
+        } catch {
+          // keep default
+        }
+      }
+
+      headers['Access-Control-Allow-Origin'] = [origin]
+      headers['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, PATCH, OPTIONS']
+      headers['Access-Control-Allow-Headers'] = ['*']
+      headers['Access-Control-Allow-Credentials'] = ['true']
+      headers['Access-Control-Expose-Headers'] = ['*']
+
+      callback({ responseHeaders: headers })
+    })
+
+    console.log('[browser-session] installed CORS overrides for browser session')
+  }
+
+  /**
+   * Register an HTTP protocol handler on the browser session that intercepts
+   * POST requests to the VS Code secret key endpoint.
+   *
+   * The `code serve-web` server sets a `vscode-secret-key-path` cookie
+   * pointing to its own `/_vscode-cli/mint-key` endpoint, which returns an
+   * *ephemeral* key that changes on every server restart.  We intercept that
+   * POST and return our own *stable* key instead, so secrets encrypted and
+   * stored in localStorage can be decrypted on subsequent app launches.
+   */
+  registerSecretKeyHandler(): void {
+    const ses = this.getSession()
+    const { net } = require('electron') as typeof import('electron')
+    const keyBuffer = getSecretKey()
+
+    // Paths used by VS Code CLI / Cursor CLI for the secret key endpoint.
+    const MINT_KEY_PATHS = new Set([
+      '/_vscode-cli/mint-key',
+      SECRET_KEY_ENDPOINT, // our own fallback: /devspace-secret-key
+    ])
+
+    ses.protocol.handle('http', (request) => {
+      const url = new URL(request.url)
+      if (MINT_KEY_PATHS.has(url.pathname) && request.method === 'POST') {
+        console.log(`[browser-session] intercepted ${url.pathname} — serving stable secret key (${keyBuffer.length} bytes) for ${url.origin}`)
+        return new Response(new Uint8Array(keyBuffer), {
+          status: 200,
+          headers: { 'Content-Type': 'application/octet-stream' },
+        })
+      }
+      // Pass all other HTTP requests through to the default network stack.
+      // bypassCustomProtocolHandlers is REQUIRED to prevent infinite recursion —
+      // without it, net.fetch triggers our own handler again.
+      return net.fetch(request, { bypassCustomProtocolHandlers: true })
+    })
+
+    console.log('[browser-session] registered VS Code secret key handler (intercepting /_vscode-cli/mint-key)')
+  }
+
+  /**
+   * Set the `vscode-secret-key-path` cookie for a VS Code server origin.
+   *
+   * When this cookie is present, the VS Code web workbench creates a
+   * `LocalStorageSecretStorageProvider` instead of falling back to volatile
+   * in-memory storage.  The cookie value is the relative endpoint path that
+   * the client POSTs to in order to retrieve the server key half.
+   */
+  async setSecretKeyCookie(serverUrl: string): Promise<void> {
+    const ses = this.getSession()
+    const parsed = new URL(serverUrl)
+
+    await ses.cookies.set({
+      url: parsed.origin,
+      name: 'vscode-secret-key-path',
+      value: SECRET_KEY_ENDPOINT,
+      path: '/',
+      httpOnly: false,
+      secure: false,
+      sameSite: 'lax',
+      // 1 year expiry
+      expirationDate: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
+    })
+
+    console.log(`[browser-session] set vscode-secret-key-path cookie for ${parsed.origin}`)
   }
 
   private toSessionPermissionGrantKey(permissionType: BrowserPermissionType, origin: string): SessionPermissionGrantKey {

@@ -4,29 +4,17 @@ import { mkdirSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
 
-interface ServerInstance {
-  process: ChildProcess
-  url: string
-  port: number
-  folder: string
-  refCount: number
-}
-
 /**
- * Derive a deterministic port from a folder path so the same folder always
- * maps to the same origin (http://127.0.0.1:PORT). This preserves the
- * browser's IndexedDB across sessions — VS Code web settings, extensions,
- * login state, and theme all persist.
+ * Fixed port for all VS Code serve-web instances.  Using a single stable
+ * port guarantees the browser origin (http://127.0.0.1:PORT) never changes,
+ * which means localStorage, IndexedDB, and cookies persist across app
+ * restarts — critical for keeping the user logged in to Settings Sync.
  *
- * Range: 9100-9899 (800 slots, plenty for concurrent folders).
+ * `code serve-web` is folder-agnostic — the `?folder=` URL param tells the
+ * VS Code client which folder to open, so a single server process can serve
+ * any number of editor panes for different folders.
  */
-function stablePortForFolder(folder: string): number {
-  let hash = 0
-  for (let i = 0; i < folder.length; i++) {
-    hash = ((hash << 5) - hash + folder.charCodeAt(i)) | 0
-  }
-  return 9100 + (Math.abs(hash) % 800)
-}
+const VSCODE_PORT = 18562
 
 /** Check if a port is available by trying to bind to it. */
 function isPortFree(port: number): Promise<boolean> {
@@ -71,11 +59,26 @@ function waitForServer(url: string, timeoutMs = 15_000, intervalMs = 300): Promi
   })
 }
 
+interface FolderEntry {
+  url: string
+  refCount: number
+}
+
 export class VscodeServerManager {
-  private servers = new Map<string, ServerInstance>()
+  /** Per-folder URL entries with reference counting. */
+  private folders = new Map<string, FolderEntry>()
+  /** The single shared server process (null when no server is running). */
+  private serverProcess: ChildProcess | null = null
+
   private codeCli: string | null = null
   private codeCliChecked = false
   private serverDataDir: string
+
+  /**
+   * Serialization lock for start().  All calls chain through this promise
+   * so only one caller does port acquisition / process spawn at a time.
+   */
+  private startLock: Promise<unknown> = Promise.resolve()
 
   constructor(serverDataDir?: string) {
     this.serverDataDir = serverDataDir || join(homedir(), '.devspace', 'vscode-server-data')
@@ -98,14 +101,29 @@ export class VscodeServerManager {
 
   /**
    * Start (or reuse) a `code serve-web` server for the given folder.
-   * Uses a deterministic port per folder to preserve IndexedDB state
-   * (settings, extensions, login) across sessions.
+   *
+   * All calls are serialized so concurrent requests for different folders
+   * don't race on port acquisition.  A single `code serve-web` process is
+   * shared across all folders — the `?folder=` URL param controls which
+   * workspace the VS Code client opens.
    */
   async start(folder: string): Promise<{ url: string; port: number }> {
-    const existing = this.servers.get(folder)
+    // Serialize: chain onto the lock so only one caller runs _startImpl at a time.
+    const result = new Promise<{ url: string; port: number }>((resolve, reject) => {
+      this.startLock = this.startLock.then(
+        () => this._startImpl(folder).then(resolve, reject),
+        () => this._startImpl(folder).then(resolve, reject),
+      )
+    })
+    return result
+  }
+
+  private async _startImpl(folder: string): Promise<{ url: string; port: number }> {
+    // Fast path: folder already has an entry → just bump refCount.
+    const existing = this.folders.get(folder)
     if (existing) {
       existing.refCount++
-      return { url: existing.url, port: existing.port }
+      return { url: existing.url, port: VSCODE_PORT }
     }
 
     const cli = this.getCodeCli()
@@ -113,27 +131,19 @@ export class VscodeServerManager {
       throw new Error('VS Code CLI (code) not found. Install VS Code and ensure the "code" command is in PATH.')
     }
 
-    // Use a stable port for this folder. If it's occupied (hash collision
-    // or leftover process), fall back to adjacent ports.
-    let port = stablePortForFolder(folder)
-    let found = false
-    for (let attempt = 0; attempt < 20; attempt++) {
-      if (await isPortFree(port + attempt)) {
-        port = port + attempt
-        found = true
-        break
-      }
-    }
-    if (!found) {
-      throw new Error(`No free port found near ${port} for folder: ${folder}`)
+    // If a server process is already running, reuse it for this folder.
+    if (this.serverProcess) {
+      return this.addFolder(folder)
     }
 
-    const url = `http://127.0.0.1:${port}?folder=${encodeURIComponent(folder)}`
+    // No server running — acquire the port (possibly killing a stale process).
+    await this.acquirePort()
 
+    // Spawn the server.
     const child = spawn(cli, [
       'serve-web',
       '--host', '127.0.0.1',
-      '--port', String(port),
+      '--port', String(VSCODE_PORT),
       '--without-connection-token',
       '--accept-server-license-terms',
       '--server-data-dir', this.serverDataDir,
@@ -145,60 +155,139 @@ export class VscodeServerManager {
     // Log stderr for debugging
     child.stderr?.on('data', (data: Buffer) => {
       const msg = data.toString().trim()
-      if (msg) console.log(`[vscode-server:${port}] ${msg}`)
+      if (msg) console.log(`[vscode-server:${VSCODE_PORT}] ${msg}`)
     })
 
     child.on('error', (err) => {
-      console.error(`[vscode-server:${port}] process error:`, err)
-      this.servers.delete(folder)
+      console.error(`[vscode-server:${VSCODE_PORT}] process error:`, err)
+      this.handleProcessDeath()
     })
 
     child.on('exit', (code) => {
-      console.log(`[vscode-server:${port}] exited with code ${code}`)
-      this.servers.delete(folder)
+      console.log(`[vscode-server:${VSCODE_PORT}] exited with code ${code}`)
+      this.handleProcessDeath()
     })
 
-    const instance: ServerInstance = {
-      process: child,
-      url,
-      port,
-      folder,
-      refCount: 1,
-    }
-    this.servers.set(folder, instance)
+    this.serverProcess = child
 
     try {
-      await waitForServer(`http://127.0.0.1:${port}`)
+      await waitForServer(`http://127.0.0.1:${VSCODE_PORT}`)
     } catch (err) {
-      // Cleanup on timeout
       child.kill()
-      this.servers.delete(folder)
+      this.serverProcess = null
       throw err
     }
 
-    console.log(`[vscode-server] started on port ${port} for ${folder}`)
-    return { url, port }
+    console.log(`[vscode-server] started on port ${VSCODE_PORT}`)
+    return this.addFolder(folder)
   }
 
-  /** Decrement ref count for a folder; kill server when no consumers remain. */
+  /** Create a folder entry pointing at the shared server. */
+  private addFolder(folder: string): { url: string; port: number } {
+    const url = `http://127.0.0.1:${VSCODE_PORT}?folder=${encodeURIComponent(folder)}`
+    this.folders.set(folder, { url, refCount: 1 })
+    console.log(`[vscode-server] serving folder ${folder}`)
+    return { url, port: VSCODE_PORT }
+  }
+
+  /** Clean up state when the server process dies unexpectedly. */
+  private handleProcessDeath(): void {
+    this.serverProcess = null
+    this.folders.clear()
+  }
+
+  /**
+   * Free up the fixed port by killing any stale process occupying it.
+   * Tries graceful SIGTERM first, then SIGKILL as a last resort.
+   * Only called when we know no managed server process is running.
+   */
+  private async acquirePort(): Promise<void> {
+    if (await isPortFree(VSCODE_PORT)) return
+
+    console.log(`[vscode-server] port ${VSCODE_PORT} busy, sending SIGTERM to stale process...`)
+    try {
+      execSync(`lsof -ti:${VSCODE_PORT} | xargs kill 2>/dev/null`, { stdio: 'ignore' })
+      for (let i = 0; i < 8; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        if (await isPortFree(VSCODE_PORT)) return
+      }
+    } catch {
+      // Ignore — might not have anything to kill
+    }
+
+    if (await isPortFree(VSCODE_PORT)) return
+
+    console.log(`[vscode-server] port ${VSCODE_PORT} still busy after SIGTERM, sending SIGKILL...`)
+    try {
+      execSync(`lsof -ti:${VSCODE_PORT} | xargs kill -9 2>/dev/null`, { stdio: 'ignore' })
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    } catch {
+      // Ignore
+    }
+
+    if (!(await isPortFree(VSCODE_PORT))) {
+      throw new Error(`Port ${VSCODE_PORT} is occupied and could not be freed. Check: lsof -i:${VSCODE_PORT}`)
+    }
+  }
+
+  /** Decrement ref count for a folder; stop server when no consumers remain. */
   release(folder: string): void {
-    const instance = this.servers.get(folder)
-    if (!instance) return
+    const entry = this.folders.get(folder)
+    if (!entry) return
 
-    instance.refCount--
-    if (instance.refCount <= 0) {
-      console.log(`[vscode-server] stopping server for ${folder}`)
-      instance.process.kill()
-      this.servers.delete(folder)
+    entry.refCount--
+    if (entry.refCount <= 0) {
+      this.folders.delete(folder)
+    }
+
+    // If no folders remain, kill the server.
+    if (this.folders.size === 0 && this.serverProcess) {
+      console.log(`[vscode-server] no remaining consumers, stopping server`)
+      this.serverProcess.kill()
+      this.serverProcess = null
     }
   }
 
-  /** Kill all running servers (called on app quit). */
-  stopAll(): void {
-    for (const [folder, instance] of this.servers) {
-      console.log(`[vscode-server] stopping server for ${folder}`)
-      instance.process.kill()
-    }
-    this.servers.clear()
+  /**
+   * Gracefully stop the server (called on app quit).
+   *
+   * Sends SIGTERM first, waits up to `timeoutMs` for the process to exit,
+   * then sends SIGKILL if it's still alive.
+   */
+  async stopAll(timeoutMs = 2000): Promise<void> {
+    const child = this.serverProcess
+    this.serverProcess = null
+    this.folders.clear()
+
+    if (!child) return
+
+    console.log(`[vscode-server] stopping server (SIGTERM)`)
+    await this.gracefulKill(child, timeoutMs)
+  }
+
+  private gracefulKill(child: ChildProcess, timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      let resolved = false
+      const done = (): void => {
+        if (resolved) return
+        resolved = true
+        resolve()
+      }
+
+      child.once('exit', done)
+      child.kill('SIGTERM')
+
+      setTimeout(() => {
+        if (resolved) return
+        try {
+          child.kill(0) // throws if already dead
+          console.log(`[vscode-server] process ${child.pid} still alive after ${timeoutMs}ms, sending SIGKILL`)
+          child.kill('SIGKILL')
+        } catch {
+          // Already dead
+        }
+        setTimeout(done, 200)
+      }, timeoutMs)
+    })
   }
 }

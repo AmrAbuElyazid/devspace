@@ -69,4 +69,5 @@ export interface BrowserPaneController {
   requestPermission(request: BrowserPermissionRequest, resolve: (decision: BrowserPermissionDecision) => void): void
   resolvePermission(requestToken: string, decision: BrowserPermissionDecision): void
   reportFailure(paneId: string, failure: BrowserFailureState, options?: { title?: string; isSecure?: boolean; securityLabel?: string | null }): void
+  executeScript(paneId: string, script: string): void
 }

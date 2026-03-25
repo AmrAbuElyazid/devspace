@@ -391,6 +391,20 @@ export class BrowserPaneManager implements BrowserPaneController {
     // Placeholder for later browser context-menu wiring.
   }
 
+  executeScript(paneId: string, script: string): void {
+    const pane = this.panes.get(paneId)
+    if (!pane) {
+      return
+    }
+
+    const executeJavaScript = pane.view.webContents?.executeJavaScript
+    if (typeof executeJavaScript === 'function') {
+      void executeJavaScript.call(pane.view.webContents, script).catch((err: unknown) => {
+        console.warn('[browser-pane] executeScript failed:', err)
+      })
+    }
+  }
+
   requestPermission(
     request: BrowserPermissionRequest,
     resolve: (decision: BrowserPermissionDecision) => void,
@@ -487,6 +501,25 @@ export class BrowserPaneManager implements BrowserPaneController {
     if (typeof webContents?.on !== 'function') {
       return
     }
+
+    // Forward WebContentsView console output to main process stdout so
+    // diagnostics are visible when launching the .app from terminal.
+    // Only forward devspace-prefixed messages — VS Code extensions generate
+    // massive amounts of warnings/errors during normal startup (Prisma
+    // duplicates, grammar scopes, sandbox notices, etc.).
+    webContents.on('console-message', (event: unknown) => {
+      // Use new Event object API (positional args are deprecated in Electron 33+).
+      const evt = event as { level?: number; message?: string }
+      const level = evt.level ?? 0
+      const message = evt.message ?? ''
+
+      if (!message.startsWith('[devspace')) return
+
+      const prefix = `[webview:${pane.runtimeState.paneId}]`
+      if (level >= 3) console.error(prefix, message)
+      else if (level === 2) console.warn(prefix, message)
+      else console.log(prefix, message)
+    })
 
     webContents.on('did-start-loading', () => {
       this.applyRuntimePatch(pane.runtimeState.paneId, { isLoading: true, failure: null })

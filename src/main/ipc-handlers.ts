@@ -12,6 +12,7 @@ import type {
 } from '../shared/browser'
 import type { BrowserPaneController } from './browser/browser-types'
 import type { BrowserImportService } from './browser/browser-import-service'
+import type { BrowserSessionManager } from './browser/browser-session-manager'
 import { findHostViewBounds, translateRendererBoundsToContentBounds } from './browser/browser-view-bounds'
 import {
   validateFilePath,
@@ -46,6 +47,7 @@ export function registerIpcHandlers(
   browserPaneManager: BrowserPaneController,
   vscodeServerManager: VscodeServerManager,
   browserImportService?: BrowserImportService,
+  browserSessionManager?: BrowserSessionManager,
 ): void {
   const allowedRoots = [homedir()]
 
@@ -116,6 +118,13 @@ export function registerIpcHandlers(
     try {
       const { url } = await vscodeServerManager.start(folderPath)
       editorPaneFolders.set(paneId, folderPath)
+
+      // No need to set the vscode-secret-key-path cookie ourselves — the
+      // code serve-web server sets it to /_vscode-cli/mint-key in its HTTP
+      // response.  Our protocol handler (registerSecretKeyHandler) intercepts
+      // POST requests to that endpoint and returns a stable key instead of
+      // the server's ephemeral one.
+
       browserPaneManager.createPane(paneId, url)
       return { url }
     } catch (err) {
