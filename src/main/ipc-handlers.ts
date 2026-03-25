@@ -492,6 +492,7 @@ export function registerIpcHandlers(
   })
 
   nativeTheme.on('updated', () => {
+    if (mainWindow.isDestroyed()) return
     mainWindow.webContents.send(
       'theme:nativeThemeChange',
       nativeTheme.shouldUseDarkColors ? 'dark' : 'light'

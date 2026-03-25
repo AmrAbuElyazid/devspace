@@ -283,21 +283,24 @@ export class VscodeServerManager {
     this.serverProcess = null
     this.folders.clear()
 
-    if (!child) return
-
     if (this.keepRunning) {
       console.log(`[vscode-server] leaving server running (keepRunning=true)`)
       return
     }
 
-    console.log(`[vscode-server] stopping server (SIGTERM)`)
-    await this.gracefulKill(child, timeoutMs)
+    // Kill the child process we spawned (if any).
+    if (child) {
+      console.log(`[vscode-server] stopping server (SIGTERM)`)
+      await this.gracefulKill(child, timeoutMs)
+    }
 
-    // Also kill orphaned code-tunn child that survives parent death.
+    // Kill anything still listening on the port — covers both orphaned
+    // code-tunn children and servers we reused but never spawned ourselves.
     try {
       execSync(`lsof -ti:${VSCODE_PORT} | xargs kill -9 2>/dev/null`, { stdio: 'ignore' })
+      console.log(`[vscode-server] killed remaining processes on port ${VSCODE_PORT}`)
     } catch {
-      // Ignore
+      // Ignore — nothing to kill
     }
   }
 
