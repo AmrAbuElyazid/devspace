@@ -104,6 +104,12 @@
     border-radius: 6px;
   }
 
+  .ws-item-tab-drop {
+    background: rgba(250, 204, 21, 0.1);
+    outline: 1px solid rgba(250, 204, 21, 0.4);
+    border-radius: 4px;
+  }
+
   /* ── Insertion line indicators ─────────────────────────────────────── */
 
   /* Sidebar: horizontal line at top or bottom edge of item */

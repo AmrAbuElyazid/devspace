@@ -117,6 +117,9 @@ function SortableWorkspaceItem({
   const isSidebarDrag = activeDrag?.type === 'sidebar-workspace' || activeDrag?.type === 'sidebar-folder'
   const insertPosition = useInsertionIndicator(isOver && !isDragging && isSidebarDrag, false, mergedRef, 'vertical')
 
+  const isTabDropTarget = isOver && !isDragging && activeDrag?.type === 'group-tab'
+    && activeDrag.workspaceId !== workspaceId
+
   const style = {
     paddingLeft: depth * 16,
     opacity: isDragging ? 0.4 : undefined,
@@ -129,7 +132,7 @@ function SortableWorkspaceItem({
       ref={setRef}
       style={style}
       data-sortable-id={`ws-${workspaceId}`}
-      className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''} ${insertClass}`}
+      className={`ws-item no-drag ${isActive ? 'ws-item-active' : ''} ${insertClass} ${isTabDropTarget ? 'ws-item-tab-drop' : ''}`}
       onClick={() => { if (!isEditing) onSelect() }}
       onDoubleClick={onStartEditing}
       onContextMenu={onContextMenu}
