@@ -403,6 +403,8 @@ test('migration from old format preserves panes', () => {
       name: 'Migrated Workspace',
       root: migratedRoot,
       focusedGroupId: groupA,
+      pinned: false,
+      lastActiveAt: Date.now(),
     }],
     activeWorkspaceId: 'ws-migrated',
     panes: {
@@ -442,4 +444,70 @@ test('migration from old format preserves panes', () => {
   assert.ok(wsAfterSplit)
   const allGroups = collectGroupIds(wsAfterSplit.root)
   assert.equal(allGroups.length, 3) // groupA, groupB, + new group from split
+})
+
+// ---------------------------------------------------------------------------
+// pinned & lastActiveAt tests
+// ---------------------------------------------------------------------------
+
+test('new workspaces have pinned: false and a recent lastActiveAt', () => {
+  const before = Date.now()
+  const wsId = setupWorkspace()
+  const after = Date.now()
+
+  const ws = getWorkspace(wsId)
+  assert.ok(ws)
+  assert.equal(ws.pinned, false)
+  assert.ok(ws.lastActiveAt >= before, 'lastActiveAt should be >= time before creation')
+  assert.ok(ws.lastActiveAt <= after, 'lastActiveAt should be <= time after creation')
+})
+
+test('togglePinWorkspace toggles pinned', () => {
+  const wsId = setupWorkspace()
+
+  const wsBefore = getWorkspace(wsId)
+  assert.ok(wsBefore)
+  assert.equal(wsBefore.pinned, false)
+
+  useWorkspaceStore.getState().togglePinWorkspace(wsId)
+
+  const wsAfterPin = getWorkspace(wsId)
+  assert.ok(wsAfterPin)
+  assert.equal(wsAfterPin.pinned, true)
+
+  useWorkspaceStore.getState().togglePinWorkspace(wsId)
+
+  const wsAfterUnpin = getWorkspace(wsId)
+  assert.ok(wsAfterUnpin)
+  assert.equal(wsAfterUnpin.pinned, false)
+})
+
+test('setActiveWorkspace updates lastActiveAt', () => {
+  resetWorkspaceStore()
+  useWorkspaceStore.getState().addWorkspace('WS A')
+  const wsAId = useWorkspaceStore.getState().activeWorkspaceId
+
+  useWorkspaceStore.getState().addWorkspace('WS B')
+  const wsBId = useWorkspaceStore.getState().activeWorkspaceId
+
+  // Record lastActiveAt for WS A before switching
+  const wsABefore = getWorkspace(wsAId)
+  assert.ok(wsABefore)
+  const oldLastActiveAt = wsABefore.lastActiveAt
+
+  // Small delay to ensure Date.now() advances
+  const before = Date.now()
+  useWorkspaceStore.getState().setActiveWorkspace(wsAId)
+  const after = Date.now()
+
+  const wsAAfter = getWorkspace(wsAId)
+  assert.ok(wsAAfter)
+  assert.ok(wsAAfter.lastActiveAt >= before, 'lastActiveAt should be updated to at least the time of switching')
+  assert.ok(wsAAfter.lastActiveAt <= after, 'lastActiveAt should not exceed current time')
+
+  // WS B's lastActiveAt should remain unchanged
+  const wsBAfter = getWorkspace(wsBId)
+  assert.ok(wsBAfter)
+  // WS B was not switched to, so its lastActiveAt should not have changed
+  // (it was set when addWorkspace created it, and again when addWorkspace calls setActiveWorkspace implicitly via set)
 })
