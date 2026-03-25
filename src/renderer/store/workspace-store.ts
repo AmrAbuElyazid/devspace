@@ -205,6 +205,8 @@ function createDefaultWorkspace(name: string, group: PaneGroup): Workspace {
     name,
     root: { type: 'leaf', groupId: group.id },
     focusedGroupId: group.id,
+    pinned: false,
+    lastActiveAt: Date.now(),
   }
 }
 
@@ -247,6 +249,7 @@ interface WorkspaceState {
   removeWorkspace: (id: string) => void
   renameWorkspace: (id: string, name: string) => void
   setActiveWorkspace: (id: string) => void
+  togglePinWorkspace: (id: string) => void
 
   // Sidebar tree actions
   reorderSidebarNode: (nodeId: string, nodeType: 'workspace' | 'folder', targetParentId: string | null, targetIndex: number) => void
@@ -378,6 +381,8 @@ function migratePersistedState(persisted: Record<string, unknown>): Pick<Workspa
       name: oldWs.name as string,
       root: newRoot,
       focusedGroupId: firstGroupId[0] ?? null,
+      pinned: false,
+      lastActiveAt: Date.now(),
     }
     newWorkspaces.push(ws)
   }
@@ -410,8 +415,14 @@ function loadPersistedState(): Pick<WorkspaceState, 'workspaces' | 'activeWorksp
 
     // Check if this is the new format (has paneGroups)
     if (persisted.paneGroups) {
+      // Fill in missing pinned/lastActiveAt fields for workspaces saved before these fields existed
+      const workspaces = (persisted.workspaces as Workspace[]).map((ws) => ({
+        ...ws,
+        pinned: ws.pinned ?? false,
+        lastActiveAt: ws.lastActiveAt ?? Date.now(),
+      }))
       return {
-        workspaces: persisted.workspaces,
+        workspaces,
         activeWorkspaceId: persisted.activeWorkspaceId,
         panes: persisted.panes ?? {},
         paneGroups: persisted.paneGroups,
@@ -534,7 +545,20 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       },
 
       setActiveWorkspace(id) {
-        set({ activeWorkspaceId: id })
+        set({
+          activeWorkspaceId: id,
+          workspaces: get().workspaces.map((w) =>
+            w.id === id ? { ...w, lastActiveAt: Date.now() } : w,
+          ),
+        })
+      },
+
+      togglePinWorkspace(id) {
+        set({
+          workspaces: get().workspaces.map((w) =>
+            w.id === id ? { ...w, pinned: !w.pinned } : w,
+          ),
+        })
       },
 
       // -------------------------------------------------------------------

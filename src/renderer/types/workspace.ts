@@ -50,4 +50,6 @@ export interface Workspace {
   name: string
   root: SplitNode
   focusedGroupId: string | null
+  pinned: boolean
+  lastActiveAt: number
 }
