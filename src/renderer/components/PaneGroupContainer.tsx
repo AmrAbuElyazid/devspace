@@ -1,15 +1,44 @@
 import { memo, useCallback, useEffect, type ReactElement } from 'react'
+import { useDroppable } from '@dnd-kit/core'
 import { shouldHideBrowserNativeViewForDrag } from '../lib/browser-pane-visibility'
 import { useWorkspaceStore, getTopLeftGroupId } from '../store/workspace-store'
 import { useDragContext } from '../hooks/useDragAndDrop'
 import GroupTabBar from './GroupTabBar'
 import type { PaneType, TerminalConfig, EditorConfig, BrowserConfig } from '../types/workspace'
+import type { DropSide } from '../types/dnd'
 
 // Import the actual pane content components
 import EmptyPane from './EmptyPane'
 import TerminalPane from './TerminalPane'
 import EditorPane from './EditorPane'
 import BrowserPane from './BrowserPane'
+
+const SIDES: DropSide[] = ['left', 'right', 'top', 'bottom']
+
+function PaneEdgeDropZone({ groupId, workspaceId, side }: { groupId: string; workspaceId: string; side: DropSide }) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: `edge-${groupId}-${side}`,
+    data: { type: 'pane-edge', workspaceId, groupId, side },
+  })
+
+  // Detection zone: 25% depth from edge, covers full extent of that side
+  const zoneStyle: React.CSSProperties = {
+    position: 'absolute',
+    zIndex: 11,
+    pointerEvents: 'auto',
+    ...(side === 'left'   ? { top: 0, left: 0, bottom: 0, width: '25%' } : {}),
+    ...(side === 'right'  ? { top: 0, right: 0, bottom: 0, width: '25%' } : {}),
+    ...(side === 'top'    ? { top: 0, left: 0, right: 0, height: '25%' } : {}),
+    ...(side === 'bottom' ? { bottom: 0, left: 0, right: 0, height: '25%' } : {}),
+  }
+
+  return (
+    <>
+      <div ref={setNodeRef} style={zoneStyle} />
+      {isOver && <div className={`pane-drop-zone-half ${side}`} />}
+    </>
+  )
+}
 
 interface PaneGroupContainerProps {
   groupId: string
@@ -121,6 +150,18 @@ export default function PaneGroupContainer({
         isTopLeftGroup={isTopLeftGroup}
       />
       <div className="pane-group-content">
+        {activeDrag?.type === 'group-tab' && (
+          <div className="pane-drop-zone-overlay" style={{ pointerEvents: 'auto' }}>
+            {SIDES.map((side) => (
+              <PaneEdgeDropZone
+                key={side}
+                groupId={groupId}
+                workspaceId={workspaceId}
+                side={side}
+              />
+            ))}
+          </div>
+        )}
         {group.tabs.map((tab) => {
           const isActiveTab = tab.id === group.activeTabId
           const pane = panes[tab.paneId]
