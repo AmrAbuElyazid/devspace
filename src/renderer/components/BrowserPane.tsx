@@ -83,7 +83,7 @@ export default function BrowserPane({
   const findBarFocusToken = useBrowserStore((s) => s.findBarFocusTokenByPaneId[paneId] ?? 0)
   const closeFindBar = useBrowserStore((s) => s.closeFindBar)
   const clearPendingPermissionRequest = useBrowserStore((s) => s.clearPendingPermissionRequest)
-  const openBrowserTab = useWorkspaceStore((s) => s.openBrowserTab)
+  const openBrowserInGroup = useWorkspaceStore((s) => s.openBrowserInGroup)
   const initialUrl = useMemo(() => normalizeBrowserInput(config.url || 'about:blank'), [config.url])
   const [inputUrl, setInputUrl] = useState(initialUrl)
   const hasCertificateError = runtimeState?.securityLabel === 'Certificate error'
@@ -258,7 +258,10 @@ export default function BrowserPane({
     }
 
     if (action === 'link-open-new-tab' && request.linkUrl) {
-      openBrowserTab(workspaceId, request.linkUrl)
+      const wsState = useWorkspaceStore.getState()
+      const ws = wsState.workspaces.find((w) => w.id === workspaceId)
+      const gId = ws?.focusedGroupId
+      if (gId) openBrowserInGroup(workspaceId, gId, request.linkUrl)
       return
     }
 
@@ -273,9 +276,12 @@ export default function BrowserPane({
     }
 
     if (action === 'selection-search-web' && request.selectionText) {
-      openBrowserTab(workspaceId, buildSearchUrl(request.selectionText))
+      const wsState = useWorkspaceStore.getState()
+      const ws = wsState.workspaces.find((w) => w.id === workspaceId)
+      const gId = ws?.focusedGroupId
+      if (gId) openBrowserInGroup(workspaceId, gId, buildSearchUrl(request.selectionText))
     }
-  }, [openBrowserTab, paneId, workspaceId])
+  }, [openBrowserInGroup, paneId, workspaceId])
 
   useEffect(() => {
     return window.api.browser.onContextMenuRequest((request) => {

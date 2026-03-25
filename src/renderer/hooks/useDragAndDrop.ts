@@ -12,30 +12,12 @@ import {
 } from '@dnd-kit/core'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { findFolder } from '../lib/sidebar-tree'
-import type { DragItemData, DropSide } from '../types/dnd'
+import type { DragItemData } from '../types/dnd'
 import type { SidebarNode } from '../types/workspace'
 
 // React context to share activeDrag state without prop drilling
 export const DragContext = createContext<DragItemData | null>(null)
 export const useDragContext = () => useContext(DragContext)
-
-/**
- * Compute which side of a rectangle the pointer is closest to.
- * Used by onDragEnd to determine split direction for tab-to-pane drops.
- */
-function computeDropSide(pointerX: number, pointerY: number, rect: DOMRect): DropSide {
-  const relX = (pointerX - rect.left) / rect.width
-  const relY = (pointerY - rect.top) / rect.height
-  const dL = relX
-  const dR = 1 - relX
-  const dT = relY
-  const dB = 1 - relY
-  const min = Math.min(dL, dR, dT, dB)
-  if (min === dL) return 'left'
-  if (min === dR) return 'right'
-  if (min === dT) return 'top'
-  return 'bottom'
-}
 
 export function useDragAndDrop() {
   const [activeDrag, setActiveDrag] = useState<DragItemData | null>(null)
@@ -228,59 +210,14 @@ export function useDragAndDrop() {
       return
     }
 
-    // ── Tab → Tab (reorder within same workspace) ──
-    if (dragData.type === 'tab' && dropType === 'tab') {
-      if (dragData.workspaceId === (dropData.workspaceId as string)) {
-        const ws = state.workspaces.find((w) => w.id === dragData.workspaceId)
-        if (!ws) return
-        const fromIndex = ws.tabs.findIndex((t) => t.id === dragData.tabId)
-        const overIndex = ws.tabs.findIndex((t) => t.id === (dropData.tabId as string))
-        if (fromIndex === -1 || overIndex === -1) return
-
-        const insertAfter = isInsertAfter(`tab-${dropData.tabId as string}`, 'horizontal')
-        let targetIndex = insertAfter ? overIndex + 1 : overIndex
-        if (fromIndex < targetIndex) targetIndex--
-        if (fromIndex !== targetIndex) {
-          state.reorderTabs(dragData.workspaceId, fromIndex, targetIndex)
-        }
-      }
-      return
-    }
-
-    // ── Tab → Sidebar workspace (cross-workspace move) ──
-    // Accept both 'sidebar-workspace-target' (separate droppable) and 'sidebar-workspace'
-    // (sortable droppable). Both are registered on the same DOM element; pointerWithin
-    // typically returns the sortable first since it's registered first.
-    if (dragData.type === 'tab' && (dropType === 'sidebar-workspace-target' || dropType === 'sidebar-workspace')) {
-      const targetWsId = dropData.workspaceId as string
-      if (dragData.workspaceId !== targetWsId) {
-        state.moveTabToWorkspace(dragData.workspaceId, dragData.tabId, targetWsId)
-      }
-      return
-    }
-
-    // ── Tab → Pane zone (merge tab into split) ──
-    if (dragData.type === 'tab' && dropType === 'pane-zone') {
-      // Compute split direction from pointer position relative to pane rect.
-      const paneId = dropData.paneId as string
-      const paneEl = document.querySelector(`[data-pane-drop-id="${paneId}"]`)
-      let side: DropSide = 'right'
-      if (paneEl && pointerPos) {
-        const rect = paneEl.getBoundingClientRect()
-        side = computeDropSide(pointerPos.x, pointerPos.y, rect)
-      } else if (dropData.side) {
-        // Fallback: read the side tracked by the drop zone's pointermove listener
-        side = dropData.side as DropSide
-      }
-
-      state.mergeTabIntoSplit(
-        dragData.workspaceId,
-        dragData.tabId,
-        dropData.workspaceId as string,
-        dropData.tabId as string,
-        paneId,
-        side,
-      )
+    // ── group-tab → group-tab (cross-group tab move) ──
+    // Intra-group reorder is handled by SortableContext in GroupTabBar.
+    // Here we only handle cross-group moves.
+    if (dragData.type === 'group-tab' && dropType === 'group-tab') {
+      const srcGroupId = dragData.groupId
+      const destGroupId = dropData.groupId as string
+      if (srcGroupId === destGroupId) return // intra-group reorder handled by SortableContext
+      state.moveTabToGroup(dragData.workspaceId, srcGroupId, dragData.tabId, destGroupId)
       return
     }
   }, [clearFolderExpandTimer])

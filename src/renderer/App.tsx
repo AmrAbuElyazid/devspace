@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { DndContext, DragOverlay } from '@dnd-kit/core'
-import { useWorkspaceStore } from './store/workspace-store'
+import { useWorkspaceStore, collectGroupIds } from './store/workspace-store'
 import { useSettingsStore } from './store/settings-store'
 import { useBrowserStore } from './store/browser-store'
 import { useTheme } from './hooks/useTheme'
@@ -8,7 +8,6 @@ import { useDragAndDrop, DragContext } from './hooks/useDragAndDrop'
 import { getActiveFocusedBrowserPane, getSplitShortcutTargetGroupId } from './lib/browser-shortcuts'
 import { findWorkspaceIdForPane } from './lib/browser-pane-routing'
 import Sidebar from './components/Sidebar'
-import TabBar from './components/TabBar'
 import SplitLayout from './components/SplitLayout'
 import SettingsPage from './components/SettingsPage'
 import type { BrowserBridgeListeners, BrowserBridgeUnsubscribe } from '../shared/types'
@@ -51,7 +50,7 @@ export default function App(): JSX.Element {
   const clearPendingPermissionRequest = useBrowserStore((s) => s.clearPendingPermissionRequest)
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig)
   const updateBrowserPaneZoom = useWorkspaceStore((s) => s.updateBrowserPaneZoom)
-  const openBrowserTab = useWorkspaceStore((s) => s.openBrowserTab)
+  const openBrowserInGroup = useWorkspaceStore((s) => s.openBrowserInGroup)
 
   const workspaces = useWorkspaceStore((s) => s.workspaces)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
@@ -60,9 +59,6 @@ export default function App(): JSX.Element {
 
   const dnd = useDragAndDrop()
   const { activeDrag } = dnd
-
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId)
-  const activeTab = activeWorkspace?.tabs.find((t) => t.id === activeWorkspace.activeTabId)
 
   // Sync keepVscodeServerRunning to main process on mount and change.
   useEffect(() => {
@@ -102,11 +98,15 @@ export default function App(): JSX.Element {
         const state = useWorkspaceStore.getState()
         const workspaceId = findWorkspaceIdForPane(state.workspaces, request.paneId, state.paneGroups)
         if (workspaceId) {
-          openBrowserTab(workspaceId, request.url)
+          const ws = state.workspaces.find((w) => w.id === workspaceId)
+          const groupId = ws?.focusedGroupId ?? (ws ? collectGroupIds(ws.root)[0] : null)
+          if (groupId) {
+            openBrowserInGroup(workspaceId, groupId, request.url)
+          }
         }
       },
     })
-  }, [clearPendingPermissionRequest, handleRuntimeStateChange, openBrowserTab, setPendingPermissionRequest, updateBrowserPaneZoom, updatePaneConfig])
+  }, [clearPendingPermissionRequest, handleRuntimeStateChange, openBrowserInGroup, setPendingPermissionRequest, updateBrowserPaneZoom, updatePaneConfig])
 
   // Shared action handlers — called by both DOM keydown (when web content
   // has focus) and IPC menu accelerators (when a native view has focus).
@@ -131,9 +131,14 @@ export default function App(): JSX.Element {
       const store = useWorkspaceStore.getState()
       const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
       if (!ws) return
+      // Switch the nth tab in the focused group
+      const groupId = ws.focusedGroupId ?? collectGroupIds(ws.root)[0]
+      if (!groupId) return
+      const group = store.paneGroups[groupId]
+      if (!group) return
       const targetIndex = num - 1
-      if (targetIndex < ws.tabs.length) {
-        store.setActiveTab(ws.id, ws.tabs[targetIndex].id)
+      if (targetIndex < group.tabs.length) {
+        store.setActiveGroupTab(ws.id, groupId, group.tabs[targetIndex].id)
       }
     }
 
@@ -154,8 +159,20 @@ export default function App(): JSX.Element {
       if (!ws && channel !== 'app:toggle-settings') return
 
       switch (channel) {
-        case 'app:new-tab': if (ws) store.addTab(ws.id); break
-        case 'app:close-tab': if (ws) store.removeTab(ws.id, ws.activeTabId); break
+        case 'app:new-tab': {
+          if (!ws) break
+          const focusedGid = ws.focusedGroupId ?? collectGroupIds(ws.root)[0]
+          if (focusedGid) store.addGroupTab(ws.id, focusedGid)
+          break
+        }
+        case 'app:close-tab': {
+          if (!ws) break
+          const focusedGid2 = ws.focusedGroupId ?? collectGroupIds(ws.root)[0]
+          if (!focusedGid2) break
+          const focusedGroup = store.paneGroups[focusedGid2]
+          if (focusedGroup) store.removeGroupTab(ws.id, focusedGid2, focusedGroup.activeTabId)
+          break
+        }
         case 'app:new-workspace': store.addWorkspace(); break
         case 'app:toggle-sidebar': settings.toggleSidebar(); break
         case 'app:toggle-settings': settings.toggleSettings(); break
@@ -266,31 +283,26 @@ export default function App(): JSX.Element {
         <div className="app-shell" data-dragging={activeDrag ? 'true' : undefined}>
           <Sidebar />
           <div className="app-main">
-            <TabBar />
             <div className="app-content">
-              {/* Render ALL tabs from ALL workspaces, stacked.
-                  Only the active workspace's active tab is visible.
-                  This prevents terminal/editor unmount on workspace or tab switch,
-                  preserving PTY sessions and editor state. */}
-              {workspaces.map((ws) =>
-                ws.tabs.map((tab) => {
-                  const isVisible = ws.id === activeWorkspaceId && tab.id === ws.activeTabId
-                  return (
-                    <div
-                      key={`${ws.id}::${tab.id}`}
-                      className="app-tab-layer"
-                      data-active={isVisible || undefined}
-                    >
-                      <SplitLayout
-                        node={tab.root}
-                        workspaceId={ws.id}
-                        tabId={tab.id}
-                        overlayActive={overlayActive}
-                      />
-                    </div>
-                  )
-                })
-              )}
+              {/* Render ALL workspaces stacked. Only the active workspace is visible.
+                  Using visibility:hidden instead of display:none so native views
+                  (xterm, WebContentsView) keep their canvas dimensions. */}
+              {workspaces.map((ws) => {
+                const isVisible = ws.id === activeWorkspaceId
+                return (
+                  <div
+                    key={ws.id}
+                    className="app-workspace-layer"
+                    data-active={isVisible || undefined}
+                  >
+                    <SplitLayout
+                      node={ws.root}
+                      workspaceId={ws.id}
+                      overlayActive={overlayActive}
+                    />
+                  </div>
+                )
+              })}
 
               {/* Settings overlay */}
               {settingsOpen && <SettingsPage />}
@@ -316,11 +328,13 @@ export default function App(): JSX.Element {
               </div>
             )
           })()}
-          {activeDrag?.type === 'tab' && (() => {
-            const ws = workspaces.find((w) => w.id === activeDrag.workspaceId)
-            const tab = ws?.tabs.find((t) => t.id === activeDrag.tabId)
-            return tab ? (
-              <div className="drag-overlay-tab">{tab.name}</div>
+          {activeDrag?.type === 'group-tab' && (() => {
+            const state = useWorkspaceStore.getState()
+            const group = state.paneGroups[activeDrag.groupId]
+            const tab = group?.tabs.find((t) => t.id === activeDrag.tabId)
+            const pane = tab ? state.panes[tab.paneId] : null
+            return pane ? (
+              <div className="drag-overlay-tab">{pane.title}</div>
             ) : null
           })()}
         </DragOverlay>
