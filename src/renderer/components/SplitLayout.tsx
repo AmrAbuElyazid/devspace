@@ -9,6 +9,7 @@ interface SplitLayoutProps {
   node: SplitNode
   workspaceId: string
   overlayActive: boolean
+  sidebarOpen: boolean
   path?: number[]
 }
 
@@ -16,6 +17,7 @@ export default function SplitLayout({
   node,
   workspaceId,
   overlayActive,
+  sidebarOpen,
   path = [],
 }: SplitLayoutProps): JSX.Element {
   const updateSplitSizes = useWorkspaceStore((s) => s.updateSplitSizes)
@@ -44,6 +46,7 @@ export default function SplitLayout({
         groupId={node.groupId}
         workspaceId={workspaceId}
         overlayActive={overlayActive}
+        sidebarOpen={sidebarOpen}
       />
     )
   }
@@ -62,6 +65,7 @@ export default function SplitLayout({
             node={child}
             workspaceId={workspaceId}
             overlayActive={overlayActive}
+            sidebarOpen={sidebarOpen}
             path={[...path, i]}
           />
         </Allotment.Pane>

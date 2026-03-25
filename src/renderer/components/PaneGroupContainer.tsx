@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, type ReactElement } from 'react'
 import { shouldHideBrowserNativeViewForDrag } from '../lib/browser-pane-visibility'
-import { useWorkspaceStore } from '../store/workspace-store'
+import { useWorkspaceStore, getTopLeftGroupId } from '../store/workspace-store'
 import { useDragContext } from '../hooks/useDragAndDrop'
 import GroupTabBar from './GroupTabBar'
 import type { PaneType, TerminalConfig, EditorConfig, BrowserConfig } from '../types/workspace'
@@ -15,6 +15,7 @@ interface PaneGroupContainerProps {
   groupId: string
   workspaceId: string
   overlayActive: boolean
+  sidebarOpen: boolean
 }
 
 // Memoized inner component that renders the right content based on pane type
@@ -76,8 +77,14 @@ export default function PaneGroupContainer({
   groupId,
   workspaceId,
   overlayActive,
+  sidebarOpen,
 }: PaneGroupContainerProps): ReactElement | null {
   const group = useWorkspaceStore((s) => s.paneGroups[groupId])
+  const topLeftGroupId = useWorkspaceStore((s) => {
+    const ws = s.workspaces.find((w) => w.id === workspaceId)
+    return ws ? getTopLeftGroupId(ws.root) : null
+  })
+  const isTopLeftGroup = !sidebarOpen && groupId === topLeftGroupId
   const panes = useWorkspaceStore((s) => s.panes)
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const focusedGroupId = useWorkspaceStore((s) => {
@@ -111,6 +118,7 @@ export default function PaneGroupContainer({
         groupId={groupId}
         workspaceId={workspaceId}
         isFocused={isFocused}
+        isTopLeftGroup={isTopLeftGroup}
       />
       <div className="pane-group-content">
         {group.tabs.map((tab) => {

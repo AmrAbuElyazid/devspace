@@ -54,6 +54,12 @@ export function collectGroupIds(root: SplitNode): string[] {
   return root.children.flatMap(collectGroupIds)
 }
 
+/** Walk children[0] at each branch level to find the top-left leaf group. */
+export function getTopLeftGroupId(root: SplitNode): string {
+  if (root.type === 'leaf') return root.groupId
+  return getTopLeftGroupId(root.children[0])
+}
+
 export function simplifyTree(node: SplitNode): SplitNode {
   if (node.type === 'leaf') return node
 
