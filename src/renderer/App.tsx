@@ -5,7 +5,7 @@ import { useSettingsStore } from './store/settings-store'
 import { useBrowserStore } from './store/browser-store'
 import { useTheme } from './hooks/useTheme'
 import { useDragAndDrop, DragContext } from './hooks/useDragAndDrop'
-import { getActiveFocusedBrowserPane, getSplitShortcutTargetPaneId } from './lib/browser-shortcuts'
+import { getActiveFocusedBrowserPane, getSplitShortcutTargetGroupId } from './lib/browser-shortcuts'
 import { findWorkspaceIdForPane } from './lib/browser-pane-routing'
 import Sidebar from './components/Sidebar'
 import TabBar from './components/TabBar'
@@ -115,22 +115,16 @@ export default function App(): JSX.Element {
       const store = useWorkspaceStore.getState()
       const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
       if (!ws) return
-      const tab = ws.tabs.find((t) => t.id === ws.activeTabId)
-      if (tab) {
-        const targetPaneId = getSplitShortcutTargetPaneId(tab)
-        if (targetPaneId) store.splitPane(ws.id, tab.id, targetPaneId, 'horizontal')
-      }
+      const targetGroupId = getSplitShortcutTargetGroupId(ws)
+      if (targetGroupId) store.splitGroup(ws.id, targetGroupId, 'horizontal')
     }
 
     function doSplitDown(): void {
       const store = useWorkspaceStore.getState()
       const ws = store.workspaces.find((w) => w.id === store.activeWorkspaceId)
       if (!ws) return
-      const tab = ws.tabs.find((t) => t.id === ws.activeTabId)
-      if (tab) {
-        const targetPaneId = getSplitShortcutTargetPaneId(tab)
-        if (targetPaneId) store.splitPane(ws.id, tab.id, targetPaneId, 'vertical')
-      }
+      const targetGroupId = getSplitShortcutTargetGroupId(ws)
+      if (targetGroupId) store.splitGroup(ws.id, targetGroupId, 'vertical')
     }
 
     function doSwitchTab(num: number): void {

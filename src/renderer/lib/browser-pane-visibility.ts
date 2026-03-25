@@ -4,5 +4,5 @@ export function shouldHideBrowserNativeViewForDrag(
   activeDrag: DragItemData | null,
   isVisibleTab: boolean,
 ): boolean {
-  return activeDrag?.type === 'tab' && isVisibleTab
+  return activeDrag?.type === 'group-tab' && isVisibleTab
 }
