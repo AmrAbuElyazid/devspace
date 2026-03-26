@@ -1,14 +1,10 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import type { Session } from 'electron'
-import {
-  BROWSER_PARTITION,
-  BrowserSessionManager,
-} from '../browser-session-manager'
+import { test, expect } from "vitest";
+import type { Session } from "electron";
+import { BROWSER_PARTITION, BrowserSessionManager } from "../browser-session-manager";
 
-type PermissionCheckHandler = Parameters<Session['setPermissionCheckHandler']>[0]
-type PermissionRequestHandler = Parameters<NonNullable<Session['setPermissionRequestHandler']>>[0]
-type CertificateVerifyProc = Parameters<Session['setCertificateVerifyProc']>[0]
+type PermissionCheckHandler = Parameters<Session["setPermissionCheckHandler"]>[0];
+type PermissionRequestHandler = Parameters<NonNullable<Session["setPermissionRequestHandler"]>>[0];
+type CertificateVerifyProc = Parameters<Session["setCertificateVerifyProc"]>[0];
 type CertificateErrorListener = (
   event: { preventDefault: () => void },
   webContents: { id: number },
@@ -16,241 +12,249 @@ type CertificateErrorListener = (
   error: string,
   certificate: unknown,
   callback: (isTrusted: boolean) => void,
-) => void
+) => void;
 
-test('uses a dedicated persistent browser partition', () => {
-  assert.equal(BROWSER_PARTITION, 'persist:devspace-global-browser')
-})
+test("uses a dedicated persistent browser partition", () => {
+  expect(BROWSER_PARTITION).toBe("persist:devspace-global-browser");
+});
 
-test('getSession uses fromPartition with the shared browser partition', () => {
+test("getSession uses fromPartition with the shared browser partition", () => {
   const fakeSession = {
     setPermissionCheckHandler: () => {},
     setCertificateVerifyProc: () => {},
-  }
-  let partition: string | undefined
+  };
+  let partition: string | undefined;
 
   const manager = new BrowserSessionManager({
     fromPartition: (nextPartition) => {
-      partition = nextPartition
-      return fakeSession as never
+      partition = nextPartition;
+      return fakeSession as never;
     },
-  })
+  });
 
-  const session = manager.getSession()
+  const session = manager.getSession();
 
-  assert.equal(partition, BROWSER_PARTITION)
-  assert.equal(session, fakeSession)
-})
+  expect(partition).toBe(BROWSER_PARTITION);
+  expect(session).toBe(fakeSession);
+});
 
-test('installHandlers registers a permission check handler on the session', () => {
-  let registeredHandler: PermissionCheckHandler | undefined
-  let registeredRequestHandler: PermissionRequestHandler | undefined
-  let registeredVerifyProc: CertificateVerifyProc | undefined
+test("installHandlers registers a permission check handler on the session", () => {
+  let registeredHandler: PermissionCheckHandler | undefined;
+  let registeredRequestHandler: PermissionRequestHandler | undefined;
+  let registeredVerifyProc: CertificateVerifyProc | undefined;
 
   const manager = new BrowserSessionManager({
-    fromPartition: () => ({
-      setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
-        registeredHandler = handler
-      },
-      setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
-        registeredRequestHandler = handler
-      },
-      setCertificateVerifyProc: (handler: CertificateVerifyProc) => {
-        registeredVerifyProc = handler
-      },
-    }) as never,
-  })
+    fromPartition: () =>
+      ({
+        setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
+          registeredHandler = handler;
+        },
+        setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
+          registeredRequestHandler = handler;
+        },
+        setCertificateVerifyProc: (handler: CertificateVerifyProc) => {
+          registeredVerifyProc = handler;
+        },
+      }) as never,
+  });
 
   manager.installHandlers({
     resolvePaneIdForWebContents: () => undefined,
     reportCertificateError: () => {},
     appModule: { on: () => undefined },
     log: () => {},
-  })
+  });
 
-  assert.equal(typeof registeredHandler, 'function')
-  assert.equal(typeof registeredRequestHandler, 'function')
-  assert.equal(typeof registeredVerifyProc, 'function')
-  assert.equal(registeredHandler?.({ id: 1 } as never, 'notifications', 'https://example.com', {} as never), false)
-})
+  expect(typeof registeredHandler).toBe("function");
+  expect(typeof registeredRequestHandler).toBe("function");
+  expect(typeof registeredVerifyProc).toBe("function");
+  expect(
+    registeredHandler?.({ id: 1 } as never, "notifications", "https://example.com", {} as never),
+  ).toBe(false);
+});
 
-test('permission request handler emits a mapped browser permission request', () => {
-  let registeredRequestHandler: PermissionRequestHandler | undefined
-  const requested: Array<{ paneId: string; origin: string; permissionType: string; requestToken: string }> = []
+test("permission request handler emits a mapped browser permission request", () => {
+  let registeredRequestHandler: PermissionRequestHandler | undefined;
+  const requested: Array<{
+    paneId: string;
+    origin: string;
+    permissionType: string;
+    requestToken: string;
+  }> = [];
 
   const manager = new BrowserSessionManager({
-    fromPartition: () => ({
-      setPermissionCheckHandler: () => {},
-      setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
-        registeredRequestHandler = handler
-      },
-      setCertificateVerifyProc: () => {},
-    }) as never,
-  })
+    fromPartition: () =>
+      ({
+        setPermissionCheckHandler: () => {},
+        setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
+          registeredRequestHandler = handler;
+        },
+        setCertificateVerifyProc: () => {},
+      }) as never,
+  });
 
   manager.installHandlers({
-    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 12 ? 'pane-12' : undefined,
+    resolvePaneIdForWebContents: (webContentsId) => (webContentsId === 12 ? "pane-12" : undefined),
     reportCertificateError: () => {},
     requestBrowserPermission: (request, resolve) => {
-      requested.push(request)
-      resolve('allow-once')
+      requested.push(request);
+      resolve("allow-once");
     },
     appModule: { on: () => undefined },
     log: () => {},
-  })
+  });
 
-  let allowed: boolean | undefined
+  let allowed: boolean | undefined;
   registeredRequestHandler?.(
     {
       id: 12,
-      getURL: () => 'https://camera.example/path',
+      getURL: () => "https://camera.example/path",
     } as never,
-    'media',
+    "media",
     (nextAllowed) => {
-      allowed = nextAllowed
+      allowed = nextAllowed;
     },
     {
-      mediaType: 'video',
-      requestingUrl: 'https://camera.example/path',
+      mediaType: "video",
+      requestingUrl: "https://camera.example/path",
     } as never,
-  )
+  );
 
-  assert.equal(allowed, true)
-  assert.equal(requested.length, 1)
-  assert.equal(requested[0]?.paneId, 'pane-12')
-  assert.equal(requested[0]?.origin, 'https://camera.example')
-  assert.equal(requested[0]?.permissionType, 'camera')
-  assert.equal(typeof requested[0]?.requestToken, 'string')
-})
+  expect(allowed).toBe(true);
+  expect(requested.length).toBe(1);
+  expect(requested[0]?.paneId).toBe("pane-12");
+  expect(requested[0]?.origin).toBe("https://camera.example");
+  expect(requested[0]?.permissionType).toBe("camera");
+  expect(typeof requested[0]?.requestToken).toBe("string");
+});
 
-test('allow-for-session is remembered by permission check handler for the same origin and permission type', () => {
-  let registeredHandler: PermissionCheckHandler | undefined
-  let registeredRequestHandler: PermissionRequestHandler | undefined
+test("allow-for-session is remembered by permission check handler for the same origin and permission type", () => {
+  let registeredHandler: PermissionCheckHandler | undefined;
+  let registeredRequestHandler: PermissionRequestHandler | undefined;
 
   const manager = new BrowserSessionManager({
-    fromPartition: () => ({
-      setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
-        registeredHandler = handler
-      },
-      setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
-        registeredRequestHandler = handler
-      },
-      setCertificateVerifyProc: () => {},
-    }) as never,
-  })
+    fromPartition: () =>
+      ({
+        setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
+          registeredHandler = handler;
+        },
+        setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
+          registeredRequestHandler = handler;
+        },
+        setCertificateVerifyProc: () => {},
+      }) as never,
+  });
 
   manager.installHandlers({
-    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 12 ? 'pane-12' : undefined,
+    resolvePaneIdForWebContents: (webContentsId) => (webContentsId === 12 ? "pane-12" : undefined),
     reportCertificateError: () => {},
     requestBrowserPermission: (_request, resolve) => {
-      resolve('allow-for-session')
+      resolve("allow-for-session");
     },
     appModule: { on: () => undefined },
     log: () => {},
-  })
+  });
 
-  let allowed: boolean | undefined
+  let allowed: boolean | undefined;
   registeredRequestHandler?.(
     {
       id: 12,
-      getURL: () => 'https://camera.example/path',
+      getURL: () => "https://camera.example/path",
     } as never,
-    'media',
+    "media",
     (nextAllowed) => {
-      allowed = nextAllowed
+      allowed = nextAllowed;
     },
     {
-      mediaType: 'video',
-      requestingUrl: 'https://camera.example/path',
+      mediaType: "video",
+      requestingUrl: "https://camera.example/path",
     } as never,
-  )
+  );
 
-  assert.equal(allowed, true)
-  assert.equal(
-    registeredHandler?.(
-      { id: 12 } as never,
-      'media',
-      'https://camera.example',
-      { mediaType: 'video', requestingUrl: 'https://camera.example/path' } as never,
-    ),
-    true,
-  )
-})
+  expect(allowed).toBe(true);
+  expect(
+    registeredHandler?.({ id: 12 } as never, "media", "https://camera.example", {
+      mediaType: "video",
+      requestingUrl: "https://camera.example/path",
+    } as never),
+  ).toBe(true);
+});
 
-test('allow-for-session still passes permission checks without webContents when origin is known', () => {
-  let registeredHandler: PermissionCheckHandler | undefined
-  let registeredRequestHandler: PermissionRequestHandler | undefined
+test("allow-for-session still passes permission checks without webContents when origin is known", () => {
+  let registeredHandler: PermissionCheckHandler | undefined;
+  let registeredRequestHandler: PermissionRequestHandler | undefined;
 
   const manager = new BrowserSessionManager({
-    fromPartition: () => ({
-      setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
-        registeredHandler = handler
-      },
-      setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
-        registeredRequestHandler = handler
-      },
-      setCertificateVerifyProc: () => {},
-    }) as never,
-  })
+    fromPartition: () =>
+      ({
+        setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
+          registeredHandler = handler;
+        },
+        setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
+          registeredRequestHandler = handler;
+        },
+        setCertificateVerifyProc: () => {},
+      }) as never,
+  });
 
   manager.installHandlers({
-    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 12 ? 'pane-12' : undefined,
+    resolvePaneIdForWebContents: (webContentsId) => (webContentsId === 12 ? "pane-12" : undefined),
     reportCertificateError: () => {},
     requestBrowserPermission: (_request, resolve) => {
-      resolve('allow-for-session')
+      resolve("allow-for-session");
     },
     appModule: { on: () => undefined },
     log: () => {},
-  })
+  });
 
   registeredRequestHandler?.(
     {
       id: 12,
-      getURL: () => 'https://camera.example/path',
+      getURL: () => "https://camera.example/path",
     } as never,
-    'notifications',
+    "notifications",
     () => {},
     {
-      requestingUrl: 'https://camera.example/path',
+      requestingUrl: "https://camera.example/path",
     } as never,
-  )
+  );
 
-  assert.equal(
-    registeredHandler?.(null as never, 'notifications', 'https://camera.example', {} as never),
-    true,
-  )
-})
+  expect(
+    registeredHandler?.(null as never, "notifications", "https://camera.example", {} as never),
+  ).toBe(true);
+});
 
-test('certificate verification fails closed without surfacing a pane failure directly', () => {
-  let registeredVerifyProc: CertificateVerifyProc | undefined
-  const reported: Array<{ paneId: string; url: string }> = []
-  const logs: string[] = []
+test("certificate verification fails closed without surfacing a pane failure directly", () => {
+  let registeredVerifyProc: CertificateVerifyProc | undefined;
+  const reported: Array<{ paneId: string; url: string }> = [];
+  const logs: string[] = [];
 
   const manager = new BrowserSessionManager({
-    fromPartition: () => ({
-      setPermissionCheckHandler: () => {},
-      setCertificateVerifyProc: (handler: CertificateVerifyProc) => {
-        registeredVerifyProc = handler
-      },
-    }) as never,
-  })
+    fromPartition: () =>
+      ({
+        setPermissionCheckHandler: () => {},
+        setCertificateVerifyProc: (handler: CertificateVerifyProc) => {
+          registeredVerifyProc = handler;
+        },
+      }) as never,
+  });
 
   manager.installHandlers({
-    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 9 ? 'pane-9' : undefined,
+    resolvePaneIdForWebContents: (webContentsId) => (webContentsId === 9 ? "pane-9" : undefined),
     reportCertificateError: (paneId, url) => {
-      reported.push({ paneId, url })
+      reported.push({ paneId, url });
     },
     appModule: { on: () => undefined },
     log: (message) => {
-      logs.push(message)
+      logs.push(message);
     },
-  })
+  });
 
-  let verificationResult: number | undefined
+  let verificationResult: number | undefined;
   registeredVerifyProc?.(
     {
-      hostname: 'expired.badssl.com',
-      verificationResult: 'net::ERR_CERT_AUTHORITY_INVALID',
+      hostname: "expired.badssl.com",
+      verificationResult: "net::ERR_CERT_AUTHORITY_INVALID",
       errorCode: -202,
       validatedCertificate: {},
       certificate: {},
@@ -259,164 +263,183 @@ test('certificate verification fails closed without surfacing a pane failure dir
       webContents: { id: 9 },
     } as never,
     (result) => {
-      verificationResult = result
+      verificationResult = result;
     },
-  )
+  );
 
-  assert.equal(verificationResult, -2)
-  assert.deepEqual(reported, [])
-  assert.equal(logs.length, 0)
-})
+  expect(verificationResult).toBe(-2);
+  expect(reported).toEqual([]);
+  expect(logs.length).toBe(0);
+});
 
-test('permission checks fail closed and log when pane resolution fails', () => {
-  let registeredHandler: PermissionCheckHandler | undefined
-  const logs: string[] = []
+test("permission checks fail closed and log when pane resolution fails", () => {
+  let registeredHandler: PermissionCheckHandler | undefined;
+  const logs: string[] = [];
 
   const manager = new BrowserSessionManager({
-    fromPartition: () => ({
-      setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
-        registeredHandler = handler
-      },
-      setCertificateVerifyProc: () => {},
-    }) as never,
-  })
+    fromPartition: () =>
+      ({
+        setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
+          registeredHandler = handler;
+        },
+        setCertificateVerifyProc: () => {},
+      }) as never,
+  });
 
   manager.installHandlers({
     resolvePaneIdForWebContents: () => undefined,
     reportCertificateError: () => {},
     appModule: { on: () => undefined },
     log: (message) => {
-      logs.push(message)
+      logs.push(message);
     },
-  })
+  });
 
-  const allowed = registeredHandler?.({ id: 42 } as never, 'notifications', 'https://example.com', {} as never)
+  const allowed = registeredHandler?.(
+    { id: 42 } as never,
+    "notifications",
+    "https://example.com",
+    {} as never,
+  );
 
-  assert.equal(allowed, false)
-  assert.match(logs[0] ?? '', /unresolved browser permission request/i)
-})
+  expect(allowed).toBe(false);
+  expect(logs[0] ?? "").toMatch(/unresolved browser permission request/i);
+});
 
-test('certificate errors are blocked without surfacing a pane failure directly from the app listener', () => {
-  let certificateErrorListener: CertificateErrorListener | undefined
-  const reported: Array<{ paneId: string; url: string }> = []
-  let prevented = false
-  let trusted: boolean | undefined
+test("certificate errors are blocked without surfacing a pane failure directly from the app listener", () => {
+  let certificateErrorListener: CertificateErrorListener | undefined;
+  const reported: Array<{ paneId: string; url: string }> = [];
+  let prevented = false;
+  let trusted: boolean | undefined;
 
   const manager = new BrowserSessionManager({
-    fromPartition: () => ({
-      setPermissionCheckHandler: () => {},
-      setCertificateVerifyProc: () => {},
-    }) as never,
-  })
+    fromPartition: () =>
+      ({
+        setPermissionCheckHandler: () => {},
+        setCertificateVerifyProc: () => {},
+      }) as never,
+  });
 
   manager.installHandlers({
-    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 7 ? 'pane-7' : undefined,
+    resolvePaneIdForWebContents: (webContentsId) => (webContentsId === 7 ? "pane-7" : undefined),
     reportCertificateError: (paneId, url) => {
-      reported.push({ paneId, url })
+      reported.push({ paneId, url });
     },
     appModule: {
       on: (event, listener) => {
-        if (event === 'certificate-error') {
-          certificateErrorListener = listener as CertificateErrorListener
+        if (event === "certificate-error") {
+          certificateErrorListener = listener as CertificateErrorListener;
         }
-        return undefined
+        return undefined;
       },
     },
     log: () => {},
-  })
+  });
 
   certificateErrorListener?.(
-    { preventDefault: () => { prevented = true } },
+    {
+      preventDefault: () => {
+        prevented = true;
+      },
+    },
     { id: 7 },
-    'https://expired.badssl.com/',
-    'ERR_CERT_AUTHORITY_INVALID',
+    "https://expired.badssl.com/",
+    "ERR_CERT_AUTHORITY_INVALID",
     {},
-    (isTrusted) => { trusted = isTrusted },
-  )
+    (isTrusted) => {
+      trusted = isTrusted;
+    },
+  );
 
-  assert.equal(prevented, true)
-  assert.equal(trusted, false)
-  assert.deepEqual(reported, [])
-})
+  expect(prevented).toBe(true);
+  expect(trusted).toBe(false);
+  expect(reported).toEqual([]);
+});
 
-test('installHandlers does not accumulate duplicate global certificate listeners', () => {
-  const listeners: CertificateErrorListener[] = []
+test("installHandlers does not accumulate duplicate global certificate listeners", () => {
+  const listeners: CertificateErrorListener[] = [];
 
   const manager = new BrowserSessionManager({
-    fromPartition: () => ({
-      setPermissionCheckHandler: () => {},
-      setCertificateVerifyProc: () => {},
-    }) as never,
-  })
+    fromPartition: () =>
+      ({
+        setPermissionCheckHandler: () => {},
+        setCertificateVerifyProc: () => {},
+      }) as never,
+  });
 
   const appModule = {
-    on: (_event: 'certificate-error', listener: CertificateErrorListener) => {
-      listeners.push(listener)
+    on: (_event: "certificate-error", listener: CertificateErrorListener) => {
+      listeners.push(listener);
     },
-  }
+  };
 
   manager.installHandlers({
     resolvePaneIdForWebContents: () => undefined,
     reportCertificateError: () => {},
     appModule,
     log: () => {},
-  })
+  });
 
   manager.installHandlers({
     resolvePaneIdForWebContents: () => undefined,
     reportCertificateError: () => {},
     appModule,
     log: () => {},
-  })
+  });
 
-  assert.equal(listeners.length, 1)
-})
+  expect(listeners.length).toBe(1);
+});
 
-test('global certificate listener still uses the latest callbacks while remaining side-effect free', () => {
-  let certificateErrorListener: CertificateErrorListener | undefined
-  const reports: Array<{ paneId: string; url: string }> = []
+test("global certificate listener still uses the latest callbacks while remaining side-effect free", () => {
+  let certificateErrorListener: CertificateErrorListener | undefined;
+  const reports: Array<{ paneId: string; url: string }> = [];
 
   const manager = new BrowserSessionManager({
-    fromPartition: () => ({
-      setPermissionCheckHandler: () => {},
-      setCertificateVerifyProc: () => {},
-    }) as never,
-  })
+    fromPartition: () =>
+      ({
+        setPermissionCheckHandler: () => {},
+        setCertificateVerifyProc: () => {},
+      }) as never,
+  });
 
   const appModule = {
-    on: (_event: 'certificate-error', listener: CertificateErrorListener) => {
-      certificateErrorListener = listener
+    on: (_event: "certificate-error", listener: CertificateErrorListener) => {
+      certificateErrorListener = listener;
     },
-  }
+  };
 
   manager.installHandlers({
-    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 1 ? 'stale-pane' : undefined,
+    resolvePaneIdForWebContents: (webContentsId) =>
+      webContentsId === 1 ? "stale-pane" : undefined,
     reportCertificateError: (paneId, url) => {
-      reports.push({ paneId, url })
+      reports.push({ paneId, url });
     },
     appModule,
     log: () => {},
-  })
+  });
 
   manager.installHandlers({
-    resolvePaneIdForWebContents: (webContentsId) => webContentsId === 2 ? 'fresh-pane' : undefined,
+    resolvePaneIdForWebContents: (webContentsId) =>
+      webContentsId === 2 ? "fresh-pane" : undefined,
     reportCertificateError: (paneId, url) => {
-      reports.push({ paneId, url })
+      reports.push({ paneId, url });
     },
     appModule,
     log: () => {},
-  })
+  });
 
-  let trusted: boolean | undefined
+  let trusted: boolean | undefined;
   certificateErrorListener?.(
     { preventDefault: () => {} },
     { id: 2 },
-    'https://expired.badssl.com/',
-    'ERR_CERT_AUTHORITY_INVALID',
+    "https://expired.badssl.com/",
+    "ERR_CERT_AUTHORITY_INVALID",
     {},
-    (isTrusted) => { trusted = isTrusted },
-  )
+    (isTrusted) => {
+      trusted = isTrusted;
+    },
+  );
 
-  assert.equal(trusted, false)
-  assert.deepEqual(reports, [])
-})
+  expect(trusted).toBe(false);
+  expect(reports).toEqual([]);
+});

@@ -1,51 +1,52 @@
-import { forwardRef, useEffect, type ComponentProps } from 'react'
-import { Dialog as DialogPrimitive } from '@base-ui-components/react/dialog'
-import { cn } from '../../lib/utils'
-import { useSettingsStore } from '../../store/settings-store'
+import { forwardRef, useEffect, type ComponentProps } from "react";
+import { Dialog as DialogPrimitive } from "@base-ui-components/react/dialog";
+import { cn } from "../../lib/utils";
+import { useSettingsStore } from "../../store/settings-store";
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
-type DialogProps = ComponentProps<typeof DialogPrimitive.Root>
+type DialogProps = ComponentProps<typeof DialogPrimitive.Root>;
 
 function Dialog(props: DialogProps) {
-  const pushOverlay = useSettingsStore((s) => s.pushOverlay)
-  const popOverlay = useSettingsStore((s) => s.popOverlay)
+  const pushOverlay = useSettingsStore((s) => s.pushOverlay);
+  const popOverlay = useSettingsStore((s) => s.popOverlay);
 
   // Hide native views only while the dialog is actually open
   useEffect(() => {
-    if (!props.open) return
-    pushOverlay()
-    void window.api?.terminal?.blur?.()
-    return () => { popOverlay() }
-  }, [props.open, pushOverlay, popOverlay])
+    if (!props.open) return;
+    pushOverlay();
+    void window.api?.terminal?.blur?.();
+    return () => {
+      popOverlay();
+    };
+  }, [props.open, pushOverlay, popOverlay]);
 
-  return <DialogPrimitive.Root {...props} />
+  return <DialogPrimitive.Root {...props} />;
 }
 
 // ── Trigger ───────────────────────────────────────────────────────────────────
 
-type DialogTriggerProps = ComponentProps<typeof DialogPrimitive.Trigger>
+type DialogTriggerProps = ComponentProps<typeof DialogPrimitive.Trigger>;
 
-const DialogTrigger = forwardRef<HTMLButtonElement, DialogTriggerProps>(
-  (props, ref) => <DialogPrimitive.Trigger ref={ref} {...props} />,
-)
-DialogTrigger.displayName = 'DialogTrigger'
+const DialogTrigger = forwardRef<HTMLButtonElement, DialogTriggerProps>((props, ref) => (
+  <DialogPrimitive.Trigger ref={ref} {...props} />
+));
+DialogTrigger.displayName = "DialogTrigger";
 
 // ── Close ─────────────────────────────────────────────────────────────────────
 
-type DialogCloseProps = ComponentProps<typeof DialogPrimitive.Close>
+type DialogCloseProps = ComponentProps<typeof DialogPrimitive.Close>;
 
-const DialogClose = forwardRef<HTMLButtonElement, DialogCloseProps>(
-  (props, ref) => <DialogPrimitive.Close ref={ref} {...props} />,
-)
-DialogClose.displayName = 'DialogClose'
+const DialogClose = forwardRef<HTMLButtonElement, DialogCloseProps>((props, ref) => (
+  <DialogPrimitive.Close ref={ref} {...props} />
+));
+DialogClose.displayName = "DialogClose";
 
 // ── Content ───────────────────────────────────────────────────────────────────
 
-interface DialogContentProps
-  extends ComponentProps<typeof DialogPrimitive.Popup> {
+interface DialogContentProps extends ComponentProps<typeof DialogPrimitive.Popup> {
   /** Hide the default close button */
-  hideClose?: boolean
+  hideClose?: boolean;
 }
 
 const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
@@ -53,21 +54,21 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop
         className={cn(
-          'fixed inset-0 z-50 bg-black/32 backdrop-blur-sm',
-          'transition-all duration-150',
-          'data-[starting-style]:opacity-0',
-          'data-[ending-style]:opacity-0',
+          "fixed inset-0 z-50 bg-black/32 backdrop-blur-sm",
+          "transition-all duration-150",
+          "data-[starting-style]:opacity-0",
+          "data-[ending-style]:opacity-0",
         )}
       />
       <DialogPrimitive.Popup
         ref={ref}
         className={cn(
-          'fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
-          'w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl',
-          'text-foreground',
-          'transition-all duration-150',
-          'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
-          'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
+          "fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
+          "w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl",
+          "text-foreground",
+          "transition-all duration-150",
+          "data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
+          "data-[ending-style]:scale-95 data-[ending-style]:opacity-0",
           className,
         )}
         {...props}
@@ -76,9 +77,9 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
         {!hideClose && (
           <DialogPrimitive.Close
             className={cn(
-              'absolute top-3 right-3 inline-flex h-6 w-6 items-center justify-center rounded-md',
-              'text-muted-foreground hover:text-foreground hover:bg-accent',
-              'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              "absolute top-3 right-3 inline-flex h-6 w-6 items-center justify-center rounded-md",
+              "text-muted-foreground hover:text-foreground hover:bg-accent",
+              "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             )}
           >
             <svg
@@ -97,50 +98,40 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
       </DialogPrimitive.Popup>
     </DialogPrimitive.Portal>
   ),
-)
-DialogContent.displayName = 'DialogContent'
+);
+DialogContent.displayName = "DialogContent";
 
 // ── Title ─────────────────────────────────────────────────────────────────────
 
-type DialogTitleProps = ComponentProps<typeof DialogPrimitive.Title>
+type DialogTitleProps = ComponentProps<typeof DialogPrimitive.Title>;
 
 const DialogTitle = forwardRef<HTMLHeadingElement, DialogTitleProps>(
   ({ className, ...props }, ref) => (
     <DialogPrimitive.Title
       ref={ref}
-      className={cn('text-sm font-semibold text-foreground', className)}
+      className={cn("text-sm font-semibold text-foreground", className)}
       {...props}
     />
   ),
-)
-DialogTitle.displayName = 'DialogTitle'
+);
+DialogTitle.displayName = "DialogTitle";
 
 // ── Description ───────────────────────────────────────────────────────────────
 
-type DialogDescriptionProps = ComponentProps<
-  typeof DialogPrimitive.Description
->
+type DialogDescriptionProps = ComponentProps<typeof DialogPrimitive.Description>;
 
-const DialogDescription = forwardRef<
-  HTMLParagraphElement,
-  DialogDescriptionProps
->(({ className, ...props }, ref) => (
-  <DialogPrimitive.Description
-    ref={ref}
-    className={cn('mt-1.5 text-xs text-muted-foreground', className)}
-    {...props}
-  />
-))
-DialogDescription.displayName = 'DialogDescription'
+const DialogDescription = forwardRef<HTMLParagraphElement, DialogDescriptionProps>(
+  ({ className, ...props }, ref) => (
+    <DialogPrimitive.Description
+      ref={ref}
+      className={cn("mt-1.5 text-xs text-muted-foreground", className)}
+      {...props}
+    />
+  ),
+);
+DialogDescription.displayName = "DialogDescription";
 
 // ── Exports ───────────────────────────────────────────────────────────────────
 
-export {
-  Dialog,
-  DialogTrigger,
-  DialogContent,
-  DialogTitle,
-  DialogDescription,
-  DialogClose,
-}
-export type { DialogProps, DialogContentProps }
+export { Dialog, DialogTrigger, DialogContent, DialogTitle, DialogDescription, DialogClose };
+export type { DialogProps, DialogContentProps };

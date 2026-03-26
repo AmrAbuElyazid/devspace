@@ -1,17 +1,17 @@
-import { expect, mock, test } from 'bun:test'
+import { expect, vi, test } from "vitest";
 
-const handlers = new Map()
-const controllerCalls = []
-const browserImportCalls = []
-const mainWindowCalls = []
+const handlers = new Map();
+const controllerCalls = [];
+const browserImportCalls = [];
+const mainWindowCalls = [];
 
-mock.module('electron', () => ({
+vi.mock("electron", () => ({
   ipcMain: {
     handle: (channel, handler) => {
-      handlers.set(channel, handler)
+      handlers.set(channel, handler);
     },
     on: (channel, handler) => {
-      handlers.set(channel, handler)
+      handlers.set(channel, handler);
     },
   },
   dialog: {
@@ -23,10 +23,11 @@ mock.module('electron', () => ({
   Menu: {
     buildFromTemplate: () => ({ popup: () => {} }),
   },
+  // oxlint-disable-next-line typescript-eslint/no-extraneous-class -- empty mock
   BrowserWindow: class {},
-}))
+}));
 
-const { registerIpcHandlers } = await import('../ipc-handlers')
+const { registerIpcHandlers } = await import("../ipc-handlers");
 
 registerIpcHandlers(
   {
@@ -45,7 +46,7 @@ registerIpcHandlers(
     unmaximize: () => {},
     maximize: () => {},
     setWindowButtonPosition: (position) => {
-      mainWindowCalls.push(['setWindowButtonPosition', position])
+      mainWindowCalls.push(["setWindowButtonPosition", position]);
     },
     close: () => {},
   },
@@ -72,7 +73,7 @@ registerIpcHandlers(
     reload: () => {},
     stop: () => {},
     setBounds: (paneId, bounds) => {
-      controllerCalls.push(['setBounds', paneId, bounds])
+      controllerCalls.push(["setBounds", paneId, bounds]);
     },
     focusPane: () => {},
     setZoom: () => {},
@@ -82,86 +83,95 @@ registerIpcHandlers(
     toggleDevTools: () => {},
     showContextMenu: () => {},
     resolvePermission: (requestToken, decision) => {
-      controllerCalls.push(['resolvePermission', requestToken, decision])
+      controllerCalls.push(["resolvePermission", requestToken, decision]);
     },
   },
   {
     isAvailable: () => false,
-    start: async () => ({ error: 'test' }),
+    start: async () => ({ error: "test" }),
     release: () => {},
     stopAll: () => {},
   },
   {
     isAvailable: () => false,
-    start: async () => ({ error: 'test' }),
+    start: async () => ({ error: "test" }),
     release: () => {},
     stopAll: () => {},
   },
   {
-    listChromeProfiles: async () => [{ name: 'Profile 1', path: '/tmp/Profile 1' }],
+    listChromeProfiles: async () => [{ name: "Profile 1", path: "/tmp/Profile 1" }],
     importChrome: async (profilePath, mode) => {
-      browserImportCalls.push(['importChrome', profilePath, mode])
-      return { ok: true, importedCookies: 0, importedHistory: 0 }
+      browserImportCalls.push(["importChrome", profilePath, mode]);
+      return { ok: true, importedCookies: 0, importedHistory: 0 };
     },
     importSafari: async (mode) => {
-      browserImportCalls.push(['importSafari', mode])
-      return { ok: true, importedCookies: 0, importedHistory: 0 }
+      browserImportCalls.push(["importSafari", mode]);
+      return { ok: true, importedCookies: 0, importedHistory: 0 };
     },
     detectSafariAccess: async () => ({ ok: true }),
   },
-)
+);
 
-test('browser resolvePermission IPC accepts spec permission choices', async () => {
-  controllerCalls.length = 0
+test("browser resolvePermission IPC accepts spec permission choices", async () => {
+  controllerCalls.length = 0;
 
-  await handlers.get('browser:resolvePermission')({}, 'token-1', 'allow-once')
+  await handlers.get("browser:resolvePermission")({}, "token-1", "allow-once");
 
-  expect(controllerCalls).toEqual([['resolvePermission', 'token-1', 'allow-once']])
-})
+  expect(controllerCalls).toEqual([["resolvePermission", "token-1", "allow-once"]]);
+});
 
-test('browser setBounds translates renderer viewport bounds into contentView coordinates', async () => {
-  controllerCalls.length = 0
+test("browser setBounds translates renderer viewport bounds into contentView coordinates", async () => {
+  controllerCalls.length = 0;
 
-  await handlers.get('browser:setBounds')(
+  await handlers.get("browser:setBounds")(
     { sender: { id: 17, getZoomFactor: () => 1 } },
-    'pane-1',
+    "pane-1",
     { x: 100, y: 200, width: 640, height: 480 },
-  )
+  );
 
   expect(controllerCalls).toEqual([
-    ['setBounds', 'pane-1', { x: 124, y: 244, width: 640, height: 480 }],
-  ])
-})
+    ["setBounds", "pane-1", { x: 124, y: 244, width: 640, height: 480 }],
+  ]);
+});
 
-test('browser import IPC forwards supported import modes', async () => {
-  browserImportCalls.length = 0
+test("browser import IPC forwards supported import modes", async () => {
+  browserImportCalls.length = 0;
 
-  await handlers.get('browser:importChrome')({}, '/tmp/Profile 1', 'history')
-  await handlers.get('browser:importSafari')({}, 'cookies')
+  await handlers.get("browser:importChrome")({}, "/tmp/Profile 1", "history");
+  await handlers.get("browser:importSafari")({}, "cookies");
 
   expect(browserImportCalls).toEqual([
-    ['importChrome', '/tmp/Profile 1', 'history'],
-    ['importSafari', 'cookies'],
-  ])
-})
+    ["importChrome", "/tmp/Profile 1", "history"],
+    ["importSafari", "cookies"],
+  ]);
+});
 
-test('browser import IPC rejects Chrome profile paths outside discovered profiles', async () => {
-  browserImportCalls.length = 0
+test("browser import IPC rejects Chrome profile paths outside discovered profiles", async () => {
+  browserImportCalls.length = 0;
 
-  const result = await handlers.get('browser:importChrome')({}, '/tmp/not-a-real-profile', 'history')
+  const result = await handlers.get("browser:importChrome")(
+    {},
+    "/tmp/not-a-real-profile",
+    "history",
+  );
 
-  expect(result).toEqual({ ok: false, code: 'INVALID_CHROME_PROFILE', importedCookies: 0, importedHistory: 0 })
-  expect(browserImportCalls).toEqual([])
-})
+  expect(result).toEqual({
+    ok: false,
+    code: "INVALID_CHROME_PROFILE",
+    importedCookies: 0,
+    importedHistory: 0,
+  });
+  expect(browserImportCalls).toEqual([]);
+});
 
-test('window setSidebarOpen IPC updates native traffic light position', async () => {
-  mainWindowCalls.length = 0
+test("window setSidebarOpen IPC updates native traffic light position", async () => {
+  mainWindowCalls.length = 0;
 
-  await handlers.get('window:setSidebarOpen')({}, false)
-  await handlers.get('window:setSidebarOpen')({}, true)
+  await handlers.get("window:setSidebarOpen")({}, false);
+  await handlers.get("window:setSidebarOpen")({}, true);
 
   expect(mainWindowCalls).toEqual([
-    ['setWindowButtonPosition', { x: 16, y: 6 }],
-    ['setWindowButtonPosition', { x: 16, y: 18 }],
-  ])
-})
+    ["setWindowButtonPosition", { x: 16, y: 6 }],
+    ["setWindowButtonPosition", { x: 16, y: 18 }],
+  ]);
+});

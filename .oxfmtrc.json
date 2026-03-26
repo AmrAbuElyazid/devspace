@@ -1,0 +1,4 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "ignorePatterns": ["out", "dist", "release", "node_modules", "native/build", "deps"]
+}

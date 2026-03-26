@@ -1,38 +1,38 @@
-import { type ElementType } from 'react'
-import { Terminal, FileCode, Globe, Bot, X } from 'lucide-react'
-import { useWorkspaceStore, collectGroupIds } from '../store/workspace-store'
-import type { PaneType, PaneConfig } from '../types/workspace'
+import { type ElementType } from "react";
+import { Terminal, FileCode, Globe, Bot, X } from "lucide-react";
+import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
+import type { PaneType, PaneConfig } from "../types/workspace";
 
 interface EmptyPaneProps {
-  paneId: string
-  workspaceId: string
-  groupId: string
+  paneId: string;
+  workspaceId: string;
+  groupId: string;
 }
 
 const options: { type: PaneType; label: string; icon: ElementType; defaultConfig: PaneConfig }[] = [
-  { type: 'terminal', label: 'Terminal', icon: Terminal, defaultConfig: { cwd: undefined } },
-  { type: 'editor', label: 'VS Code', icon: FileCode, defaultConfig: {} },
-  { type: 't3code', label: 'T3 Code', icon: Bot, defaultConfig: {} },
-  { type: 'browser', label: 'Browser', icon: Globe, defaultConfig: { url: 'https://google.com' } },
-]
+  { type: "terminal", label: "Terminal", icon: Terminal, defaultConfig: { cwd: undefined } },
+  { type: "editor", label: "VS Code", icon: FileCode, defaultConfig: {} },
+  { type: "t3code", label: "T3 Code", icon: Bot, defaultConfig: {} },
+  { type: "browser", label: "Browser", icon: Globe, defaultConfig: { url: "https://google.com" } },
+];
 
-export default function EmptyPane({ paneId, workspaceId, groupId }: EmptyPaneProps): JSX.Element {
-  const changePaneType = useWorkspaceStore((s) => s.changePaneType)
-  const removeGroupTab = useWorkspaceStore((s) => s.removeGroupTab)
-  const closeGroup = useWorkspaceStore((s) => s.closeGroup)
-  const group = useWorkspaceStore((s) => s.paneGroups[groupId])
-  const wsRoot = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.root)
+export default function EmptyPane({ paneId, workspaceId, groupId }: EmptyPaneProps) {
+  const changePaneType = useWorkspaceStore((s) => s.changePaneType);
+  const removeGroupTab = useWorkspaceStore((s) => s.removeGroupTab);
+  const closeGroup = useWorkspaceStore((s) => s.closeGroup);
+  const group = useWorkspaceStore((s) => s.paneGroups[groupId]);
+  const wsRoot = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.root);
 
   const handleClose = () => {
-    const tab = group?.tabs.find((t) => t.paneId === paneId)
-    if (!tab) return
-    const hasMultipleGroups = wsRoot ? collectGroupIds(wsRoot).length > 1 : false
-    if (group.tabs.length === 1 && hasMultipleGroups) {
-      closeGroup(workspaceId, groupId)
+    const tab = group?.tabs.find((t) => t.paneId === paneId);
+    if (!tab) return;
+    const hasMultipleGroups = wsRoot ? collectGroupIds(wsRoot).length > 1 : false;
+    if (group && group.tabs.length === 1 && hasMultipleGroups) {
+      closeGroup(workspaceId, groupId);
     } else {
-      removeGroupTab(workspaceId, groupId, tab.id)
+      removeGroupTab(workspaceId, groupId, tab.id);
     }
-  }
+  };
 
   return (
     <div className="empty-pane">
@@ -53,5 +53,5 @@ export default function EmptyPane({ paneId, workspaceId, groupId }: EmptyPanePro
         ))}
       </div>
     </div>
-  )
+  );
 }

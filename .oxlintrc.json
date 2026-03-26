@@ -1,0 +1,17 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "ignorePatterns": ["out", "dist", "release", "node_modules", "native/build", "deps"],
+  "plugins": ["eslint", "oxc", "react", "unicorn", "typescript"],
+  "categories": {
+    "correctness": "warn",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    "react-in-jsx-scope": "off",
+    "eslint/no-shadow": "off",
+    "eslint/no-await-in-loop": "off",
+    "oxc/no-map-spread": "off",
+    "react/no-array-index-key": "off"
+  }
+}

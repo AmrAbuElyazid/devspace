@@ -1,21 +1,30 @@
-import { useCallback } from 'react'
-import { Terminal, FileCode, Globe, Bot, Square, Plus, Columns2, Rows2, X, Menu } from 'lucide-react'
-import { SortableContext, useSortable, horizontalListSortingStrategy } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-import { useWorkspaceStore, collectGroupIds } from '../store/workspace-store'
-import { useDragContext } from '../hooks/useDragAndDrop'
-import { useSettingsStore } from '../store/settings-store'
-import { Button } from './ui/button'
-import type { PaneGroup, PaneType } from '../types/workspace'
-import type { DragItemData } from '../types/dnd'
+import {
+  Terminal,
+  FileCode,
+  Globe,
+  Bot,
+  Square,
+  Plus,
+  Columns2,
+  Rows2,
+  X,
+  Menu,
+} from "lucide-react";
+import { SortableContext, useSortable, horizontalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
+import { useDragContext } from "../hooks/useDragAndDrop";
+import { useSettingsStore } from "../store/settings-store";
+import type { PaneGroup, PaneType } from "../types/workspace";
+import type { DragItemData } from "../types/dnd";
 
 export function handleTabBarWindowZoomDoubleClick(
-  event: Pick<React.MouseEvent, 'detail' | 'stopPropagation'>,
+  event: Pick<React.MouseEvent, "detail" | "stopPropagation">,
   deps: { maximize: () => void } = { maximize: () => window.api.window.maximize() },
 ): void {
-  if (event.detail !== 2) return
-  event.stopPropagation()
-  deps.maximize()
+  if (event.detail !== 2) return;
+  event.stopPropagation();
+  deps.maximize();
 }
 
 const typeIcons: Record<PaneType, typeof Terminal> = {
@@ -24,15 +33,15 @@ const typeIcons: Record<PaneType, typeof Terminal> = {
   t3code: Bot,
   browser: Globe,
   empty: Square,
-}
+};
 
 interface GroupTabBarProps {
-  group: PaneGroup
-  groupId: string
-  workspaceId: string
-  isFocused: boolean
-  isTopLeftGroup?: boolean
-  dndEnabled: boolean
+  group: PaneGroup;
+  groupId: string;
+  workspaceId: string;
+  isFocused: boolean;
+  isTopLeftGroup?: boolean;
+  dndEnabled: boolean;
 }
 
 function SortableGroupTab({
@@ -45,74 +54,88 @@ function SortableGroupTab({
   onSelect,
   onClose,
 }: {
-  tabId: string
-  paneId: string
-  groupId: string
-  workspaceId: string
-  isActive: boolean
-  dndEnabled: boolean
-  onSelect: () => void
-  onClose: () => void
+  tabId: string;
+  paneId: string;
+  groupId: string;
+  workspaceId: string;
+  isActive: boolean;
+  dndEnabled: boolean;
+  onSelect: () => void;
+  onClose: () => void;
 }) {
-  const pane = useWorkspaceStore((s) => s.panes[paneId])
-  const { activeDrag } = useDragContext()
-  const { attributes, listeners, setNodeRef, isDragging, isOver, transform, transition } = useSortable({
-    id: `gtab-${tabId}`,
-    disabled: !dndEnabled,
-    data: { type: 'group-tab', workspaceId, groupId, tabId } satisfies DragItemData,
-  })
+  const pane = useWorkspaceStore((s) => s.panes[paneId]);
+  const { activeDrag } = useDragContext();
+  const { attributes, listeners, setNodeRef, isDragging, isOver, transform, transition } =
+    useSortable({
+      id: `gtab-${tabId}`,
+      disabled: !dndEnabled,
+      data: { type: "group-tab", workspaceId, groupId, tabId } satisfies DragItemData,
+    });
 
-  const baseTransition = 'background-color 100ms ease, color 100ms ease'
+  const baseTransition = "background-color 100ms ease, color 100ms ease";
   const style = {
     transform: CSS.Transform.toString(transform),
     transition: transition ? `${transition}, ${baseTransition}` : undefined,
     opacity: isDragging ? 0.4 : undefined,
-  }
+  };
 
-  const isDropTarget = isOver && !isDragging && activeDrag?.type === 'group-tab'
+  const isDropTarget = isOver && !isDragging && activeDrag?.type === "group-tab";
 
-  const Icon = pane ? typeIcons[pane.type] : Square
+  const Icon = pane ? typeIcons[pane.type] : Square;
 
   return (
     <div
       ref={setNodeRef}
       data-sortable-id={`gtab-${tabId}`}
-      className={`group-tab ${isActive ? 'group-tab-active' : ''} ${isDropTarget ? 'group-tab-drop-target' : ''}`}
+      className={`group-tab ${isActive ? "group-tab-active" : ""} ${isDropTarget ? "group-tab-drop-target" : ""}`}
       style={style}
       onClick={onSelect}
       onMouseDown={(e) => {
-        if (e.button === 1) { e.preventDefault(); onClose() }
+        if (e.button === 1) {
+          e.preventDefault();
+          onClose();
+        }
       }}
       {...attributes}
       {...listeners}
     >
       <Icon size={10} className="tab-icon" />
-      <span className="truncate">{pane?.title ?? 'Empty'}</span>
+      <span className="truncate">{pane?.title ?? "Empty"}</span>
       <button
         className="tab-close no-drag"
-        onClick={(e) => { e.stopPropagation(); onClose() }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
       >
         <X size={9} />
       </button>
     </div>
-  )
+  );
 }
 
-export default function GroupTabBar({ group, groupId, workspaceId, isFocused, isTopLeftGroup, dndEnabled }: GroupTabBarProps) {
-  const addGroupTab = useWorkspaceStore((s) => s.addGroupTab)
-  const removeGroupTab = useWorkspaceStore((s) => s.removeGroupTab)
-  const setActiveGroupTab = useWorkspaceStore((s) => s.setActiveGroupTab)
-  const splitGroup = useWorkspaceStore((s) => s.splitGroup)
-  const closeGroup = useWorkspaceStore((s) => s.closeGroup)
-  const addWorkspace = useWorkspaceStore((s) => s.addWorkspace)
-  const toggleSidebar = useSettingsStore((s) => s.toggleSidebar)
-  const defaultPaneType = useSettingsStore((s) => s.defaultPaneType)
-  const wsRoot = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.root)
+export default function GroupTabBar({
+  group,
+  groupId,
+  workspaceId,
+  isFocused,
+  isTopLeftGroup,
+  dndEnabled,
+}: GroupTabBarProps) {
+  const addGroupTab = useWorkspaceStore((s) => s.addGroupTab);
+  const removeGroupTab = useWorkspaceStore((s) => s.removeGroupTab);
+  const setActiveGroupTab = useWorkspaceStore((s) => s.setActiveGroupTab);
+  const splitGroup = useWorkspaceStore((s) => s.splitGroup);
+  const closeGroup = useWorkspaceStore((s) => s.closeGroup);
+  const addWorkspace = useWorkspaceStore((s) => s.addWorkspace);
+  const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
+  const defaultPaneType = useSettingsStore((s) => s.defaultPaneType);
+  const wsRoot = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.root);
 
-  const hasMultipleGroups = wsRoot ? collectGroupIds(wsRoot).length > 1 : false
+  const hasMultipleGroups = wsRoot ? collectGroupIds(wsRoot).length > 1 : false;
 
   return (
-    <div className={`group-tabbar ${isFocused ? 'group-focused' : ''}`}>
+    <div className={`group-tabbar ${isFocused ? "group-focused" : ""}`}>
       {isTopLeftGroup && (
         <>
           <div className="tabbar-traffic-zone drag-region" />
@@ -134,7 +157,10 @@ export default function GroupTabBar({ group, groupId, workspaceId, isFocused, is
           </div>
         </>
       )}
-      <SortableContext items={group.tabs.map((t) => `gtab-${t.id}`)} strategy={horizontalListSortingStrategy}>
+      <SortableContext
+        items={group.tabs.map((t) => `gtab-${t.id}`)}
+        strategy={horizontalListSortingStrategy}
+      >
         {group.tabs.map((tab) => (
           <SortableGroupTab
             key={tab.id}
@@ -167,14 +193,14 @@ export default function GroupTabBar({ group, groupId, workspaceId, isFocused, is
       <div className="group-tabbar-actions">
         <button
           className="group-tabbar-action no-drag"
-          onClick={() => splitGroup(workspaceId, groupId, 'horizontal')}
+          onClick={() => splitGroup(workspaceId, groupId, "horizontal")}
           title="Split Right"
         >
           <Columns2 size={12} />
         </button>
         <button
           className="group-tabbar-action no-drag"
-          onClick={() => splitGroup(workspaceId, groupId, 'vertical')}
+          onClick={() => splitGroup(workspaceId, groupId, "vertical")}
           title="Split Down"
         >
           <Rows2 size={12} />
@@ -190,5 +216,5 @@ export default function GroupTabBar({ group, groupId, workspaceId, isFocused, is
         )}
       </div>
     </div>
-  )
+  );
 }
