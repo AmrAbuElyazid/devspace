@@ -11,13 +11,13 @@ Benchmarked devspace's native Ghostty terminal integration against four other te
 
 ### Terminals tested
 
-| Terminal | Renderer | PTY |
-|----------|----------|-----|
-| **devspace** | libghostty (Metal) via Electron N-API addon | libghostty internal |
-| **cmux** | libghostty (Metal) via native Swift | libghostty internal |
-| **Alacritty** | Custom GPU renderer (OpenGL/Metal) | Built-in |
-| **macOS Terminal** | Native AppKit (software) | Built-in |
-| **VSCode** | xterm.js (JavaScript canvas) | node-pty |
+| Terminal           | Renderer                                    | PTY                 |
+| ------------------ | ------------------------------------------- | ------------------- |
+| **devspace**       | libghostty (Metal) via Electron N-API addon | libghostty internal |
+| **cmux**           | libghostty (Metal) via native Swift         | libghostty internal |
+| **Alacritty**      | Custom GPU renderer (OpenGL/Metal)          | Built-in            |
+| **macOS Terminal** | Native AppKit (software)                    | Built-in            |
+| **VSCode**         | xterm.js (JavaScript canvas)                | node-pty            |
 
 ### What vtebench measures
 
@@ -109,11 +109,13 @@ cd /path/to/vtebench && cargo run --release
 ### Included scripts
 
 Quick benchmark (10 tests, ~15 seconds):
+
 ```bash
 bash scripts/terminal-bench.sh
 ```
 
 Stress test (6 phases, ~2 minutes):
+
 ```bash
 bash scripts/terminal-stress.sh
 ```

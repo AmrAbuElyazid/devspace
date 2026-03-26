@@ -1,57 +1,57 @@
-export type PaneType = 'terminal' | 'browser' | 'editor' | 't3code' | 'empty'
+export type PaneType = "terminal" | "browser" | "editor" | "t3code" | "empty";
 
 export interface TerminalConfig {
-  cwd?: string
+  cwd?: string;
 }
 
 export interface BrowserConfig {
-  url: string
-  zoom?: number
+  url: string;
+  zoom?: number;
 }
 
 export interface EditorConfig {
-  folderPath?: string
+  folderPath?: string;
 }
 
 export interface T3CodeConfig {}
 
 export interface EmptyConfig {}
 
-export type PaneConfig = TerminalConfig | BrowserConfig | EditorConfig | T3CodeConfig | EmptyConfig
+export type PaneConfig = TerminalConfig | BrowserConfig | EditorConfig | T3CodeConfig | EmptyConfig;
 
 export interface Pane {
-  id: string
-  type: PaneType
-  title: string
-  config: PaneConfig
+  id: string;
+  type: PaneType;
+  title: string;
+  config: PaneConfig;
 }
 
-export type SplitDirection = 'horizontal' | 'vertical'
+export type SplitDirection = "horizontal" | "vertical";
 
 export type SplitNode =
-  | { type: 'leaf'; groupId: string }
-  | { type: 'branch'; direction: SplitDirection; children: SplitNode[]; sizes: number[] }
+  | { type: "leaf"; groupId: string }
+  | { type: "branch"; direction: SplitDirection; children: SplitNode[]; sizes: number[] };
 
 export interface PaneGroupTab {
-  id: string
-  paneId: string
+  id: string;
+  paneId: string;
 }
 
 export interface PaneGroup {
-  id: string
-  tabs: PaneGroupTab[]
-  activeTabId: string
+  id: string;
+  tabs: PaneGroupTab[];
+  activeTabId: string;
 }
 
 export type SidebarNode =
-  | { type: 'workspace'; workspaceId: string }
-  | { type: 'folder'; id: string; name: string; collapsed: boolean; children: SidebarNode[] }
+  | { type: "workspace"; workspaceId: string }
+  | { type: "folder"; id: string; name: string; collapsed: boolean; children: SidebarNode[] };
 
 export interface Workspace {
-  id: string
-  name: string
-  root: SplitNode
-  focusedGroupId: string | null
-  pinned?: boolean
-  lastActiveAt: number
+  id: string;
+  name: string;
+  root: SplitNode;
+  focusedGroupId: string | null;
+  pinned?: boolean;
+  lastActiveAt: number;
 }

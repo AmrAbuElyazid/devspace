@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect } from "react";
 
 /**
  * Sync devspace's own UI dark/light mode with the OS preference.
@@ -11,21 +11,21 @@ import { useEffect } from 'react'
  */
 export function useTheme(): void {
   useEffect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
 
     function apply(dark: boolean): void {
-      document.documentElement.classList.toggle('dark', dark)
+      document.documentElement.classList.toggle("dark", dark);
     }
 
     // Apply initial state.
-    apply(mq.matches)
+    apply(mq.matches);
 
     // Listen for OS theme changes.
     function onChange(e: MediaQueryListEvent): void {
-      apply(e.matches)
+      apply(e.matches);
     }
 
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
-  }, [])
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
 }

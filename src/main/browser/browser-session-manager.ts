@@ -1,25 +1,34 @@
-import type { Session } from 'electron'
-import { randomUUID } from 'node:crypto'
-import type { BrowserPermissionDecision, BrowserPermissionRequest, BrowserPermissionType } from '../../shared/browser'
-import { getSecretKey, SECRET_KEY_ENDPOINT } from '../vscode-secret-key'
-import { BROWSER_PARTITION } from '../dev-mode'
+import type { Session } from "electron";
+import { randomUUID } from "node:crypto";
+import type {
+  BrowserPermissionDecision,
+  BrowserPermissionRequest,
+  BrowserPermissionType,
+} from "../../shared/browser";
+import { getSecretKey, SECRET_KEY_ENDPOINT } from "../vscode-secret-key";
+import { BROWSER_PARTITION } from "../dev-mode";
 
-export { BROWSER_PARTITION }
+export { BROWSER_PARTITION };
 
-export interface BrowserSessionModule {
-  fromPartition(partition: string): Session
+/** 30 days from now, in seconds since epoch. */
+function thirtyDays(): number {
+  return Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
 }
 
-export interface BrowserSessionManagerDeps {
-  resolvePaneIdForWebContents: (webContentsId: number) => string | undefined
-  reportCertificateError: (paneId: string, url: string) => void
+interface BrowserSessionModule {
+  fromPartition(partition: string): Session;
+}
+
+interface BrowserSessionManagerDeps {
+  resolvePaneIdForWebContents: (webContentsId: number) => string | undefined;
+  reportCertificateError: (paneId: string, url: string) => void;
   requestBrowserPermission?: (
     request: BrowserPermissionRequest,
     resolve: (decision: BrowserPermissionDecision) => void,
-  ) => void
+  ) => void;
   appModule?: {
     on: (
-      event: 'certificate-error',
+      event: "certificate-error",
       listener: (
         event: { preventDefault: () => void },
         webContents: { id: number } | null,
@@ -28,79 +37,89 @@ export interface BrowserSessionManagerDeps {
         certificate: unknown,
         callback: (isTrusted: boolean) => void,
       ) => void,
-    ) => unknown
-  }
-  log?: (message: string, meta?: Record<string, unknown>) => void
+    ) => unknown;
+  };
+  log?: (message: string, meta?: Record<string, unknown>) => void;
 }
 
 type CertificateVerifyRequest = {
-  hostname?: string
-  errorCode?: number
-  verificationResult?: string
-  webContents?: { id: number } | null
-}
+  hostname?: string;
+  errorCode?: number;
+  verificationResult?: string;
+  webContents?: { id: number } | null;
+};
 
 type PermissionRequestDetails = {
-  mediaType?: string
-  requestingUrl?: string
-}
+  mediaType?: string;
+  requestingUrl?: string;
+};
 
-type SessionPermissionGrantKey = `${BrowserPermissionType}|${string}`
+type SessionPermissionGrantKey = `${BrowserPermissionType}|${string}`;
 
-function mapPermissionType(permission: string, details: PermissionRequestDetails): BrowserPermissionType | null {
-  if (permission === 'geolocation' || permission === 'notifications') {
-    return permission
+function mapPermissionType(
+  permission: string,
+  details: PermissionRequestDetails,
+): BrowserPermissionType | null {
+  if (permission === "geolocation" || permission === "notifications") {
+    return permission;
   }
 
-  if (permission === 'media') {
-    if (details.mediaType === 'video') {
-      return 'camera'
+  if (permission === "media") {
+    if (details.mediaType === "video") {
+      return "camera";
     }
-    if (details.mediaType === 'audio') {
-      return 'microphone'
+    if (details.mediaType === "audio") {
+      return "microphone";
     }
   }
 
-  return null
+  return null;
 }
 
-function toRequestOrigin(rawUrl: string | undefined, fallbackUrl: string | undefined): string | null {
-  const candidate = rawUrl || fallbackUrl
+function toRequestOrigin(
+  rawUrl: string | undefined,
+  fallbackUrl: string | undefined,
+): string | null {
+  const candidate = rawUrl || fallbackUrl;
   if (!candidate) {
-    return null
+    return null;
   }
 
   try {
-    return new URL(candidate).origin
+    return new URL(candidate).origin;
   } catch {
-    return null
+    // Expected: invalid URL format
+    return null;
   }
 }
 
 function decisionAllows(decision: BrowserPermissionDecision): boolean {
-  return decision === 'allow-once' || decision === 'allow-for-session'
+  return decision === "allow-once" || decision === "allow-for-session";
 }
 
 function getElectronSession(): BrowserSessionModule {
-  return require('electron').session as typeof import('electron').session
+  return require("electron").session as typeof import("electron").session;
 }
 
-function getElectronApp(): NonNullable<BrowserSessionManagerDeps['appModule']> {
-  return require('electron').app as typeof import('electron').app
+function getElectronApp(): NonNullable<BrowserSessionManagerDeps["appModule"]> {
+  return require("electron").app as typeof import("electron").app;
 }
 
 export class BrowserSessionManager {
-  private certificateErrorListenerRegistered = false
-  private currentDeps: BrowserSessionManagerDeps | undefined
-  private currentLog: (message: string, meta?: Record<string, unknown>) => void = (message, meta) => {
-    console.warn(message, meta)
-  }
-  private readonly sessionPermissionGrants = new Set<SessionPermissionGrantKey>()
+  private certificateErrorListenerRegistered = false;
+  private currentDeps: BrowserSessionManagerDeps | undefined;
+  private currentLog: (message: string, meta?: Record<string, unknown>) => void = (
+    message,
+    meta,
+  ) => {
+    console.warn(message, meta);
+  };
+  private readonly sessionPermissionGrants = new Set<SessionPermissionGrantKey>();
 
   constructor(private readonly sessionModule: BrowserSessionModule = getElectronSession()) {}
 
   getSession(): Session {
-    return this.sessionModule.fromPartition(BROWSER_PARTITION)
+    return this.sessionModule.fromPartition(BROWSER_PARTITION);
   }
 
   /**
@@ -110,24 +129,27 @@ export class BrowserSessionManager {
    * quit because its auth cookies have no Expires header.
    */
   persistSessionCookies(): void {
-    const ses = this.getSession()
-    const cookies = ses.cookies as {
-      on?: (event: string, listener: (...args: unknown[]) => void) => void
-      get?: (filter: Record<string, unknown>) => Promise<Array<Record<string, unknown>>>
-      set?: (details: Record<string, unknown>) => Promise<void>
-    }
+    const ses = this.getSession();
+    const cookies = ses.cookies as unknown as {
+      on?: (event: string, listener: (...args: unknown[]) => void) => void;
+      get?: (filter: Record<string, unknown>) => Promise<Array<Record<string, unknown>>>;
+      set?: (details: Record<string, unknown>) => Promise<void>;
+    };
 
-    if (typeof cookies.on !== 'function' || typeof cookies.set !== 'function') return
+    if (typeof cookies.on !== "function" || typeof cookies.set !== "function") return;
 
-    // 30 days from now, in seconds since epoch
-    const thirtyDays = () => Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60
-
-    cookies.on('changed', (_event: unknown, cookie: Record<string, unknown>, _cause: unknown, removed: unknown) => {
-      if (removed) return
+    cookies.on("changed", (...args: unknown[]) => {
+      const [_event, cookie, _cause, removed] = args as [
+        unknown,
+        Record<string, unknown>,
+        unknown,
+        unknown,
+      ];
+      if (removed) return;
       // Only process session cookies (those without an expiration)
-      if (cookie.session !== true) return
+      if (cookie.session !== true) return;
 
-      const url = `http${cookie.secure ? 's' : ''}://${cookie.domain as string}${cookie.path as string || '/'}`
+      const url = `http${cookie.secure ? "s" : ""}://${cookie.domain as string}${(cookie.path as string) || "/"}`;
       void (cookies.set as (d: Record<string, unknown>) => Promise<void>)({
         url,
         name: cookie.name,
@@ -140,169 +162,190 @@ export class BrowserSessionManager {
         expirationDate: thirtyDays(),
       }).catch(() => {
         // Silently ignore — some cookies can't be re-set (e.g. __Host- prefixed)
-      })
-    })
+      });
+    });
   }
 
   installHandlers(deps?: BrowserSessionManagerDeps): void {
-    const ses = this.getSession()
-    const log = deps?.log ?? ((message: string, meta?: Record<string, unknown>) => {
-      console.warn(message, meta)
-    })
-    this.currentDeps = deps
-    this.currentLog = log
+    const ses = this.getSession();
+    const log =
+      deps?.log ??
+      ((message: string, meta?: Record<string, unknown>) => {
+        console.warn(message, meta);
+      });
+    this.currentDeps = deps;
+    this.currentLog = log;
 
     ses.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
-      const permissionType = mapPermissionType(permission, (details ?? {}) as PermissionRequestDetails)
+      const permissionType = mapPermissionType(
+        permission,
+        (details ?? {}) as PermissionRequestDetails,
+      );
       const origin = toRequestOrigin(
         (details as PermissionRequestDetails | undefined)?.requestingUrl,
         requestingOrigin,
-      )
+      );
 
-      if (permissionType && origin && this.sessionPermissionGrants.has(this.toSessionPermissionGrantKey(permissionType, origin))) {
-        return true
+      if (
+        permissionType &&
+        origin &&
+        this.sessionPermissionGrants.has(this.toSessionPermissionGrantKey(permissionType, origin))
+      ) {
+        return true;
       }
 
       if (!webContents) {
-        log('[browser] missing webContents for permission request; denying by default', {
+        log("[browser] missing webContents for permission request; denying by default", {
           permission,
           requestingOrigin,
           details,
-        })
-        return false
+        });
+        return false;
       }
 
-      const paneId = deps?.resolvePaneIdForWebContents(webContents.id)
+      const paneId = deps?.resolvePaneIdForWebContents(webContents.id);
       if (!paneId) {
-        log('[browser] unresolved browser permission request; denying by default', {
+        log("[browser] unresolved browser permission request; denying by default", {
           webContentsId: webContents.id,
           permission,
           requestingOrigin,
           details,
-        })
-        return false
+        });
+        return false;
       }
 
       if (!permissionType || !origin) {
-        return false
+        return false;
       }
 
-      return this.sessionPermissionGrants.has(this.toSessionPermissionGrantKey(permissionType, origin))
-    })
+      return this.sessionPermissionGrants.has(
+        this.toSessionPermissionGrantKey(permissionType, origin),
+      );
+    });
 
-    if (typeof ses.setPermissionRequestHandler === 'function') {
+    if (typeof ses.setPermissionRequestHandler === "function") {
       ses.setPermissionRequestHandler((webContents, permission, callback, details) => {
         if (!webContents) {
-          log('[browser] missing webContents for permission request prompt; denying by default', {
+          log("[browser] missing webContents for permission request prompt; denying by default", {
             permission,
             details,
-          })
-          callback(false)
-          return
+          });
+          callback(false);
+          return;
         }
 
-        const paneId = deps?.resolvePaneIdForWebContents(webContents.id)
+        const paneId = deps?.resolvePaneIdForWebContents(webContents.id);
         if (!paneId) {
-          log('[browser] unresolved browser permission request prompt; denying by default', {
+          log("[browser] unresolved browser permission request prompt; denying by default", {
             webContentsId: webContents.id,
             permission,
             details,
-          })
-          callback(false)
-          return
+          });
+          callback(false);
+          return;
         }
 
-        const permissionType = mapPermissionType(permission, (details ?? {}) as PermissionRequestDetails)
+        const permissionType = mapPermissionType(
+          permission,
+          (details ?? {}) as PermissionRequestDetails,
+        );
         const origin = toRequestOrigin(
           (details as PermissionRequestDetails | undefined)?.requestingUrl,
-          typeof (webContents as { getURL?: () => string }).getURL === 'function'
+          typeof (webContents as { getURL?: () => string }).getURL === "function"
             ? (webContents as { getURL: () => string }).getURL()
             : undefined,
-        )
+        );
 
         if (!permissionType || !origin || !deps?.requestBrowserPermission) {
-          callback(false)
-          return
+          callback(false);
+          return;
         }
 
-        deps.requestBrowserPermission({
-          paneId,
-          origin,
-          permissionType,
-          requestToken: randomUUID(),
-        }, (decision) => {
-          if (decision === 'allow-for-session') {
-            this.sessionPermissionGrants.add(this.toSessionPermissionGrantKey(permissionType, origin))
-          }
-          callback(decisionAllows(decision))
-        })
-      })
+        deps.requestBrowserPermission(
+          {
+            paneId,
+            origin,
+            permissionType,
+            requestToken: randomUUID(),
+          },
+          (decision) => {
+            if (decision === "allow-for-session") {
+              this.sessionPermissionGrants.add(
+                this.toSessionPermissionGrantKey(permissionType, origin),
+              );
+            }
+            callback(decisionAllows(decision));
+          },
+        );
+      });
     }
 
-    if (typeof ses.setCertificateVerifyProc === 'function') {
-      ses.setCertificateVerifyProc((request: CertificateVerifyRequest, callback: (verificationResult: number) => void) => {
-        if (request.errorCode === 0 || request.verificationResult === 'net::OK') {
-          callback(-3)
-          return
-        }
+    if (typeof ses.setCertificateVerifyProc === "function") {
+      ses.setCertificateVerifyProc(
+        (request: CertificateVerifyRequest, callback: (verificationResult: number) => void) => {
+          if (request.errorCode === 0 || request.verificationResult === "net::OK") {
+            callback(-3);
+            return;
+          }
 
-        const webContentsId = request.webContents?.id
-        if (typeof webContentsId !== 'number') {
-          log('[browser] missing webContents for certificate verification; denying by default', {
-            hostname: request.hostname,
-            errorCode: request.errorCode,
-            verificationResult: request.verificationResult,
-          })
-          callback(-2)
-          return
-        }
+          const webContentsId = request.webContents?.id;
+          if (typeof webContentsId !== "number") {
+            log("[browser] missing webContents for certificate verification; denying by default", {
+              hostname: request.hostname,
+              errorCode: request.errorCode,
+              verificationResult: request.verificationResult,
+            });
+            callback(-2);
+            return;
+          }
 
-        if (!deps?.resolvePaneIdForWebContents(webContentsId)) {
-          log('[browser] unresolved browser certificate verification; denying by default', {
-            webContentsId,
-            hostname: request.hostname,
-            errorCode: request.errorCode,
-            verificationResult: request.verificationResult,
-          })
-          callback(-2)
-          return
-        }
+          if (!deps?.resolvePaneIdForWebContents(webContentsId)) {
+            log("[browser] unresolved browser certificate verification; denying by default", {
+              webContentsId,
+              hostname: request.hostname,
+              errorCode: request.errorCode,
+              verificationResult: request.verificationResult,
+            });
+            callback(-2);
+            return;
+          }
 
-        callback(-2)
-      })
+          callback(-2);
+        },
+      );
     }
 
     if (!this.certificateErrorListenerRegistered) {
-      this.certificateErrorListenerRegistered = true
-      const appModule = deps?.appModule ?? getElectronApp()
-      appModule.on('certificate-error', (event, webContents, url, error, certificate, callback) => {
-        event.preventDefault()
-        const currentDeps = this.currentDeps
-        const currentLog = this.currentLog
+      this.certificateErrorListenerRegistered = true;
+      const appModule = deps?.appModule ?? getElectronApp();
+      appModule.on("certificate-error", (event, webContents, url, error, certificate, callback) => {
+        event.preventDefault();
+        const currentDeps = this.currentDeps;
+        const currentLog = this.currentLog;
 
         if (!webContents) {
-          currentLog('[browser] missing webContents for certificate error; denying by default', {
+          currentLog("[browser] missing webContents for certificate error; denying by default", {
             url,
             error,
             certificate,
-          })
-          callback(false)
-          return
+          });
+          callback(false);
+          return;
         }
 
         if (!currentDeps?.resolvePaneIdForWebContents(webContents.id)) {
-          currentLog('[browser] unresolved browser certificate error; denying by default', {
+          currentLog("[browser] unresolved browser certificate error; denying by default", {
             webContentsId: webContents.id,
             url,
             error,
             certificate,
-          })
-          callback(false)
-          return
+          });
+          callback(false);
+          return;
         }
 
-        callback(false)
-      })
+        callback(false);
+      });
     }
   }
 
@@ -315,40 +358,40 @@ export class BrowserSessionManager {
    * inject permissive CORS headers on every response.
    */
   installCorsOverrides(): void {
-    const ses = this.getSession()
+    const ses = this.getSession();
 
     ses.webRequest.onHeadersReceived((details, callback) => {
-      const headers = { ...details.responseHeaders }
+      const headers = { ...details.responseHeaders };
 
       // Strip any existing CORS headers (case-insensitive) so we don't
       // end up with duplicates or conflicting values.
       for (const key of Object.keys(headers)) {
-        if (key.toLowerCase().startsWith('access-control-')) {
-          delete headers[key]
+        if (key.toLowerCase().startsWith("access-control-")) {
+          delete headers[key];
         }
       }
 
       // Derive the requesting origin from the referrer, falling back to
       // our fixed VS Code server origin.
-      let origin = 'http://127.0.0.1:18562'
+      let origin = "http://127.0.0.1:18562";
       if (details.referrer) {
         try {
-          origin = new URL(details.referrer).origin
+          origin = new URL(details.referrer).origin;
         } catch {
-          // keep default
+          // Expected: invalid referrer URL format, keep default origin
         }
       }
 
-      headers['Access-Control-Allow-Origin'] = [origin]
-      headers['Access-Control-Allow-Methods'] = ['GET, POST, PUT, DELETE, PATCH, OPTIONS']
-      headers['Access-Control-Allow-Headers'] = ['*']
-      headers['Access-Control-Allow-Credentials'] = ['true']
-      headers['Access-Control-Expose-Headers'] = ['*']
+      headers["Access-Control-Allow-Origin"] = [origin];
+      headers["Access-Control-Allow-Methods"] = ["GET, POST, PUT, DELETE, PATCH, OPTIONS"];
+      headers["Access-Control-Allow-Headers"] = ["*"];
+      headers["Access-Control-Allow-Credentials"] = ["true"];
+      headers["Access-Control-Expose-Headers"] = ["*"];
 
-      callback({ responseHeaders: headers })
-    })
+      callback({ responseHeaders: headers });
+    });
 
-    console.log('[browser-session] installed CORS overrides for browser session')
+    console.log("[browser-session] installed CORS overrides for browser session");
   }
 
   /**
@@ -362,32 +405,36 @@ export class BrowserSessionManager {
    * stored in localStorage can be decrypted on subsequent app launches.
    */
   registerSecretKeyHandler(): void {
-    const ses = this.getSession()
-    const { net } = require('electron') as typeof import('electron')
-    const keyBuffer = getSecretKey()
+    const ses = this.getSession();
+    const { net } = require("electron") as typeof import("electron");
+    const keyBuffer = getSecretKey();
 
     // Paths used by VS Code CLI / Cursor CLI for the secret key endpoint.
     const MINT_KEY_PATHS = new Set([
-      '/_vscode-cli/mint-key',
+      "/_vscode-cli/mint-key",
       SECRET_KEY_ENDPOINT, // our own fallback: /devspace-secret-key
-    ])
+    ]);
 
-    ses.protocol.handle('http', (request) => {
-      const url = new URL(request.url)
-      if (MINT_KEY_PATHS.has(url.pathname) && request.method === 'POST') {
-        console.log(`[browser-session] intercepted ${url.pathname} — serving stable secret key (${keyBuffer.length} bytes) for ${url.origin}`)
+    ses.protocol.handle("http", (request) => {
+      const url = new URL(request.url);
+      if (MINT_KEY_PATHS.has(url.pathname) && request.method === "POST") {
+        console.log(
+          `[browser-session] intercepted ${url.pathname} — serving stable secret key (${keyBuffer.length} bytes) for ${url.origin}`,
+        );
         return new Response(new Uint8Array(keyBuffer), {
           status: 200,
-          headers: { 'Content-Type': 'application/octet-stream' },
-        })
+          headers: { "Content-Type": "application/octet-stream" },
+        });
       }
       // Pass all other HTTP requests through to the default network stack.
       // bypassCustomProtocolHandlers is REQUIRED to prevent infinite recursion —
       // without it, net.fetch triggers our own handler again.
-      return net.fetch(request, { bypassCustomProtocolHandlers: true })
-    })
+      return net.fetch(request, { bypassCustomProtocolHandlers: true });
+    });
 
-    console.log('[browser-session] registered VS Code secret key handler (intercepting /_vscode-cli/mint-key)')
+    console.log(
+      "[browser-session] registered VS Code secret key handler (intercepting /_vscode-cli/mint-key)",
+    );
   }
 
   /**
@@ -399,25 +446,28 @@ export class BrowserSessionManager {
    * the client POSTs to in order to retrieve the server key half.
    */
   async setSecretKeyCookie(serverUrl: string): Promise<void> {
-    const ses = this.getSession()
-    const parsed = new URL(serverUrl)
+    const ses = this.getSession();
+    const parsed = new URL(serverUrl);
 
     await ses.cookies.set({
       url: parsed.origin,
-      name: 'vscode-secret-key-path',
+      name: "vscode-secret-key-path",
       value: SECRET_KEY_ENDPOINT,
-      path: '/',
+      path: "/",
       httpOnly: false,
       secure: false,
-      sameSite: 'lax',
+      sameSite: "lax",
       // 1 year expiry
       expirationDate: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
-    })
+    });
 
-    console.log(`[browser-session] set vscode-secret-key-path cookie for ${parsed.origin}`)
+    console.log(`[browser-session] set vscode-secret-key-path cookie for ${parsed.origin}`);
   }
 
-  private toSessionPermissionGrantKey(permissionType: BrowserPermissionType, origin: string): SessionPermissionGrantKey {
-    return `${permissionType}|${origin}`
+  private toSessionPermissionGrantKey(
+    permissionType: BrowserPermissionType,
+    origin: string,
+  ): SessionPermissionGrantKey {
+    return `${permissionType}|${origin}`;
   }
 }

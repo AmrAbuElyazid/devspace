@@ -1,29 +1,32 @@
-import type { BrowserBounds } from '../../shared/browser'
+import type { BrowserBounds } from "../../shared/browser";
 
 type BoundsLike = {
-  x: number
-  y: number
-}
+  x: number;
+  y: number;
+};
 
 type ViewWithBounds = {
   webContents?: {
-    id?: number
-  }
-  getBounds?: () => BoundsLike
-}
+    id?: number;
+  };
+  getBounds?: () => BoundsLike;
+};
 
 type ParentViewLike = {
-  children?: ViewWithBounds[]
-}
+  children?: ViewWithBounds[];
+};
 
-export function findHostViewBounds(parentView: ParentViewLike, webContentsId: number): BoundsLike | null {
-  const child = parentView.children?.find((view) => view.webContents?.id === webContentsId)
-  if (!child || typeof child.getBounds !== 'function') {
-    return null
+export function findHostViewBounds(
+  parentView: ParentViewLike,
+  webContentsId: number,
+): BoundsLike | null {
+  const child = parentView.children?.find((view) => view.webContents?.id === webContentsId);
+  if (!child || typeof child.getBounds !== "function") {
+    return null;
   }
 
-  const { x, y } = child.getBounds()
-  return { x, y }
+  const { x, y } = child.getBounds();
+  return { x, y };
 }
 
 export function translateRendererBoundsToContentBounds(
@@ -31,7 +34,7 @@ export function translateRendererBoundsToContentBounds(
   hostViewBounds: BoundsLike | null,
 ): BrowserBounds {
   if (!hostViewBounds) {
-    return bounds
+    return bounds;
   }
 
   return {
@@ -39,5 +42,5 @@ export function translateRendererBoundsToContentBounds(
     y: bounds.y + Math.round(hostViewBounds.y),
     width: bounds.width,
     height: bounds.height,
-  }
+  };
 }

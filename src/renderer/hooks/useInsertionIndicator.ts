@@ -1,4 +1,4 @@
-import { useEffect, useState, type RefObject } from 'react'
+import { useEffect, useState, type RefObject } from "react";
 
 /**
  * Tracks whether the pointer is in the "before" or "after" zone of an element
@@ -16,39 +16,40 @@ export function useInsertionIndicator(
   isOver: boolean,
   isDragging: boolean,
   elementRef: RefObject<HTMLElement | null>,
-  axis: 'vertical' | 'horizontal' = 'vertical',
+  axis: "vertical" | "horizontal" = "vertical",
   edgeThreshold: number = 0.5,
-): 'before' | 'after' | null {
-  const [position, setPosition] = useState<'before' | 'after' | null>(null)
+): "before" | "after" | null {
+  const [position, setPosition] = useState<"before" | "after" | null>(null);
 
   useEffect(() => {
     if (!isOver || isDragging || !elementRef.current) {
-      setPosition(null)
-      return
+      setPosition(null);
+      return;
     }
 
-    const el = elementRef.current
+    const el = elementRef.current;
 
     function handlePointerMove(e: PointerEvent): void {
-      const rect = el.getBoundingClientRect()
-      const rel = axis === 'vertical'
-        ? (e.clientY - rect.top) / rect.height
-        : (e.clientX - rect.left) / rect.width
+      const rect = el.getBoundingClientRect();
+      const rel =
+        axis === "vertical"
+          ? (e.clientY - rect.top) / rect.height
+          : (e.clientX - rect.left) / rect.width;
 
       if (edgeThreshold >= 0.5) {
         // Full split: top/left half = before, bottom/right half = after
-        setPosition(rel < 0.5 ? 'before' : 'after')
+        setPosition(rel < 0.5 ? "before" : "after");
       } else {
         // Edge zones only: center returns null (used for folder "drop into" zone)
-        if (rel < edgeThreshold) setPosition('before')
-        else if (rel > 1 - edgeThreshold) setPosition('after')
-        else setPosition(null)
+        if (rel < edgeThreshold) setPosition("before");
+        else if (rel > 1 - edgeThreshold) setPosition("after");
+        else setPosition(null);
       }
     }
 
-    window.addEventListener('pointermove', handlePointerMove)
-    return () => window.removeEventListener('pointermove', handlePointerMove)
-  }, [isOver, isDragging, axis, edgeThreshold])
+    window.addEventListener("pointermove", handlePointerMove);
+    return () => window.removeEventListener("pointermove", handlePointerMove);
+  }, [isOver, isDragging, axis, edgeThreshold, elementRef]);
 
-  return position
+  return position;
 }

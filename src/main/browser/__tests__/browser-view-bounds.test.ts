@@ -1,17 +1,16 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
-import { findHostViewBounds, translateRendererBoundsToContentBounds } from '../browser-view-bounds'
+import { test, expect } from "vitest";
+import { findHostViewBounds, translateRendererBoundsToContentBounds } from "../browser-view-bounds";
 
-test('translateRendererBoundsToContentBounds adds the renderer host view offset', () => {
+test("translateRendererBoundsToContentBounds adds the renderer host view offset", () => {
   const translated = translateRendererBoundsToContentBounds(
     { x: 120, y: 180, width: 640, height: 480 },
     { x: 18, y: 52 },
-  )
+  );
 
-  assert.deepEqual(translated, { x: 138, y: 232, width: 640, height: 480 })
-})
+  expect(translated).toEqual({ x: 138, y: 232, width: 640, height: 480 });
+});
 
-test('findHostViewBounds returns the matching renderer host view origin', () => {
+test("findHostViewBounds returns the matching renderer host view origin", () => {
   const hostBounds = findHostViewBounds(
     {
       children: [
@@ -26,7 +25,7 @@ test('findHostViewBounds returns the matching renderer host view origin', () => 
       ],
     },
     7,
-  )
+  );
 
-  assert.deepEqual(hostBounds, { x: 18, y: 52 })
-})
+  expect(hostBounds).toEqual({ x: 18, y: 52 });
+});
