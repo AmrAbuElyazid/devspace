@@ -19,6 +19,8 @@ export interface GhosttyBridge {
 }
 
 export function loadNativeAddon(): GhosttyBridge {
-  const addon = require("../../native/build/Release/ghostty_bridge.node");
+  const raw = require("../../native/build/Release/ghostty_bridge.node");
+  // Vite's ESM bundling may wrap the require result in { default: <addon> }
+  const addon = raw.default ?? raw;
   return addon as GhosttyBridge;
 }
