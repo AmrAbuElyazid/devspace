@@ -3,6 +3,7 @@ import { readFile, writeFile } from 'fs/promises'
 import { homedir } from 'os'
 import type { TerminalManager } from './terminal-manager'
 import type { VscodeServerManager } from './vscode-server'
+import type { T3CodeServerManager } from './t3code-server'
 import type {
   BrowserBounds,
   BrowserFindInPageOptions,
@@ -47,6 +48,7 @@ export function registerIpcHandlers(
   terminalManager: TerminalManager,
   browserPaneManager: BrowserPaneController,
   vscodeServerManager: VscodeServerManager,
+  t3codeServerManager: T3CodeServerManager,
   browserImportService?: BrowserImportService,
   browserSessionManager?: BrowserSessionManager,
 ): void {
@@ -147,6 +149,32 @@ export function registerIpcHandlers(
   safeOn('editor:setKeepServerRunning', (_event, keep: unknown) => {
     if (typeof keep !== 'boolean') return
     vscodeServerManager.keepRunning = keep
+  })
+
+  // --- T3 Code handlers ---
+
+  safeHandle('t3code:isAvailable', () => {
+    return t3codeServerManager.isAvailable()
+  })
+
+  safeHandle('t3code:start', async (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') {
+      return { error: 'Invalid arguments' }
+    }
+    try {
+      const { url } = await t3codeServerManager.start()
+      browserPaneManager.createPane(paneId, url)
+      return { url }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return { error: message }
+    }
+  })
+
+  safeHandle('t3code:stop', (_event, paneId: unknown) => {
+    if (typeof paneId !== 'string') return
+    t3codeServerManager.release()
+    browserPaneManager.destroyPane(paneId)
   })
 
   // Terminal event forwarding to renderer
