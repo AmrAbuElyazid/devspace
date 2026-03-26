@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { Terminal, FileCode, Globe, Square, Plus, Columns2, Rows2, X, Menu } from 'lucide-react'
+import { Terminal, FileCode, Globe, Bot, Square, Plus, Columns2, Rows2, X, Menu } from 'lucide-react'
 import { SortableContext, useSortable, horizontalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useWorkspaceStore, collectGroupIds } from '../store/workspace-store'
@@ -21,6 +21,7 @@ export function handleTabBarWindowZoomDoubleClick(
 const typeIcons: Record<PaneType, typeof Terminal> = {
   terminal: Terminal,
   editor: FileCode,
+  t3code: Bot,
   browser: Globe,
   empty: Square,
 }

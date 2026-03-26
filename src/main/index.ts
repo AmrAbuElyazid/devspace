@@ -3,6 +3,7 @@ import { join } from 'path'
 import { syncShellEnvironment } from './shell-env'
 import { TerminalManager } from './terminal-manager'
 import { VscodeServerManager } from './vscode-server'
+import { T3CodeServerManager } from './t3code-server'
 import { registerIpcHandlers } from './ipc-handlers'
 import { BrowserSessionManager } from './browser/browser-session-manager'
 import { BrowserPaneManager } from './browser/browser-pane-manager'
@@ -16,6 +17,7 @@ syncShellEnvironment()
 
 const terminalManager = new TerminalManager()
 let vscodeServerManager: VscodeServerManager
+let t3codeServerManager: T3CodeServerManager
 const browserSessionManager = new BrowserSessionManager()
 
 // Global error handlers
@@ -84,7 +86,7 @@ function createWindow(): void {
   })
 
   terminalManager.init(mainWindow)
-  registerIpcHandlers(mainWindow, terminalManager, browserPaneManager, vscodeServerManager, browserImportService, browserSessionManager)
+  registerIpcHandlers(mainWindow, terminalManager, browserPaneManager, vscodeServerManager, t3codeServerManager, browserImportService, browserSessionManager)
   installWindowZoomReset(mainWindow.webContents)
 
   mainWindow.on('ready-to-show', () => {
@@ -100,6 +102,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   vscodeServerManager = new VscodeServerManager()
+  t3codeServerManager = new T3CodeServerManager()
 
   // Session-level setup — runs once, NOT per-window.
   // protocol.handle('http', ...) can only be registered once per session.
@@ -214,7 +217,10 @@ app.on('before-quit', (event) => {
   // stopAll() is async — prevent immediate quit, wait for graceful
   // shutdown, then re-trigger quit.
   event.preventDefault()
-  vscodeServerManager.stopAll().finally(() => {
+  Promise.all([
+    vscodeServerManager.stopAll(),
+    t3codeServerManager.stopAll(),
+  ]).finally(() => {
     app.quit()
   })
 })

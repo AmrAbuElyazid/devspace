@@ -1,5 +1,5 @@
 import { type ElementType } from 'react'
-import { Terminal, FileCode, Globe, X } from 'lucide-react'
+import { Terminal, FileCode, Globe, Bot, X } from 'lucide-react'
 import { useWorkspaceStore, collectGroupIds } from '../store/workspace-store'
 import type { PaneType, PaneConfig } from '../types/workspace'
 
@@ -12,6 +12,7 @@ interface EmptyPaneProps {
 const options: { type: PaneType; label: string; icon: ElementType; defaultConfig: PaneConfig }[] = [
   { type: 'terminal', label: 'Terminal', icon: Terminal, defaultConfig: { cwd: undefined } },
   { type: 'editor', label: 'VS Code', icon: FileCode, defaultConfig: {} },
+  { type: 't3code', label: 'T3 Code', icon: Bot, defaultConfig: {} },
   { type: 'browser', label: 'Browser', icon: Globe, defaultConfig: { url: 'https://google.com' } },
 ]
 

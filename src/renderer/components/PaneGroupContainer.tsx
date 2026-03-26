@@ -11,6 +11,7 @@ import EmptyPane from './EmptyPane'
 import TerminalPane from './TerminalPane'
 import EditorPane from './EditorPane'
 import BrowserPane from './BrowserPane'
+import T3CodePane from './T3CodePane'
 function PaneContentDropZone({ groupId, workspaceId, enabled, previewSide }: { groupId: string; workspaceId: string; enabled: boolean; previewSide: 'left' | 'right' | 'top' | 'bottom' | null }) {
   const zoneRef = useRef<HTMLDivElement | null>(null)
 
@@ -98,6 +99,14 @@ const PaneContent = memo(function PaneContent({
           paneId={paneId}
           workspaceId={workspaceId}
           config={(paneConfig ?? { url: 'https://www.google.com' }) as BrowserConfig}
+          isVisible={isVisible}
+          hideNativeView={hideNativeView}
+        />
+      )
+    case 't3code':
+      return (
+        <T3CodePane
+          paneId={paneId}
           isVisible={isVisible}
           hideNativeView={hideNativeView}
         />
