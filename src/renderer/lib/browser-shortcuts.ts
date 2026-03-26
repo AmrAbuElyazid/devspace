@@ -11,7 +11,7 @@ interface BrowserShortcutWorkspaceState {
 export function getActiveFocusedBrowserPane(state: BrowserShortcutWorkspaceState): Pane | null {
   const workspace = state.workspaces.find((w) => w.id === state.activeWorkspaceId)
   if (!workspace) return null
-  const groupId = workspace.focusedGroupId
+  const groupId = workspace.focusedGroupId ?? findFirstGroupId(workspace.root)
   if (!groupId) return null
   const group = state.paneGroups[groupId]
   if (!group) return null

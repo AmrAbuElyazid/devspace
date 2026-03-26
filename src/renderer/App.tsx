@@ -77,6 +77,28 @@ export default function App(): JSX.Element {
     }
   }, [overlayActive])
 
+  // Re-focus the active terminal when the window regains focus.
+  // macOS restores first-responder to the Electron web content view,
+  // not to the previously-focused GhosttyView.
+  useEffect(() => {
+    return window.api.window.onFocus(() => {
+      // Don't steal focus from an open overlay (settings, dialog, etc.)
+      if (useSettingsStore.getState().settingsOpen || useSettingsStore.getState().overlayCount > 0) return
+
+      const state = useWorkspaceStore.getState()
+      const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId)
+      if (!ws?.focusedGroupId) return
+      const group = state.paneGroups[ws.focusedGroupId]
+      if (!group) return
+      const activeTab = group.tabs.find((t) => t.id === group.activeTabId)
+      if (!activeTab) return
+      const pane = state.panes[activeTab.paneId]
+      if (pane?.type === 'terminal') {
+        void window.api.terminal.focus(activeTab.paneId)
+      }
+    })
+  }, [])
+
   useEffect(() => {
     window.api.window.setSidebarOpen(sidebarOpen)
   }, [sidebarOpen])

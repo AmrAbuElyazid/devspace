@@ -77,7 +77,14 @@ const bridge: DevspaceBridge = {
       return () => {
         ipcRenderer.removeListener('window:maximizeChange', listener)
       }
-    }
+    },
+    onFocus: (callback) => {
+      const listener = (): void => { callback() }
+      ipcRenderer.on('window:focus', listener)
+      return () => {
+        ipcRenderer.removeListener('window:focus', listener)
+      }
+    },
   },
 
   dialog: {
