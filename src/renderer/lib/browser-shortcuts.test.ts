@@ -32,7 +32,7 @@ test('returns the focused browser pane via the active group tab', () => {
   assert.equal(pane?.id, 'pane-2')
 })
 
-test('returns null when no group is focused', () => {
+test('falls back to the first group when no group is focused', () => {
   const pane = getActiveFocusedBrowserPane({
     activeWorkspaceId: 'ws-1',
     workspaces: [
@@ -55,7 +55,7 @@ test('returns null when no group is focused', () => {
     },
   })
 
-  assert.equal(pane, null)
+  assert.equal(pane?.id, 'pane-1')
 })
 
 test('split shortcuts fall back to the first group when no group is focused', () => {

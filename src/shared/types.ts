@@ -48,6 +48,7 @@ export interface DevspaceBridge {
     setSidebarOpen: (open: boolean) => void
     isMaximized: () => Promise<boolean>
     onMaximizeChange: (callback: (maximized: boolean) => void) => () => void
+    onFocus: (callback: () => void) => () => void
   }
   dialog: {
     openFile: (defaultPath?: string) => Promise<{ path: string; content: string } | null>

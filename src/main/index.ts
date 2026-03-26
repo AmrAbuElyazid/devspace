@@ -93,6 +93,13 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  // Notify renderer when the window regains focus so it can re-focus
+  // the active terminal surface (macOS restores focus to the web content
+  // view, not the previously-focused GhosttyView).
+  mainWindow.on('focus', () => {
+    mainWindow.webContents.send('window:focus')
+  })
+
   if (process.env.ELECTRON_RENDERER_URL) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {

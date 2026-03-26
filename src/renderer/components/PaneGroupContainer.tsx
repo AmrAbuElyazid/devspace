@@ -1,10 +1,11 @@
 import { memo, useRef, useCallback, useEffect, type ReactElement } from 'react'
 import { useDroppable } from '@dnd-kit/core'
+import { Terminal, FileCode, Globe, Bot } from 'lucide-react'
 import { shouldHideBrowserNativeViewForDrag } from '../lib/browser-pane-visibility'
 import { useWorkspaceStore, getTopLeftGroupId } from '../store/workspace-store'
 import { useDragContext } from '../hooks/useDragAndDrop'
 import GroupTabBar from './GroupTabBar'
-import type { PaneType, TerminalConfig, EditorConfig, BrowserConfig } from '../types/workspace'
+import type { PaneType, Pane, TerminalConfig, EditorConfig, BrowserConfig } from '../types/workspace'
 
 // Import the actual pane content components
 import EmptyPane from './EmptyPane'
@@ -12,6 +13,32 @@ import TerminalPane from './TerminalPane'
 import EditorPane from './EditorPane'
 import BrowserPane from './BrowserPane'
 import T3CodePane from './T3CodePane'
+
+const paneTypeIcons: Record<string, typeof Terminal> = {
+  terminal: Terminal,
+  editor: FileCode,
+  browser: Globe,
+  t3code: Bot,
+}
+
+const paneTypeLabels: Record<string, string> = {
+  terminal: 'Terminal',
+  editor: 'VS Code',
+  browser: 'Browser',
+  t3code: 'T3 Code',
+}
+
+/** Lightweight placeholder shown over panes whose native view is hidden during drag. */
+function DragPlaceholder({ pane }: { pane: Pane }): ReactElement {
+  const Icon = paneTypeIcons[pane.type]
+  const label = pane.title || paneTypeLabels[pane.type] || pane.type
+  return (
+    <div className="pane-drag-placeholder">
+      {Icon && <Icon size={24} />}
+      <span>{label}</span>
+    </div>
+  )
+}
 function PaneContentDropZone({ groupId, workspaceId, enabled, previewSide }: { groupId: string; workspaceId: string; enabled: boolean; previewSide: 'left' | 'right' | 'top' | 'bottom' | null }) {
   const zoneRef = useRef<HTMLDivElement | null>(null)
 
@@ -173,6 +200,8 @@ export default function PaneGroupContainer({
           const pane = panes[tab.paneId]
           if (!pane) return null
 
+          const showDragPlaceholder = isActiveTab && shouldHideNative && activeDrag?.type === 'group-tab' && pane.type !== 'empty'
+
           return (
             <div
               key={tab.paneId}
@@ -189,6 +218,7 @@ export default function PaneGroupContainer({
                 hideNativeView={shouldHideNative || !isActiveTab}
                 isFocused={isFocused && isActiveTab}
               />
+              {showDragPlaceholder && <DragPlaceholder pane={pane} />}
             </div>
           )
         })}
