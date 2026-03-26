@@ -77,6 +77,14 @@ export default function App(): JSX.Element {
     }
   }, [overlayActive])
 
+  // Listen for CLI-triggered "open editor" requests from the main process.
+  const openEditorTab = useWorkspaceStore((s) => s.openEditorTab)
+  useEffect(() => {
+    return window.api.window.onOpenEditor((folderPath) => {
+      openEditorTab(folderPath)
+    })
+  }, [openEditorTab])
+
   // Re-focus the active terminal when the window regains focus.
   // macOS restores first-responder to the Electron web content view,
   // not to the previously-focused GhosttyView.

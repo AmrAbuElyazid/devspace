@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { FolderOpen, AlertCircle, Loader2 } from 'lucide-react'
+import { AlertCircle, Loader2 } from 'lucide-react'
 import { useBrowserBounds } from '../hooks/useBrowserBounds'
 import { useWorkspaceStore } from '../store/workspace-store'
 import { Button } from './ui/button'
@@ -22,9 +22,9 @@ interface EditorPaneProps {
 }
 
 type EditorState =
-  | { status: 'picking-folder' }
-  | { status: 'starting'; folderPath: string }
-  | { status: 'running'; folderPath: string }
+  | { status: 'checking' }
+  | { status: 'starting'; folderPath?: string }
+  | { status: 'running'; folderPath?: string }
   | { status: 'error'; message: string }
   | { status: 'unavailable' }
 
@@ -43,12 +43,14 @@ export default function EditorPane({
   // Determine initial state based on config
   const [state, setState] = useState<EditorState>(() => {
     if (startedEditors.has(paneId)) {
-      return { status: 'running', folderPath: config.folderPath || '' }
+      return { status: 'running', folderPath: config.folderPath }
     }
+    // Skip availability check if we already have a folder (e.g. opened via CLI)
     if (config.folderPath) {
       return { status: 'starting', folderPath: config.folderPath }
     }
-    return { status: 'picking-folder' }
+    // Check availability first, then start immediately
+    return { status: 'checking' }
   })
 
   // Track bounds for the WebContentsView (reuses browser bounds hook)
@@ -58,18 +60,38 @@ export default function EditorPane({
     ref: placeholderRef,
   })
 
-  // Start the VS Code server when we have a folder
+  // Check availability on mount, then immediately transition to starting
   useEffect(() => {
-    if (state.status !== 'starting') return
+    if (state.status !== 'checking') return
+    let cancelled = false
+    void window.api.editor.isAvailable().then((available) => {
+      if (cancelled) return
+      if (!available) {
+        setState({ status: 'unavailable' })
+      } else {
+        setState({ status: 'starting', folderPath: config.folderPath })
+      }
+    })
+    return () => { cancelled = true }
+  }, [state.status, config.folderPath])
+
+  // Extract values for effect dependency arrays (avoids depending on
+  // the entire `state` object which is a new reference on every setState).
+  const stateStatus = state.status
+  const stateFolderPath = 'folderPath' in state ? state.folderPath : undefined
+
+  // Start the VS Code server
+  useEffect(() => {
+    if (stateStatus !== 'starting') return
     if (startedEditors.has(paneId)) {
-      setState({ status: 'running', folderPath: state.folderPath })
+      setState({ status: 'running', folderPath: stateFolderPath })
       return
     }
 
     let cancelled = false
 
     void (async () => {
-      const result = await window.api.editor.start(paneId, state.folderPath)
+      const result = await window.api.editor.start(paneId, stateFolderPath)
 
       if (cancelled) return
 
@@ -79,14 +101,18 @@ export default function EditorPane({
       }
 
       startedEditors.add(paneId)
-      const folderName = state.folderPath.split('/').pop() || state.folderPath
-      updatePaneTitle(paneId, `VS Code: ${folderName}`)
-      updatePaneConfig(paneId, { folderPath: state.folderPath })
-      setState({ status: 'running', folderPath: state.folderPath })
+      if (stateFolderPath) {
+        const folderName = stateFolderPath.split('/').pop() || stateFolderPath
+        updatePaneTitle(paneId, `VS Code: ${folderName}`)
+        updatePaneConfig(paneId, { folderPath: stateFolderPath })
+      } else {
+        updatePaneTitle(paneId, 'VS Code')
+      }
+      setState({ status: 'running', folderPath: stateFolderPath })
     })()
 
     return () => { cancelled = true }
-  }, [paneId, state, updatePaneConfig, updatePaneTitle])
+  }, [paneId, stateStatus, stateFolderPath, updatePaneConfig, updatePaneTitle])
 
   // Show/hide the WebContentsView based on visibility
   useEffect(() => {
@@ -97,30 +123,9 @@ export default function EditorPane({
     void action(paneId)
   }, [shouldShowNativeView, paneId, state.status])
 
-  // Check availability on mount
-  useEffect(() => {
-    if (state.status !== 'picking-folder') return
-    void window.api.editor.isAvailable().then((available) => {
-      if (!available) {
-        setState({ status: 'unavailable' })
-      }
-    })
-  }, [state.status])
-
-  // Folder picker
-  const handlePickFolder = useCallback(async () => {
-    const folder = await window.api.dialog.openFolder()
-    if (!folder) return
-    setState({ status: 'starting', folderPath: folder })
-  }, [])
-
   // Retry on error
   const handleRetry = useCallback(() => {
-    if (config.folderPath) {
-      setState({ status: 'starting', folderPath: config.folderPath })
-    } else {
-      setState({ status: 'picking-folder' })
-    }
+    setState({ status: 'starting', folderPath: config.folderPath })
   }, [config.folderPath])
 
   // Render states before the VS Code view is ready
@@ -150,22 +155,7 @@ export default function EditorPane({
     )
   }
 
-  if (state.status === 'picking-folder') {
-    return (
-      <div className="h-full w-full flex flex-col items-center justify-center gap-4" style={{ backgroundColor: 'var(--background)' }}>
-        <FolderOpen size={48} style={{ color: 'var(--muted-foreground)', opacity: 0.5 }} />
-        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-          Open a folder to start editing
-        </p>
-        <Button onClick={handlePickFolder}>
-          <FolderOpen size={14} />
-          Open Folder
-        </Button>
-      </div>
-    )
-  }
-
-  if (state.status === 'starting') {
+  if (state.status === 'checking' || state.status === 'starting') {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center gap-3" style={{ backgroundColor: 'var(--background)' }}>
         <Loader2 size={24} className="animate-spin" style={{ color: 'var(--muted-foreground)' }} />

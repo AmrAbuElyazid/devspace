@@ -378,6 +378,9 @@ interface WorkspaceState {
   // Browser in group
   openBrowserInGroup: (workspaceId: string, groupId: string, url: string) => void
 
+  // Editor in active workspace (used by CLI open-editor)
+  openEditorTab: (folderPath: string) => void
+
   // Split operations
   splitGroup: (workspaceId: string, groupId: string, direction: SplitDirection) => void
   closeGroup: (workspaceId: string, groupId: string) => void
@@ -1252,6 +1255,45 @@ export const useWorkspaceStore = create<WorkspaceState>()(
               activeTabId: newTab.id,
             },
           },
+        })
+      },
+
+      // -------------------------------------------------------------------
+      // Editor in active workspace (CLI)
+      // -------------------------------------------------------------------
+
+      openEditorTab(folderPath) {
+        const state = get()
+        const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId)
+        if (!ws) return
+
+        const groupId = ws.focusedGroupId ?? collectGroupIds(ws.root)[0]
+        if (!groupId) return
+        const group = state.paneGroups[groupId]
+        if (!group) return
+
+        const folderName = folderPath.split('/').pop() || folderPath
+        const pane: Pane = {
+          id: nanoid(),
+          type: 'editor',
+          title: `VS Code: ${folderName}`,
+          config: { folderPath } as PaneConfig,
+        }
+        const newTab: PaneGroupTab = { id: nanoid(), paneId: pane.id }
+
+        set({
+          panes: { ...state.panes, [pane.id]: pane },
+          paneGroups: {
+            ...state.paneGroups,
+            [groupId]: {
+              ...group,
+              tabs: [...group.tabs, newTab],
+              activeTabId: newTab.id,
+            },
+          },
+          workspaces: state.workspaces.map((w) =>
+            w.id === state.activeWorkspaceId ? { ...w, lastActiveAt: Date.now() } : w,
+          ),
         })
       },
 

@@ -98,8 +98,11 @@ export class VscodeServerManager {
    * don't race on port acquisition.  A single `code serve-web` process is
    * shared across all folders — the `?folder=` URL param controls which
    * workspace the VS Code client opens.
+   *
+   * When called without a folder, the server starts (or is reused) and
+   * returns the base URL — VS Code shows its Welcome tab.
    */
-  async start(folder: string): Promise<{ url: string; port: number }> {
+  async start(folder?: string): Promise<{ url: string; port: number }> {
     // Serialize: chain onto the lock so only one caller runs _startImpl at a time.
     const result = new Promise<{ url: string; port: number }>((resolve, reject) => {
       this.startLock = this.startLock.then(
@@ -110,9 +113,14 @@ export class VscodeServerManager {
     return result
   }
 
-  private async _startImpl(folder: string): Promise<{ url: string; port: number }> {
+  /** Sentinel key used for no-folder editor sessions. */
+  private static NO_FOLDER_KEY = '__no_folder__'
+
+  private async _startImpl(folder?: string): Promise<{ url: string; port: number }> {
+    const key = folder ?? VscodeServerManager.NO_FOLDER_KEY
+
     // Fast path: folder already has an entry → just bump refCount.
-    const existing = this.folders.get(folder)
+    const existing = this.folders.get(key)
     if (existing) {
       existing.refCount++
       return { url: existing.url, port: VSCODE_PORT }
@@ -125,12 +133,12 @@ export class VscodeServerManager {
 
     // If a server process is already running, reuse it for this folder.
     if (this.serverProcess) {
-      return this.addFolder(folder)
+      return this.addFolder(key, folder)
     }
 
     // Try to reuse a server left running from a previous session.
     if (await this.reuseRunningServer()) {
-      return this.addFolder(folder)
+      return this.addFolder(key, folder)
     }
 
     // No server running — acquire the port (possibly killing a stale process).
@@ -176,7 +184,7 @@ export class VscodeServerManager {
     }
 
     console.log(`[vscode-server] started on port ${VSCODE_PORT}`)
-    return this.addFolder(folder)
+    return this.addFolder(key, folder)
   }
 
   /**
@@ -196,10 +204,12 @@ export class VscodeServerManager {
   }
 
   /** Create a folder entry pointing at the shared server. */
-  private addFolder(folder: string): { url: string; port: number } {
-    const url = `http://127.0.0.1:${VSCODE_PORT}?folder=${encodeURIComponent(folder)}`
-    this.folders.set(folder, { url, refCount: 1 })
-    console.log(`[vscode-server] serving folder ${folder}`)
+  private addFolder(key: string, folder?: string): { url: string; port: number } {
+    const url = folder
+      ? `http://127.0.0.1:${VSCODE_PORT}?folder=${encodeURIComponent(folder)}`
+      : `http://127.0.0.1:${VSCODE_PORT}`
+    this.folders.set(key, { url, refCount: 1 })
+    console.log(`[vscode-server] serving ${folder ?? '(no folder)'}`)
     return { url, port: VSCODE_PORT }
   }
 
@@ -244,13 +254,14 @@ export class VscodeServerManager {
   }
 
   /** Decrement ref count for a folder; stop server when no consumers remain. */
-  release(folder: string): void {
-    const entry = this.folders.get(folder)
+  release(folder?: string): void {
+    const key = folder ?? VscodeServerManager.NO_FOLDER_KEY
+    const entry = this.folders.get(key)
     if (!entry) return
 
     entry.refCount--
     if (entry.refCount <= 0) {
-      this.folders.delete(folder)
+      this.folders.delete(key)
     }
 
     // If no folders remain, kill the server.
