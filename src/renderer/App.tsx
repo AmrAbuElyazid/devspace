@@ -69,7 +69,8 @@ export default function App(): JSX.Element {
   // When a full-screen overlay (settings, dialog) is active, native views
   // must be hidden so the DOM overlay is visible.  Also resign first
   // responder from any terminal so keyboard events flow to the DOM.
-  const overlayActive = settingsOpen
+  const overlayCount = useSettingsStore((s) => s.overlayCount)
+  const overlayActive = settingsOpen || overlayCount > 0
   useEffect(() => {
     if (overlayActive) {
       void window.api.terminal.blur()
@@ -167,7 +168,7 @@ export default function App(): JSX.Element {
         case 'app:new-tab': {
           if (!ws) break
           const focusedGid = ws.focusedGroupId ?? collectGroupIds(ws.root)[0]
-          if (focusedGid) store.addGroupTab(ws.id, focusedGid)
+          if (focusedGid) store.addGroupTab(ws.id, focusedGid, settings.defaultPaneType)
           break
         }
         case 'app:close-tab': {

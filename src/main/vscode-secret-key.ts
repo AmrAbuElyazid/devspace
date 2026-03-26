@@ -2,9 +2,10 @@ import { randomBytes } from 'crypto'
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { homedir } from 'os'
+import { DATA_DIR_SUFFIX } from './dev-mode'
 
 const KEY_LENGTH = 32 // 256 bits for AES-GCM
-const KEY_PATH = join(homedir(), '.devspace', 'vscode-secret.key')
+const KEY_PATH = join(homedir(), '.devspace', `vscode-secret${DATA_DIR_SUFFIX}.key`)
 
 /** The endpoint path that the VS Code web client will POST to. */
 export const SECRET_KEY_ENDPOINT = '/devspace-secret-key'

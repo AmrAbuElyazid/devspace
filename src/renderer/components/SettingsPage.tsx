@@ -21,7 +21,7 @@ const shortcuts = [
 export default function SettingsPage(): JSX.Element {
   const {
     fontSize, defaultShell, terminalScrollback, terminalCursorStyle,
-    keepVscodeServerRunning,
+    keepVscodeServerRunning, defaultPaneType,
     updateSetting, setSettingsOpen,
   } = useSettingsStore()
 
@@ -39,6 +39,22 @@ export default function SettingsPage(): JSX.Element {
       </div>
 
       <div className="max-w-2xl mx-auto px-6 py-6 space-y-8">
+        {/* General */}
+        <section>
+          <SectionTitle>General</SectionTitle>
+          <SettingRow label="Default new tab">
+            <SegmentedControl
+              options={[
+                { label: 'Terminal', value: 'terminal' as const },
+                { label: 'Browser', value: 'browser' as const },
+                { label: 'Picker', value: 'empty' as const },
+              ]}
+              value={defaultPaneType}
+              onChange={(v) => updateSetting('defaultPaneType', v as 'empty' | 'terminal' | 'browser')}
+            />
+          </SettingRow>
+        </section>
+
         {/* Appearance */}
         <section>
           <SectionTitle>Appearance</SectionTitle>

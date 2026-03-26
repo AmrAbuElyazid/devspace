@@ -3,18 +3,7 @@ import { createServer } from 'net'
 import { mkdirSync } from 'fs'
 import { join } from 'path'
 import { homedir } from 'os'
-
-/**
- * Fixed port for all VS Code serve-web instances.  Using a single stable
- * port guarantees the browser origin (http://127.0.0.1:PORT) never changes,
- * which means localStorage, IndexedDB, and cookies persist across app
- * restarts — critical for keeping the user logged in to Settings Sync.
- *
- * `code serve-web` is folder-agnostic — the `?folder=` URL param tells the
- * VS Code client which folder to open, so a single server process can serve
- * any number of editor panes for different folders.
- */
-const VSCODE_PORT = 18562
+import { VSCODE_PORT, DATA_DIR_SUFFIX } from './dev-mode'
 
 /** Check if a port is available by trying to bind to it. */
 function isPortFree(port: number): Promise<boolean> {
@@ -84,7 +73,7 @@ export class VscodeServerManager {
   keepRunning = true
 
   constructor(serverDataDir?: string) {
-    this.serverDataDir = serverDataDir || join(homedir(), '.devspace', 'vscode-server-data')
+    this.serverDataDir = serverDataDir || join(homedir(), '.devspace', `vscode-server-data${DATA_DIR_SUFFIX}`)
     mkdirSync(this.serverDataDir, { recursive: true })
   }
 

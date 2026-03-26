@@ -10,6 +10,15 @@ interface SettingsState {
   terminalCursorStyle: 'block' | 'underline' | 'bar'
   keepVscodeServerRunning: boolean
   sidebarWidth: number
+  /** Pane type to open by default for new tabs ('empty' shows the picker) */
+  defaultPaneType: 'empty' | 'terminal' | 'browser' | 'editor' | 't3code'
+
+  /** Count of open overlays (dialogs, popovers) that should hide native views */
+  overlayCount: number
+  /** True when any overlay is active (settings page or dialog/popover) */
+  isOverlayActive: () => boolean
+  pushOverlay: () => void
+  popOverlay: () => void
 
   toggleSidebar: () => void
   setSidebarWidth: (width: number) => void
@@ -21,7 +30,7 @@ interface SettingsState {
 
 export const useSettingsStore = create<SettingsState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       sidebarOpen: true,
       settingsOpen: false,
       fontSize: 13,
@@ -30,6 +39,21 @@ export const useSettingsStore = create<SettingsState>()(
       terminalCursorStyle: 'block' as const,
       keepVscodeServerRunning: true,
       sidebarWidth: 220,
+      defaultPaneType: 'terminal' as const,
+      overlayCount: 0,
+
+      isOverlayActive() {
+        const s = get()
+        return s.settingsOpen || s.overlayCount > 0
+      },
+
+      pushOverlay() {
+        set((s) => ({ overlayCount: s.overlayCount + 1 }))
+      },
+
+      popOverlay() {
+        set((s) => ({ overlayCount: Math.max(0, s.overlayCount - 1) }))
+      },
 
       toggleSidebar() {
         set((s) => ({ sidebarOpen: !s.sidebarOpen }))
@@ -57,6 +81,11 @@ export const useSettingsStore = create<SettingsState>()(
     }),
     {
       name: 'devspace:settings',
+      partialize: (state) => {
+        // Exclude ephemeral state from persistence
+        const { overlayCount, ...persisted } = state
+        return persisted
+      },
     },
   ),
 )
