@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { useDroppable } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { Plus, Settings, ChevronDown, ChevronRight, ChevronLeft, FolderClosed, Search, X } from 'lucide-react'
@@ -479,6 +479,9 @@ export default function Sidebar(): JSX.Element {
   const unpinFolder = useWorkspaceStore((s) => s.unpinFolder)
   const panes = useWorkspaceStore((s) => s.panes)
   const paneGroups = useWorkspaceStore((s) => s.paneGroups)
+  const pendingEditId = useWorkspaceStore((s) => s.pendingEditId)
+  const pendingEditType = useWorkspaceStore((s) => s.pendingEditType)
+  const clearPendingEdit = useWorkspaceStore((s) => s.clearPendingEdit)
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen)
   const sidebarWidth = useSettingsStore((s) => s.sidebarWidth)
   const setSidebarWidth = useSettingsStore((s) => s.setSidebarWidth)
@@ -490,6 +493,15 @@ export default function Sidebar(): JSX.Element {
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingType, setEditingType] = useState<'workspace' | 'folder' | null>(null)
+
+  // Pick up pending edit requests from the store (e.g. from Cmd+N IPC)
+  useEffect(() => {
+    if (pendingEditId && pendingEditType) {
+      setEditingId(pendingEditId)
+      setEditingType(pendingEditType)
+      clearPendingEdit()
+    }
+  }, [pendingEditId, pendingEditType, clearPendingEdit])
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null)
   const [isResizing, setIsResizing] = useState(false)
   const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null)
@@ -671,19 +683,31 @@ export default function Sidebar(): JSX.Element {
         </>
       )}
 
-      {/* Section label + add button */}
+      {/* Section label + add buttons */}
       <div className="sidebar-section-header">
         <span className="sidebar-label">Workspaces</span>
-        <Tooltip content="New workspace" shortcut="⌘N">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() => addWorkspace()}
-            className="no-drag"
-          >
-            <Plus size={13} />
-          </Button>
-        </Tooltip>
+        <div className="flex items-center gap-0.5">
+          <Tooltip content="New folder">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => addFolder('New Folder')}
+              className="no-drag"
+            >
+              <FolderClosed size={12} />
+            </Button>
+          </Tooltip>
+          <Tooltip content="New workspace" shortcut="⌘N">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => addWorkspace()}
+              className="no-drag"
+            >
+              <Plus size={13} />
+            </Button>
+          </Tooltip>
+        </div>
       </div>
 
       {/* Sidebar tree with DnD */}

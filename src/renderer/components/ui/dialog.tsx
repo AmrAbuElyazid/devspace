@@ -1,12 +1,24 @@
-import { forwardRef, type ComponentProps } from 'react'
+import { forwardRef, useEffect, type ComponentProps } from 'react'
 import { Dialog as DialogPrimitive } from '@base-ui-components/react/dialog'
 import { cn } from '../../lib/utils'
+import { useSettingsStore } from '../../store/settings-store'
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
 type DialogProps = ComponentProps<typeof DialogPrimitive.Root>
 
 function Dialog(props: DialogProps) {
+  const pushOverlay = useSettingsStore((s) => s.pushOverlay)
+  const popOverlay = useSettingsStore((s) => s.popOverlay)
+
+  // Hide native views only while the dialog is actually open
+  useEffect(() => {
+    if (!props.open) return
+    pushOverlay()
+    void window.api?.terminal?.blur?.()
+    return () => { popOverlay() }
+  }, [props.open, pushOverlay, popOverlay])
+
   return <DialogPrimitive.Root {...props} />
 }
 

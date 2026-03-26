@@ -2,8 +2,9 @@ import type { Session } from 'electron'
 import { randomUUID } from 'node:crypto'
 import type { BrowserPermissionDecision, BrowserPermissionRequest, BrowserPermissionType } from '../../shared/browser'
 import { getSecretKey, SECRET_KEY_ENDPOINT } from '../vscode-secret-key'
+import { BROWSER_PARTITION } from '../dev-mode'
 
-export const BROWSER_PARTITION = 'persist:devspace-global-browser'
+export { BROWSER_PARTITION }
 
 export interface BrowserSessionModule {
   fromPartition(partition: string): Session

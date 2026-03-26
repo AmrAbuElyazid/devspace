@@ -1,6 +1,7 @@
 import { spawn, execSync, type ChildProcess } from 'child_process'
 import { createServer } from 'net'
 import { homedir } from 'os'
+import { T3CODE_PORT_BASE } from './dev-mode'
 
 /**
  * Manages a single shared T3 Code server instance.
@@ -22,7 +23,7 @@ function isPortFree(port: number): Promise<boolean> {
 }
 
 /** Find an available port starting from a base. */
-async function findFreePort(startFrom = 18570): Promise<number> {
+async function findFreePort(startFrom = T3CODE_PORT_BASE): Promise<number> {
   for (let port = startFrom; port < startFrom + 100; port++) {
     if (await isPortFree(port)) return port
   }

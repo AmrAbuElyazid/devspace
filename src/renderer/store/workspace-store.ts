@@ -230,11 +230,20 @@ function updateSizesAtPath(
 // Default factory helpers
 // ---------------------------------------------------------------------------
 
-function createEmptyPane(): Pane {
+const titleForType: Record<PaneType, string> = {
+  terminal: 'Terminal',
+  browser: 'Browser',
+  editor: 'Editor',
+  t3code: 'T3 Code',
+  empty: 'Empty',
+}
+
+function createEmptyPane(type?: PaneType): Pane {
+  const paneType = type ?? 'empty'
   return {
     id: nanoid(),
-    type: 'empty',
-    title: 'Empty',
+    type: paneType,
+    title: titleForType[paneType] ?? 'Empty',
     config: {},
   }
 }
@@ -246,6 +255,20 @@ function createPaneGroup(pane: Pane): PaneGroup {
     tabs: [{ id: tabId, paneId: pane.id }],
     activeTabId: tabId,
   }
+}
+
+function nextWorkspaceName(workspaces: Workspace[]): string {
+  const existingNumbers = new Set(
+    workspaces
+      .map((w) => {
+        const match = w.name.match(/^Workspace (\d+)$/)
+        return match ? parseInt(match[1], 10) : null
+      })
+      .filter((n): n is number => n !== null),
+  )
+  let n = 1
+  while (existingNumbers.has(n)) n++
+  return `Workspace ${n}`
 }
 
 function createDefaultWorkspace(name: string, group: PaneGroup): Workspace {
@@ -300,14 +323,6 @@ const defaultPaneCleanupDeps: PaneCleanupDeps = {
 // Store
 // ---------------------------------------------------------------------------
 
-const titleForType: Record<PaneType, string> = {
-  terminal: 'Terminal',
-  browser: 'Browser',
-  editor: 'Editor',
-  t3code: 'T3 Code',
-  empty: 'Empty',
-}
-
 interface WorkspaceState {
   workspaces: Workspace[]
   activeWorkspaceId: string
@@ -316,8 +331,13 @@ interface WorkspaceState {
   pinnedSidebarNodes: SidebarNode[]
   sidebarTree: SidebarNode[]
 
+  /** Set by addWorkspace/addFolder when the newly created item should enter edit mode */
+  pendingEditId: string | null
+  pendingEditType: 'workspace' | 'folder' | null
+  clearPendingEdit: () => void
+
   // Workspace CRUD
-  addWorkspace: (name?: string, parentFolderId?: string | null, container?: SidebarContainer) => void
+  addWorkspace: (name?: string, parentFolderId?: string | null, container?: SidebarContainer) => string
   removeWorkspace: (id: string) => void
   renameWorkspace: (id: string, name: string) => void
   setActiveWorkspace: (id: string) => void
@@ -347,7 +367,7 @@ interface WorkspaceState {
   setFocusedGroup: (workspaceId: string, groupId: string) => void
 
   // Group tab CRUD
-  addGroupTab: (workspaceId: string, groupId: string) => void
+  addGroupTab: (workspaceId: string, groupId: string, defaultType?: PaneType) => void
   removeGroupTab: (workspaceId: string, groupId: string, tabId: string) => void
   setActiveGroupTab: (workspaceId: string, groupId: string, tabId: string) => void
   reorderGroupTabs: (workspaceId: string, groupId: string, fromIndex: number, toIndex: number) => void
@@ -592,6 +612,9 @@ function buildInitialState(): Pick<WorkspaceState, 'workspaces' | 'activeWorkspa
 export const useWorkspaceStore = create<WorkspaceState>()(
     (set, get) => ({
       ...buildInitialState(),
+      pendingEditId: null,
+      pendingEditType: null,
+      clearPendingEdit: () => set({ pendingEditId: null, pendingEditType: null }),
 
       // -------------------------------------------------------------------
       // Workspace CRUD
@@ -600,7 +623,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       addWorkspace: (name, parentFolderId = null, container = 'main') => {
         const pane = createEmptyPane()
         const group = createPaneGroup(pane)
-        const wsName = name ?? `Workspace ${get().workspaces.length + 1}`
+        const wsName = name ?? nextWorkspaceName(get().workspaces)
         const ws = createDefaultWorkspace(wsName, group)
         set((state) => {
           const targetNodes = getSidebarNodesForContainer(state, container)
@@ -618,8 +641,11 @@ export const useWorkspaceStore = create<WorkspaceState>()(
             paneGroups: { ...state.paneGroups, [group.id]: group },
             sidebarTree: container === 'main' ? insertedNodes : state.sidebarTree,
             pinnedSidebarNodes: container === 'pinned' ? insertedNodes : state.pinnedSidebarNodes,
+            pendingEditId: ws.id,
+            pendingEditType: 'workspace' as const,
           }
         })
+        return ws.id
       },
 
       removeWorkspace: (id) => {
@@ -780,14 +806,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(
       // Group tab CRUD
       // -------------------------------------------------------------------
 
-      addGroupTab(workspaceId, groupId) {
+      addGroupTab(workspaceId, groupId, defaultType) {
         const { paneGroups, panes, workspaces } = get()
         const workspace = workspaces.find((w) => w.id === workspaceId)
         if (!workspace || !treeHasGroup(workspace.root, groupId)) return
         const group = paneGroups[groupId]
         if (!group) return
 
-        const pane = createEmptyPane()
+        const pane = createEmptyPane(defaultType)
         const newTab: PaneGroupTab = { id: nanoid(), paneId: pane.id }
 
         set({
@@ -1513,6 +1539,8 @@ export const useWorkspaceStore = create<WorkspaceState>()(
           return {
             sidebarTree: container === 'main' ? insertedNodes : state.sidebarTree,
             pinnedSidebarNodes: container === 'pinned' ? insertedNodes : state.pinnedSidebarNodes,
+            pendingEditId: id,
+            pendingEditType: 'folder' as const,
           }
         })
         return id

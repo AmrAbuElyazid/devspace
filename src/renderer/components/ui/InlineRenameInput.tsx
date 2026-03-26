@@ -17,11 +17,16 @@ export const InlineRenameInput = memo(function InlineRenameInput({
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    const input = inputRef.current
-    if (input) {
-      input.focus()
-      input.select()
-    }
+    // Blur native views (Ghostty terminal) so the web input can receive focus,
+    // then wait a frame for the DOM to settle before focusing.
+    void window.api?.terminal?.blur?.()
+    requestAnimationFrame(() => {
+      const input = inputRef.current
+      if (input) {
+        input.focus()
+        input.select()
+      }
+    })
   }, [])
 
   const handleCommit = useCallback(() => {

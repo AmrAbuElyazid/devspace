@@ -106,6 +106,7 @@ export default function GroupTabBar({ group, groupId, workspaceId, isFocused, is
   const closeGroup = useWorkspaceStore((s) => s.closeGroup)
   const addWorkspace = useWorkspaceStore((s) => s.addWorkspace)
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar)
+  const defaultPaneType = useSettingsStore((s) => s.defaultPaneType)
   const wsRoot = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.root)
 
   const hasMultipleGroups = wsRoot ? collectGroupIds(wsRoot).length > 1 : false
@@ -157,7 +158,7 @@ export default function GroupTabBar({ group, groupId, workspaceId, isFocused, is
 
       <button
         className="group-tabbar-add no-drag"
-        onClick={() => addGroupTab(workspaceId, groupId)}
+        onClick={() => addGroupTab(workspaceId, groupId, defaultPaneType)}
         title="New tab"
       >
         <Plus size={12} />
