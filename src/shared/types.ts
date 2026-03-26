@@ -69,6 +69,11 @@ export interface DevspaceBridge {
     stop: (paneId: string) => Promise<void>
     setKeepServerRunning: (keep: boolean) => void
   }
+  t3code: {
+    isAvailable: () => Promise<boolean>
+    start: (paneId: string) => Promise<{ url: string } | { error: string }>
+    stop: (paneId: string) => Promise<void>
+  }
   browser: BrowserBridge
 }
 

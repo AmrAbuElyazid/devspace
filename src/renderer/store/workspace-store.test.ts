@@ -101,6 +101,9 @@ test('cleanupPaneResources destroys browser panes and clears runtime state', () 
       destroyEditor: () => {
         throw new Error('unexpected editor cleanup')
       },
+      destroyT3Code: () => {
+        throw new Error('unexpected t3code cleanup')
+      },
       clearBrowserRuntime: (paneId) => {
         clearedPaneIds.push(paneId)
       },

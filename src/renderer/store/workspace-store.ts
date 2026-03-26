@@ -288,6 +288,9 @@ const defaultPaneCleanupDeps: PaneCleanupDeps = {
   destroyEditor: (paneId) => {
     void window.api.editor.stop(paneId)
   },
+  destroyT3Code: (paneId) => {
+    void window.api.t3code.stop(paneId)
+  },
   clearBrowserRuntime: (paneId) => {
     useBrowserStore.getState().clearRuntimeState(paneId)
   },
@@ -301,6 +304,7 @@ const titleForType: Record<PaneType, string> = {
   terminal: 'Terminal',
   browser: 'Browser',
   editor: 'Editor',
+  t3code: 'T3 Code',
   empty: 'Empty',
 }
 

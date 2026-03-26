@@ -1,11 +1,13 @@
 import type { Pane } from '../types/workspace'
 import { markSurfaceDestroyed } from '../components/TerminalPane'
 import { markEditorDestroyed } from '../components/EditorPane'
+import { markT3CodeDestroyed } from '../components/T3CodePane'
 
 export type PaneCleanupDeps = {
   destroyTerminal: (surfaceId: string) => void
   destroyBrowser: (paneId: string) => void
   destroyEditor: (paneId: string) => void
+  destroyT3Code: (paneId: string) => void
   clearBrowserRuntime: (paneId: string) => void
 }
 
@@ -29,5 +31,10 @@ export function cleanupPaneResources(
   if (pane?.type === 'editor') {
     markEditorDestroyed(paneId)
     deps.destroyEditor(paneId)
+  }
+
+  if (pane?.type === 't3code') {
+    markT3CodeDestroyed(paneId)
+    deps.destroyT3Code(paneId)
   }
 }

@@ -1,4 +1,4 @@
-export type PaneType = 'terminal' | 'browser' | 'editor' | 'empty'
+export type PaneType = 'terminal' | 'browser' | 'editor' | 't3code' | 'empty'
 
 export interface TerminalConfig {
   cwd?: string
@@ -13,9 +13,11 @@ export interface EditorConfig {
   folderPath?: string
 }
 
+export interface T3CodeConfig {}
+
 export interface EmptyConfig {}
 
-export type PaneConfig = TerminalConfig | BrowserConfig | EditorConfig | EmptyConfig
+export type PaneConfig = TerminalConfig | BrowserConfig | EditorConfig | T3CodeConfig | EmptyConfig
 
 export interface Pane {
   id: string

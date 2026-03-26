@@ -105,6 +105,12 @@ const bridge: DevspaceBridge = {
     setKeepServerRunning: (keep) => ipcRenderer.send('editor:setKeepServerRunning', keep),
   },
 
+  t3code: {
+    isAvailable: () => ipcRenderer.invoke('t3code:isAvailable'),
+    start: (paneId) => ipcRenderer.invoke('t3code:start', paneId),
+    stop: (paneId) => ipcRenderer.invoke('t3code:stop', paneId),
+  },
+
   browser: {
     create: (paneId, url) => ipcRenderer.invoke('browser:create', paneId, url),
     destroy: (paneId) => ipcRenderer.invoke('browser:destroy', paneId),
