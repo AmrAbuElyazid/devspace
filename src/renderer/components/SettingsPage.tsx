@@ -1,4 +1,5 @@
-import { X } from 'lucide-react'
+import { useState } from 'react'
+import { X, Terminal } from 'lucide-react'
 import { useSettingsStore } from '../store/settings-store'
 import { Kbd } from './ui/kbd'
 import { Button } from './ui/button'
@@ -52,6 +53,9 @@ export default function SettingsPage(): JSX.Element {
               value={defaultPaneType}
               onChange={(v) => updateSetting('defaultPaneType', v as 'empty' | 'terminal' | 'browser')}
             />
+          </SettingRow>
+          <SettingRow label="Shell command">
+            <InstallCliButton />
           </SettingRow>
         </section>
 
@@ -268,5 +272,54 @@ function Toggle({
         style={{ transform: checked ? 'translateX(18px)' : 'translateX(2px)' }}
       />
     </button>
+  )
+}
+
+function InstallCliButton() {
+  const [status, setStatus] = useState<'idle' | 'installing' | 'done' | 'error'>('idle')
+  const [errorMsg, setErrorMsg] = useState('')
+
+  const handleInstall = async (): Promise<void> => {
+    setStatus('installing')
+    try {
+      const result = await window.api.cli.install()
+      if (result.ok) {
+        setStatus('done')
+      } else {
+        setErrorMsg(result.error ?? 'Unknown error')
+        setStatus('error')
+      }
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : String(err))
+      setStatus('error')
+    }
+  }
+
+  if (status === 'done') {
+    return (
+      <span className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+        Installed at /usr/local/bin/devspace
+      </span>
+    )
+  }
+
+  if (status === 'error') {
+    return (
+      <span className="text-xs" style={{ color: 'var(--destructive)' }}>
+        {errorMsg}
+      </span>
+    )
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handleInstall}
+      disabled={status === 'installing'}
+    >
+      <Terminal size={12} />
+      {status === 'installing' ? 'Installing...' : "Install 'devspace' command in PATH"}
+    </Button>
   )
 }

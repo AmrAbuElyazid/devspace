@@ -49,6 +49,7 @@ export interface DevspaceBridge {
     isMaximized: () => Promise<boolean>
     onMaximizeChange: (callback: (maximized: boolean) => void) => () => void
     onFocus: (callback: () => void) => () => void
+    onOpenEditor: (callback: (folderPath: string) => void) => () => void
   }
   dialog: {
     openFile: (defaultPath?: string) => Promise<{ path: string; content: string } | null>
@@ -66,9 +67,12 @@ export interface DevspaceBridge {
   }
   editor: {
     isAvailable: () => Promise<boolean>
-    start: (paneId: string, folderPath: string) => Promise<{ url: string } | { error: string }>
+    start: (paneId: string, folderPath?: string) => Promise<{ url: string } | { error: string }>
     stop: (paneId: string) => Promise<void>
     setKeepServerRunning: (keep: boolean) => void
+  }
+  cli: {
+    install: () => Promise<{ ok: boolean; error?: string }>
   }
   t3code: {
     isAvailable: () => Promise<boolean>

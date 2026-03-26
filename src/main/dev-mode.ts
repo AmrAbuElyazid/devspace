@@ -23,3 +23,6 @@ export const BROWSER_PARTITION = IS_DEV
 
 /** Suffix for data directories that need isolation. */
 export const DATA_DIR_SUFFIX = IS_DEV ? '-dev' : ''
+
+/** Port for the CLI HTTP server (`devspace .` talks to this). */
+export const CLI_PORT = 21549 + (IS_DEV ? DEV_PORT_OFFSET : 0)

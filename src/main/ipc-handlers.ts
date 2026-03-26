@@ -1,6 +1,9 @@
-import { ipcMain, dialog, shell, BrowserWindow, Menu } from 'electron'
+import { ipcMain, app, dialog, shell, BrowserWindow, Menu } from 'electron'
 import { readFile, writeFile } from 'fs/promises'
+import { existsSync, unlinkSync, symlinkSync } from 'fs'
+import { join } from 'path'
 import { homedir } from 'os'
+import { execSync, execFileSync } from 'child_process'
 import type { TerminalManager } from './terminal-manager'
 import type { VscodeServerManager } from './vscode-server'
 import type { T3CodeServerManager } from './t3code-server'
@@ -107,20 +110,22 @@ export function registerIpcHandlers(
 
   // --- Editor (VS Code serve-web) handlers ---
 
-  // Track which pane maps to which folder so we can release on stop
-  const editorPaneFolders = new Map<string, string>()
+  // Track which pane maps to which folder so we can release on stop.
+  // Value is the folder path, or undefined for no-folder sessions.
+  const editorPaneFolders = new Map<string, string | undefined>()
 
   safeHandle('editor:isAvailable', () => {
     return vscodeServerManager.isAvailable()
   })
 
   safeHandle('editor:start', async (_event, paneId: unknown, folderPath: unknown) => {
-    if (typeof paneId !== 'string' || typeof folderPath !== 'string') {
+    if (typeof paneId !== 'string') {
       return { error: 'Invalid arguments' }
     }
+    const folder = typeof folderPath === 'string' ? folderPath : undefined
     try {
-      const { url } = await vscodeServerManager.start(folderPath)
-      editorPaneFolders.set(paneId, folderPath)
+      const { url } = await vscodeServerManager.start(folder)
+      editorPaneFolders.set(paneId, folder)
 
       // No need to set the vscode-secret-key-path cookie ourselves — the
       // code serve-web server sets it to /_vscode-cli/mint-key in its HTTP
@@ -138,8 +143,8 @@ export function registerIpcHandlers(
 
   safeHandle('editor:stop', (_event, paneId: unknown) => {
     if (typeof paneId !== 'string') return
-    const folder = editorPaneFolders.get(paneId)
-    if (folder) {
+    if (editorPaneFolders.has(paneId)) {
+      const folder = editorPaneFolders.get(paneId)
       editorPaneFolders.delete(paneId)
       vscodeServerManager.release(folder)
     }
@@ -514,6 +519,52 @@ export function registerIpcHandlers(
       ok: false,
       code: 'SAFARI_FULL_DISK_ACCESS_REQUIRED',
       message: 'Safari import service unavailable.',
+    }
+  })
+
+  // --- CLI install handler ---
+
+  safeHandle('cli:install', async () => {
+    const symlink = '/usr/local/bin/devspace'
+    // Resolve the CLI script inside the app bundle.
+    // In packaged mode:  .../Devspace.app/Contents/Resources/bin/devspace
+    // In dev mode:       <project>/resources/bin/devspace
+    const isPackaged = app.isPackaged
+    const scriptPath = isPackaged
+      ? join(process.resourcesPath, 'bin', 'devspace')
+      : join(app.getAppPath(), 'resources', 'bin', 'devspace')
+
+    if (!existsSync(scriptPath)) {
+      return { ok: false, error: `CLI script not found at ${scriptPath}` }
+    }
+
+    try {
+      // Remove existing symlink if present
+      if (existsSync(symlink)) {
+        try {
+          unlinkSync(symlink)
+        } catch {
+          // May need elevated privileges — try with osascript below
+        }
+      }
+
+      try {
+        symlinkSync(scriptPath, symlink)
+      } catch {
+        // Need admin privileges — use osascript to prompt.
+        // execFileSync avoids shell parsing of the outer command.
+        // Paths are escaped for AppleScript string syntax (\, "),
+        // then `quoted form of` handles shell escaping for `ln`.
+        const escAS = (s: string): string => s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+        const appleScript =
+          `do shell script "ln -sf " & quoted form of "${escAS(scriptPath)}" & " " & quoted form of "${escAS(symlink)}" with administrator privileges`
+        execFileSync('osascript', ['-e', appleScript], { stdio: 'ignore' })
+      }
+
+      return { ok: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return { ok: false, error: message }
     }
   })
 

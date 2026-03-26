@@ -9,15 +9,22 @@
     "preview": "electron-vite preview",
     "postinstall": "electron-vite postinstall 2>/dev/null; true",
     "rebuild-native": "cd native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=arm64 --dist-url=https://electronjs.org/headers",
-    "dist": "electron-vite build && cd native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=arm64 --dist-url=https://electronjs.org/headers && cd .. && bunx electron-builder --mac --arm64 --dir"
+    "dist": "bun run build && bun run rebuild-native && bunx electron-builder --mac --arm64 --dir"
   },
   "build": {
     "appId": "com.devspace.app",
     "productName": "Devspace",
+    "asar": true,
+    "asarUnpack": [
+      "native/build/Release/*.node"
+    ],
     "mac": {
       "target": "dir",
       "category": "public.app-category.developer-tools",
-      "identity": null
+      "identity": null,
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist"
     },
     "directories": {
       "output": "release"
@@ -26,8 +33,13 @@
       "out/**/*",
       "native/build/Release/ghostty_bridge.node"
     ],
-    "extraResources": [],
-    "asar": false
+    "extraResources": [
+      {
+        "from": "resources/bin",
+        "to": "bin",
+        "filter": ["**/*"]
+      }
+    ]
   },
   "dependencies": {
     "@base-ui-components/react": "^1.0.0-rc.0",

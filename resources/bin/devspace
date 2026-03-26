@@ -1,0 +1,43 @@
+#!/bin/bash
+#
+# devspace — open a folder in the Devspace built-in editor.
+#
+# Usage:
+#   devspace [<folder>]
+
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+  FOLDER="$(pwd)"
+else
+  if [ ! -d "$1" ]; then
+    echo "Error: '$1' is not a directory" >&2
+    exit 1
+  fi
+  FOLDER="$(cd "$1" && pwd)"
+fi
+
+# Percent-encode the folder path for use as a URL query parameter.
+# Uses perl (ships with macOS) for proper RFC 3986 encoding.
+ENCODED=$(printf '%s' "$FOLDER" | perl -pe 's/([^A-Za-z0-9\-._~\/])/sprintf("%%%02X", ord($1))/ge')
+
+# Auth token directory (Electron userData on macOS)
+TOKEN_DIR="$HOME/Library/Application Support/devspace/cli"
+
+# Try a port: read the auth token, send the request with the token header.
+try_port() {
+  local port="$1"
+  local token_file="$TOKEN_DIR/token.$port"
+  [ -f "$token_file" ] || return 1
+  local token
+  token=$(<"$token_file")
+  curl -sf -H "X-Devspace-Token: $token" \
+    "http://127.0.0.1:$port/open-editor?path=$ENCODED" >/dev/null 2>&1
+}
+
+# Try production port (21549), then dev port (21649)
+try_port 21549 && exit 0
+try_port 21649 && exit 0
+
+echo "Error: Could not connect to Devspace. Is it running?" >&2
+exit 1

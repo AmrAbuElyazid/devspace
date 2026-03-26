@@ -85,6 +85,15 @@ const bridge: DevspaceBridge = {
         ipcRenderer.removeListener('window:focus', listener)
       }
     },
+    onOpenEditor: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, folderPath: string): void => {
+        callback(folderPath)
+      }
+      ipcRenderer.on('open-editor', listener)
+      return () => {
+        ipcRenderer.removeListener('open-editor', listener)
+      }
+    },
   },
 
   dialog: {
@@ -110,6 +119,10 @@ const bridge: DevspaceBridge = {
     start: (paneId, folderPath) => ipcRenderer.invoke('editor:start', paneId, folderPath),
     stop: (paneId) => ipcRenderer.invoke('editor:stop', paneId),
     setKeepServerRunning: (keep) => ipcRenderer.send('editor:setKeepServerRunning', keep),
+  },
+
+  cli: {
+    install: () => ipcRenderer.invoke('cli:install'),
   },
 
   t3code: {
