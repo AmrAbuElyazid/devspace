@@ -1,6 +1,7 @@
 #include "ghostty_bridge.h"
 #include <napi.h>
 #import <AppKit/AppKit.h>
+#import <Carbon/Carbon.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 #include <unordered_map>
@@ -180,14 +181,196 @@ GhosttyAppState g_state;
 
 // ---- Input helpers ----
 
+// Map NSEvent modifier flags to Ghostty modifier bitmask.
+// CapsLock is intentionally excluded — it interferes with keybinding matching
+// and Ghostty handles it internally via the text translation path.
 static ghostty_input_mods_e translateMods(NSEventModifierFlags flags) {
     uint32_t mods = GHOSTTY_MODS_NONE;
-    if (flags & NSEventModifierFlagShift)    mods |= GHOSTTY_MODS_SHIFT;
-    if (flags & NSEventModifierFlagControl)  mods |= GHOSTTY_MODS_CTRL;
-    if (flags & NSEventModifierFlagOption)   mods |= GHOSTTY_MODS_ALT;
-    if (flags & NSEventModifierFlagCommand)  mods |= GHOSTTY_MODS_SUPER;
-    if (flags & NSEventModifierFlagCapsLock) mods |= GHOSTTY_MODS_CAPS;
+    if (flags & NSEventModifierFlagShift)   mods |= GHOSTTY_MODS_SHIFT;
+    if (flags & NSEventModifierFlagControl) mods |= GHOSTTY_MODS_CTRL;
+    if (flags & NSEventModifierFlagOption)  mods |= GHOSTTY_MODS_ALT;
+    if (flags & NSEventModifierFlagCommand) mods |= GHOSTTY_MODS_SUPER;
     return (ghostty_input_mods_e)mods;
+}
+
+// Consumed mods are modifiers that were used for text translation.
+// Control and Command never contribute to text translation, so they
+// should be excluded from consumed_mods.  Only Shift and Option can
+// be consumed (Shift for uppercase, Option for special characters).
+static ghostty_input_mods_e consumedMods(NSEventModifierFlags flags) {
+    uint32_t mods = GHOSTTY_MODS_NONE;
+    if (flags & NSEventModifierFlagShift)  mods |= GHOSTTY_MODS_SHIFT;
+    if (flags & NSEventModifierFlagOption) mods |= GHOSTTY_MODS_ALT;
+    return (ghostty_input_mods_e)mods;
+}
+
+// Return true if the character is a control character that should NOT
+// be sent as text to Ghostty (Ghostty encodes these from keycodes).
+static bool isControlCharacter(unichar ch) {
+    return ch < 0x20 || ch == 0x7F;
+}
+
+// Return true if the character is in the macOS Private Use Area range
+// used for function/arrow keys.  These must never be sent as text.
+static bool isPUA(unichar ch) {
+    return ch >= 0xF700 && ch <= 0xF8FF;
+}
+
+// Get the unshifted codepoint for a key event using UCKeyTranslate.
+// This is more reliable than charactersIgnoringModifiers for non-Latin
+// keyboard layouts (e.g. Korean, Japanese, Dvorak-QWERTY).
+static uint32_t unshiftedCodepointFromEvent(NSEvent* event) {
+    // Try UCKeyTranslate with the current keyboard layout
+    TISInputSourceRef source = TISCopyCurrentKeyboardInputSource();
+    if (source) {
+        CFDataRef layoutData = (CFDataRef)TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData);
+        if (layoutData) {
+            const UCKeyboardLayout* keyboardLayout =
+                (const UCKeyboardLayout*)CFDataGetBytePtr(layoutData);
+            UInt32 deadKeyState = 0;
+            UniChar chars[4] = {};
+            UniCharCount length = 0;
+            OSStatus status = UCKeyTranslate(
+                keyboardLayout,
+                event.keyCode,
+                kUCKeyActionDisplay,
+                0,  // no modifiers — we want the unshifted character
+                LMGetKbdType(),
+                kUCKeyTranslateNoDeadKeysBit,
+                &deadKeyState,
+                4,
+                &length,
+                chars
+            );
+            CFRelease(source);
+            if (status == noErr && length > 0) {
+                unichar ch = chars[0];
+                // Only use if it's a printable, non-PUA character
+                if (ch >= 0x20 && !isPUA(ch)) {
+                    // Lowercase for consistency (UCKeyTranslate returns uppercase for some layouts)
+                    NSString* str = [[NSString stringWithCharacters:chars length:length] lowercaseString];
+                    if (str.length > 0) return (uint32_t)[str characterAtIndex:0];
+                }
+            }
+        } else {
+            CFRelease(source);
+        }
+    }
+
+    // Fallback: try ASCII-capable keyboard source
+    TISInputSourceRef asciiSource = TISCopyCurrentASCIICapableKeyboardInputSource();
+    if (asciiSource) {
+        CFDataRef layoutData = (CFDataRef)TISGetInputSourceProperty(asciiSource, kTISPropertyUnicodeKeyLayoutData);
+        if (layoutData) {
+            const UCKeyboardLayout* keyboardLayout =
+                (const UCKeyboardLayout*)CFDataGetBytePtr(layoutData);
+            UInt32 deadKeyState = 0;
+            UniChar chars[4] = {};
+            UniCharCount length = 0;
+            OSStatus status = UCKeyTranslate(
+                keyboardLayout,
+                event.keyCode,
+                kUCKeyActionDisplay,
+                0,
+                LMGetKbdType(),
+                kUCKeyTranslateNoDeadKeysBit,
+                &deadKeyState,
+                4,
+                &length,
+                chars
+            );
+            CFRelease(asciiSource);
+            if (status == noErr && length > 0) {
+                unichar ch = chars[0];
+                if (ch >= 0x20 && !isPUA(ch)) {
+                    return (uint32_t)ch;
+                }
+            }
+        } else {
+            CFRelease(asciiSource);
+        }
+    }
+
+    // Final fallback: use event's charactersIgnoringModifiers
+    NSString* unshifted = event.charactersIgnoringModifiers;
+    if (unshifted && unshifted.length > 0) {
+        unichar ch = [unshifted characterAtIndex:0];
+        if (!isPUA(ch)) return (uint32_t)ch;
+    }
+    return 0;
+}
+
+// Get the text to send for a key event.
+// For control-modified keys, strips the Ctrl modifier and returns the
+// base character so Ghostty's KeyEncoder can apply its own encoding.
+// Filters out PUA characters (arrows, function keys).
+static NSString* textForKeyEvent(NSEvent* event) {
+    NSString* chars = event.characters;
+    if (!chars || chars.length == 0) return nil;
+
+    if (chars.length == 1) {
+        unichar ch = [chars characterAtIndex:0];
+        NSEventModifierFlags flags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+
+        // Control characters: strip Ctrl and ask AppKit for the base character
+        // so Ghostty's KeyEncoder handles ctrl encoding (not us).
+        if (isControlCharacter(ch)) {
+            if (flags & NSEventModifierFlagControl) {
+                NSEventModifierFlags strippedMods = event.modifierFlags & ~NSEventModifierFlagControl;
+                NSString* baseChar = [event charactersByApplyingModifiers:strippedMods];
+                return (baseChar && baseChar.length > 0) ? baseChar : event.charactersIgnoringModifiers;
+            }
+            // AppKit bug: Shift+` can produce ESC (0x1B) instead of "~"
+            if (ch == 0x1B && (flags == NSEventModifierFlagShift)) {
+                NSString* ignoring = event.charactersIgnoringModifiers;
+                if (ignoring && [ignoring isEqualToString:@"`"]) {
+                    return @"~";
+                }
+            }
+        }
+
+        // Filter Private Use Area characters (function keys, arrows)
+        if (isPUA(ch)) return nil;
+    }
+
+    return chars;
+}
+
+// Return true if text should be sent to Ghostty.
+// Suppresses control characters (< 0x20 and 0x7F) — Ghostty encodes
+// these from keycodes, sending them as text would cause double-encoding.
+static bool shouldSendText(NSString* text) {
+    if (!text || text.length == 0) return false;
+    if (text.length == 1) {
+        return !isControlCharacter([text characterAtIndex:0]);
+    }
+    return true;
+}
+
+// Build a ghostty_input_key_s with translation mods and consumed_mods
+// properly set.  Used by performKeyEquivalent and keyUp for consistency.
+static ghostty_input_key_s buildKeyEvent(NSEvent* event, ghostty_surface_t surface) {
+    ghostty_input_key_s key = {};
+    key.action = GHOSTTY_ACTION_PRESS;
+    key.keycode = (uint32_t)event.keyCode;
+    key.mods = translateMods(event.modifierFlags);
+
+    // Translate mods to respect Ghostty config (e.g., macos-option-as-alt)
+    ghostty_input_mods_e translatedMods =
+        ghostty_surface_key_translation_mods(surface, key.mods);
+
+    // Reconstruct NSEventModifierFlags from translated Ghostty mods for consumed_mods
+    NSEventModifierFlags translatedFlags = 0;
+    if (translatedMods & GHOSTTY_MODS_SHIFT)  translatedFlags |= NSEventModifierFlagShift;
+    if (translatedMods & GHOSTTY_MODS_CTRL)   translatedFlags |= NSEventModifierFlagControl;
+    if (translatedMods & GHOSTTY_MODS_ALT)    translatedFlags |= NSEventModifierFlagOption;
+    if (translatedMods & GHOSTTY_MODS_SUPER)  translatedFlags |= NSEventModifierFlagCommand;
+
+    key.consumed_mods = consumedMods(translatedFlags);
+    key.text = nullptr;
+    key.composing = false;
+    key.unshifted_codepoint = unshiftedCodepointFromEvent(event);
+    return key;
 }
 
 // ---- Keyboard ----
@@ -246,37 +429,67 @@ static bool isAppReservedShortcut(NSEvent* event) {
 
 // Intercept Cmd+key combos before Electron's menu system eats them.
 // App-reserved shortcuts are always passed through to Electron.
+// Also checks Ghostty keybindings via ghostty_surface_key_is_binding.
 - (BOOL)performKeyEquivalent:(NSEvent*)event {
     if (!self.surface) return NO;
+    if (event.type != NSEventTypeKeyDown) return NO;
     if ([self.window firstResponder] != self) return NO;
+
+    // During IME composition, don't intercept unless Cmd is held
+    // (Cmd is never part of IME input sequences).
+    if ([self hasMarkedText] &&
+        !(event.modifierFlags & NSEventModifierFlagCommand)) {
+        return NO;
+    }
 
     // Let app-reserved shortcuts propagate to Electron's menu accelerators
     if (isAppReservedShortcut(event)) return NO;
 
-    if (event.modifierFlags & NSEventModifierFlagCommand) {
-        ghostty_input_key_s key = {};
-        key.action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS;
-        key.keycode = (uint32_t)event.keyCode;
-        key.composing = false;
-
-        ghostty_input_mods_e originalMods = translateMods(event.modifierFlags);
-        key.mods = ghostty_surface_key_translation_mods(self.surface, originalMods);
-
-        if (key.mods != originalMods) {
-            NSString* unshifted = event.charactersIgnoringModifiers;
-            if (unshifted && unshifted.length > 0) {
-                key.text = [unshifted UTF8String];
-                key.unshifted_codepoint = [unshifted characterAtIndex:0];
-            }
-        } else {
-            NSString* chars = event.characters;
-            if (chars && chars.length > 0) key.text = [chars UTF8String];
-            NSString* unshifted = event.charactersIgnoringModifiers;
-            if (unshifted && unshifted.length > 0) key.unshifted_codepoint = [unshifted characterAtIndex:0];
+    // Check if this key matches a Ghostty keybinding.
+    // This allows Ghostty bindings (e.g. Cmd+K for clear) to be routed
+    // correctly even before we check the Cmd modifier.
+    {
+        ghostty_input_key_s bindKey = buildKeyEvent(event, self.surface);
+        bindKey.action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS;
+        NSString* text = textForKeyEvent(event);
+        if (text && shouldSendText(text)) {
+            const char* ctext = [text UTF8String];
+            bindKey.text = ctext;
         }
+        ghostty_binding_flags_e flags = (ghostty_binding_flags_e)0;
+        if (ghostty_surface_key_is_binding(self.surface, bindKey, &flags)) {
+            bool isConsumed = (flags & GHOSTTY_BINDING_FLAGS_CONSUMED) != 0;
+            bool isAll = (flags & GHOSTTY_BINDING_FLAGS_ALL) != 0;
+            bool isPerformable = (flags & GHOSTTY_BINDING_FLAGS_PERFORMABLE) != 0;
 
-        bool handled = ghostty_surface_key(self.surface, key);
-        if (handled) return YES;
+            // If the binding is consumed and not meant for all/performable,
+            // let the menu system try first (so app shortcuts still work).
+            if (isConsumed && !isAll && !isPerformable) {
+                return NO;
+            }
+
+            // Route directly to keyDown for Ghostty to handle
+            [self keyDown:event];
+            return YES;
+        }
+    }
+
+    if (event.modifierFlags & NSEventModifierFlagCommand) {
+        ghostty_input_key_s key = buildKeyEvent(event, self.surface);
+        key.action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS;
+
+        NSString* text = textForKeyEvent(event);
+        if (text && shouldSendText(text)) {
+            const char* ctext = [text UTF8String];
+            key.text = ctext;
+            bool handled = ghostty_surface_key(self.surface, key);
+            if (handled) return YES;
+        } else {
+            key.text = nullptr;
+            key.consumed_mods = GHOSTTY_MODS_NONE;
+            bool handled = ghostty_surface_key(self.surface, key);
+            if (handled) return YES;
+        }
     }
 
     return NO;
@@ -285,9 +498,45 @@ static bool isAppReservedShortcut(NSEvent* event) {
 - (void)keyDown:(NSEvent*)event {
     if (!self.surface) return;
 
-    // If we have marked text (active IME composition), route through
-    // interpretKeyEvents so the input method can process the keystroke.
-    if ([self hasMarkedText]) {
+    NSEventModifierFlags flags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+    BOOL hadMarkedText = [self hasMarkedText];
+
+    // ---- Ctrl fast path ----
+    // For Ctrl-modified terminal input (Ctrl+C, Ctrl+D, etc.), bypass
+    // interpretKeyEvents and send directly to Ghostty.  This avoids IME
+    // interference and ensures reliable control character delivery.
+    if ((flags & NSEventModifierFlagControl) &&
+        !(flags & NSEventModifierFlagCommand) &&
+        !(flags & NSEventModifierFlagOption) &&
+        !hadMarkedText) {
+
+        ghostty_surface_set_focus(self.surface, true);
+
+        ghostty_input_key_s key = {};
+        key.action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS;
+        key.keycode = (uint32_t)event.keyCode;
+        key.mods = translateMods(event.modifierFlags);
+        key.consumed_mods = GHOSTTY_MODS_NONE;  // Ctrl is never consumed for text
+        key.composing = false;
+        key.unshifted_codepoint = unshiftedCodepointFromEvent(event);
+
+        // Use charactersIgnoringModifiers to get the base letter (e.g. "c" for Ctrl+C)
+        // instead of the pre-encoded control character ("\x03").
+        NSString* text = event.charactersIgnoringModifiers;
+        if (text && text.length > 0) {
+            key.text = [text UTF8String];
+        }
+
+        ghostty_surface_key(self.surface, key);
+        return;
+    }
+
+    // ---- IME path: route through interpretKeyEvents ----
+    // Only use interpretKeyEvents when IME composition is active.
+    // For normal input, we compute text directly from the event —
+    // interpretKeyEvents can interfere with non-IME text delivery
+    // in an Electron/NSView context.
+    if (hadMarkedText) {
         [self.keyTextAccumulator removeAllObjects];
         [self interpretKeyEvents:@[event]];
 
@@ -295,39 +544,61 @@ static bool isAppReservedShortcut(NSEvent* event) {
         key.action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS;
         key.keycode = (uint32_t)event.keyCode;
         key.composing = [self hasMarkedText];
-        key.mods = ghostty_surface_key_translation_mods(self.surface, translateMods(event.modifierFlags));
+        key.mods = translateMods(event.modifierFlags);
+        key.consumed_mods = GHOSTTY_MODS_NONE;
+        key.unshifted_codepoint = unshiftedCodepointFromEvent(event);
 
         if (self.keyTextAccumulator.count > 0) {
             NSString* accum = [self.keyTextAccumulator componentsJoinedByString:@""];
-            key.text = [accum UTF8String];
+            if (accum.length > 0) {
+                key.text = [accum UTF8String];
+                if (!key.composing) {
+                    key.consumed_mods = consumedMods(event.modifierFlags);
+                }
+            }
         }
-        NSString* unshifted = event.charactersIgnoringModifiers;
-        if (unshifted && unshifted.length > 0) key.unshifted_codepoint = [unshifted characterAtIndex:0];
 
         ghostty_surface_key(self.surface, key);
         return;
     }
 
-    // Normal path: send key directly to Ghostty
+    // ---- Normal path: send key directly to Ghostty ----
+
+    ghostty_input_mods_e originalMods = translateMods(event.modifierFlags);
+    ghostty_input_mods_e translatedMods =
+        ghostty_surface_key_translation_mods(self.surface, originalMods);
+
     ghostty_input_key_s key = {};
     key.action = event.isARepeat ? GHOSTTY_ACTION_REPEAT : GHOSTTY_ACTION_PRESS;
     key.keycode = (uint32_t)event.keyCode;
     key.composing = false;
+    key.unshifted_codepoint = unshiftedCodepointFromEvent(event);
 
-    ghostty_input_mods_e originalMods = translateMods(event.modifierFlags);
-    key.mods = ghostty_surface_key_translation_mods(self.surface, originalMods);
-
-    if (key.mods != originalMods) {
-        NSString* unshifted = event.charactersIgnoringModifiers;
-        if (unshifted && unshifted.length > 0) {
-            key.text = [unshifted UTF8String];
-            key.unshifted_codepoint = [unshifted characterAtIndex:0];
+    if (translatedMods != originalMods) {
+        // Mods were translated (e.g. Option treated as Alt via macos-option-as-alt).
+        // Use charactersIgnoringModifiers for text since the original characters
+        // would include the Option-modified glyph.
+        key.mods = translatedMods;
+        NSString* text = event.charactersIgnoringModifiers;
+        if (text && text.length > 0 && !isPUA([text characterAtIndex:0])) {
+            key.text = [text UTF8String];
+            // Only Shift can be consumed here (Option was stripped by translation)
+            key.consumed_mods = (translatedMods & GHOSTTY_MODS_SHIFT)
+                ? GHOSTTY_MODS_SHIFT : GHOSTTY_MODS_NONE;
+        } else {
+            key.consumed_mods = GHOSTTY_MODS_NONE;
         }
     } else {
-        NSString* chars = event.characters;
-        if (chars && chars.length > 0) key.text = [chars UTF8String];
-        NSString* unshifted = event.charactersIgnoringModifiers;
-        if (unshifted && unshifted.length > 0) key.unshifted_codepoint = [unshifted characterAtIndex:0];
+        // No mod translation — use textForKeyEvent for proper handling
+        // of control characters, PUA filtering, etc.
+        key.mods = originalMods;
+        NSString* text = textForKeyEvent(event);
+        if (text && shouldSendText(text)) {
+            key.text = [text UTF8String];
+            key.consumed_mods = consumedMods(event.modifierFlags);
+        } else {
+            key.consumed_mods = GHOSTTY_MODS_NONE;
+        }
     }
 
     ghostty_surface_key(self.surface, key);
@@ -335,21 +606,25 @@ static bool isAppReservedShortcut(NSEvent* event) {
 
 - (void)keyUp:(NSEvent*)event {
     if (!self.surface) return;
-    ghostty_input_key_s key = {};
+
+    // Use buildKeyEvent for consistent translation mods between PRESS and RELEASE
+    ghostty_input_key_s key = buildKeyEvent(event, self.surface);
     key.action = GHOSTTY_ACTION_RELEASE;
-    key.mods = translateMods(event.modifierFlags);
-    key.keycode = (uint32_t)event.keyCode;
+    key.text = nullptr;
+    key.composing = false;
+    key.consumed_mods = GHOSTTY_MODS_NONE;
     ghostty_surface_key(self.surface, key);
 }
 
 - (void)flagsChanged:(NSEvent*)event {
     if (!self.surface) return;
     ghostty_input_key_s key = {};
-    key.action = (event.modifierFlags & (NSEventModifierFlagShift | NSEventModifierFlagControl |
-                  NSEventModifierFlagOption | NSEventModifierFlagCommand))
-                  ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE;
+    key.action = GHOSTTY_ACTION_PRESS;  // always PRESS for modifier events
     key.mods = translateMods(event.modifierFlags);
     key.keycode = (uint32_t)event.keyCode;
+    key.consumed_mods = GHOSTTY_MODS_NONE;
+    key.text = nullptr;
+    key.composing = false;
     ghostty_surface_key(self.surface, key);
 }
 
@@ -717,6 +992,40 @@ static Napi::Value InitGhostty(const Napi::CallbackInfo& info) {
         Napi::TypeError::New(env, "Expected Buffer (native window handle)").ThrowAsJavaScriptException();
         return env.Undefined();
     }
+
+    // Ensure TUI apps get colors
+    unsetenv("NO_COLOR");
+
+    // Set GHOSTTY_RESOURCES_DIR so Ghostty can find terminfo (xterm-ghostty),
+    // shell integration scripts, and themes.  Without this, programs won't
+    // know the terminal's capabilities and may produce garbled output.
+    if (!getenv("GHOSTTY_RESOURCES_DIR")) {
+        // Check for system Ghostty installation
+        NSString* ghosttyAppResources = @"/Applications/Ghostty.app/Contents/Resources/ghostty";
+        if ([[NSFileManager defaultManager] fileExistsAtPath:ghosttyAppResources]) {
+            setenv("GHOSTTY_RESOURCES_DIR", [ghosttyAppResources UTF8String], 0);
+        }
+    }
+
+    // Set TERM so programs know the terminal capabilities.
+    // Ghostty sets this internally when spawning PTYs, but the process env
+    // should also have it for child processes that inherit the environment.
+    if (!getenv("TERM") || strcmp(getenv("TERM"), "xterm-ghostty") != 0) {
+        // Only set if the terminfo entry exists
+        NSString* ghosttyResources = [NSString stringWithUTF8String:getenv("GHOSTTY_RESOURCES_DIR") ?: ""];
+        NSString* terminfoPath = [ghosttyResources stringByAppendingPathComponent:@"terminfo"];
+        if ([[NSFileManager defaultManager] fileExistsAtPath:terminfoPath]) {
+            setenv("TERM", "xterm-ghostty", 1);
+            // Also set TERMINFO so ncurses can find the entry
+            const char* existingTerminfo = getenv("TERMINFO");
+            if (!existingTerminfo || strlen(existingTerminfo) == 0) {
+                setenv("TERMINFO", [terminfoPath UTF8String], 0);
+            }
+        }
+    }
+
+    // Set TERM_PROGRAM for shell integration detection
+    setenv("TERM_PROGRAM", "ghostty", 0);
 
     // Initialize Ghostty
     ghostty_init(0, nullptr);
