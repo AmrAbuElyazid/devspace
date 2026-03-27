@@ -17,6 +17,7 @@
           "-ObjC",
           "-framework Metal",
           "-framework AppKit",
+          "-framework Carbon",
           "-framework CoreText",
           "-framework QuartzCore",
           "-framework CoreGraphics",
