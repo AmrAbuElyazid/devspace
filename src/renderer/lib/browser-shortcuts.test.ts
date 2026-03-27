@@ -10,6 +10,7 @@ test("returns the focused browser pane via the active group tab", () => {
         name: "Workspace 1",
         root: { type: "leaf", groupId: "group-1" },
         focusedGroupId: "group-1",
+        zoomedGroupId: null,
         lastActiveAt: Date.now(),
       },
     ],
@@ -51,6 +52,7 @@ test("falls back to the first group when no group is focused", () => {
         name: "Workspace 1",
         root: { type: "leaf", groupId: "group-1" },
         focusedGroupId: null,
+        zoomedGroupId: null,
         lastActiveAt: Date.now(),
       },
     ],
@@ -79,6 +81,7 @@ test("split shortcuts fall back to the first group when no group is focused", ()
     id: "ws-1",
     name: "Workspace 1",
     focusedGroupId: null,
+    zoomedGroupId: null,
     lastActiveAt: Date.now(),
     root: {
       type: "branch",

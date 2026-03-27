@@ -95,6 +95,11 @@ export function registerIpcHandlers(
     terminalManager.blurSurfaces();
   });
 
+  safeHandle("terminal:sendBindingAction", (_event, surfaceId: unknown, action: unknown) => {
+    if (typeof surfaceId !== "string" || typeof action !== "string") return false;
+    return terminalManager.sendBindingAction(surfaceId, action);
+  });
+
   safeHandle("terminal:setBounds", (_event, surfaceId: unknown, bounds: unknown) => {
     if (typeof surfaceId !== "string" || typeof bounds !== "object" || bounds === null) return;
     const b = bounds as Partial<{ x: number; y: number; width: number; height: number }>;
@@ -190,6 +195,10 @@ export function registerIpcHandlers(
 
   terminalManager.onSurfaceClosed((surfaceId) => {
     mainWindow.webContents.send("terminal:closed", surfaceId);
+  });
+
+  terminalManager.onSurfaceFocused((surfaceId) => {
+    mainWindow.webContents.send("terminal:focused", surfaceId);
   });
 
   // --- Window handlers ---

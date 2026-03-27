@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback, type KeyboardEvent } from "react";
 import { ArrowLeft, ArrowRight, RotateCw, Search, X } from "lucide-react";
+import { resolveDisplayString } from "../../shared/shortcuts";
 import {
   buildSearchUrl,
   getAddressBarSubmitValue,
@@ -296,7 +297,7 @@ export default function BrowserPane({
   return (
     <div className="browser-pane-shell">
       <div className="browser-toolbar flex items-center gap-1 shrink-0 px-1">
-        <Tooltip content="Back" shortcut="⌘[">
+        <Tooltip content="Back" shortcut={resolveDisplayString("browser-back")}>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -308,7 +309,7 @@ export default function BrowserPane({
           </Button>
         </Tooltip>
 
-        <Tooltip content="Forward" shortcut="⌘]">
+        <Tooltip content="Forward" shortcut={resolveDisplayString("browser-forward")}>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -320,7 +321,10 @@ export default function BrowserPane({
           </Button>
         </Tooltip>
 
-        <Tooltip content={isLoading ? "Stop" : "Reload"} shortcut="⌘R">
+        <Tooltip
+          content={isLoading ? "Stop" : "Reload"}
+          shortcut={resolveDisplayString("browser-reload")}
+        >
           <Button
             variant="ghost"
             size="icon-sm"

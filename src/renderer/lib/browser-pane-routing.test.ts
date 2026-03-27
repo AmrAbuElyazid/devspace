@@ -15,6 +15,7 @@ test("findWorkspaceIdForPane returns the owning workspace for a background pane"
       name: "Workspace 1",
       root: { type: "leaf", groupId: "group-1" },
       focusedGroupId: "group-1",
+      zoomedGroupId: null,
       lastActiveAt: Date.now(),
     },
     {
@@ -30,6 +31,7 @@ test("findWorkspaceIdForPane returns the owning workspace for a background pane"
         ],
       },
       focusedGroupId: "group-2",
+      zoomedGroupId: null,
       lastActiveAt: Date.now(),
     },
   ];

@@ -5,6 +5,9 @@ export interface TerminalBounds {
   height: number;
 }
 
+export type { NativeBridgeShortcut } from "../shared/shortcuts";
+import type { NativeBridgeShortcut } from "../shared/shortcuts";
+
 export interface GhosttyBridge {
   init(windowHandle: Buffer): void;
   createSurface(surfaceId: string): void;
@@ -15,8 +18,10 @@ export interface GhosttyBridge {
   resizeSurface(surfaceId: string, x: number, y: number, width: number, height: number): void;
   setVisibleSurfaces(surfaceIds: string[]): void;
   blurSurfaces(): void;
+  sendBindingAction(surfaceId: string, action: string): boolean;
+  setReservedShortcuts(shortcuts: NativeBridgeShortcut[]): void;
   setCallback(
-    event: "title-changed" | "surface-closed" | "pwd-changed" | "notification",
+    event: "title-changed" | "surface-closed" | "surface-focused" | "pwd-changed" | "notification",
     callback: (...args: unknown[]) => void,
   ): void;
 }

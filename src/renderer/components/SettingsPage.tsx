@@ -1,23 +1,18 @@
-import { useState } from "react";
-import { X, Terminal } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { X, Terminal, RotateCcw } from "lucide-react";
 import { useSettingsStore } from "../store/settings-store";
-import { Kbd } from "./ui/kbd";
 import { Button } from "./ui/button";
+import { ShortcutRecorder } from "./ui/shortcut-recorder";
 import BrowserImportPanel from "./browser/BrowserImportPanel";
-
-const shortcuts = [
-  { keys: "⌘N", action: "New workspace" },
-  { keys: "⌘T", action: "New tab" },
-  { keys: "⌘W", action: "Close tab" },
-  { keys: "⌘B", action: "Toggle sidebar" },
-  { keys: "⌘,", action: "Settings" },
-  { keys: "⌘D", action: "Split right" },
-  { keys: "⌘⇧D", action: "Split down" },
-  { keys: "⌘1-9", action: "Switch tab" },
-  { keys: "⌃1-9", action: "Switch workspace" },
-
-  { keys: "Esc", action: "Close settings" },
-];
+import {
+  SHORTCUT_CATEGORIES,
+  getVisibleShortcutsForCategory,
+  getNumberedGroupDisplayString,
+  resolveShortcut,
+  findConflict,
+  type ShortcutAction,
+  type StoredShortcut,
+} from "../../shared/shortcuts";
 
 export default function SettingsPage() {
   const {
@@ -138,33 +133,171 @@ export default function SettingsPage() {
         </section>
 
         {/* Keyboard Shortcuts */}
-        <section>
-          <SectionTitle>Keyboard Shortcuts</SectionTitle>
-          <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--border)" }}>
-            {shortcuts.map((s, i) => (
-              <div
-                key={s.keys}
-                className="flex items-center justify-between px-4 py-2.5"
-                style={{
-                  background: "var(--background)",
-                  borderBottom:
-                    i < shortcuts.length - 1 ? "1px solid var(--border-faint)" : undefined,
-                }}
-              >
-                <span className="text-sm" style={{ color: "var(--foreground-muted)" }}>
-                  {s.action}
-                </span>
-                <Kbd>{s.keys}</Kbd>
-              </div>
-            ))}
-          </div>
-        </section>
+        <ShortcutSettingsSection />
       </div>
     </div>
   );
 }
 
 // --- Sub-components (small, tightly coupled to this page) ---
+
+// ── Keyboard Shortcuts Section ───────────────────────────────────────────
+
+function ShortcutSettingsSection() {
+  const [overrides, setOverrides] = useState<Record<string, StoredShortcut>>({});
+  const [filter, setFilter] = useState("");
+
+  // Load overrides from main process on mount
+  useEffect(() => {
+    void window.api.shortcuts.getAll().then(setOverrides);
+    const unsub = window.api.shortcuts.onChanged(() => {
+      void window.api.shortcuts.getAll().then(setOverrides);
+    });
+    return unsub;
+  }, []);
+
+  const overridesMap = new Map(Object.entries(overrides)) as Map<ShortcutAction, StoredShortcut>;
+
+  const handleRecord = useCallback((action: ShortcutAction, shortcut: StoredShortcut) => {
+    void window.api.shortcuts.set(action, shortcut);
+    setOverrides((prev) => ({ ...prev, [action]: shortcut }));
+  }, []);
+
+  const handleReset = useCallback((action: ShortcutAction) => {
+    void window.api.shortcuts.reset(action);
+    setOverrides((prev) => {
+      const next = { ...prev };
+      delete next[action];
+      return next;
+    });
+  }, []);
+
+  const handleResetAll = useCallback(() => {
+    void window.api.shortcuts.resetAll();
+    setOverrides({});
+  }, []);
+
+  const hasAnyOverrides = Object.keys(overrides).length > 0;
+  const filterLower = filter.toLowerCase();
+
+  return (
+    <section>
+      <div className="flex items-center justify-between mb-4">
+        <SectionTitle>Keyboard Shortcuts</SectionTitle>
+        {hasAnyOverrides && (
+          <button
+            className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded"
+            style={{
+              color: "var(--muted-foreground)",
+              background: "var(--surface-hover)",
+            }}
+            onClick={handleResetAll}
+          >
+            <RotateCcw size={10} />
+            Reset All
+          </button>
+        )}
+      </div>
+
+      {/* Search filter */}
+      <input
+        type="text"
+        placeholder="Filter shortcuts..."
+        className="w-full mb-4 px-3 py-1.5 text-sm rounded-md"
+        style={{
+          background: "var(--background)",
+          border: "1px solid var(--border)",
+          color: "var(--foreground)",
+          outline: "none",
+        }}
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+      />
+
+      {SHORTCUT_CATEGORIES.map((cat) => {
+        const defs = getVisibleShortcutsForCategory(cat.id);
+        const filteredDefs = filterLower
+          ? defs.filter((d) => d.label.toLowerCase().includes(filterLower))
+          : defs;
+
+        if (filteredDefs.length === 0) return null;
+
+        // Check if this category has numbered shortcuts (show as summary row)
+        const numberedBase =
+          cat.id === "workspaces" ? "select-workspace" : cat.id === "tabs" ? "select-tab" : null;
+
+        return (
+          <div key={cat.id} className="mb-5">
+            <h3
+              className="text-[11px] font-medium uppercase tracking-wide mb-2"
+              style={{ color: "var(--foreground-faint)" }}
+            >
+              {cat.label}
+            </h3>
+            <div
+              className="rounded-lg overflow-hidden"
+              style={{ border: "1px solid var(--border)" }}
+            >
+              {filteredDefs.map((def, i) => {
+                const current = resolveShortcut(def.action, overridesMap);
+                const conflict = findConflict(current, def.action, overridesMap);
+                const conflictText = conflict ? `Conflicts with ${conflict.label}` : undefined;
+
+                return (
+                  <div
+                    key={def.action}
+                    className="flex items-center justify-between px-4 py-2"
+                    style={{
+                      background: "var(--background)",
+                      borderBottom:
+                        i < filteredDefs.length - 1 || numberedBase
+                          ? "1px solid var(--border-faint)"
+                          : undefined,
+                    }}
+                  >
+                    <span className="text-sm" style={{ color: "var(--foreground-muted)" }}>
+                      {def.label}
+                    </span>
+                    <ShortcutRecorder
+                      current={current}
+                      defaultShortcut={def.defaultShortcut}
+                      onRecord={(s) => handleRecord(def.action, s)}
+                      onReset={() => handleReset(def.action)}
+                      conflict={conflictText}
+                    />
+                  </div>
+                );
+              })}
+
+              {/* Numbered shortcut summary row (e.g. "Select Workspace 1...9 ⌘1...9") */}
+              {numberedBase &&
+                (!filterLower || `select ${cat.id.slice(0, -1)} 1-9`.includes(filterLower)) && (
+                  <div
+                    className="flex items-center justify-between px-4 py-2"
+                    style={{ background: "var(--background)" }}
+                  >
+                    <span className="text-sm" style={{ color: "var(--foreground-muted)" }}>
+                      Select {cat.id === "workspaces" ? "Workspace" : "Tab"} 1...9
+                    </span>
+                    <span
+                      className="text-[10px] font-medium px-2 py-0.5 rounded"
+                      style={{
+                        color: "var(--foreground)",
+                        background: "var(--surface)",
+                        border: "1px solid var(--border)",
+                      }}
+                    >
+                      {getNumberedGroupDisplayString(numberedBase, overridesMap)}
+                    </span>
+                  </div>
+                )}
+            </div>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (

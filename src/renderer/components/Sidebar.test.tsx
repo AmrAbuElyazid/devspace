@@ -12,6 +12,7 @@ beforeEach(() => {
         name: "Workspace One",
         root: { type: "leaf", groupId: "group-1" },
         focusedGroupId: "group-1",
+        zoomedGroupId: null,
         lastActiveAt: Date.now(),
       },
     ],
