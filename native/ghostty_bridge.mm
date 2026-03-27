@@ -1023,6 +1023,38 @@ static bool read_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard, voi
 
     NSPasteboard* pb = [NSPasteboard generalPasteboard];
     NSString* str = [pb stringForType:NSPasteboardTypeString];
+
+    // If no text on the clipboard, check for image data.
+    // Save the image to a temp file and paste the file path instead (cmux pattern).
+    if (!str) {
+        NSData* imageData = [pb dataForType:NSPasteboardTypePNG];
+        BOOL needsConversion = NO;
+        if (!imageData) {
+            imageData = [pb dataForType:NSPasteboardTypeTIFF];
+            needsConversion = YES;
+        }
+        if (imageData) {
+            // Convert TIFF → PNG
+            if (needsConversion) {
+                NSBitmapImageRep* rep = [NSBitmapImageRep imageRepWithData:imageData];
+                if (rep) {
+                    imageData = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+                }
+            }
+            if (imageData) {
+                NSString* tempDir = NSTemporaryDirectory();
+                NSString* filename = [NSString stringWithFormat:@"devspace-paste-%@.png",
+                    [[NSUUID UUID] UUIDString]];
+                NSString* tempPath = [tempDir stringByAppendingPathComponent:filename];
+                if ([imageData writeToFile:tempPath atomically:YES]) {
+                    // Shell-escape the path and use it as paste text
+                    NSString* escaped = [tempPath stringByReplacingOccurrencesOfString:@"'" withString:@"'\\''"];
+                    str = [NSString stringWithFormat:@"'%@'", escaped];
+                }
+            }
+        }
+    }
+
     if (str && view && view.surface) {
         ghostty_surface_complete_clipboard_request(view.surface, [str UTF8String], context, false);
     }
@@ -1230,6 +1262,16 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
 
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
 
+    // Optionally accept a second argument (options object with `cwd`)
+    NSString* workingDirectory = nil;
+    if (info.Length() > 1 && info[1].IsObject()) {
+        Napi::Object opts = info[1].As<Napi::Object>();
+        Napi::Value cwdVal = opts.Get("cwd");
+        if (cwdVal.IsString()) {
+            workingDirectory = [NSString stringWithUTF8String:cwdVal.As<Napi::String>().Utf8Value().c_str()];
+        }
+    }
+
     // Idempotent: if a surface with this ID already exists, destroy it first.
     // This prevents leaked NSViews when React remounts a TerminalPane component
     // (e.g. during split operations where the parent tree structure changes).
@@ -1263,6 +1305,10 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
     surface_cfg.scale_factor = [[g_state.window screen] backingScaleFactor];
     surface_cfg.font_size = 0;
     surface_cfg.context = GHOSTTY_SURFACE_CONTEXT_TAB;
+
+    if (workingDirectory) {
+        surface_cfg.working_directory = [workingDirectory UTF8String];
+    }
 
     ghostty_surface_t surface = ghostty_surface_new(g_state.app, &surface_cfg);
     if (!surface) {

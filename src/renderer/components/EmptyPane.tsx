@@ -22,6 +22,18 @@ export default function EmptyPane({ paneId, workspaceId, groupId }: EmptyPanePro
   const closeGroup = useWorkspaceStore((s) => s.closeGroup);
   const group = useWorkspaceStore((s) => s.paneGroups[groupId]);
   const wsRoot = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.root);
+  const focusedCwd = useWorkspaceStore((s) => {
+    const ws = s.workspaces.find((w) => w.id === workspaceId);
+    if (!ws?.focusedGroupId) return undefined;
+    const g = s.paneGroups[ws.focusedGroupId];
+    if (!g) return undefined;
+    const tab = g.tabs.find((t) => t.id === g.activeTabId);
+    if (!tab) return undefined;
+    const p = s.panes[tab.paneId];
+    return p?.type === "terminal"
+      ? ((p.config as Record<string, unknown>)?.cwd as string | undefined)
+      : undefined;
+  });
 
   const handleClose = () => {
     const tab = group?.tabs.find((t) => t.paneId === paneId);
@@ -44,7 +56,13 @@ export default function EmptyPane({ paneId, workspaceId, groupId }: EmptyPanePro
           <button
             key={type}
             type="button"
-            onClick={() => changePaneType(paneId, type, defaultConfig)}
+            onClick={() => {
+              const config =
+                type === "terminal" && focusedCwd
+                  ? { ...defaultConfig, cwd: focusedCwd }
+                  : defaultConfig;
+              changePaneType(paneId, type, config);
+            }}
             className={`empty-pane-option empty-pane-option-${type}`}
           >
             <Icon size={14} />

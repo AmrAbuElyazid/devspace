@@ -227,7 +227,7 @@ export default function GroupTabBar({
             </button>
             <button
               className="tabbar-ctl-btn no-drag"
-              onClick={() => addWorkspace()}
+              onClick={() => addWorkspace(undefined, null, "main", defaultPaneType)}
               title={`New workspace (${resolveDisplayString("new-workspace")})`}
             >
               <Plus size={13} />

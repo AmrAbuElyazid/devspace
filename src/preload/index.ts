@@ -69,6 +69,19 @@ const bridge: DevspaceBridge = {
         ipcRenderer.removeListener("terminal:focused", listener);
       };
     },
+    onPwdChanged: (callback) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        surfaceId: string,
+        pwd: string,
+      ): void => {
+        callback(surfaceId, pwd);
+      };
+      ipcRenderer.on("terminal:pwdChanged", listener);
+      return () => {
+        ipcRenderer.removeListener("terminal:pwdChanged", listener);
+      };
+    },
   },
 
   window: {

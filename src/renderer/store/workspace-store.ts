@@ -6,6 +6,7 @@ import type {
   Pane,
   PaneType,
   PaneConfig,
+  TerminalConfig,
   SplitNode,
   SplitDirection,
   PaneGroup,
@@ -241,13 +242,66 @@ const titleForType: Record<PaneType, string> = {
   empty: "Empty",
 };
 
-function createEmptyPane(type?: PaneType): Pane {
+/**
+ * Find the CWD of the nearest terminal in a group or workspace.
+ * Lookup order:
+ *  1. Active tab in the specified group (if it's a terminal)
+ *  2. Any terminal tab in the specified group
+ *  3. Focused group's active terminal in the workspace (cross-group fallback)
+ *  4. undefined (no terminal context → defaults to $HOME)
+ */
+function findNearestTerminalCwd(
+  panes: Record<string, Pane>,
+  paneGroups: Record<string, PaneGroup>,
+  groupId: string | undefined,
+  workspace: Workspace | undefined,
+): string | undefined {
+  // Helper to extract CWD from a pane
+  const getCwd = (paneId: string): string | undefined => {
+    const pane = panes[paneId];
+    if (pane?.type !== "terminal") return undefined;
+    return (pane.config as TerminalConfig).cwd || undefined;
+  };
+
+  // 1. Active tab in the specified group
+  if (groupId) {
+    const group = paneGroups[groupId];
+    if (group) {
+      const activeTab = group.tabs.find((t) => t.id === group.activeTabId);
+      if (activeTab) {
+        const cwd = getCwd(activeTab.paneId);
+        if (cwd) return cwd;
+      }
+      // 2. Any terminal tab in the same group
+      for (const tab of group.tabs) {
+        const cwd = getCwd(tab.paneId);
+        if (cwd) return cwd;
+      }
+    }
+  }
+
+  // 3. Focused group's active terminal (cross-group fallback)
+  if (workspace && workspace.focusedGroupId && workspace.focusedGroupId !== groupId) {
+    const focusedGroup = paneGroups[workspace.focusedGroupId];
+    if (focusedGroup) {
+      const activeTab = focusedGroup.tabs.find((t) => t.id === focusedGroup.activeTabId);
+      if (activeTab) {
+        const cwd = getCwd(activeTab.paneId);
+        if (cwd) return cwd;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function createEmptyPane(type?: PaneType, configOverride?: Partial<PaneConfig>): Pane {
   const paneType = type ?? "empty";
   return {
     id: nanoid(),
     type: paneType,
     title: titleForType[paneType] ?? "Empty",
-    config: {},
+    config: configOverride ?? {},
   };
 }
 
@@ -345,6 +399,7 @@ interface WorkspaceState {
     name?: string,
     parentFolderId?: string | null,
     container?: SidebarContainer,
+    defaultType?: PaneType,
   ) => string;
   removeWorkspace: (id: string) => void;
   renameWorkspace: (id: string, name: string) => void;
@@ -417,7 +472,12 @@ interface WorkspaceState {
   openEditorTab: (folderPath: string) => void;
 
   // Split operations
-  splitGroup: (workspaceId: string, groupId: string, direction: SplitDirection) => void;
+  splitGroup: (
+    workspaceId: string,
+    groupId: string,
+    direction: SplitDirection,
+    defaultType?: PaneType,
+  ) => void;
   closeGroup: (workspaceId: string, groupId: string) => void;
   updateSplitSizes: (workspaceId: string, nodePath: number[], sizes: number[]) => void;
 
@@ -681,8 +741,21 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   // Workspace CRUD
   // -------------------------------------------------------------------
 
-  addWorkspace: (name, parentFolderId = null, container = "main") => {
-    const pane = createEmptyPane();
+  addWorkspace: (name, parentFolderId = null, container = "main", defaultType) => {
+    // Inherit CWD from the currently focused terminal in the active workspace
+    let inheritedConfig: Partial<PaneConfig> | undefined;
+    if (defaultType === "terminal") {
+      const currentState = get();
+      const activeWs = currentState.workspaces.find((w) => w.id === currentState.activeWorkspaceId);
+      const cwd = findNearestTerminalCwd(
+        currentState.panes,
+        currentState.paneGroups,
+        activeWs?.focusedGroupId ?? undefined,
+        activeWs,
+      );
+      if (cwd) inheritedConfig = { cwd };
+    }
+    const pane = createEmptyPane(defaultType, inheritedConfig);
     const group = createPaneGroup(pane);
     const wsName = name ?? nextWorkspaceName(get().workspaces);
     const ws = createDefaultWorkspace(wsName, group);
@@ -864,13 +937,20 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   // -------------------------------------------------------------------
 
   addGroupTab(workspaceId, groupId, defaultType) {
-    const { paneGroups, panes, workspaces } = get();
+    const state = get();
+    const { paneGroups, panes, workspaces } = state;
     const workspace = workspaces.find((w) => w.id === workspaceId);
     if (!workspace || !treeHasGroup(workspace.root, groupId)) return;
     const group = paneGroups[groupId];
     if (!group) return;
 
-    const pane = createEmptyPane(defaultType);
+    // Inherit CWD from the nearest terminal (same group → focused group → $HOME)
+    let inheritedConfig: Partial<PaneConfig> | undefined;
+    if (defaultType === "terminal") {
+      const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, workspace);
+      if (cwd) inheritedConfig = { cwd };
+    }
+    const pane = createEmptyPane(defaultType, inheritedConfig);
     const newTab: PaneGroupTab = { id: nanoid(), paneId: pane.id };
 
     set({
@@ -1363,13 +1443,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   // Split operations
   // -------------------------------------------------------------------
 
-  splitGroup(workspaceId, groupId, direction) {
+  splitGroup(workspaceId, groupId, direction, defaultType) {
     const { workspaces, panes, paneGroups } = get();
     const ws = workspaces.find((w) => w.id === workspaceId);
     if (!ws) return;
     if (!treeHasGroup(ws.root, groupId)) return;
 
-    const newPane = createEmptyPane();
+    // Inherit CWD from the pane being split
+    let inheritedConfig: Partial<PaneConfig> | undefined;
+    if (defaultType === "terminal") {
+      const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, ws);
+      if (cwd) inheritedConfig = { cwd };
+    }
+    const newPane = createEmptyPane(defaultType, inheritedConfig);
     const newGroup = createPaneGroup(newPane);
 
     const replacement: SplitNode = {

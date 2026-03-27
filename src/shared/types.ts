@@ -43,6 +43,7 @@ export interface DevspaceBridge {
     onTitleChanged: (callback: (surfaceId: string, title: string) => void) => () => void;
     onClosed: (callback: (surfaceId: string) => void) => () => void;
     onFocused: (callback: (surfaceId: string) => void) => () => void;
+    onPwdChanged: (callback: (surfaceId: string, pwd: string) => void) => () => void;
   };
   window: {
     minimize: () => void;

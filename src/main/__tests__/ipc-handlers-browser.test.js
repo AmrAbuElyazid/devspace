@@ -60,6 +60,7 @@ registerIpcHandlers(
     onTitleChanged: () => {},
     onSurfaceClosed: () => {},
     onSurfaceFocused: () => {},
+    onPwdChanged: () => {},
     destroyAll: () => {},
   },
   {

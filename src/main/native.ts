@@ -10,7 +10,7 @@ import type { NativeBridgeShortcut } from "../shared/shortcuts";
 
 export interface GhosttyBridge {
   init(windowHandle: Buffer): void;
-  createSurface(surfaceId: string): void;
+  createSurface(surfaceId: string, options?: { cwd?: string }): void;
   destroySurface(surfaceId: string): void;
   showSurface(surfaceId: string): void;
   hideSurface(surfaceId: string): void;

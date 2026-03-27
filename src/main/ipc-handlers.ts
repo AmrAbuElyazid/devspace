@@ -60,9 +60,12 @@ export function registerIpcHandlers(
 
   // --- Terminal handlers ---
 
-  safeHandle("terminal:create", (_event, surfaceId: unknown, _options: unknown) => {
+  safeHandle("terminal:create", (_event, surfaceId: unknown, options: unknown) => {
     if (typeof surfaceId !== "string") return;
-    terminalManager.createSurface(surfaceId);
+    const opts =
+      typeof options === "object" && options !== null ? (options as Record<string, unknown>) : {};
+    const cwd = typeof opts["cwd"] === "string" ? opts["cwd"] : undefined;
+    terminalManager.createSurface(surfaceId, cwd ? { cwd } : undefined);
   });
 
   safeHandle("terminal:destroy", (_event, surfaceId: unknown) => {
@@ -199,6 +202,10 @@ export function registerIpcHandlers(
 
   terminalManager.onSurfaceFocused((surfaceId) => {
     mainWindow.webContents.send("terminal:focused", surfaceId);
+  });
+
+  terminalManager.onPwdChanged((surfaceId, pwd) => {
+    mainWindow.webContents.send("terminal:pwdChanged", surfaceId, pwd);
   });
 
   // --- Window handlers ---

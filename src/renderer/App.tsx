@@ -8,6 +8,7 @@ import { useDragAndDrop, DragContext } from "./hooks/useDragAndDrop";
 import { useModifierHeld, type HeldModifier } from "./hooks/useModifierHeld";
 import {
   getActiveFocusedBrowserPane,
+  getActiveFocusedWebViewPane,
   getSplitShortcutTargetGroupId,
 } from "./lib/browser-shortcuts";
 import { findWorkspaceIdForPane } from "./lib/browser-pane-routing";
@@ -120,6 +121,17 @@ export default function App() {
     });
   }, []);
 
+  // Track CWD changes from terminals so new tabs can inherit the directory.
+  useEffect(() => {
+    return window.api.terminal.onPwdChanged((surfaceId, pwd) => {
+      const state = useWorkspaceStore.getState();
+      const pane = state.panes[surfaceId];
+      if (pane?.type === "terminal") {
+        state.updatePaneConfig(surfaceId, { cwd: pwd });
+      }
+    });
+  }, []);
+
   // When a native GhosttyView receives focus (user clicks on a terminal pane),
   // update focusedGroupId so keyboard shortcuts operate on the correct group.
   useEffect(() => {
@@ -210,6 +222,7 @@ export default function App() {
       return ws.focusedGroupId ?? collectGroupIds(ws.root)[0];
     }
 
+    /** Get the focused browser pane context (browser type only — for reload, back, forward, etc.). */
     function getBrowserContext(): { paneId: string; currentZoom: number } | null {
       const store = useWorkspaceStore.getState();
       const browserPane = getActiveFocusedBrowserPane(store);
@@ -220,6 +233,18 @@ export default function App() {
         browserConfig.zoom ??
         1;
       return { paneId: browserPane.id, currentZoom };
+    }
+
+    /** Get any focused WebContentsView pane context (browser, editor, t3code — for zoom). */
+    function getWebViewContext(): { paneId: string; currentZoom: number } | null {
+      const store = useWorkspaceStore.getState();
+      const pane = getActiveFocusedWebViewPane(store);
+      if (!pane) return null;
+      const currentZoom =
+        useBrowserStore.getState().runtimeByPaneId[pane.id]?.currentZoom ??
+        (pane.config as BrowserConfig).zoom ??
+        1;
+      return { paneId: pane.id, currentZoom };
     }
 
     /** Get the focused terminal pane's surfaceId (for font zoom). */
@@ -255,7 +280,9 @@ export default function App() {
 
         // ── Workspaces ───────────────────────────────────────────────
         case "app:new-workspace":
-          useWorkspaceStore.getState().addWorkspace();
+          useWorkspaceStore
+            .getState()
+            .addWorkspace(undefined, null, "main", settings.defaultPaneType);
           break;
         case "app:close-workspace": {
           const ctx = getActiveWorkspace();
@@ -358,14 +385,14 @@ export default function App() {
           const ctx = getActiveWorkspace();
           if (!ctx) break;
           const gid = getSplitShortcutTargetGroupId(ctx.ws);
-          if (gid) ctx.store.splitGroup(ctx.ws.id, gid, "horizontal");
+          if (gid) ctx.store.splitGroup(ctx.ws.id, gid, "horizontal", settings.defaultPaneType);
           break;
         }
         case "app:split-down": {
           const ctx = getActiveWorkspace();
           if (!ctx) break;
           const gid = getSplitShortcutTargetGroupId(ctx.ws);
-          if (gid) ctx.store.splitGroup(ctx.ws.id, gid, "vertical");
+          if (gid) ctx.store.splitGroup(ctx.ws.id, gid, "vertical", settings.defaultPaneType);
           break;
         }
         case "app:focus-pane-left": {
@@ -402,7 +429,7 @@ export default function App() {
           if (termId) {
             void window.api.terminal.sendBindingAction(termId, "increase_font_size:1");
           } else {
-            const ctx = getBrowserContext();
+            const ctx = getWebViewContext();
             if (ctx) void window.api.browser.setZoom(ctx.paneId, clampZoom(ctx.currentZoom + 0.1));
           }
           break;
@@ -412,7 +439,7 @@ export default function App() {
           if (termId) {
             void window.api.terminal.sendBindingAction(termId, "decrease_font_size:1");
           } else {
-            const ctx = getBrowserContext();
+            const ctx = getWebViewContext();
             if (ctx) void window.api.browser.setZoom(ctx.paneId, clampZoom(ctx.currentZoom - 0.1));
           }
           break;
@@ -422,7 +449,7 @@ export default function App() {
           if (termId) {
             void window.api.terminal.sendBindingAction(termId, "reset_font_size");
           } else {
-            const ctx = getBrowserContext();
+            const ctx = getWebViewContext();
             if (ctx) void window.api.browser.resetZoom(ctx.paneId);
           }
           break;
