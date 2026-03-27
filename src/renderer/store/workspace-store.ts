@@ -11,6 +11,7 @@ import type {
   PaneGroup,
   PaneGroupTab,
 } from "../types/workspace";
+import { findGroupInDirection, type FocusDirection } from "../lib/split-navigation";
 import {
   findSidebarNode,
   findFolder,
@@ -279,6 +280,7 @@ function createDefaultWorkspace(name: string, group: PaneGroup): Workspace {
     name,
     root: { type: "leaf", groupId: group.id },
     focusedGroupId: group.id,
+    zoomedGroupId: null,
     lastActiveAt: Date.now(),
   };
 }
@@ -335,7 +337,7 @@ interface WorkspaceState {
 
   /** Set by addWorkspace/addFolder when the newly created item should enter edit mode */
   pendingEditId: string | null;
-  pendingEditType: "workspace" | "folder" | null;
+  pendingEditType: "workspace" | "folder" | "tab" | null;
   clearPendingEdit: () => void;
 
   // Workspace CRUD
@@ -418,6 +420,14 @@ interface WorkspaceState {
   splitGroup: (workspaceId: string, groupId: string, direction: SplitDirection) => void;
   closeGroup: (workspaceId: string, groupId: string) => void;
   updateSplitSizes: (workspaceId: string, nodePath: number[], sizes: number[]) => void;
+
+  // Navigation
+  activateNextWorkspace: () => void;
+  activatePrevWorkspace: () => void;
+  activateNextTab: (workspaceId: string, groupId: string) => void;
+  activatePrevTab: (workspaceId: string, groupId: string) => void;
+  focusGroupInDirection: (workspaceId: string, direction: "left" | "right" | "up" | "down") => void;
+  togglePaneZoom: (workspaceId: string) => void;
 
   // Pane operations
   addPane: (type: PaneType, config?: Partial<PaneConfig>) => string;
@@ -528,6 +538,7 @@ function migratePersistedState(
       name: oldWs.name as string,
       root: newRoot,
       focusedGroupId: firstGroupId[0] ?? null,
+      zoomedGroupId: null,
       lastActiveAt: Date.now(),
     };
     newWorkspaces.push(ws);
@@ -1420,6 +1431,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
                 ...w,
                 root: { type: "leaf", groupId: freshGroup.id },
                 focusedGroupId: freshGroup.id,
+                zoomedGroupId: null,
               }
             : w,
         ),
@@ -1434,6 +1446,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       ws.focusedGroupId === groupId
         ? (findSiblingGroupId(ws.root, groupId) ?? findFirstGroupId(ws.root))
         : ws.focusedGroupId;
+    // Clear zoom if the zoomed group was closed
+    const newZoomedGroupId = ws.zoomedGroupId === groupId ? null : ws.zoomedGroupId;
 
     const newRoot = removeGroupFromTree(ws.root, groupId);
     const simplifiedRoot = newRoot ? simplifyTree(newRoot) : ws.root;
@@ -1443,7 +1457,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     set({
       workspaces: state.workspaces.map((w) =>
         w.id === workspaceId
-          ? { ...w, root: simplifiedRoot, focusedGroupId: newFocusedGroupId }
+          ? {
+              ...w,
+              root: simplifiedRoot,
+              focusedGroupId: newFocusedGroupId,
+              zoomedGroupId: newZoomedGroupId,
+            }
           : w,
       ),
       panes: newPanes,
@@ -1455,6 +1474,115 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     set({
       workspaces: get().workspaces.map((w) =>
         w.id === workspaceId ? { ...w, root: updateSizesAtPath(w.root, nodePath, sizes) } : w,
+      ),
+    });
+  },
+
+  // -------------------------------------------------------------------
+  // Navigation
+  // -------------------------------------------------------------------
+
+  activateNextWorkspace() {
+    const state = get();
+    const idx = state.workspaces.findIndex((w) => w.id === state.activeWorkspaceId);
+    if (idx < 0 || state.workspaces.length <= 1) return;
+    const nextIdx = (idx + 1) % state.workspaces.length;
+    const nextWs = state.workspaces[nextIdx];
+    if (nextWs) {
+      set({
+        activeWorkspaceId: nextWs.id,
+        workspaces: state.workspaces.map((w) =>
+          w.id === nextWs.id ? { ...w, lastActiveAt: Date.now() } : w,
+        ),
+      });
+    }
+  },
+
+  activatePrevWorkspace() {
+    const state = get();
+    const idx = state.workspaces.findIndex((w) => w.id === state.activeWorkspaceId);
+    if (idx < 0 || state.workspaces.length <= 1) return;
+    const prevIdx = (idx - 1 + state.workspaces.length) % state.workspaces.length;
+    const prevWs = state.workspaces[prevIdx];
+    if (prevWs) {
+      set({
+        activeWorkspaceId: prevWs.id,
+        workspaces: state.workspaces.map((w) =>
+          w.id === prevWs.id ? { ...w, lastActiveAt: Date.now() } : w,
+        ),
+      });
+    }
+  },
+
+  activateNextTab(workspaceId, groupId) {
+    const state = get();
+    const group = state.paneGroups[groupId];
+    if (!group || group.tabs.length <= 1) return;
+    const idx = group.tabs.findIndex((t) => t.id === group.activeTabId);
+    if (idx < 0) return;
+    const nextIdx = (idx + 1) % group.tabs.length;
+    const nextTab = group.tabs[nextIdx];
+    if (nextTab) {
+      set({
+        paneGroups: {
+          ...state.paneGroups,
+          [groupId]: { ...group, activeTabId: nextTab.id },
+        },
+      });
+    }
+  },
+
+  activatePrevTab(workspaceId, groupId) {
+    const state = get();
+    const group = state.paneGroups[groupId];
+    if (!group || group.tabs.length <= 1) return;
+    const idx = group.tabs.findIndex((t) => t.id === group.activeTabId);
+    if (idx < 0) return;
+    const prevIdx = (idx - 1 + group.tabs.length) % group.tabs.length;
+    const prevTab = group.tabs[prevIdx];
+    if (prevTab) {
+      set({
+        paneGroups: {
+          ...state.paneGroups,
+          [groupId]: { ...group, activeTabId: prevTab.id },
+        },
+      });
+    }
+  },
+
+  focusGroupInDirection(workspaceId, direction) {
+    const state = get();
+    const ws = state.workspaces.find((w) => w.id === workspaceId);
+    if (!ws) return;
+    // Directional navigation is a no-op while a pane is zoomed
+    if (ws.zoomedGroupId) return;
+    const currentGroupId = ws.focusedGroupId ?? collectGroupIds(ws.root)[0];
+    if (!currentGroupId) return;
+    const targetGroupId = findGroupInDirection(
+      ws.root,
+      currentGroupId,
+      direction as FocusDirection,
+    );
+    if (targetGroupId) {
+      set({
+        workspaces: state.workspaces.map((w) =>
+          w.id === workspaceId ? { ...w, focusedGroupId: targetGroupId } : w,
+        ),
+      });
+    }
+  },
+
+  togglePaneZoom(workspaceId) {
+    const state = get();
+    const ws = state.workspaces.find((w) => w.id === workspaceId);
+    if (!ws) return;
+    // Toggle: if currently zoomed, unzoom. Otherwise zoom the focused group.
+    const newZoomedGroupId = ws.zoomedGroupId
+      ? null
+      : (ws.focusedGroupId ?? collectGroupIds(ws.root)[0] ?? null);
+    set({
+      workspaces: state.workspaces.map((w) =>
+        w.id === workspaceId ? { ...w, zoomedGroupId: newZoomedGroupId } : w,
       ),
     });
   },

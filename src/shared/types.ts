@@ -12,6 +12,7 @@ import type {
   SafariAccessResult,
   BrowserStopFindAction,
 } from "./browser";
+import type { ShortcutAction, StoredShortcut } from "./shortcuts";
 
 export interface TerminalBounds {
   x: number;
@@ -37,9 +38,11 @@ export interface DevspaceBridge {
     focus: (surfaceId: string) => Promise<void>;
     setBounds: (surfaceId: string, bounds: TerminalBounds) => Promise<void>;
     setVisibleSurfaces: (surfaceIds: string[]) => Promise<void>;
+    sendBindingAction: (surfaceId: string, action: string) => Promise<boolean>;
     blur: () => Promise<void>;
     onTitleChanged: (callback: (surfaceId: string, title: string) => void) => () => void;
     onClosed: (callback: (surfaceId: string) => void) => () => void;
+    onFocused: (callback: (surfaceId: string) => void) => () => void;
   };
   window: {
     minimize: () => void;
@@ -73,6 +76,13 @@ export interface DevspaceBridge {
     start: (paneId: string, folderPath?: string) => Promise<{ url: string } | { error: string }>;
     stop: (paneId: string) => Promise<void>;
     setKeepServerRunning: (keep: boolean) => void;
+  };
+  shortcuts: {
+    getAll: () => Promise<Record<string, StoredShortcut>>;
+    set: (action: ShortcutAction, shortcut: StoredShortcut) => Promise<void>;
+    reset: (action: ShortcutAction) => Promise<void>;
+    resetAll: () => Promise<void>;
+    onChanged: (callback: () => void) => () => void;
   };
   cli: {
     install: () => Promise<{ ok: boolean; error?: string }>;

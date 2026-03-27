@@ -1,34 +1,19 @@
 import type { DevspaceBridge } from "../shared/types";
+import { DEFAULT_SHORTCUTS } from "../shared/shortcuts";
 import { getElectronBridge } from "./electron-bridge";
 
 const { contextBridge, ipcRenderer } = getElectronBridge();
+
+/** Collect unique IPC channels from the shortcut registry. */
+const APP_ACTION_CHANNELS = [...new Set(DEFAULT_SHORTCUTS.map((d) => d.ipcChannel))];
 
 const bridge: DevspaceBridge = {
   platform: process.platform,
 
   app: {
     onAction: (callback) => {
-      const channels = [
-        "app:new-tab",
-        "app:close-tab",
-        "app:new-workspace",
-        "app:toggle-sidebar",
-        "app:toggle-settings",
-        "app:split-right",
-        "app:split-down",
-        "app:switch-tab",
-        "app:browser-focus-url",
-        "app:browser-reload",
-        "app:browser-back",
-        "app:browser-forward",
-        "app:browser-find",
-        "app:browser-zoom-in",
-        "app:browser-zoom-out",
-        "app:browser-zoom-reset",
-        "app:browser-devtools",
-      ];
       const disposers: (() => void)[] = [];
-      for (const channel of channels) {
+      for (const channel of APP_ACTION_CHANNELS) {
         const handler = (_event: Electron.IpcRendererEvent, ...args: unknown[]): void => {
           callback(channel, ...args);
         };
@@ -50,6 +35,8 @@ const bridge: DevspaceBridge = {
     setBounds: (surfaceId, bounds) => ipcRenderer.invoke("terminal:setBounds", surfaceId, bounds),
     setVisibleSurfaces: (surfaceIds) =>
       ipcRenderer.invoke("terminal:setVisibleSurfaces", surfaceIds),
+    sendBindingAction: (surfaceId, action) =>
+      ipcRenderer.invoke("terminal:sendBindingAction", surfaceId, action),
     blur: () => ipcRenderer.invoke("terminal:blur"),
     onTitleChanged: (callback) => {
       const listener = (
@@ -71,6 +58,15 @@ const bridge: DevspaceBridge = {
       ipcRenderer.on("terminal:closed", listener);
       return () => {
         ipcRenderer.removeListener("terminal:closed", listener);
+      };
+    },
+    onFocused: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, surfaceId: string): void => {
+        callback(surfaceId);
+      };
+      ipcRenderer.on("terminal:focused", listener);
+      return () => {
+        ipcRenderer.removeListener("terminal:focused", listener);
       };
     },
   },
@@ -133,6 +129,22 @@ const bridge: DevspaceBridge = {
     start: (paneId, folderPath) => ipcRenderer.invoke("editor:start", paneId, folderPath),
     stop: (paneId) => ipcRenderer.invoke("editor:stop", paneId),
     setKeepServerRunning: (keep) => ipcRenderer.send("editor:setKeepServerRunning", keep),
+  },
+
+  shortcuts: {
+    getAll: () => ipcRenderer.invoke("shortcuts:get-all"),
+    set: (action, shortcut) => ipcRenderer.invoke("shortcuts:set", action, shortcut),
+    reset: (action) => ipcRenderer.invoke("shortcuts:reset", action),
+    resetAll: () => ipcRenderer.invoke("shortcuts:reset-all"),
+    onChanged: (callback) => {
+      const listener = (): void => {
+        callback();
+      };
+      ipcRenderer.on("shortcuts:changed", listener);
+      return () => {
+        ipcRenderer.removeListener("shortcuts:changed", listener);
+      };
+    },
   },
 
   cli: {

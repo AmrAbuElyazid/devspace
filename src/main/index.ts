@@ -15,6 +15,13 @@ import { BrowserImportService } from "./browser/browser-import-service";
 import { installWindowZoomReset } from "./window-zoom";
 import { getTrafficLightPosition } from "./window-chrome";
 import { IS_DEV, CLI_PORT } from "./dev-mode";
+import { ShortcutStore } from "./shortcut-store";
+import {
+  DEFAULT_SHORTCUTS,
+  getAllNativeBridgeShortcuts,
+  resolveShortcut,
+  toElectronAccelerator,
+} from "../shared/shortcuts";
 
 // Sync shell environment before app is ready (macOS GUI apps don't inherit login shell env)
 syncShellEnvironment();
@@ -228,97 +235,124 @@ app.whenReady().then(() => {
   browserSessionManager.installCorsOverrides();
   browserSessionManager.registerSecretKeyHandler();
 
+  // Initialize shortcut store and register IPC handlers
+  const shortcutStore = new ShortcutStore();
+  shortcutStore.registerIpcHandlers();
+
   createWindow();
 
-  // Set application menu with Edit menu for native view responder chain.
-  // App-level shortcuts are registered as menu accelerators so they fire
-  // even when a native GhosttyView has keyboard focus.
-  const send = (channel: string, ...args: unknown[]): void => {
-    const win = BrowserWindow.getFocusedWindow();
-    if (win) win.webContents.send(channel, ...args);
-  };
+  // ── Dynamic application menu ──────────────────────────────────────────
+  // Built from the shortcut registry so accelerators stay in sync with
+  // user customizations. Rebuilt whenever shortcuts change.
 
-  const menuTemplate: Electron.MenuItemConstructorOptions[] = [
-    {
-      label: app.name,
-      submenu: [
-        { role: "about" },
-        { type: "separator" },
-        { label: "Settings…", accelerator: "Cmd+,", click: () => send("app:toggle-settings") },
-        { type: "separator" },
-        { role: "hide" },
-        { role: "hideOthers" },
-        { role: "unhide" },
-        { type: "separator" },
-        { role: "quit" },
-      ],
-    },
-    {
-      label: "File",
-      submenu: [
-        { label: "New Tab", accelerator: "Cmd+T", click: () => send("app:new-tab") },
-        { label: "Close Tab", accelerator: "Cmd+W", click: () => send("app:close-tab") },
-        { label: "New Workspace", accelerator: "Cmd+N", click: () => send("app:new-workspace") },
-      ],
-    },
-    {
-      label: "Edit",
-      submenu: [
-        { role: "undo" },
-        { role: "redo" },
-        { type: "separator" },
-        { role: "cut" },
-        { role: "copy" },
-        { role: "paste" },
-        { role: "selectAll" },
-      ],
-    },
-    {
-      label: "View",
-      submenu: [
-        { label: "Toggle Sidebar", accelerator: "Cmd+B", click: () => send("app:toggle-sidebar") },
-        { type: "separator" },
-        { label: "Split Right", accelerator: "Cmd+D", click: () => send("app:split-right") },
-        { label: "Split Down", accelerator: "Cmd+Shift+D", click: () => send("app:split-down") },
-        { type: "separator" },
-        ...[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => ({
-          label: `Tab ${n}`,
-          accelerator: `Cmd+${n}`,
-          click: () => send("app:switch-tab", n),
-          visible: false, // hidden from menu but accelerator still works
-        })),
-      ],
-    },
-    {
-      label: "Browser",
-      submenu: [
-        {
-          label: "Focus Address Bar",
-          accelerator: "Cmd+L",
-          click: () => send("app:browser-focus-url"),
-        },
-        { label: "Reload", accelerator: "Cmd+R", click: () => send("app:browser-reload") },
-        { label: "Back", accelerator: "Cmd+[", click: () => send("app:browser-back") },
-        { label: "Forward", accelerator: "Cmd+]", click: () => send("app:browser-forward") },
-        { label: "Find", accelerator: "Cmd+F", click: () => send("app:browser-find") },
-        { type: "separator" },
-        { label: "Zoom In", accelerator: "Cmd+=", click: () => send("app:browser-zoom-in") },
-        { label: "Zoom Out", accelerator: "Cmd+-", click: () => send("app:browser-zoom-out") },
-        { label: "Reset Zoom", accelerator: "Cmd+0", click: () => send("app:browser-zoom-reset") },
-        { type: "separator" },
-        {
-          label: "Developer Tools",
-          accelerator: "Cmd+Alt+I",
-          click: () => send("app:browser-devtools"),
-        },
-      ],
-    },
-    {
-      label: "Window",
-      submenu: [{ role: "minimize" }, { role: "zoom" }, { role: "close" }],
-    },
-  ];
-  Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
+  function buildAppMenu(): void {
+    const send = (channel: string, ...args: unknown[]): void => {
+      const win = BrowserWindow.getFocusedWindow();
+      if (win) win.webContents.send(channel, ...args);
+    };
+
+    const overrides = shortcutStore.getAllOverrides();
+
+    // Build menu items from registry, grouped by menuGroup.
+    // Some groups have additional static items (roles, separators).
+    type MenuItem = Electron.MenuItemConstructorOptions;
+
+    function menuItemsForGroup(group: string): MenuItem[] {
+      const defs = DEFAULT_SHORTCUTS.filter((d) => d.menuGroup === group);
+      return defs.map((def) => {
+        const shortcut = resolveShortcut(def.action, overrides);
+        const accelerator = toElectronAccelerator(shortcut);
+
+        // For numbered shortcuts, extract the digit and pass as arg
+        if (def.numbered) {
+          const digit = parseInt(def.action.slice(-1), 10);
+          return {
+            label: def.label,
+            accelerator,
+            click: () => send(def.ipcChannel, digit),
+            visible: false,
+          };
+        }
+
+        return {
+          label: def.label,
+          accelerator,
+          click: () => send(def.ipcChannel),
+          visible: !def.hidden,
+        };
+      });
+    }
+
+    const menuTemplate: MenuItem[] = [
+      {
+        label: app.name,
+        submenu: [
+          { role: "about" },
+          { type: "separator" },
+          ...menuItemsForGroup("App"),
+          { type: "separator" },
+          { role: "hide" },
+          { role: "hideOthers" },
+          { role: "unhide" },
+          { type: "separator" },
+          { role: "quit" },
+        ],
+      },
+      {
+        label: "File",
+        submenu: menuItemsForGroup("File"),
+      },
+      {
+        label: "Edit",
+        submenu: [
+          { role: "undo" },
+          { role: "redo" },
+          { type: "separator" },
+          { role: "cut" },
+          { role: "copy" },
+          { role: "paste" },
+          { role: "selectAll" },
+        ],
+      },
+      {
+        label: "View",
+        submenu: [...menuItemsForGroup("View")],
+      },
+      {
+        label: "Browser",
+        submenu: menuItemsForGroup("Browser"),
+      },
+      {
+        label: "Window",
+        submenu: [
+          { role: "minimize" },
+          { role: "zoom" },
+          ...menuItemsForGroup("Window"),
+          { role: "close" },
+        ],
+      },
+    ];
+    Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
+  }
+
+  buildAppMenu();
+
+  // Sync reserved shortcuts to the native bridge so Ghostty doesn't consume them.
+  function syncNativeBridgeShortcuts(): void {
+    const overrides = shortcutStore.getAllOverrides();
+    terminalManager.setReservedShortcuts(getAllNativeBridgeShortcuts(overrides));
+  }
+
+  syncNativeBridgeShortcuts();
+
+  // Rebuild menu and native bridge when shortcuts change, and notify all windows
+  shortcutStore.onChange(() => {
+    buildAppMenu();
+    syncNativeBridgeShortcuts();
+    for (const win of BrowserWindow.getAllWindows()) {
+      win.webContents.send("shortcuts:changed");
+    }
+  });
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

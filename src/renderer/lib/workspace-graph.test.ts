@@ -8,6 +8,7 @@ function makeWorkspace(id: string, groupId: string): Workspace {
     name: id,
     root: { type: "leaf", groupId },
     focusedGroupId: groupId,
+    zoomedGroupId: null,
     pinned: false,
     lastActiveAt: Date.now(),
   };

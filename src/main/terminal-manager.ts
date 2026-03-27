@@ -1,9 +1,15 @@
 import type { BrowserWindow } from "electron";
-import { loadNativeAddon, type GhosttyBridge, type TerminalBounds } from "./native";
+import {
+  loadNativeAddon,
+  type GhosttyBridge,
+  type NativeBridgeShortcut,
+  type TerminalBounds,
+} from "./native";
 
 type TerminalCallback = {
   onTitleChanged?: (surfaceId: string, title: string) => void;
   onSurfaceClosed?: (surfaceId: string) => void;
+  onSurfaceFocused?: (surfaceId: string) => void;
   onPwdChanged?: (surfaceId: string, pwd: string) => void;
   onNotification?: (surfaceId: string, title: string, body: string) => void;
 };
@@ -31,6 +37,12 @@ export class TerminalManager {
       }
     });
 
+    this.bridge.setCallback("surface-focused", (surfaceId: unknown) => {
+      if (typeof surfaceId === "string") {
+        this.callbacks.onSurfaceFocused?.(surfaceId);
+      }
+    });
+
     this.bridge.setCallback("pwd-changed", (surfaceId: unknown, pwd: unknown) => {
       if (typeof surfaceId === "string" && typeof pwd === "string") {
         this.callbacks.onPwdChanged?.(surfaceId, pwd);
@@ -50,6 +62,10 @@ export class TerminalManager {
 
   onSurfaceClosed(callback: (surfaceId: string) => void): void {
     this.callbacks.onSurfaceClosed = callback;
+  }
+
+  onSurfaceFocused(callback: (surfaceId: string) => void): void {
+    this.callbacks.onSurfaceFocused = callback;
   }
 
   onPwdChanged(callback: (surfaceId: string, pwd: string) => void): void {
@@ -100,6 +116,18 @@ export class TerminalManager {
   blurSurfaces(): void {
     if (!this.bridge) return;
     this.bridge.blurSurfaces();
+  }
+
+  /** Send a Ghostty binding action to a surface (e.g. "increase_font_size:1"). */
+  sendBindingAction(surfaceId: string, action: string): boolean {
+    if (!this.bridge) return false;
+    return this.bridge.sendBindingAction(surfaceId, action);
+  }
+
+  /** Sync the reserved shortcuts list to the native bridge. */
+  setReservedShortcuts(shortcuts: NativeBridgeShortcut[]): void {
+    if (!this.bridge) return;
+    this.bridge.setReservedShortcuts(shortcuts);
   }
 
   destroyAll(): void {

@@ -12,6 +12,7 @@ const config: KnipConfig = {
   ignore: [
     "src/renderer/components/ui/**", // UI primitives are a component library with intentional public exports
     "src/renderer/env.d.ts", // ambient type declarations for CSS modules
+    "src/shared/shortcuts.ts", // shortcut registry types are consumed by multiple phases (persistence, menu, bridge, UI)
   ],
 };
 

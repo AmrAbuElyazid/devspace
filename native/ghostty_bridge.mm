@@ -66,6 +66,16 @@ GhosttyAppState g_state;
         if (screenNum) {
             ghostty_surface_set_display_id(self.surface, [screenNum unsignedIntValue]);
         }
+        // Notify JS that this surface received focus so the renderer
+        // can update focusedGroupId for correct shortcut dispatch.
+        if (self.tabId && g_state.surfaceFocusedCallback) {
+            std::string sid = [self.tabId UTF8String];
+            g_state.surfaceFocusedCallback.NonBlockingCall(
+                [sid](Napi::Env env, Napi::Function fn) {
+                    fn.Call({ Napi::String::New(env, sid) });
+                }
+            );
+        }
     }
     return YES;
 }
@@ -380,53 +390,75 @@ static ghostty_input_key_s buildKeyEvent(NSEvent* event, ghostty_surface_t surfa
 
 // ---- Keyboard ----
 
-// Check if a Cmd+key combo is reserved by the host app (devspace).
-// These shortcuts always propagate to Electron's menu system instead
-// of being consumed by Ghostty.
+// Convert an NSEvent to a normalized key name string matching the JS
+// shortcut registry format (e.g. "b", "arrowleft", "enter", "1").
+// Uses keyCode for special keys and unshiftedCodepointFromEvent for
+// layout-independent character identification.
+static NSString* eventToKeyName(NSEvent* event) {
+    // Special keys by keyCode (layout-independent)
+    switch (event.keyCode) {
+        case 123: return @"arrowleft";
+        case 124: return @"arrowright";
+        case 125: return @"arrowdown";
+        case 126: return @"arrowup";
+        case 36:  return @"enter";
+        case 48:  return @"tab";
+        case 53:  return @"escape";
+        case 49:  return @"space";
+        case 51:  return @"backspace";
+        case 117: return @"delete";
+        case 122: return @"f1";
+        case 120: return @"f2";
+        case 99:  return @"f3";
+        case 118: return @"f4";
+        case 96:  return @"f5";
+        case 97:  return @"f6";
+        case 98:  return @"f7";
+        case 100: return @"f8";
+        case 101: return @"f9";
+        case 109: return @"f10";
+        case 103: return @"f11";
+        case 111: return @"f12";
+        default: break;
+    }
+
+    // For regular keys, use UCKeyTranslate to get the base unshifted character.
+    // This handles non-Latin layouts and ensures Shift+[ gives "[" not "{".
+    uint32_t cp = unshiftedCodepointFromEvent(event);
+    if (cp > 0) {
+        unichar ch = (unichar)cp;
+        NSString* str = [[NSString stringWithCharacters:&ch length:1] lowercaseString];
+        if (str.length > 0) return str;
+    }
+
+    return nil;
+}
+
+// Check if a key event matches any reserved shortcut from the dynamic list.
+// These shortcuts always propagate to Electron's menu system instead of
+// being consumed by Ghostty.
 static bool isAppReservedShortcut(NSEvent* event) {
-    NSEventModifierFlags flags = event.modifierFlags;
+    if (g_state.reservedShortcuts.empty()) return false;
+
+    NSString* keyName = eventToKeyName(event);
+    if (!keyName) return false;
+
+    NSEventModifierFlags flags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
     bool hasCmd   = (flags & NSEventModifierFlagCommand) != 0;
     bool hasShift = (flags & NSEventModifierFlagShift) != 0;
-    bool hasAlt   = (flags & NSEventModifierFlagOption) != 0;
-    if (!hasCmd) return false;
+    bool hasOpt   = (flags & NSEventModifierFlagOption) != 0;
+    bool hasCtrl  = (flags & NSEventModifierFlagControl) != 0;
 
-    NSString* chars = event.charactersIgnoringModifiers;
-    if (!chars || chars.length == 0) return false;
-    unichar ch = [chars characterAtIndex:0];
+    std::string key = [keyName UTF8String];
 
-    // Cmd only (no Shift, no Alt)
-    if (!hasShift && !hasAlt) {
-        switch (ch) {
-            case 't': // New tab
-            case 'w': // Close tab
-            case 'n': // New workspace
-            case 'b': // Toggle sidebar
-            case ',': // Settings
-            case 'd': // Split right
-            case 'l': // Focus browser URL bar
-            case 'r': // Reload browser
-            case '[': // Browser back
-            case ']': // Browser forward
-            case 'f': // Browser find
-            case '=': // Browser zoom in
-            case '+': // Browser zoom in (alt)
-            case '-': // Browser zoom out
-            case '0': // Browser zoom reset
-                return true;
-            default: break;
+    for (const auto& s : g_state.reservedShortcuts) {
+        if (s.key == key &&
+            s.command == hasCmd &&
+            s.shift == hasShift &&
+            s.option == hasOpt &&
+            s.control == hasCtrl) {
+            return true;
         }
-        // Cmd+1-9: switch tab
-        if (ch >= '1' && ch <= '9') return true;
-    }
-
-    // Cmd+Shift (no Alt)
-    if (hasShift && !hasAlt) {
-        if (ch == 'd' || ch == 'D') return true; // Split down
-    }
-
-    // Cmd+Alt
-    if (hasAlt && !hasShift) {
-        if (ch == 'i' || ch == 'I') return true; // Browser dev tools
     }
 
     return false;
@@ -1370,6 +1402,9 @@ static Napi::Value SetCallback(const Napi::CallbackInfo& info) {
     } else if (event == "surface-closed") {
         g_state.surfaceClosedCallback = Napi::ThreadSafeFunction::New(
             env, callback, "surfaceClosed", 0, 1);
+    } else if (event == "surface-focused") {
+        g_state.surfaceFocusedCallback = Napi::ThreadSafeFunction::New(
+            env, callback, "surfaceFocused", 0, 1);
     } else if (event == "pwd-changed") {
         g_state.pwdChangedCallback = Napi::ThreadSafeFunction::New(
             env, callback, "pwdChanged", 0, 1);
@@ -1377,6 +1412,70 @@ static Napi::Value SetCallback(const Napi::CallbackInfo& info) {
         g_state.notificationCallback = Napi::ThreadSafeFunction::New(
             env, callback, "notification", 0, 1);
     }
+    return env.Undefined();
+}
+
+// Send a Ghostty binding action string to a surface (e.g. "increase_font_size:1").
+// Returns true if the action was handled by Ghostty.
+static Napi::Value SendBindingAction(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 2 || !info[0].IsString() || !info[1].IsString()) {
+        return Napi::Boolean::New(env, false);
+    }
+
+    std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
+    std::string action = info[1].As<Napi::String>().Utf8Value();
+
+    auto it = g_state.surfaces.find(surfaceId);
+    if (it == g_state.surfaces.end() || !it->second.surface) {
+        return Napi::Boolean::New(env, false);
+    }
+
+    bool handled = ghostty_surface_binding_action(
+        it->second.surface,
+        action.c_str(),
+        (uintptr_t)action.length()
+    );
+    return Napi::Boolean::New(env, handled);
+}
+
+// Set the dynamic list of reserved shortcuts from the JS shortcut registry.
+// Called on init and whenever user shortcuts change.
+// Accepts an array of objects: [{ key, command, shift, option, control }, ...]
+static Napi::Value SetReservedShortcuts(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsArray()) return env.Undefined();
+
+    Napi::Array arr = info[0].As<Napi::Array>();
+    std::vector<ReservedShortcut> shortcuts;
+    shortcuts.reserve(arr.Length());
+
+    for (uint32_t i = 0; i < arr.Length(); i++) {
+        Napi::Value val = arr.Get(i);
+        if (!val.IsObject()) continue;
+        Napi::Object obj = val.As<Napi::Object>();
+
+        Napi::Value keyVal = obj.Get("key");
+        Napi::Value cmdVal = obj.Get("command");
+        Napi::Value shiftVal = obj.Get("shift");
+        Napi::Value optVal = obj.Get("option");
+        Napi::Value ctrlVal = obj.Get("control");
+
+        if (!keyVal.IsString() || !cmdVal.IsBoolean() || !shiftVal.IsBoolean() ||
+            !optVal.IsBoolean() || !ctrlVal.IsBoolean()) {
+            continue;
+        }
+
+        ReservedShortcut s;
+        s.key = keyVal.As<Napi::String>().Utf8Value();
+        s.command = cmdVal.As<Napi::Boolean>().Value();
+        s.shift = shiftVal.As<Napi::Boolean>().Value();
+        s.option = optVal.As<Napi::Boolean>().Value();
+        s.control = ctrlVal.As<Napi::Boolean>().Value();
+        shortcuts.push_back(std::move(s));
+    }
+
+    g_state.reservedShortcuts = std::move(shortcuts);
     return env.Undefined();
 }
 
@@ -1403,6 +1502,8 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("hideSurface", Napi::Function::New(env, HideSurface));
     exports.Set("setVisibleSurfaces", Napi::Function::New(env, SetVisibleSurfaces));
     exports.Set("blurSurfaces", Napi::Function::New(env, BlurSurfaces));
+    exports.Set("sendBindingAction", Napi::Function::New(env, SendBindingAction));
+    exports.Set("setReservedShortcuts", Napi::Function::New(env, SetReservedShortcuts));
     exports.Set("setCallback", Napi::Function::New(env, SetCallback));
     return exports;
 }

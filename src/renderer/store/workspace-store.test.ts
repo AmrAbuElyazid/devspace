@@ -442,6 +442,7 @@ test("migration from old format preserves panes", () => {
         name: "Migrated Workspace",
         root: migratedRoot,
         focusedGroupId: groupA,
+        zoomedGroupId: null,
         pinned: false,
         lastActiveAt: Date.now(),
       },

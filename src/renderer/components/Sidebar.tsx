@@ -13,6 +13,8 @@ import {
 } from "lucide-react";
 import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
 import { useSettingsStore } from "../store/settings-store";
+import { resolveDisplayString } from "../../shared/shortcuts";
+import { useModifierHeldContext } from "../App";
 import { Button } from "./ui/button";
 import { Tooltip } from "./ui/tooltip";
 import { ScrollArea } from "./ui/scroll-area";
@@ -96,6 +98,7 @@ function SortableWorkspaceItem({
   isEditing,
   name,
   metadata,
+  shortcutHint,
   onSelect,
   onStartEditing,
   onRename,
@@ -110,6 +113,7 @@ function SortableWorkspaceItem({
   isEditing: boolean;
   name: string;
   metadata: string;
+  shortcutHint: string | null;
   onSelect: () => void;
   onStartEditing: () => void;
   onRename: (name: string) => void;
@@ -210,6 +214,7 @@ function SortableWorkspaceItem({
         </div>
         {!isEditing && metadata && <div className="ws-meta">{metadata}</div>}
       </div>
+      {shortcutHint && <span className="ws-shortcut-hint">{shortcutHint}</span>}
     </div>
   );
 }
@@ -442,6 +447,7 @@ export function SidebarTreeLevel({
   const sortableIds = nodes.map((n) =>
     n.type === "workspace" ? `ws-${n.workspaceId}` : `folder-${n.id}`,
   );
+  const modifierHeld = useModifierHeldContext();
 
   return (
     <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
@@ -452,6 +458,18 @@ export function SidebarTreeLevel({
           const ws = workspaces.find((w) => w.id === node.workspaceId);
           if (!ws) return null;
           const metadata = getWorkspaceMetadata(ws, panes, paneGroups);
+          // Show ⌘1-8 for first 8 workspaces, ⌘9 for the last (when index >= 8).
+          // Workspaces at index 8+ that aren't last have no shortcut.
+          const wsIndex = workspaces.indexOf(ws);
+          const isLast = wsIndex === workspaces.length - 1;
+          let shortcutHint: string | null = null;
+          if (modifierHeld === "command" && wsIndex >= 0) {
+            if (wsIndex < 8) {
+              shortcutHint = `⌘${wsIndex + 1}`;
+            } else if (isLast) {
+              shortcutHint = "⌘9";
+            }
+          }
           return (
             <SortableWorkspaceItem
               key={`ws-${ws.id}`}
@@ -463,6 +481,7 @@ export function SidebarTreeLevel({
               isEditing={editingId === ws.id && editingType === "workspace"}
               name={ws.name}
               metadata={metadata}
+              shortcutHint={shortcutHint}
               onSelect={() => onSelectWorkspace(ws.id)}
               onStartEditing={() => onStartEditingWorkspace(ws.id)}
               onRename={(name) => onRenameWorkspace(ws.id, name)}
@@ -545,8 +564,9 @@ export default function Sidebar() {
   const [editingType, setEditingType] = useState<"workspace" | "folder" | null>(null);
 
   // Pick up pending edit requests from the store (e.g. from Cmd+N IPC)
+  // Only handle workspace/folder renames — tab renames are handled by GroupTabBar.
   useEffect(() => {
-    if (pendingEditId && pendingEditType) {
+    if (pendingEditId && (pendingEditType === "workspace" || pendingEditType === "folder")) {
       setEditingId(pendingEditId);
       setEditingType(pendingEditType);
       clearPendingEdit();
@@ -694,7 +714,7 @@ export default function Sidebar() {
         <button
           className="sidebar-collapse-btn no-drag"
           onClick={toggleSidebar}
-          title="Toggle sidebar (⌘B)"
+          title={`Toggle sidebar (${resolveDisplayString("toggle-sidebar")})`}
         >
           <ChevronLeft size={14} />
         </button>
@@ -772,7 +792,7 @@ export default function Sidebar() {
               <FolderClosed size={12} />
             </Button>
           </Tooltip>
-          <Tooltip content="New workspace" shortcut="⌘N">
+          <Tooltip content="New workspace" shortcut={resolveDisplayString("new-workspace")}>
             <Button
               variant="ghost"
               size="icon-sm"
@@ -847,7 +867,7 @@ export default function Sidebar() {
           onMouseLeave={(e) => {
             e.currentTarget.style.color = "var(--foreground-faint)";
           }}
-          title="Settings (⌘,)"
+          title={`Settings (${resolveDisplayString("toggle-settings")})`}
         >
           <Settings size={15} />
         </button>

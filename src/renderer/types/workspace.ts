@@ -52,6 +52,8 @@ export interface Workspace {
   name: string;
   root: SplitNode;
   focusedGroupId: string | null;
+  /** When set, only this group is visible (maximized). Other groups are preserved in the tree. */
+  zoomedGroupId: string | null;
   pinned?: boolean;
   lastActiveAt: number;
 }
