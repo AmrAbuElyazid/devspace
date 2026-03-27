@@ -149,6 +149,7 @@ GhosttyAppState g_state;
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [super dealloc];
 }
 
 - (void)screenDidChange:(NSNotification*)notification {
