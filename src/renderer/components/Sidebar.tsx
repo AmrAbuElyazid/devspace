@@ -534,6 +534,7 @@ export default function Sidebar() {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const addWorkspace = useWorkspaceStore((s) => s.addWorkspace);
+  const defaultPaneType = useSettingsStore((s) => s.defaultPaneType);
   const removeWorkspace = useWorkspaceStore((s) => s.removeWorkspace);
   const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace);
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace);
@@ -688,7 +689,8 @@ export default function Sidebar() {
       else if (result === "pin") {
         if (isPinned) unpinFolder(folderId);
         else pinFolder(folderId);
-      } else if (result === "add-workspace") addWorkspace(undefined, folderId, container);
+      } else if (result === "add-workspace")
+        addWorkspace(undefined, folderId, container, defaultPaneType);
       else if (result === "add-subfolder") addFolder("New Folder", folderId, container);
       else if (result === "delete") removeFolder(folderId);
     },
@@ -700,6 +702,7 @@ export default function Sidebar() {
       removeFolder,
       pinFolder,
       unpinFolder,
+      defaultPaneType,
     ],
   );
 
@@ -796,7 +799,7 @@ export default function Sidebar() {
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={() => addWorkspace()}
+              onClick={() => addWorkspace(undefined, null, "main", defaultPaneType)}
               className="no-drag"
             >
               <Plus size={13} />

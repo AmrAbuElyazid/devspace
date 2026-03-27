@@ -76,10 +76,10 @@ export class TerminalManager {
     this.callbacks.onNotification = callback;
   }
 
-  createSurface(surfaceId: string): void {
+  createSurface(surfaceId: string, options?: { cwd?: string }): void {
     if (!this.bridge) return;
-    this.bridge.createSurface(surfaceId);
     this.activeSurfaces.add(surfaceId);
+    this.bridge.createSurface(surfaceId, options);
   }
 
   destroySurface(surfaceId: string): void {
