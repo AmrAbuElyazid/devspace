@@ -15,7 +15,10 @@ export interface GhosttyBridge {
   resizeSurface(surfaceId: string, x: number, y: number, width: number, height: number): void;
   setVisibleSurfaces(surfaceIds: string[]): void;
   blurSurfaces(): void;
-  setCallback(event: string, callback: (...args: unknown[]) => void): void;
+  setCallback(
+    event: "title-changed" | "surface-closed" | "pwd-changed" | "notification",
+    callback: (...args: unknown[]) => void,
+  ): void;
 }
 
 export function loadNativeAddon(): GhosttyBridge {
