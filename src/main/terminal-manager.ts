@@ -4,6 +4,8 @@ import { loadNativeAddon, type GhosttyBridge, type TerminalBounds } from "./nati
 type TerminalCallback = {
   onTitleChanged?: (surfaceId: string, title: string) => void;
   onSurfaceClosed?: (surfaceId: string) => void;
+  onPwdChanged?: (surfaceId: string, pwd: string) => void;
+  onNotification?: (surfaceId: string, title: string, body: string) => void;
 };
 
 export class TerminalManager {
@@ -28,6 +30,18 @@ export class TerminalManager {
         this.callbacks.onSurfaceClosed?.(surfaceId);
       }
     });
+
+    this.bridge.setCallback("pwd-changed", (surfaceId: unknown, pwd: unknown) => {
+      if (typeof surfaceId === "string" && typeof pwd === "string") {
+        this.callbacks.onPwdChanged?.(surfaceId, pwd);
+      }
+    });
+
+    this.bridge.setCallback("notification", (surfaceId: unknown, title: unknown, body: unknown) => {
+      if (typeof surfaceId === "string" && typeof title === "string" && typeof body === "string") {
+        this.callbacks.onNotification?.(surfaceId, title, body);
+      }
+    });
   }
 
   onTitleChanged(callback: (surfaceId: string, title: string) => void): void {
@@ -36,6 +50,14 @@ export class TerminalManager {
 
   onSurfaceClosed(callback: (surfaceId: string) => void): void {
     this.callbacks.onSurfaceClosed = callback;
+  }
+
+  onPwdChanged(callback: (surfaceId: string, pwd: string) => void): void {
+    this.callbacks.onPwdChanged = callback;
+  }
+
+  onNotification(callback: (surfaceId: string, title: string, body: string) => void): void {
+    this.callbacks.onNotification = callback;
   }
 
   createSurface(surfaceId: string): void {
