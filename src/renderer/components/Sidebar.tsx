@@ -22,14 +22,7 @@ import { AlertDialog } from "./ui/alert-dialog";
 import { InlineRenameInput } from "./ui/InlineRenameInput";
 import { useInsertionIndicator } from "../hooks/useInsertionIndicator";
 import type { ContextMenuItem } from "../../shared/types";
-import type {
-  SidebarNode,
-  Workspace,
-  Pane,
-  PaneGroup,
-  TerminalConfig,
-  EditorConfig,
-} from "../types/workspace";
+import type { SidebarNode, Workspace, Pane, PaneGroup } from "../types/workspace";
 import { useDragContext } from "../hooks/useDragAndDrop";
 import type { SidebarContainer } from "../types/dnd";
 import { findSidebarNode } from "../lib/sidebar-tree";
@@ -69,11 +62,11 @@ function getWorkspaceMetadata(
       if (!pane || pane.type === "empty") continue;
       paneCount++;
       if (!primaryDir && pane.type === "terminal") {
-        const cwd = (pane.config as TerminalConfig).cwd;
+        const cwd = pane.config.cwd;
         if (cwd) primaryDir = cwd.replace(/^\/Users\/[^/]+/, "~");
       }
       if (!primaryDir && pane.type === "editor") {
-        const folder = (pane.config as EditorConfig).folderPath;
+        const folder = pane.config.folderPath;
         if (folder) primaryDir = folder.replace(/^\/Users\/[^/]+/, "~");
       }
     }

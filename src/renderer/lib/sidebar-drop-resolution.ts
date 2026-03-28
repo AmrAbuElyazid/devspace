@@ -1,4 +1,5 @@
 import type { DragItemData, SidebarContainer } from "../types/dnd";
+import type { RectLike } from "../types/geometry";
 
 type SidebarDragData = Extract<DragItemData, { type: "sidebar-workspace" | "sidebar-folder" }>;
 
@@ -16,13 +17,6 @@ type SidebarDropTarget =
       parentFolderId: string | null;
     }
   | { type: "sidebar-root"; container: SidebarContainer };
-
-interface RectLike {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
 
 interface ResolveSidebarDropInput {
   active: SidebarDragData;

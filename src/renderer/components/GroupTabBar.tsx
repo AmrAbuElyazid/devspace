@@ -1,16 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import {
-  Terminal,
-  FileCode,
-  Globe,
-  Bot,
-  Square,
-  Plus,
-  Columns2,
-  Rows2,
-  X,
-  Menu,
-} from "lucide-react";
+import { Plus, Columns2, Rows2, X, Menu } from "lucide-react";
 import { SortableContext, useSortable, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
@@ -18,7 +7,8 @@ import { useDragContext } from "../hooks/useDragAndDrop";
 import { useSettingsStore } from "../store/settings-store";
 import { useModifierHeldContext } from "../App";
 import { resolveDisplayString } from "../../shared/shortcuts";
-import type { PaneGroup, PaneType } from "../types/workspace";
+import { paneTypeIcons } from "../lib/pane-type-meta";
+import type { PaneGroup } from "../types/workspace";
 import type { DragItemData } from "../types/dnd";
 
 export function handleTabBarWindowZoomDoubleClick(
@@ -29,14 +19,6 @@ export function handleTabBarWindowZoomDoubleClick(
   event.stopPropagation();
   deps.maximize();
 }
-
-const typeIcons: Record<PaneType, typeof Terminal> = {
-  terminal: Terminal,
-  editor: FileCode,
-  t3code: Bot,
-  browser: Globe,
-  empty: Square,
-};
 
 interface GroupTabBarProps {
   group: PaneGroup;
@@ -126,7 +108,7 @@ function SortableGroupTab({
 
   const isDropTarget = isOver && !isDragging && activeDrag?.type === "group-tab";
 
-  const Icon = pane ? typeIcons[pane.type] : Square;
+  const Icon = pane ? paneTypeIcons[pane.type] : paneTypeIcons.empty;
 
   return (
     <div

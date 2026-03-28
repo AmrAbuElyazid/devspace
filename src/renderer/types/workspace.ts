@@ -19,12 +19,13 @@ export interface EmptyConfig {}
 
 export type PaneConfig = TerminalConfig | BrowserConfig | EditorConfig | T3CodeConfig | EmptyConfig;
 
-export interface Pane {
-  id: string;
-  type: PaneType;
-  title: string;
-  config: PaneConfig;
-}
+/** Discriminated union coupling `type` with the correct `config` shape. */
+export type Pane =
+  | { id: string; title: string; type: "terminal"; config: TerminalConfig }
+  | { id: string; title: string; type: "browser"; config: BrowserConfig }
+  | { id: string; title: string; type: "editor"; config: EditorConfig }
+  | { id: string; title: string; type: "t3code"; config: T3CodeConfig }
+  | { id: string; title: string; type: "empty"; config: EmptyConfig };
 
 export type SplitDirection = "horizontal" | "vertical";
 

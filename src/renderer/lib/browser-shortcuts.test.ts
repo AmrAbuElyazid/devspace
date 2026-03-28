@@ -98,7 +98,7 @@ test("getActiveFocusedBrowserPane returns null for editor pane", () => {
         id: "pane-1",
         type: "editor" as const,
         title: "Editor",
-        config: { url: "https://editor.example" },
+        config: { folderPath: "/path/to/project" },
       },
     },
     paneGroups: {

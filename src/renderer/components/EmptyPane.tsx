@@ -30,9 +30,7 @@ export default function EmptyPane({ paneId, workspaceId, groupId }: EmptyPanePro
     const tab = g.tabs.find((t) => t.id === g.activeTabId);
     if (!tab) return undefined;
     const p = s.panes[tab.paneId];
-    return p?.type === "terminal"
-      ? ((p.config as Record<string, unknown>)?.cwd as string | undefined)
-      : undefined;
+    return p?.type === "terminal" ? p.config.cwd : undefined;
   });
 
   const handleClose = () => {
