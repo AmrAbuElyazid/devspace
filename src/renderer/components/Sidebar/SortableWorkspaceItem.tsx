@@ -1,0 +1,138 @@
+import { useRef, useCallback } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { useDragContext } from "../../hooks/useDragAndDrop";
+import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
+import { InlineRenameInput } from "../ui/InlineRenameInput";
+import type { SidebarContainer } from "../../types/dnd";
+
+export interface SortableWorkspaceItemProps {
+  workspaceId: string;
+  container: SidebarContainer;
+  parentFolderId: string | null;
+  depth: number;
+  isActive: boolean;
+  isEditing: boolean;
+  name: string;
+  metadata: string;
+  shortcutHint: string | null;
+  onSelect: () => void;
+  onStartEditing: () => void;
+  onRename: (name: string) => void;
+  onStopEditing: () => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+}
+
+export function SortableWorkspaceItem({
+  workspaceId,
+  container,
+  parentFolderId,
+  depth,
+  isActive,
+  isEditing,
+  name,
+  metadata,
+  shortcutHint,
+  onSelect,
+  onStartEditing,
+  onRename,
+  onStopEditing,
+  onContextMenu,
+}: SortableWorkspaceItemProps) {
+  const { activeDrag } = useDragContext();
+  const mergedRef = useRef<HTMLDivElement | null>(null);
+
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setSortableRef,
+    isDragging,
+    isOver,
+  } = useSortable({
+    id: `ws-${workspaceId}`,
+    data: {
+      type: "sidebar-workspace" as const,
+      workspaceId,
+      container,
+      parentFolderId,
+      visible: true,
+    },
+  });
+
+  const setRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      mergedRef.current = el;
+      setSortableRef(el);
+    },
+    [setSortableRef],
+  );
+
+  // Insertion line indicator — items stay in place, line shows where drop will go
+  const isSidebarDrag =
+    activeDrag?.type === "sidebar-workspace" || activeDrag?.type === "sidebar-folder";
+  const insertPosition = useInsertionIndicator(
+    isOver && !isDragging && isSidebarDrag,
+    false,
+    mergedRef,
+    "vertical",
+  );
+
+  const isTabDropTarget =
+    isOver &&
+    !isDragging &&
+    activeDrag?.type === "group-tab" &&
+    activeDrag.workspaceId !== workspaceId;
+
+  const style = {
+    paddingLeft: depth * 16,
+    opacity: isDragging ? 0.4 : undefined,
+  };
+
+  const insertClass =
+    insertPosition === "before"
+      ? "sidebar-insert-before"
+      : insertPosition === "after"
+        ? "sidebar-insert-after"
+        : "";
+
+  return (
+    <div
+      ref={setRef}
+      style={style}
+      data-sortable-id={`ws-${workspaceId}`}
+      className={`ws-item no-drag ${isActive ? "ws-item-active" : ""} ${insertClass} ${isTabDropTarget ? "ws-item-tab-drop" : ""}`}
+      onClick={() => {
+        if (!isEditing) onSelect();
+      }}
+      onDoubleClick={onStartEditing}
+      onContextMenu={onContextMenu}
+      {...attributes}
+      {...listeners}
+    >
+      <div className="ws-item-content">
+        <div className="ws-item-row">
+          <span
+            className="ws-dot"
+            style={{
+              background: isActive ? "var(--accent)" : "var(--foreground-faint)",
+            }}
+          />
+          {isEditing ? (
+            <InlineRenameInput
+              initialValue={name}
+              onCommit={(newName) => {
+                onRename(newName);
+                onStopEditing();
+              }}
+              onCancel={onStopEditing}
+              className="text-[13px]"
+            />
+          ) : (
+            <span className="flex-1 truncate">{name}</span>
+          )}
+        </div>
+        {!isEditing && metadata && <div className="ws-meta">{metadata}</div>}
+      </div>
+      {shortcutHint && <span className="ws-shortcut-hint">{shortcutHint}</span>}
+    </div>
+  );
+}

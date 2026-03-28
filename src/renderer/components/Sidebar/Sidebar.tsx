@@ -1,0 +1,366 @@
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { useDroppable } from "@dnd-kit/core";
+import { Plus, Settings, ChevronLeft, FolderClosed, Search, X } from "lucide-react";
+import { useWorkspaceStore } from "../../store/workspace-store";
+import { useSettingsStore } from "../../store/settings-store";
+import { resolveDisplayString } from "../../../shared/shortcuts";
+import { Button } from "../ui/button";
+import { Tooltip } from "../ui/tooltip";
+import { ScrollArea } from "../ui/scroll-area";
+import { AlertDialog } from "../ui/alert-dialog";
+import { useDragContext } from "../../hooks/useDragAndDrop";
+import { findSidebarNode } from "../../lib/sidebar-tree";
+import { SidebarTreeLevel } from "./SidebarTreeLevel";
+import type { ContextMenuItem } from "../../../shared/types";
+import type { SidebarContainer } from "../../types/dnd";
+
+export default function Sidebar() {
+  const workspaces = useWorkspaceStore((s) => s.workspaces);
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
+  const addWorkspace = useWorkspaceStore((s) => s.addWorkspace);
+  const defaultPaneType = useSettingsStore((s) => s.defaultPaneType);
+  const removeWorkspace = useWorkspaceStore((s) => s.removeWorkspace);
+  const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace);
+  const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace);
+  const pinnedSidebarNodes = useWorkspaceStore((s) => s.pinnedSidebarNodes);
+  const sidebarTree = useWorkspaceStore((s) => s.sidebarTree);
+  const addFolder = useWorkspaceStore((s) => s.addFolder);
+  const removeFolder = useWorkspaceStore((s) => s.removeFolder);
+  const renameFolder = useWorkspaceStore((s) => s.renameFolder);
+  const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed);
+  const togglePinWorkspace = useWorkspaceStore((s) => s.togglePinWorkspace);
+  const pinFolder = useWorkspaceStore((s) => s.pinFolder);
+  const unpinFolder = useWorkspaceStore((s) => s.unpinFolder);
+  const panes = useWorkspaceStore((s) => s.panes);
+  const paneGroups = useWorkspaceStore((s) => s.paneGroups);
+  const pendingEditId = useWorkspaceStore((s) => s.pendingEditId);
+  const pendingEditType = useWorkspaceStore((s) => s.pendingEditType);
+  const clearPendingEdit = useWorkspaceStore((s) => s.clearPendingEdit);
+  const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
+  const sidebarWidth = useSettingsStore((s) => s.sidebarWidth);
+  const setSidebarWidth = useSettingsStore((s) => s.setSidebarWidth);
+  const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
+
+  const { activeDrag } = useDragContext();
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingType, setEditingType] = useState<"workspace" | "folder" | null>(null);
+
+  // Pick up pending edit requests from the store (e.g. from Cmd+N IPC)
+  // Only handle workspace/folder renames — tab renames are handled by GroupTabBar.
+  useEffect(() => {
+    if (pendingEditId && (pendingEditType === "workspace" || pendingEditType === "folder")) {
+      setEditingId(pendingEditId);
+      setEditingType(pendingEditType);
+      clearPendingEdit();
+    }
+  }, [pendingEditId, pendingEditType, clearPendingEdit]);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const filteredWorkspaceIds = useMemo(() => {
+    if (!searchQuery.trim()) return null; // null = show all
+    const q = searchQuery.toLowerCase();
+    return new Set(workspaces.filter((ws) => ws.name.toLowerCase().includes(q)).map((ws) => ws.id));
+  }, [searchQuery, workspaces]);
+
+  const workspaceContainer = useCallback(
+    (workspaceId: string): SidebarContainer => {
+      return findSidebarNode(pinnedSidebarNodes, workspaceId, "workspace") ? "pinned" : "main";
+    },
+    [pinnedSidebarNodes],
+  );
+
+  const folderContainer = useCallback(
+    (folderId: string): SidebarContainer => {
+      return findSidebarNode(pinnedSidebarNodes, folderId, "folder") ? "pinned" : "main";
+    },
+    [pinnedSidebarNodes],
+  );
+
+  const isSidebarDrag =
+    activeDrag?.type === "sidebar-workspace" || activeDrag?.type === "sidebar-folder";
+  const { setNodeRef: setPinnedRootRef, isOver: isPinnedRootOver } = useDroppable({
+    id: "sidebar-root-pinned",
+    data: { type: "sidebar-root" as const, container: "pinned", visible: true },
+  });
+  const { setNodeRef: setMainRootRef, isOver: isMainRootOver } = useDroppable({
+    id: "sidebar-root-main",
+    data: { type: "sidebar-root" as const, container: "main", visible: true },
+  });
+
+  const handleResizeStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      resizeRef.current = { startX: e.clientX, startWidth: sidebarWidth };
+      setIsResizing(true);
+
+      const onMouseMove = (ev: MouseEvent) => {
+        if (!resizeRef.current) return;
+        const delta = ev.clientX - resizeRef.current.startX;
+        setSidebarWidth(resizeRef.current.startWidth + delta);
+      };
+      const onMouseUp = () => {
+        setIsResizing(false);
+        resizeRef.current = null;
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+      };
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+    },
+    [sidebarWidth, setSidebarWidth],
+  );
+
+  const startEditingWorkspace = useCallback((id: string) => {
+    setEditingId(id);
+    setEditingType("workspace");
+  }, []);
+
+  const startEditingFolder = useCallback((id: string) => {
+    setEditingId(id);
+    setEditingType("folder");
+  }, []);
+
+  const stopEditing = useCallback(() => {
+    setEditingId(null);
+    setEditingType(null);
+  }, []);
+
+  const handleWorkspaceContextMenu = useCallback(
+    async (e: React.MouseEvent, workspaceId: string) => {
+      e.preventDefault();
+      const ws = workspaces.find((w) => w.id === workspaceId);
+      if (!ws) return;
+      const isPinned = workspaceContainer(workspaceId) === "pinned";
+
+      const items: ContextMenuItem[] = [
+        { id: "rename", label: "Rename" },
+        { id: "pin", label: isPinned ? "Unpin" : "Pin" },
+        { id: "new-folder", label: "New Folder..." },
+        ...(workspaces.length > 1 ? [{ id: "delete", label: "Delete", destructive: true }] : []),
+      ];
+
+      const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY });
+      if (!result) return;
+
+      if (result === "rename") startEditingWorkspace(workspaceId);
+      else if (result === "pin") togglePinWorkspace(workspaceId);
+      else if (result === "new-folder") addFolder("New Folder");
+      else if (result === "delete") setDeleteTarget(workspaceId);
+    },
+    [workspaces, workspaceContainer, startEditingWorkspace, addFolder, togglePinWorkspace],
+  );
+
+  const handleFolderContextMenu = useCallback(
+    async (e: React.MouseEvent, folderId: string) => {
+      e.preventDefault();
+      const container = folderContainer(folderId);
+      const isPinned = container === "pinned";
+      const items: ContextMenuItem[] = [
+        { id: "rename", label: "Rename Folder" },
+        { id: "pin", label: isPinned ? "Unpin" : "Pin" },
+        { id: "add-workspace", label: "Add Workspace" },
+        { id: "add-subfolder", label: "Add Sub-folder" },
+        { id: "delete", label: "Delete Folder", destructive: true },
+      ];
+
+      const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY });
+      if (result === "rename") startEditingFolder(folderId);
+      else if (result === "pin") {
+        if (isPinned) unpinFolder(folderId);
+        else pinFolder(folderId);
+      } else if (result === "add-workspace")
+        addWorkspace(undefined, folderId, container, defaultPaneType);
+      else if (result === "add-subfolder") addFolder("New Folder", folderId, container);
+      else if (result === "delete") removeFolder(folderId);
+    },
+    [
+      folderContainer,
+      startEditingFolder,
+      addWorkspace,
+      addFolder,
+      removeFolder,
+      pinFolder,
+      unpinFolder,
+      defaultPaneType,
+    ],
+  );
+
+  return (
+    <div
+      className={`sidebar ${!sidebarOpen ? "sidebar-collapsed" : ""} ${isResizing ? "sidebar-resizing" : ""}`}
+      style={sidebarOpen ? { width: sidebarWidth, minWidth: sidebarWidth } : undefined}
+    >
+      {/* Header — drag region with traffic light space + branding */}
+      <div className="sidebar-header drag-region">
+        <span className="sidebar-label no-drag">DevSpace</span>
+        <button
+          className="sidebar-collapse-btn no-drag"
+          onClick={toggleSidebar}
+          title={`Toggle sidebar (${resolveDisplayString("toggle-sidebar")})`}
+        >
+          <ChevronLeft size={14} />
+        </button>
+      </div>
+
+      {/* Search bar */}
+      <div className="sidebar-search">
+        <Search size={12} className="sidebar-search-icon" />
+        <input
+          type="text"
+          placeholder="Search workspaces..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") setSearchQuery("");
+          }}
+          className="sidebar-search-input no-drag"
+        />
+        {searchQuery && (
+          <button className="sidebar-search-clear no-drag" onClick={() => setSearchQuery("")}>
+            <X size={10} />
+          </button>
+        )}
+      </div>
+
+      {/* Pinned section */}
+      {(pinnedSidebarNodes.length > 0 || isSidebarDrag) && (
+        <>
+          <div className="sidebar-section-header">
+            <span className="sidebar-label">Pinned</span>
+          </div>
+          <div
+            ref={setPinnedRootRef}
+            className={`sidebar-pinned-list ${isSidebarDrag && isPinnedRootOver ? "sidebar-item-drag-over-folder" : ""}`}
+          >
+            <SidebarTreeLevel
+              nodes={pinnedSidebarNodes}
+              container="pinned"
+              parentFolderId={null}
+              depth={0}
+              editingId={editingId}
+              editingType={editingType}
+              filteredWorkspaceIds={filteredWorkspaceIds}
+              onStartEditingFolder={startEditingFolder}
+              onStartEditingWorkspace={startEditingWorkspace}
+              onRenameFolder={(id, name) => renameFolder(id, name)}
+              onRenameWorkspace={(id, name) => renameWorkspace(id, name)}
+              onStopEditing={stopEditing}
+              onContextMenuFolder={handleFolderContextMenu}
+              onContextMenuWorkspace={handleWorkspaceContextMenu}
+              onSelectWorkspace={(id) => setActiveWorkspace(id)}
+              activeWorkspaceId={activeWorkspaceId}
+              workspaces={workspaces}
+              panes={panes}
+              paneGroups={paneGroups}
+              toggleFolderCollapsed={toggleFolderCollapsed}
+              deleteTarget={deleteTarget}
+              setDeleteTarget={setDeleteTarget}
+            />
+          </div>
+        </>
+      )}
+
+      {/* Section label + add buttons */}
+      <div className="sidebar-section-header">
+        <span className="sidebar-label">Workspaces</span>
+        <div className="flex items-center gap-0.5">
+          <Tooltip content="New folder">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => addFolder("New Folder")}
+              className="no-drag"
+            >
+              <FolderClosed size={12} />
+            </Button>
+          </Tooltip>
+          <Tooltip content="New workspace" shortcut={resolveDisplayString("new-workspace")}>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => addWorkspace(undefined, null, "main", defaultPaneType)}
+              className="no-drag"
+            >
+              <Plus size={13} />
+            </Button>
+          </Tooltip>
+        </div>
+      </div>
+
+      {/* Sidebar tree with DnD */}
+      <div
+        ref={setMainRootRef}
+        className={isSidebarDrag && isMainRootOver ? "sidebar-item-drag-over-folder" : ""}
+      >
+        <ScrollArea className="ws-list">
+          <SidebarTreeLevel
+            nodes={sidebarTree}
+            container="main"
+            parentFolderId={null}
+            depth={0}
+            editingId={editingId}
+            editingType={editingType}
+            filteredWorkspaceIds={filteredWorkspaceIds}
+            onStartEditingFolder={startEditingFolder}
+            onStartEditingWorkspace={startEditingWorkspace}
+            onRenameFolder={(id, name) => renameFolder(id, name)}
+            onRenameWorkspace={(id, name) => renameWorkspace(id, name)}
+            onStopEditing={stopEditing}
+            onContextMenuFolder={handleFolderContextMenu}
+            onContextMenuWorkspace={handleWorkspaceContextMenu}
+            onSelectWorkspace={(id) => setActiveWorkspace(id)}
+            activeWorkspaceId={activeWorkspaceId}
+            workspaces={workspaces}
+            panes={panes}
+            paneGroups={paneGroups}
+            toggleFolderCollapsed={toggleFolderCollapsed}
+            deleteTarget={deleteTarget}
+            setDeleteTarget={setDeleteTarget}
+          />
+        </ScrollArea>
+      </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+        title="Delete workspace?"
+        description="This workspace and all its tabs will be permanently removed. This action cannot be undone."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          if (deleteTarget) removeWorkspace(deleteTarget);
+        }}
+        variant="destructive"
+      />
+
+      {/* Footer — gear icon */}
+      <div
+        className="sidebar-footer"
+        style={{ padding: "8px 12px", borderTop: "1px solid var(--border)" }}
+      >
+        <button
+          onClick={() => useSettingsStore.getState().toggleSettings()}
+          className="no-drag flex items-center justify-center rounded-md p-1 transition-colors"
+          style={{ color: "var(--foreground-faint)" }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "var(--foreground-muted)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "var(--foreground-faint)";
+          }}
+          title={`Settings (${resolveDisplayString("toggle-settings")})`}
+        >
+          <Settings size={15} />
+        </button>
+      </div>
+
+      {sidebarOpen && <div className="sidebar-resize-handle" onMouseDown={handleResizeStart} />}
+    </div>
+  );
+}
