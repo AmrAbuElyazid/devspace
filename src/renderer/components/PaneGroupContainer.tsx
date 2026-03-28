@@ -1,7 +1,7 @@
 import { memo, useRef, useCallback, useEffect, type ReactElement } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { Terminal, FileCode, Globe, Bot } from "lucide-react";
 import { shouldHideBrowserNativeViewForDrag } from "../lib/browser-pane-visibility";
+import { paneTypeIcons, paneTypeLabels } from "../lib/pane-type-meta";
 import { useWorkspaceStore, getTopLeftGroupId } from "../store/workspace-store";
 import { useDragContext } from "../hooks/useDragAndDrop";
 import GroupTabBar from "./GroupTabBar";
@@ -19,20 +19,6 @@ import TerminalPane from "./TerminalPane";
 import EditorPane from "./EditorPane";
 import BrowserPane from "./BrowserPane";
 import T3CodePane from "./T3CodePane";
-
-const paneTypeIcons: Record<string, typeof Terminal> = {
-  terminal: Terminal,
-  editor: FileCode,
-  browser: Globe,
-  t3code: Bot,
-};
-
-const paneTypeLabels: Record<string, string> = {
-  terminal: "Terminal",
-  editor: "VS Code",
-  browser: "Browser",
-  t3code: "T3 Code",
-};
 
 /** Lightweight placeholder shown over panes whose native view is hidden during drag. */
 function DragPlaceholder({ pane }: { pane: Pane }): ReactElement {
@@ -119,7 +105,7 @@ const PaneContent = memo(function PaneContent({
       return (
         <TerminalPane
           paneId={paneId}
-          config={(paneConfig ?? {}) as TerminalConfig}
+          config={(paneConfig as TerminalConfig) ?? {}}
           isVisible={isVisible}
           hideNativeView={hideNativeView}
           isFocused={isFocused}
@@ -129,7 +115,7 @@ const PaneContent = memo(function PaneContent({
       return (
         <EditorPane
           paneId={paneId}
-          config={(paneConfig ?? {}) as EditorConfig}
+          config={(paneConfig as EditorConfig) ?? {}}
           isVisible={isVisible}
           hideNativeView={hideNativeView}
         />
@@ -139,7 +125,7 @@ const PaneContent = memo(function PaneContent({
         <BrowserPane
           paneId={paneId}
           workspaceId={workspaceId}
-          config={(paneConfig ?? { url: "https://www.google.com" }) as BrowserConfig}
+          config={(paneConfig as BrowserConfig) ?? { url: "https://www.google.com" }}
           isVisible={isVisible}
           hideNativeView={hideNativeView}
         />

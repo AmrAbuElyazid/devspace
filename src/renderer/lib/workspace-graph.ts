@@ -59,6 +59,13 @@ export function validateWorkspaceGraph({
       };
     }
 
+    if (workspace.zoomedGroupId && !groupIds.includes(workspace.zoomedGroupId)) {
+      return {
+        valid: false,
+        reason: `workspace ${workspace.id}: zoomedGroupId is outside the tree`,
+      };
+    }
+
     for (const groupId of groupIds) {
       const existingOwner = owningWorkspaceByGroupId.get(groupId);
       if (existingOwner && existingOwner !== workspace.id) {

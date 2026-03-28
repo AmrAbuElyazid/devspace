@@ -6,7 +6,6 @@ import type {
   Pane,
   PaneType,
   PaneConfig,
-  TerminalConfig,
   SplitNode,
   SplitDirection,
   PaneGroup,
@@ -26,9 +25,42 @@ import { cleanupPaneResources, type PaneCleanupDeps } from "../lib/pane-cleanup"
 import type { DropSide } from "../types/dnd";
 import { markBrowserPaneDestroyed } from "../lib/browser-pane-session";
 import { useBrowserStore } from "./browser-store";
-import type { BrowserConfig } from "../types/workspace";
+
 import { validateWorkspaceGraph } from "../lib/workspace-graph";
 import { normalizeSidebarPersistence } from "../lib/sidebar-organization";
+import {
+  collectGroupIds,
+  treeHasGroup,
+  getTopLeftGroupId,
+  findFirstGroupId,
+  findSiblingGroupId,
+  findParentOfGroup,
+  simplifyTree,
+  repairTree,
+  removeGroupFromTree,
+  replaceLeafInTree,
+  updateSizesAtPath,
+} from "../lib/split-tree";
+import {
+  titleForType,
+  createEmptyPane,
+  createPaneGroup,
+  nextWorkspaceName,
+  createDefaultWorkspace,
+  findNearestTerminalCwd,
+} from "../lib/pane-factory";
+import { resolveSourceGroupAfterTabRemoval } from "../lib/source-group-resolution";
+
+// Re-export tree helpers for consumers that import from this module
+export {
+  collectGroupIds,
+  getTopLeftGroupId,
+  findFirstGroupId,
+  findSiblingGroupId,
+  findParentOfGroup,
+  repairTree,
+  removeGroupFromTree,
+} from "../lib/split-tree";
 
 function findOwnerFolder(nodes: SidebarNode[], target: SidebarNode[]): string | null {
   for (const n of nodes) {
@@ -39,304 +71,6 @@ function findOwnerFolder(nodes: SidebarNode[], target: SidebarNode[]): string | 
     }
   }
   return null;
-}
-
-// ---------------------------------------------------------------------------
-// Tree helper functions (pure)
-// ---------------------------------------------------------------------------
-
-export function findParentOfGroup(
-  root: SplitNode,
-  groupId: string,
-): { parent: SplitNode; index: number } | null {
-  if (root.type === "leaf") return null;
-
-  for (let i = 0; i < root.children.length; i++) {
-    const child = root.children[i]!;
-    if (child.type === "leaf" && child.groupId === groupId) {
-      return { parent: root, index: i };
-    }
-    if (child.type === "branch") {
-      const result = findParentOfGroup(child, groupId);
-      if (result) return result;
-    }
-  }
-  return null;
-}
-
-export function collectGroupIds(root: SplitNode): string[] {
-  if (root.type === "leaf") return [root.groupId];
-  return root.children.flatMap(collectGroupIds);
-}
-
-function treeHasGroup(root: SplitNode, groupId: string): boolean {
-  return collectGroupIds(root).includes(groupId);
-}
-
-/** Walk children[0] at each branch level to find the top-left leaf group. */
-export function getTopLeftGroupId(root: SplitNode): string {
-  if (root.type === "leaf") return root.groupId;
-  return getTopLeftGroupId(root.children[0]!);
-}
-
-function simplifyTree(node: SplitNode): SplitNode {
-  if (node.type === "leaf") return node;
-
-  const simplified: SplitNode = {
-    ...node,
-    children: node.children.map(simplifyTree),
-  };
-
-  if (simplified.type === "branch" && simplified.children.length === 1) {
-    return simplified.children[0]!;
-  }
-
-  return simplified;
-}
-
-/**
- * Remove tree leaves whose groupId is not in `validGroupIds`.
- * Returns the repaired tree, or null if every leaf was orphaned.
- */
-export function repairTree(node: SplitNode, validGroupIds: Set<string>): SplitNode | null {
-  if (node.type === "leaf") {
-    return validGroupIds.has(node.groupId) ? node : null;
-  }
-
-  const newChildren: SplitNode[] = [];
-  const newSizes: number[] = [];
-
-  for (let i = 0; i < node.children.length; i++) {
-    const result = repairTree(node.children[i]!, validGroupIds);
-    if (result !== null) {
-      newChildren.push(result);
-      newSizes.push(node.sizes[i]!);
-    }
-  }
-
-  if (newChildren.length === 0) return null;
-  if (newChildren.length === 1) return newChildren[0]!;
-
-  // Re-normalize sizes
-  const sizeSum = newSizes.reduce((a, b) => a + b, 0);
-  const normalizedSizes = newSizes.map((s) => (s / sizeSum) * 100);
-
-  return {
-    type: "branch",
-    direction: node.direction,
-    children: newChildren,
-    sizes: normalizedSizes,
-  };
-}
-
-export function removeGroupFromTree(root: SplitNode, groupId: string): SplitNode | null {
-  if (root.type === "leaf") {
-    return root.groupId === groupId ? null : root;
-  }
-
-  const newChildren: SplitNode[] = [];
-  const newSizes: number[] = [];
-  let changed = false;
-
-  for (let i = 0; i < root.children.length; i++) {
-    const child = root.children[i]!;
-    const result = removeGroupFromTree(child, groupId);
-    if (result !== null) {
-      if (result !== child) changed = true;
-      newChildren.push(result);
-      newSizes.push(root.sizes[i]!);
-    } else {
-      changed = true;
-    }
-  }
-
-  // Group not found in this subtree — return unchanged
-  if (!changed) return root;
-
-  if (newChildren.length === 0) return null;
-
-  // Re-normalize sizes so they sum to 100
-  const sizeSum = newSizes.reduce((a, b) => a + b, 0);
-  const normalizedSizes = newSizes.map((s) => (s / sizeSum) * 100);
-
-  const branch: SplitNode = {
-    type: "branch",
-    direction: root.direction,
-    children: newChildren,
-    sizes: normalizedSizes,
-  };
-
-  return simplifyTree(branch);
-}
-
-// Replace a leaf matching `targetGroupId` with `replacement` (immutable).
-function replaceLeafInTree(
-  node: SplitNode,
-  targetGroupId: string,
-  replacement: SplitNode,
-): SplitNode {
-  if (node.type === "leaf") {
-    return node.groupId === targetGroupId ? replacement : node;
-  }
-
-  return {
-    ...node,
-    children: node.children.map((child) => replaceLeafInTree(child, targetGroupId, replacement)),
-  };
-}
-
-// Returns the first leaf's groupId in a tree.
-export function findFirstGroupId(node: SplitNode): string | null {
-  if (node.type === "leaf") return node.groupId;
-  for (const child of node.children) {
-    const gid = findFirstGroupId(child);
-    if (gid) return gid;
-  }
-  return null;
-}
-
-// Finds a sibling groupId for focus transfer when a group is being removed.
-export function findSiblingGroupId(root: SplitNode, groupId: string): string | null {
-  const parentResult = findParentOfGroup(root, groupId);
-  if (!parentResult || parentResult.parent.type !== "branch") return null;
-
-  const siblings = parentResult.parent.children;
-  // Prefer previous sibling, else next
-  const siblingIndex = parentResult.index > 0 ? parentResult.index - 1 : 1;
-  if (siblingIndex >= 0 && siblingIndex < siblings.length) {
-    const sibling = siblings[siblingIndex]!;
-    return sibling.type === "leaf" ? sibling.groupId : findFirstGroupId(sibling);
-  }
-  return null;
-}
-
-// Navigate to a branch node via a path of child indices and update its sizes.
-function updateSizesAtPath(node: SplitNode, path: number[], sizes: number[]): SplitNode {
-  if (path.length === 0) {
-    if (node.type === "branch") {
-      return { ...node, sizes };
-    }
-    return node;
-  }
-
-  if (node.type === "leaf") return node;
-
-  const [head, ...rest] = path;
-  return {
-    ...node,
-    children: node.children.map((child, i) =>
-      i === head ? updateSizesAtPath(child, rest, sizes) : child,
-    ),
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Default factory helpers
-// ---------------------------------------------------------------------------
-
-const titleForType: Record<PaneType, string> = {
-  terminal: "Terminal",
-  browser: "Browser",
-  editor: "Editor",
-  t3code: "T3 Code",
-  empty: "Empty",
-};
-
-/**
- * Find the CWD of the nearest terminal in a group or workspace.
- * Lookup order:
- *  1. Active tab in the specified group (if it's a terminal)
- *  2. Any terminal tab in the specified group
- *  3. Focused group's active terminal in the workspace (cross-group fallback)
- *  4. undefined (no terminal context → defaults to $HOME)
- */
-function findNearestTerminalCwd(
-  panes: Record<string, Pane>,
-  paneGroups: Record<string, PaneGroup>,
-  groupId: string | undefined,
-  workspace: Workspace | undefined,
-): string | undefined {
-  // Helper to extract CWD from a pane
-  const getCwd = (paneId: string): string | undefined => {
-    const pane = panes[paneId];
-    if (pane?.type !== "terminal") return undefined;
-    return (pane.config as TerminalConfig).cwd || undefined;
-  };
-
-  // 1. Active tab in the specified group
-  if (groupId) {
-    const group = paneGroups[groupId];
-    if (group) {
-      const activeTab = group.tabs.find((t) => t.id === group.activeTabId);
-      if (activeTab) {
-        const cwd = getCwd(activeTab.paneId);
-        if (cwd) return cwd;
-      }
-      // 2. Any terminal tab in the same group
-      for (const tab of group.tabs) {
-        const cwd = getCwd(tab.paneId);
-        if (cwd) return cwd;
-      }
-    }
-  }
-
-  // 3. Focused group's active terminal (cross-group fallback)
-  if (workspace && workspace.focusedGroupId && workspace.focusedGroupId !== groupId) {
-    const focusedGroup = paneGroups[workspace.focusedGroupId];
-    if (focusedGroup) {
-      const activeTab = focusedGroup.tabs.find((t) => t.id === focusedGroup.activeTabId);
-      if (activeTab) {
-        const cwd = getCwd(activeTab.paneId);
-        if (cwd) return cwd;
-      }
-    }
-  }
-
-  return undefined;
-}
-
-function createEmptyPane(type?: PaneType, configOverride?: Partial<PaneConfig>): Pane {
-  const paneType = type ?? "empty";
-  return {
-    id: nanoid(),
-    type: paneType,
-    title: titleForType[paneType] ?? "Empty",
-    config: configOverride ?? {},
-  };
-}
-
-function createPaneGroup(pane: Pane): PaneGroup {
-  const tabId = nanoid();
-  return {
-    id: nanoid(),
-    tabs: [{ id: tabId, paneId: pane.id }],
-    activeTabId: tabId,
-  };
-}
-
-function nextWorkspaceName(workspaces: Workspace[]): string {
-  const existingNumbers = new Set(
-    workspaces
-      .map((w) => {
-        const match = w.name.match(/^Workspace (\d+)$/);
-        return match ? parseInt(match[1]!, 10) : null;
-      })
-      .filter((n): n is number => n !== null),
-  );
-  let n = 1;
-  while (existingNumbers.has(n)) n++;
-  return `Workspace ${n}`;
-}
-
-function createDefaultWorkspace(name: string, group: PaneGroup): Workspace {
-  return {
-    id: nanoid(),
-    name,
-    root: { type: "leaf", groupId: group.id },
-    focusedGroupId: group.id,
-    zoomedGroupId: null,
-    lastActiveAt: Date.now(),
-  };
 }
 
 type SidebarContainer = "main" | "pinned";
@@ -731,6 +465,47 @@ function buildInitialState(): Pick<
   };
 }
 
+// ---------------------------------------------------------------------------
+// Shared navigation helpers (deduplicates next/prev mirror-image functions)
+// ---------------------------------------------------------------------------
+
+type StoreGet = () => WorkspaceState;
+type StoreSet = (partial: Partial<WorkspaceState>) => void;
+
+function activateAdjacentWorkspace(get: StoreGet, set: StoreSet, delta: 1 | -1): void {
+  const state = get();
+  const idx = state.workspaces.findIndex((w) => w.id === state.activeWorkspaceId);
+  if (idx < 0 || state.workspaces.length <= 1) return;
+  const targetIdx = (idx + delta + state.workspaces.length) % state.workspaces.length;
+  const targetWs = state.workspaces[targetIdx];
+  if (targetWs) {
+    set({
+      activeWorkspaceId: targetWs.id,
+      workspaces: state.workspaces.map((w) =>
+        w.id === targetWs.id ? { ...w, lastActiveAt: Date.now() } : w,
+      ),
+    });
+  }
+}
+
+function activateAdjacentTab(get: StoreGet, set: StoreSet, groupId: string, delta: 1 | -1): void {
+  const state = get();
+  const group = state.paneGroups[groupId];
+  if (!group || group.tabs.length <= 1) return;
+  const idx = group.tabs.findIndex((t) => t.id === group.activeTabId);
+  if (idx < 0) return;
+  const targetIdx = (idx + delta + group.tabs.length) % group.tabs.length;
+  const targetTab = group.tabs[targetIdx];
+  if (targetTab) {
+    set({
+      paneGroups: {
+        ...state.paneGroups,
+        [groupId]: { ...group, activeTabId: targetTab.id },
+      },
+    });
+  }
+}
+
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   ...buildInitialState(),
   pendingEditId: null,
@@ -983,100 +758,32 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const newPanes = { ...state.panes };
     delete newPanes[tab.paneId];
 
-    const remainingTabs = group.tabs.filter((t) => t.id !== tabId);
-
-    if (remainingTabs.length === 0) {
-      // Last tab in group
-      const allGroupIds = collectGroupIds(ws.root);
-
-      if (allGroupIds.length > 1) {
-        // Multiple groups exist: remove this group from the tree
-        const newRoot = removeGroupFromTree(ws.root, groupId);
-        const simplifiedRoot = newRoot ? simplifyTree(newRoot) : null;
-
-        if (!simplifiedRoot) {
-          // Shouldn't happen if allGroupIds.length > 1, but handle gracefully
-          const emptyPane = createEmptyPane();
-          newPanes[emptyPane.id] = emptyPane;
-          const newGroup = createPaneGroup(emptyPane);
-          const newPaneGroups = { ...state.paneGroups };
-          delete newPaneGroups[groupId];
-          newPaneGroups[newGroup.id] = newGroup;
-
-          set({
-            workspaces: state.workspaces.map((w) =>
-              w.id === workspaceId
-                ? {
-                    ...w,
-                    root: { type: "leaf", groupId: newGroup.id },
-                    focusedGroupId: newGroup.id,
-                  }
-                : w,
-            ),
-            panes: newPanes,
-            paneGroups: newPaneGroups,
-          });
-          return;
-        }
-
-        // Transfer focus
-        const newFocusedGroupId =
-          ws.focusedGroupId === groupId
-            ? (findSiblingGroupId(ws.root, groupId) ?? findFirstGroupId(simplifiedRoot))
-            : ws.focusedGroupId;
-
-        const newPaneGroups = { ...state.paneGroups };
+    // Resolve source group after tab removal
+    const newPaneGroups = { ...state.paneGroups };
+    const resolution = resolveSourceGroupAfterTabRemoval(ws, groupId, group, tabId);
+    switch (resolution.kind) {
+      case "tabs-remaining":
+        newPaneGroups[groupId] = resolution.srcGroup;
+        set({ panes: newPanes, paneGroups: newPaneGroups });
+        break;
+      case "group-removed":
         delete newPaneGroups[groupId];
-
         set({
           workspaces: state.workspaces.map((w) =>
             w.id === workspaceId
-              ? { ...w, root: simplifiedRoot, focusedGroupId: newFocusedGroupId }
+              ? { ...w, root: resolution.newRoot, focusedGroupId: resolution.newFocusedGroupId }
               : w,
           ),
           panes: newPanes,
           paneGroups: newPaneGroups,
         });
-      } else {
-        // Only group — replace with empty pane tab
-        const emptyPane = createEmptyPane();
-        newPanes[emptyPane.id] = emptyPane;
-        const newTab: PaneGroupTab = { id: nanoid(), paneId: emptyPane.id };
-
-        set({
-          panes: newPanes,
-          paneGroups: {
-            ...state.paneGroups,
-            [groupId]: {
-              ...group,
-              tabs: [newTab],
-              activeTabId: newTab.id,
-            },
-          },
-        });
-      }
-      return;
+        break;
+      case "group-replaced-with-empty":
+        newPanes[resolution.emptyPane.id] = resolution.emptyPane;
+        newPaneGroups[groupId] = resolution.srcGroup;
+        set({ panes: newPanes, paneGroups: newPaneGroups });
+        break;
     }
-
-    // Not the last tab — just remove and update activeTabId if needed
-    let newActiveTabId = group.activeTabId;
-    if (group.activeTabId === tabId) {
-      const removedIndex = group.tabs.findIndex((t) => t.id === tabId);
-      newActiveTabId =
-        remainingTabs[Math.min(removedIndex, remainingTabs.length - 1)]?.id ?? remainingTabs[0]!.id;
-    }
-
-    set({
-      panes: newPanes,
-      paneGroups: {
-        ...state.paneGroups,
-        [groupId]: {
-          ...group,
-          tabs: remainingTabs,
-          activeTabId: newActiveTabId,
-        },
-      },
-    });
   },
 
   setActiveGroupTab(workspaceId, groupId, tabId) {
@@ -1129,8 +836,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const tab = srcGroup.tabs.find((t) => t.id === tabId);
     if (!tab) return;
 
-    const remainingSrcTabs = srcGroup.tabs.filter((t) => t.id !== tabId);
-
     const destTabs = [...destGroup.tabs];
     const idx =
       insertIndex !== undefined ? Math.min(insertIndex, destTabs.length) : destTabs.length;
@@ -1147,49 +852,30 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       activeTabId: tab.id,
     };
 
-    if (remainingSrcTabs.length === 0) {
-      // Source group is now empty
-      const allGroupIds = collectGroupIds(ws.root);
-
-      if (allGroupIds.length > 1) {
-        // Remove the empty source group from the tree
-        const newRoot = removeGroupFromTree(ws.root, srcGroupId);
-        const simplifiedRoot = newRoot ? simplifyTree(newRoot) : ws.root;
-
-        const newFocusedGroupId =
-          ws.focusedGroupId === srcGroupId ? destGroupId : ws.focusedGroupId;
-
+    // Resolve source group after tab removal
+    const resolution = resolveSourceGroupAfterTabRemoval(
+      ws,
+      srcGroupId,
+      srcGroup,
+      tabId,
+      destGroupId,
+    );
+    switch (resolution.kind) {
+      case "tabs-remaining":
+        newPaneGroups[srcGroupId] = resolution.srcGroup;
+        break;
+      case "group-removed":
         delete newPaneGroups[srcGroupId];
-
         newWorkspaces = state.workspaces.map((w) =>
           w.id === workspaceId
-            ? { ...w, root: simplifiedRoot, focusedGroupId: newFocusedGroupId }
+            ? { ...w, root: resolution.newRoot, focusedGroupId: resolution.newFocusedGroupId }
             : w,
         );
-      } else {
-        // Only group left — add empty pane tab
-        const emptyPane = createEmptyPane();
-        newPanes = { ...state.panes, [emptyPane.id]: emptyPane };
-        const emptyTab: PaneGroupTab = { id: nanoid(), paneId: emptyPane.id };
-
-        newPaneGroups[srcGroupId] = {
-          ...srcGroup,
-          tabs: [emptyTab],
-          activeTabId: emptyTab.id,
-        };
-      }
-    } else {
-      // Update source group activeTabId if needed
-      let srcActiveTabId = srcGroup.activeTabId;
-      if (srcGroup.activeTabId === tabId) {
-        srcActiveTabId = remainingSrcTabs[0]!.id;
-      }
-
-      newPaneGroups[srcGroupId] = {
-        ...srcGroup,
-        tabs: remainingSrcTabs,
-        activeTabId: srcActiveTabId,
-      };
+        break;
+      case "group-replaced-with-empty":
+        newPanes = { ...state.panes, [resolution.emptyPane.id]: resolution.emptyPane };
+        newPaneGroups[srcGroupId] = resolution.srcGroup;
+        break;
     }
 
     set({
@@ -1239,40 +925,30 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     let newWorkspaces = state.workspaces;
     let newPanes = state.panes;
 
-    // Remove tab from source group
-    const remainingSrcTabs = srcGroup.tabs.filter((t) => t.id !== tabId);
-
-    if (remainingSrcTabs.length === 0) {
-      // Source group is now empty
-      if (srcGroupId !== targetGroupId) {
-        // Different groups: remove source leaf from the tree entirely
-        const cleaned = removeGroupFromTree(newRoot, srcGroupId);
-        newRoot = cleaned ? simplifyTree(cleaned) : newRoot;
+    // Resolve source group after tab removal.
+    // We use the *original* workspace tree for resolution — the tree modification
+    // (replaceLeafInTree) only affects the target, not the source group count.
+    // Special case: when srcGroupId === targetGroupId, the original tree has
+    // only 1 group (the same leaf), so it correctly falls into "group-replaced-with-empty"
+    // rather than "group-removed".
+    const resolution = resolveSourceGroupAfterTabRemoval(ws, srcGroupId, srcGroup, tabId);
+    switch (resolution.kind) {
+      case "tabs-remaining":
+        newPaneGroups[srcGroupId] = resolution.srcGroup;
+        break;
+      case "group-removed":
+        // Source group was the last tab and tree had multiple groups in the
+        // *original* tree — remove it from the *already-modified* newRoot.
+        {
+          const cleaned = removeGroupFromTree(newRoot, srcGroupId);
+          newRoot = cleaned ? simplifyTree(cleaned) : newRoot;
+        }
         delete newPaneGroups[srcGroupId];
-      } else {
-        // Same group: the target leaf was replaced by a branch that still
-        // contains a leaf for srcGroupId — populate it with an empty pane
-        // so the leaf isn't orphaned.
-        const emptyPane = createEmptyPane();
-        newPanes = { ...state.panes, [emptyPane.id]: emptyPane };
-        const emptyTab: PaneGroupTab = { id: nanoid(), paneId: emptyPane.id };
-        newPaneGroups[srcGroupId] = {
-          ...srcGroup,
-          tabs: [emptyTab],
-          activeTabId: emptyTab.id,
-        };
-      }
-    } else {
-      // Update source group
-      let srcActiveTabId = srcGroup.activeTabId;
-      if (srcGroup.activeTabId === tabId) {
-        srcActiveTabId = remainingSrcTabs[0]!.id;
-      }
-      newPaneGroups[srcGroupId] = {
-        ...srcGroup,
-        tabs: remainingSrcTabs,
-        activeTabId: srcActiveTabId,
-      };
+        break;
+      case "group-replaced-with-empty":
+        newPanes = { ...state.panes, [resolution.emptyPane.id]: resolution.emptyPane };
+        newPaneGroups[srcGroupId] = resolution.srcGroup;
+        break;
     }
 
     newWorkspaces = state.workspaces.map((w) =>
@@ -1317,52 +993,27 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       [destGroupId]: { ...destGroup, tabs: destTabs, activeTabId: newTab.id },
     };
 
-    // Remove tab from source group
-    const remainingSrcTabs = srcGroup.tabs.filter((t) => t.id !== tabId);
+    // Resolve source group after tab removal
     let newWorkspaces = state.workspaces;
     let newPanes = state.panes;
 
-    if (remainingSrcTabs.length === 0) {
-      const allGroupIds = collectGroupIds(srcWs.root);
-
-      if (allGroupIds.length > 1) {
-        // Remove empty source group from tree
-        const newRoot = removeGroupFromTree(srcWs.root, srcGroupId);
-        const simplifiedRoot = newRoot ? simplifyTree(newRoot) : srcWs.root;
-
-        const newFocusedGroupId =
-          srcWs.focusedGroupId === srcGroupId
-            ? (findSiblingGroupId(srcWs.root, srcGroupId) ?? findFirstGroupId(simplifiedRoot))
-            : srcWs.focusedGroupId;
-
+    const resolution = resolveSourceGroupAfterTabRemoval(srcWs, srcGroupId, srcGroup, tabId);
+    switch (resolution.kind) {
+      case "tabs-remaining":
+        newPaneGroups[srcGroupId] = resolution.srcGroup;
+        break;
+      case "group-removed":
         delete newPaneGroups[srcGroupId];
-
         newWorkspaces = state.workspaces.map((w) =>
           w.id === srcWorkspaceId
-            ? { ...w, root: simplifiedRoot, focusedGroupId: newFocusedGroupId }
+            ? { ...w, root: resolution.newRoot, focusedGroupId: resolution.newFocusedGroupId }
             : w,
         );
-      } else {
-        // Only group — add empty pane tab
-        const emptyPane = createEmptyPane();
-        newPanes = { ...state.panes, [emptyPane.id]: emptyPane };
-        const emptyTab: PaneGroupTab = { id: nanoid(), paneId: emptyPane.id };
-        newPaneGroups[srcGroupId] = {
-          ...srcGroup,
-          tabs: [emptyTab],
-          activeTabId: emptyTab.id,
-        };
-      }
-    } else {
-      let srcActiveTabId = srcGroup.activeTabId;
-      if (srcGroup.activeTabId === tabId) {
-        srcActiveTabId = remainingSrcTabs[0]!.id;
-      }
-      newPaneGroups[srcGroupId] = {
-        ...srcGroup,
-        tabs: remainingSrcTabs,
-        activeTabId: srcActiveTabId,
-      };
+        break;
+      case "group-replaced-with-empty":
+        newPanes = { ...state.panes, [resolution.emptyPane.id]: resolution.emptyPane };
+        newPaneGroups[srcGroupId] = resolution.srcGroup;
+        break;
     }
 
     set({
@@ -1419,7 +1070,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       id: nanoid(),
       type: "editor",
       title: `VS Code: ${folderName}`,
-      config: { folderPath } as PaneConfig,
+      config: { folderPath },
     };
     const newTab: PaneGroupTab = { id: nanoid(), paneId: pane.id };
 
@@ -1569,71 +1220,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   // -------------------------------------------------------------------
 
   activateNextWorkspace() {
-    const state = get();
-    const idx = state.workspaces.findIndex((w) => w.id === state.activeWorkspaceId);
-    if (idx < 0 || state.workspaces.length <= 1) return;
-    const nextIdx = (idx + 1) % state.workspaces.length;
-    const nextWs = state.workspaces[nextIdx];
-    if (nextWs) {
-      set({
-        activeWorkspaceId: nextWs.id,
-        workspaces: state.workspaces.map((w) =>
-          w.id === nextWs.id ? { ...w, lastActiveAt: Date.now() } : w,
-        ),
-      });
-    }
+    activateAdjacentWorkspace(get, set, 1);
   },
 
   activatePrevWorkspace() {
-    const state = get();
-    const idx = state.workspaces.findIndex((w) => w.id === state.activeWorkspaceId);
-    if (idx < 0 || state.workspaces.length <= 1) return;
-    const prevIdx = (idx - 1 + state.workspaces.length) % state.workspaces.length;
-    const prevWs = state.workspaces[prevIdx];
-    if (prevWs) {
-      set({
-        activeWorkspaceId: prevWs.id,
-        workspaces: state.workspaces.map((w) =>
-          w.id === prevWs.id ? { ...w, lastActiveAt: Date.now() } : w,
-        ),
-      });
-    }
+    activateAdjacentWorkspace(get, set, -1);
   },
 
   activateNextTab(workspaceId, groupId) {
-    const state = get();
-    const group = state.paneGroups[groupId];
-    if (!group || group.tabs.length <= 1) return;
-    const idx = group.tabs.findIndex((t) => t.id === group.activeTabId);
-    if (idx < 0) return;
-    const nextIdx = (idx + 1) % group.tabs.length;
-    const nextTab = group.tabs[nextIdx];
-    if (nextTab) {
-      set({
-        paneGroups: {
-          ...state.paneGroups,
-          [groupId]: { ...group, activeTabId: nextTab.id },
-        },
-      });
-    }
+    activateAdjacentTab(get, set, groupId, 1);
   },
 
   activatePrevTab(workspaceId, groupId) {
-    const state = get();
-    const group = state.paneGroups[groupId];
-    if (!group || group.tabs.length <= 1) return;
-    const idx = group.tabs.findIndex((t) => t.id === group.activeTabId);
-    if (idx < 0) return;
-    const prevIdx = (idx - 1 + group.tabs.length) % group.tabs.length;
-    const prevTab = group.tabs[prevIdx];
-    if (prevTab) {
-      set({
-        paneGroups: {
-          ...state.paneGroups,
-          [groupId]: { ...group, activeTabId: prevTab.id },
-        },
-      });
-    }
+    activateAdjacentTab(get, set, groupId, -1);
   },
 
   focusGroupInDirection(workspaceId, direction) {
@@ -1678,12 +1277,12 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   // -------------------------------------------------------------------
 
   addPane(type, config) {
-    const pane: Pane = {
+    const pane = {
       id: nanoid(),
       type,
       title: titleForType[type],
       config: config ?? {},
-    };
+    } as Pane;
 
     set({ panes: { ...get().panes, [pane.id]: pane } });
     return pane.id;
@@ -1710,7 +1309,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     set({
       panes: {
         ...panes,
-        [paneId]: { ...pane, config: nextConfig },
+        [paneId]: { ...pane, config: nextConfig } as Pane,
       },
     });
   },
@@ -1720,15 +1319,14 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const pane = panes[paneId];
     if (!pane || pane.type !== "browser") return;
 
-    const config = (pane.config ?? {}) as BrowserConfig;
-    if (config.zoom === zoom) return;
+    if (pane.config.zoom === zoom) return;
 
     set({
       panes: {
         ...panes,
         [paneId]: {
           ...pane,
-          config: { ...config, zoom },
+          config: { ...pane.config, zoom },
         },
       },
     });
@@ -1761,7 +1359,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
           type,
           title: titleForType[type],
           config: config ?? {},
-        },
+        } as Pane,
       },
     });
   },

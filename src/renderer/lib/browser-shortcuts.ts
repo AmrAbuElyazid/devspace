@@ -23,14 +23,18 @@ function getFocusedActivePane(state: BrowserShortcutWorkspaceState): Pane | null
 
 /** Get the focused browser pane (type "browser" only).
  *  Used for browser-specific actions: reload, back, forward, find, devtools. */
-export function getActiveFocusedBrowserPane(state: BrowserShortcutWorkspaceState): Pane | null {
+export function getActiveFocusedBrowserPane(
+  state: BrowserShortcutWorkspaceState,
+): Extract<Pane, { type: "browser" }> | null {
   const pane = getFocusedActivePane(state);
   return pane?.type === "browser" ? pane : null;
 }
 
 /** Get the focused WebView-based pane (browser, editor, or t3code).
  *  Used for actions that work on any WebContentsView: zoom. */
-export function getActiveFocusedWebViewPane(state: BrowserShortcutWorkspaceState): Pane | null {
+export function getActiveFocusedWebViewPane(
+  state: BrowserShortcutWorkspaceState,
+): Extract<Pane, { type: "browser" | "editor" | "t3code" }> | null {
   const pane = getFocusedActivePane(state);
   if (!pane) return null;
   return pane.type === "browser" || pane.type === "editor" || pane.type === "t3code" ? pane : null;

@@ -1,11 +1,5 @@
 import type { DropSide } from "../types/dnd";
-
-interface RectLike {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
+import type { RectLike } from "../types/geometry";
 
 interface ActiveTabDrag {
   workspaceId: string;
