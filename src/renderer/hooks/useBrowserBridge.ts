@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
 import { useBrowserStore } from "../store/browser-store";
 import { findWorkspaceIdForPane } from "../lib/browser-pane-routing";
+import { extractEditorFolderFromUrl } from "../lib/editor-url";
 import type { BrowserBridgeListeners, BrowserBridgeUnsubscribe } from "../../shared/types";
 
 function subscribeToBrowserEvents(listeners: BrowserBridgeListeners): BrowserBridgeUnsubscribe {
@@ -35,6 +36,7 @@ export function useBrowserBridge(): void {
   const setPendingPermissionRequest = useBrowserStore((s) => s.setPendingPermissionRequest);
   const clearPendingPermissionRequest = useBrowserStore((s) => s.clearPendingPermissionRequest);
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig);
+  const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
   const updateBrowserPaneZoom = useWorkspaceStore((s) => s.updateBrowserPaneZoom);
   const openBrowserInGroup = useWorkspaceStore((s) => s.openBrowserInGroup);
 
@@ -59,6 +61,23 @@ export function useBrowserBridge(): void {
       },
       onOpenInNewTabRequest: (request) => {
         const state = useWorkspaceStore.getState();
+
+        // When an editor pane (VS Code) tries to open a new window — e.g.
+        // the "Open Folder" action after a folder is dragged in — redirect
+        // the navigation back into the same editor pane instead of opening
+        // a new browser tab.
+        const sourcePane = state.panes[request.paneId];
+        if (sourcePane?.type === "editor") {
+          const folderPath = extractEditorFolderFromUrl(request.url);
+          if (folderPath) {
+            void window.api.browser.navigate(request.paneId, request.url);
+            const folderName = folderPath.split("/").pop() || folderPath;
+            updatePaneConfig(request.paneId, { folderPath });
+            updatePaneTitle(request.paneId, `VS Code: ${folderName}`);
+            return;
+          }
+        }
+
         const workspaceId = findWorkspaceIdForPane(
           state.workspaces,
           request.paneId,
@@ -80,5 +99,6 @@ export function useBrowserBridge(): void {
     setPendingPermissionRequest,
     updateBrowserPaneZoom,
     updatePaneConfig,
+    updatePaneTitle,
   ]);
 }
