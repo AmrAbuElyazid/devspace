@@ -1,0 +1,99 @@
+#!/bin/bash
+#
+# devspace-dev — CLI for the Devspace dev instance (bun run dev).
+#
+# Only talks to the dev port (21649). Will not touch the stable
+# packaged build running on port 21549.
+#
+# Usage:
+#   devspace-dev code [<folder>]   Open a folder in the dev instance's VS Code editor
+#   devspace-dev --help            Show this help message
+
+set -euo pipefail
+
+VERSION="0.1.0-dev"
+
+# ── Help / version ──────────────────────────────────────────────────────────
+
+show_help() {
+  cat <<'EOF'
+Usage: devspace-dev <command> [options]
+
+Talks to the dev instance only (bun run dev, port 21649).
+Will not touch the stable packaged build.
+
+Commands:
+  code [<folder>]   Open a folder in the built-in VS Code editor.
+                    Defaults to the current directory if no folder is given.
+
+Options:
+  --help, -h        Show this help message
+  --version, -v     Show version
+
+Examples:
+  devspace-dev code            # open VS Code with the current directory
+  devspace-dev code .          # same as above
+  devspace-dev code ~/project  # open VS Code with ~/project
+EOF
+}
+
+# ── Argument parsing ────────────────────────────────────────────────────────
+
+if [ $# -eq 0 ]; then
+  show_help
+  exit 0
+fi
+
+case "$1" in
+  --help|-h)
+    show_help
+    exit 0
+    ;;
+  --version|-v)
+    echo "devspace-dev $VERSION"
+    exit 0
+    ;;
+  code)
+    shift
+    ;;
+  *)
+    echo "Error: unknown command '$1'" >&2
+    echo "Run 'devspace-dev --help' for usage." >&2
+    exit 1
+    ;;
+esac
+
+# ── Resolve folder ──────────────────────────────────────────────────────────
+
+if [ $# -eq 0 ]; then
+  FOLDER="$(pwd)"
+else
+  if [ ! -d "$1" ]; then
+    echo "Error: '$1' is not a directory" >&2
+    exit 1
+  fi
+  FOLDER="$(cd "$1" && pwd)"
+fi
+
+ENCODED=$(printf '%s' "$FOLDER" | perl -pe 's/([^A-Za-z0-9\-._~\/])/sprintf("%%%02X", ord($1))/ge')
+
+# ── Communication with dev instance ────────────────────────────────────────
+
+TOKEN_DIR="$HOME/Library/Application Support/devspace/cli"
+DEV_PORT=21649
+
+token_file="$TOKEN_DIR/token.$DEV_PORT"
+if [ ! -f "$token_file" ]; then
+  echo "Error: No dev instance token found. Is 'bun run dev' running?" >&2
+  exit 1
+fi
+
+token=$(<"$token_file")
+if curl -sf -H "X-Devspace-Token: $token" \
+  "http://127.0.0.1:$DEV_PORT/open-editor?path=$ENCODED" >/dev/null 2>&1; then
+  exit 0
+fi
+
+echo "Error: Could not connect to dev instance on port $DEV_PORT." >&2
+echo "Start it with: bun run dev" >&2
+exit 1
