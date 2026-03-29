@@ -1,7 +1,7 @@
 import { collectGroupIds } from "../../store/workspace-store";
 import type { Workspace, Pane, PaneGroup } from "../../types/workspace";
 
-export function formatRelativeTime(timestamp: number): string {
+function formatRelativeTime(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
   if (seconds < 60) return "now";
   const minutes = Math.floor(seconds / 60);
