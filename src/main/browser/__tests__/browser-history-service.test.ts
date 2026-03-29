@@ -1,8 +1,19 @@
-import { test, expect } from "vitest";
+import { test, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrowserHistoryService } from "../browser-history-service";
+
+// Silence intentional error-path logging (ENOENT, corrupt JSON, etc.)
+beforeEach(() => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 test("dedupes imported history by source/profile/url/visitedAt", () => {
   const service = new BrowserHistoryService();

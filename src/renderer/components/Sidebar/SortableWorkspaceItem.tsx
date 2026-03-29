@@ -5,7 +5,7 @@ import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
 import type { SidebarContainer } from "../../types/dnd";
 
-export interface SortableWorkspaceItemProps {
+interface SortableWorkspaceItemProps {
   workspaceId: string;
   container: SidebarContainer;
   parentFolderId: string | null;

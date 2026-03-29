@@ -8,8 +8,10 @@ import { SidebarTreeLevel, type SidebarTreeLevelProps } from "./SidebarTreeLevel
 import type { SidebarNode } from "../../types/workspace";
 import type { SidebarContainer } from "../../types/dnd";
 
-export interface SortableFolderItemProps
-  extends Omit<SidebarTreeLevelProps, "nodes" | "container" | "parentFolderId" | "depth"> {
+interface SortableFolderItemProps extends Omit<
+  SidebarTreeLevelProps,
+  "nodes" | "container" | "parentFolderId" | "depth"
+> {
   folder: SidebarNode & { type: "folder" };
   container: SidebarContainer;
   parentFolderId: string | null;
