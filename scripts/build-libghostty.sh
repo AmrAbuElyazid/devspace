@@ -37,5 +37,39 @@ cp "$XCFW_DIR/libghostty.a" "$DEPS_DIR/lib/"
 # Copy the main header
 cp "$XCFW_DIR/Headers/ghostty.h" "$DEPS_DIR/include/"
 
+# Copy shell integration scripts (for CWD tracking via OSC 7, prompt marking, etc.)
+SHARE_DIR="$DEPS_DIR/share/ghostty"
+mkdir -p "$SHARE_DIR/shell-integration"
+if [ -d "$GHOSTTY_DIR/zig-out/share/ghostty/shell-integration" ]; then
+  echo "Copying shell integration from build output..."
+  rsync -a "$GHOSTTY_DIR/zig-out/share/ghostty/shell-integration/" "$SHARE_DIR/shell-integration/"
+elif [ -d "$GHOSTTY_DIR/src/shell-integration" ]; then
+  echo "Copying shell integration from source tree..."
+  rsync -a "$GHOSTTY_DIR/src/shell-integration/" "$SHARE_DIR/shell-integration/"
+fi
+
+# Compile xterm-ghostty terminfo using the system's tic compiler.
+# Stored outside GHOSTTY_RESOURCES_DIR to prevent the native bridge from
+# forcing TERM=xterm-ghostty (which can cause display issues).
+TERMINFO_DIR="$DEPS_DIR/share/terminfo"
+if [ -f "$SHARE_DIR/xterm-ghostty.terminfo" ]; then
+  echo "Compiling xterm-ghostty terminfo..."
+  mkdir -p "$TERMINFO_DIR"
+  tic -x -o "$TERMINFO_DIR" "$SHARE_DIR/xterm-ghostty.terminfo" 2>/dev/null || true
+elif command -v infocmp >/dev/null 2>&1; then
+  # Try to extract from the build output or system
+  GHOSTTY_TERMINFO="$GHOSTTY_DIR/zig-out/share/terminfo"
+  if [ -d "$GHOSTTY_TERMINFO" ]; then
+    echo "Extracting and compiling terminfo from build output..."
+    TERMINFO="$GHOSTTY_TERMINFO" infocmp -x xterm-ghostty > /tmp/xterm-ghostty.terminfo 2>/dev/null || true
+    if [ -s /tmp/xterm-ghostty.terminfo ]; then
+      mkdir -p "$TERMINFO_DIR"
+      tic -x -o "$TERMINFO_DIR" /tmp/xterm-ghostty.terminfo 2>/dev/null || true
+      cp /tmp/xterm-ghostty.terminfo "$SHARE_DIR/xterm-ghostty.terminfo"
+    fi
+    rm -f /tmp/xterm-ghostty.terminfo
+  fi
+fi
+
 echo "Done. Artifacts in $DEPS_DIR"
 ls -la "$DEPS_DIR/include/" "$DEPS_DIR/lib/"

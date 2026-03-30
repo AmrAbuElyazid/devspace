@@ -893,9 +893,33 @@ static bool action_cb(ghostty_app_t app, ghostty_target_s target, ghostty_action
             }
             return true;
         }
+        // Tab, split, and window management — Devspace handles these through
+        // its own React-based workspace system, so we consume the actions
+        // (return true) to prevent Ghostty from attempting default handling.
         case GHOSTTY_ACTION_NEW_TAB:
-            // Could wire to create a new tab via callback; for now ignore
-            return false;
+        case GHOSTTY_ACTION_CLOSE_TAB:
+        case GHOSTTY_ACTION_NEW_SPLIT:
+        case GHOSTTY_ACTION_GOTO_SPLIT:
+        case GHOSTTY_ACTION_RESIZE_SPLIT:
+        case GHOSTTY_ACTION_EQUALIZE_SPLITS:
+        case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
+        case GHOSTTY_ACTION_MOVE_TAB:
+        case GHOSTTY_ACTION_GOTO_TAB:
+        case GHOSTTY_ACTION_NEW_WINDOW:
+        case GHOSTTY_ACTION_CLOSE_WINDOW:
+        case GHOSTTY_ACTION_CLOSE_ALL_WINDOWS:
+        case GHOSTTY_ACTION_TOGGLE_FULLSCREEN:
+        case GHOSTTY_ACTION_TOGGLE_MAXIMIZE:
+        case GHOSTTY_ACTION_TOGGLE_WINDOW_DECORATIONS:
+        case GHOSTTY_ACTION_TOGGLE_TAB_OVERVIEW:
+        case GHOSTTY_ACTION_TOGGLE_QUICK_TERMINAL:
+        case GHOSTTY_ACTION_TOGGLE_COMMAND_PALETTE:
+        case GHOSTTY_ACTION_TOGGLE_VISIBILITY:
+        case GHOSTTY_ACTION_PRESENT_TERMINAL:
+        case GHOSTTY_ACTION_RESET_WINDOW_SIZE:
+        case GHOSTTY_ACTION_GOTO_WINDOW:
+        case GHOSTTY_ACTION_FLOAT_WINDOW:
+            return true;
 
         case GHOSTTY_ACTION_SET_TAB_TITLE: {
             if (target.tag != GHOSTTY_TARGET_SURFACE) return false;
@@ -994,6 +1018,69 @@ static bool action_cb(ghostty_app_t app, ghostty_target_s target, ghostty_action
             }
             return true;
         }
+
+        case GHOSTTY_ACTION_MOUSE_VISIBILITY: {
+            if (action.action.mouse_visibility == GHOSTTY_MOUSE_HIDDEN) {
+                [NSCursor hide];
+            } else {
+                [NSCursor unhide];
+            }
+            return true;
+        }
+
+        case GHOSTTY_ACTION_MOUSE_OVER_LINK: {
+            // Ghostty signals when hovering over a clickable link.
+            // Update cursor accordingly.
+            if (action.action.mouse_over_link.url) {
+                [[NSCursor pointingHandCursor] set];
+            } else {
+                [[NSCursor IBeamCursor] set];
+            }
+            return true;
+        }
+
+        // Config management — consume to acknowledge; Devspace doesn't
+        // need to react to config reloads beyond what Ghostty handles internally.
+        case GHOSTTY_ACTION_RELOAD_CONFIG:
+        case GHOSTTY_ACTION_CONFIG_CHANGE:
+        case GHOSTTY_ACTION_OPEN_CONFIG:
+            return true;
+
+        // Color changes from OSC sequences or config — consume for now.
+        // Future: forward to renderer for background color syncing.
+        case GHOSTTY_ACTION_COLOR_CHANGE:
+            return true;
+
+        // Cell size and scrollbar — consume; Devspace uses its own layout system.
+        case GHOSTTY_ACTION_CELL_SIZE:
+        case GHOSTTY_ACTION_SCROLLBAR:
+            return true;
+
+        // Search — consume for now. Future: wire to a search UI.
+        case GHOSTTY_ACTION_START_SEARCH:
+        case GHOSTTY_ACTION_END_SEARCH:
+        case GHOSTTY_ACTION_SEARCH_TOTAL:
+        case GHOSTTY_ACTION_SEARCH_SELECTED:
+            return true;
+
+        // Key sequence/table indicators — consume; future UI feature.
+        case GHOSTTY_ACTION_KEY_SEQUENCE:
+        case GHOSTTY_ACTION_KEY_TABLE:
+            return true;
+
+        // Command finished (from OSC 133 D) — consume; future feature.
+        case GHOSTTY_ACTION_COMMAND_FINISHED:
+            return true;
+
+        // Misc actions that should be consumed rather than ignored.
+        case GHOSTTY_ACTION_QUIT:
+        case GHOSTTY_ACTION_SECURE_INPUT:
+        case GHOSTTY_ACTION_QUIT_TIMER:
+        case GHOSTTY_ACTION_TOGGLE_BACKGROUND_OPACITY:
+        case GHOSTTY_ACTION_COPY_TITLE_TO_CLIPBOARD:
+        case GHOSTTY_ACTION_READONLY:
+        case GHOSTTY_ACTION_PROMPT_TITLE:
+            return true;
 
         default:
             return false;
