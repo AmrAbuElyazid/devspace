@@ -468,10 +468,10 @@ export class BrowserSessionManager {
         console.log(
           `[browser-session] intercepted ${url.pathname} — serving stable secret key (${keyBuffer.length} bytes) for ${url.origin}`,
         );
-        return new Response(new Uint8Array(keyBuffer), {
+        return new globalThis.Response(new Uint8Array(keyBuffer), {
           status: 200,
           headers: { "Content-Type": "application/octet-stream" },
-        });
+        }) as Response;
       }
       // Pass all other HTTP requests through to the default network stack.
       // bypassCustomProtocolHandlers is REQUIRED to prevent infinite recursion —

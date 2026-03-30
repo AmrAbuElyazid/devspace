@@ -23,6 +23,11 @@ import {
   toElectronAccelerator,
 } from "../shared/shortcuts";
 
+// Keep the same userData path as before the monorepo conversion.
+// Without this, Electron derives the path from package.json "name" (@devspace/desktop)
+// which would lose existing user data (shortcuts, browser history, etc.).
+app.setName("devspace");
+
 // Sync shell environment before app is ready (macOS GUI apps don't inherit login shell env)
 syncShellEnvironment();
 
@@ -186,7 +191,7 @@ function createWindow(): void {
   if (!process.env.GHOSTTY_RESOURCES_DIR) {
     const bundledResources = app.isPackaged
       ? join(process.resourcesPath, "ghostty")
-      : join(app.getAppPath(), "deps/libghostty/share/ghostty");
+      : join(app.getAppPath(), "../../packages/ghostty-electron/deps/libghostty/share/ghostty");
     if (existsSync(bundledResources)) {
       process.env.GHOSTTY_RESOURCES_DIR = bundledResources;
     }
@@ -194,7 +199,7 @@ function createWindow(): void {
   if (!process.env.TERMINFO) {
     const terminfoDir = app.isPackaged
       ? join(process.resourcesPath, "terminfo")
-      : join(app.getAppPath(), "deps/libghostty/share/terminfo");
+      : join(app.getAppPath(), "../../packages/ghostty-electron/deps/libghostty/share/terminfo");
     if (existsSync(terminfoDir)) {
       process.env.TERMINFO = terminfoDir;
     }

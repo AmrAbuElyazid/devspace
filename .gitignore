@@ -8,14 +8,17 @@ dist/
 docs/superpowers/
 opencode.json
 
+# Turborepo
+.turbo/
+
 # Native addon build artifacts
-native/build/
+packages/ghostty-electron/native/build/
 
 # Ghostty source checkout (used by build script)
 .ghostty-src/
 
 # Large binary deps (libghostty static lib)
-deps/libghostty/lib/
+packages/ghostty-electron/deps/libghostty/lib/
 
 # Electron-builder output
 release/

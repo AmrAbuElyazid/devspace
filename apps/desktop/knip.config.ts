@@ -4,10 +4,12 @@ const config: KnipConfig = {
   entry: ["src/main/index.ts", "src/preload/index.ts", "src/renderer/main.tsx"],
   project: ["src/**/*.{ts,tsx}"],
   ignoreDependencies: [
-    "node-addon-api", // used by native/binding.gyp, not visible to knip
     "@vitejs/plugin-react", // used in electron.vite.config.ts
     "@tailwindcss/postcss", // used in postcss.config.mjs
     "tailwindcss", // peer dep of @tailwindcss/postcss, used via CSS
+  ],
+  ignoreBinaries: [
+    "node-gyp", // used in rebuild-native script, installed via ghostty-electron
   ],
   ignore: [
     "src/renderer/components/ui/**", // UI primitives are a component library with intentional public exports

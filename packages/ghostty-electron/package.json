@@ -1,0 +1,44 @@
+{
+  "name": "ghostty-electron",
+  "version": "0.1.0",
+  "description": "Ghostty terminal emulator bridge for Electron apps",
+  "keywords": [
+    "electron",
+    "ghostty",
+    "native",
+    "terminal"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anomalyco/devspace",
+    "directory": "packages/ghostty-electron"
+  },
+  "files": [
+    "src",
+    "native",
+    "deps",
+    "share"
+  ],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "rebuild-native": "cd native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=$(node -p \"process.arch\") --dist-url=https://electronjs.org/headers",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "node-addon-api": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "electron": "catalog:",
+    "node-gyp": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "electron": ">=30"
+  }
+}
