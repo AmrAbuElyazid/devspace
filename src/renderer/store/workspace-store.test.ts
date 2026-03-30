@@ -1391,6 +1391,32 @@ test("updatePaneConfig does not update lastTerminalCwd for non-terminal panes", 
   expect(getWorkspace(wsId)!.lastTerminalCwd).toBeUndefined();
 });
 
+test("addWorkspace inherits CWD then new workspace CWD diverges independently", () => {
+  const wsAId = setupWorkspace();
+  const wsA = getWorkspace(wsAId)!;
+  const groupA = useWorkspaceStore.getState().paneGroups[wsA.focusedGroupId!]!;
+  const paneAId = groupA.tabs[0]!.paneId;
+
+  // Set CWD on WS A
+  useWorkspaceStore.getState().updatePaneConfig(paneAId, { cwd: "/shared/start" });
+
+  // Create WS B (inherits from A)
+  useWorkspaceStore.getState().setActiveWorkspace(wsAId);
+  useWorkspaceStore.getState().addWorkspace("WS B");
+  const wsBId = useWorkspaceStore.getState().activeWorkspaceId;
+  expect(getWorkspace(wsBId)!.lastTerminalCwd).toBe("/shared/start");
+
+  // Change CWD on WS B
+  const wsB = getWorkspace(wsBId)!;
+  const groupB = useWorkspaceStore.getState().paneGroups[wsB.focusedGroupId!]!;
+  const paneBId = groupB.tabs[0]!.paneId;
+  useWorkspaceStore.getState().updatePaneConfig(paneBId, { cwd: "/ws-b/diverged" });
+
+  // WS B should have diverged, WS A should be unchanged
+  expect(getWorkspace(wsBId)!.lastTerminalCwd).toBe("/ws-b/diverged");
+  expect(getWorkspace(wsAId)!.lastTerminalCwd).toBe("/shared/start");
+});
+
 test("closing both panes on the left side of a 2x2 layout collapses to the right column", () => {
   const { wsId, groupIds } = setupFourGroupWorkspace();
   expect(groupIds.length).toBe(4);

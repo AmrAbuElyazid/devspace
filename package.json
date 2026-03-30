@@ -82,6 +82,27 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "deps/libghostty/share/ghostty",
+        "to": "ghostty",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "deps/libghostty/share/devspace-shell-integration",
+        "to": "devspace-shell-integration",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "deps/libghostty/share/terminfo",
+        "to": "terminfo",
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   }
