@@ -1,0 +1,231 @@
+# ghostty-electron
+
+Embed [Ghostty](https://ghostty.org) terminal surfaces in Electron apps.
+
+This package wraps Ghostty's libghostty via a native N-API addon and exposes
+a TypeScript API for creating, positioning, and managing terminal surfaces
+within an Electron `BrowserWindow`.
+
+> **Status**: Early / experimental. macOS arm64 only. API will change.
+
+## Requirements
+
+- macOS (arm64)
+- Electron >= 30
+- node-gyp build toolchain (Xcode Command Line Tools)
+- Pre-built `libghostty.a` in `deps/libghostty/lib/` (see [Building libghostty](#building-libghostty))
+
+## Installation
+
+Within a monorepo using workspace protocol:
+
+```json
+{
+  "dependencies": {
+    "ghostty-electron": "workspace:*"
+  }
+}
+```
+
+After installing, compile the native addon against your Electron version:
+
+```sh
+cd packages/ghostty-electron/native
+npx node-gyp rebuild \
+  --target=$(node -e "console.log(require('electron/package.json').version)") \
+  --arch=$(node -p "process.arch") \
+  --dist-url=https://electronjs.org/headers
+```
+
+Or from the consuming app:
+
+```sh
+bun run rebuild-native
+```
+
+## Usage
+
+```typescript
+import { GhosttyTerminal } from "ghostty-electron";
+import { resolve } from "path";
+
+// 1. Create an instance
+const terminal = new GhosttyTerminal();
+
+// 2. Initialize with the Electron window handle and native addon path
+terminal.init({
+  windowHandle: mainWindow.getNativeWindowHandle(),
+  nativeAddonPath: resolve(
+    __dirname,
+    "path/to/ghostty_bridge.node",
+  ),
+});
+
+// 3. Listen for events
+terminal.on("title-changed", (surfaceId, title) => {
+  console.log(`Terminal ${surfaceId} title: ${title}`);
+});
+
+terminal.on("pwd-changed", (surfaceId, pwd) => {
+  console.log(`Terminal ${surfaceId} cwd: ${pwd}`);
+});
+
+terminal.on("surface-closed", (surfaceId) => {
+  console.log(`Terminal ${surfaceId} closed`);
+});
+
+// 4. Create a terminal surface
+terminal.createSurface("term-1", {
+  cwd: "/Users/me/projects",
+  envVars: { MY_VAR: "hello" },
+});
+
+// 5. Position it within the window (CSS pixels)
+terminal.setBounds("term-1", { x: 0, y: 40, width: 800, height: 560 });
+
+// 6. Show and focus
+terminal.showSurface("term-1");
+terminal.focusSurface("term-1");
+
+// 7. Clean up when done
+terminal.destroy();
+```
+
+## API
+
+### `GhosttyTerminal`
+
+The main class. One instance per `BrowserWindow`.
+
+#### `init(config: GhosttyTerminalConfig)`
+
+Initialize the native bridge. Must be called before any other method.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `windowHandle` | `Buffer` | From `BrowserWindow.getNativeWindowHandle()` |
+| `nativeAddonPath` | `string` | Absolute path to compiled `ghostty_bridge.node` |
+
+#### `createSurface(surfaceId: string, options?: CreateSurfaceOptions)`
+
+Spawn a new terminal surface. Each surface is an independent shell session
+rendered via Metal.
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `cwd` | `string?` | Initial working directory |
+| `envVars` | `Record<string, string>?` | Additional environment variables |
+
+#### `destroySurface(surfaceId: string)`
+
+Kill the shell process and remove the surface.
+
+#### `showSurface(surfaceId: string)` / `hideSurface(surfaceId: string)`
+
+Toggle surface visibility.
+
+#### `focusSurface(surfaceId: string)` / `blurSurfaces()`
+
+Direct keyboard input to a surface, or remove focus from all surfaces.
+
+#### `setBounds(surfaceId: string, bounds: TerminalBounds)`
+
+Position and size a surface within the window. Coordinates are CSS pixels
+relative to the window's content area.
+
+#### `setVisibleSurfaces(surfaceIds: string[])`
+
+Batch-set which surfaces are visible. Surfaces not in the list are hidden.
+
+#### `sendBindingAction(surfaceId: string, action: string): boolean`
+
+Send a Ghostty key binding action (e.g. `"increase_font_size:1"`,
+`"copy_to_clipboard"`, `"search"`).
+
+#### `setReservedShortcuts(shortcuts: ReservedShortcut[])`
+
+Register keyboard shortcuts that Ghostty should pass through to your app
+instead of handling itself.
+
+#### `on(event, listener)` / `off(event, listener)`
+
+Type-safe event subscription. Available events:
+
+| Event | Callback Signature |
+|-------|-------------------|
+| `title-changed` | `(surfaceId, title) => void` |
+| `surface-closed` | `(surfaceId) => void` |
+| `surface-focused` | `(surfaceId) => void` |
+| `pwd-changed` | `(surfaceId, pwd) => void` |
+| `notification` | `(surfaceId, title, body) => void` |
+| `search-start` | `(surfaceId, needle) => void` |
+| `search-end` | `(surfaceId) => void` |
+| `search-total` | `(surfaceId, total) => void` |
+| `search-selected` | `(surfaceId, selected) => void` |
+
+#### `destroy()`
+
+Destroy all surfaces, clear listeners, release the native bridge.
+
+## Shell integration
+
+Ghostty supports shell integration (CWD tracking, prompt marking) for zsh,
+bash, and fish. The integration scripts ship in
+`deps/libghostty/share/ghostty/shell-integration/`.
+
+The package does **not** inject these automatically. Your app is responsible
+for setting the appropriate env vars via `createSurface({ envVars })`. See
+the Devspace desktop app (`apps/desktop/src/main/terminal-manager.ts`) for
+a reference implementation covering zsh ZDOTDIR wrapping, bash
+PROMPT_COMMAND, and fish XDG_DATA_DIRS injection.
+
+## Building libghostty
+
+The pre-built static library (`deps/libghostty/lib/libghostty.a`) is not
+checked into git due to its size. To build from source:
+
+```sh
+./scripts/build-libghostty.sh
+```
+
+This clones the Ghostty repo, builds libghostty with Zig, and copies the
+artifacts into `deps/libghostty/`.
+
+## Project structure
+
+```
+src/
+  index.ts              Public API exports
+  types.ts              TypeScript type definitions
+  terminal-manager.ts   GhosttyTerminal class
+  native.ts             Native addon loader + N-API interface types
+native/
+  binding.gyp           node-gyp build configuration
+  ghostty_bridge.h      C++ header
+  ghostty_bridge.mm     Objective-C++ implementation
+deps/
+  libghostty/           Pre-built static library + shell integration resources
+scripts/
+  build-libghostty.sh   Build script for libghostty from source
+```
+
+## Known limitations and TODO
+
+- **macOS only** -- The native bridge uses Cocoa, Metal, and
+  Objective-C++. No Windows/Linux support yet.
+- **arm64 only** -- libghostty is currently built for Apple Silicon.
+  x86_64 cross-compilation is not wired up.
+- **No npm publish pipeline** -- The package exports raw TypeScript
+  source. A build step (tsdown/tsup) is needed before publishing to npm.
+  Works fine within a monorepo via workspace protocol.
+- **No package-level tests** -- `GhosttyTerminal` class has no unit
+  tests. The native bridge can't be easily mocked yet.
+- **Native addon path is manual** -- Consumers must provide the absolute
+  path to `ghostty_bridge.node`. A `node-gyp-build` or `prebuild-install`
+  pattern would improve this.
+- **Single window** -- One `GhosttyTerminal` instance per
+  `BrowserWindow`. Multi-window support requires multiple instances.
+
+## License
+
+MIT
