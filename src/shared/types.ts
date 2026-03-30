@@ -45,6 +45,10 @@ export interface DevspaceBridge {
     onClosed: (callback: (surfaceId: string) => void) => () => void;
     onFocused: (callback: (surfaceId: string) => void) => () => void;
     onPwdChanged: (callback: (surfaceId: string, pwd: string) => void) => () => void;
+    onSearchStart: (callback: (surfaceId: string, needle: string) => void) => () => void;
+    onSearchEnd: (callback: (surfaceId: string) => void) => () => void;
+    onSearchTotal: (callback: (surfaceId: string, total: number) => void) => () => void;
+    onSearchSelected: (callback: (surfaceId: string, selected: number) => void) => () => void;
   };
   window: {
     minimize: () => void;

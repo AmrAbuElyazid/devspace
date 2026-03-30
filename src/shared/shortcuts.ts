@@ -400,7 +400,7 @@ export const DEFAULT_SHORTCUTS: readonly ShortcutDefinition[] = [
   },
   {
     action: "browser-find",
-    label: "Find in Page",
+    label: "Find",
     category: "browser",
     defaultShortcut: cmd("f"),
     ipcChannel: "app:browser-find",

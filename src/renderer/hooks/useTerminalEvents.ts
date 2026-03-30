@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
 import { useSettingsStore } from "../store/settings-store";
+import { useTerminalStore } from "../store/terminal-store";
 
 /**
  * Manages terminal-related IPC event subscriptions:
@@ -60,6 +61,32 @@ export function useTerminalEvents(): void {
       if (pane?.type === "terminal") {
         void window.api.terminal.focus(activeTab.paneId);
       }
+    });
+  }, []);
+
+  // Search callbacks: Ghostty reports match counts back through the action callback pipeline.
+  useEffect(() => {
+    return window.api.terminal.onSearchStart((surfaceId) => {
+      useTerminalStore.getState().requestFindBarFocus(surfaceId);
+    });
+  }, []);
+
+  useEffect(() => {
+    return window.api.terminal.onSearchEnd((surfaceId) => {
+      useTerminalStore.getState().closeFindBar(surfaceId);
+      useTerminalStore.getState().clearSearchState(surfaceId);
+    });
+  }, []);
+
+  useEffect(() => {
+    return window.api.terminal.onSearchTotal((surfaceId, total) => {
+      useTerminalStore.getState().updateSearchTotal(surfaceId, total);
+    });
+  }, []);
+
+  useEffect(() => {
+    return window.api.terminal.onSearchSelected((surfaceId, selected) => {
+      useTerminalStore.getState().updateSearchSelected(surfaceId, selected);
     });
   }, []);
 }

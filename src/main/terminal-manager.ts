@@ -68,6 +68,10 @@ type TerminalCallback = {
   onSurfaceFocused?: (surfaceId: string) => void;
   onPwdChanged?: (surfaceId: string, pwd: string) => void;
   onNotification?: (surfaceId: string, title: string, body: string) => void;
+  onSearchStart?: (surfaceId: string, needle: string) => void;
+  onSearchEnd?: (surfaceId: string) => void;
+  onSearchTotal?: (surfaceId: string, total: number) => void;
+  onSearchSelected?: (surfaceId: string, selected: number) => void;
 };
 
 export class TerminalManager {
@@ -125,6 +129,30 @@ export class TerminalManager {
         this.callbacks.onNotification?.(surfaceId, title, body);
       }
     });
+
+    this.bridge.setCallback("search-start", (surfaceId: unknown, needle: unknown) => {
+      if (typeof surfaceId === "string" && typeof needle === "string") {
+        this.callbacks.onSearchStart?.(surfaceId, needle);
+      }
+    });
+
+    this.bridge.setCallback("search-end", (surfaceId: unknown) => {
+      if (typeof surfaceId === "string") {
+        this.callbacks.onSearchEnd?.(surfaceId);
+      }
+    });
+
+    this.bridge.setCallback("search-total", (surfaceId: unknown, total: unknown) => {
+      if (typeof surfaceId === "string" && typeof total === "number") {
+        this.callbacks.onSearchTotal?.(surfaceId, total);
+      }
+    });
+
+    this.bridge.setCallback("search-selected", (surfaceId: unknown, selected: unknown) => {
+      if (typeof surfaceId === "string" && typeof selected === "number") {
+        this.callbacks.onSearchSelected?.(surfaceId, selected);
+      }
+    });
   }
 
   onTitleChanged(callback: (surfaceId: string, title: string) => void): void {
@@ -145,6 +173,22 @@ export class TerminalManager {
 
   onNotification(callback: (surfaceId: string, title: string, body: string) => void): void {
     this.callbacks.onNotification = callback;
+  }
+
+  onSearchStart(callback: (surfaceId: string, needle: string) => void): void {
+    this.callbacks.onSearchStart = callback;
+  }
+
+  onSearchEnd(callback: (surfaceId: string) => void): void {
+    this.callbacks.onSearchEnd = callback;
+  }
+
+  onSearchTotal(callback: (surfaceId: string, total: number) => void): void {
+    this.callbacks.onSearchTotal = callback;
+  }
+
+  onSearchSelected(callback: (surfaceId: string, selected: number) => void): void {
+    this.callbacks.onSearchSelected = callback;
   }
 
   createSurface(

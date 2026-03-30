@@ -1056,12 +1056,66 @@ static bool action_cb(ghostty_app_t app, ghostty_target_s target, ghostty_action
         case GHOSTTY_ACTION_SCROLLBAR:
             return true;
 
-        // Search — consume for now. Future: wire to a search UI.
-        case GHOSTTY_ACTION_START_SEARCH:
-        case GHOSTTY_ACTION_END_SEARCH:
-        case GHOSTTY_ACTION_SEARCH_TOTAL:
-        case GHOSTTY_ACTION_SEARCH_SELECTED:
+        // Search — forward to renderer for find bar UI.
+        case GHOSTTY_ACTION_START_SEARCH: {
+            if (target.tag != GHOSTTY_TARGET_SURFACE) return false;
+            std::string surfaceId = findSurfaceId(target.target.surface);
+            if (surfaceId.empty()) return false;
+            const char* needle = action.action.start_search.needle;
+            std::string needleStr(needle ? needle : "");
+            std::string capturedId = surfaceId;
+            if (g_state.searchStartCallback) {
+                g_state.searchStartCallback.NonBlockingCall(
+                    [capturedId, needleStr](Napi::Env env, Napi::Function fn) {
+                        fn.Call({Napi::String::New(env, capturedId),
+                                 Napi::String::New(env, needleStr)});
+                    });
+            }
             return true;
+        }
+        case GHOSTTY_ACTION_END_SEARCH: {
+            if (target.tag != GHOSTTY_TARGET_SURFACE) return false;
+            std::string surfaceId = findSurfaceId(target.target.surface);
+            if (surfaceId.empty()) return false;
+            std::string capturedId = surfaceId;
+            if (g_state.searchEndCallback) {
+                g_state.searchEndCallback.NonBlockingCall(
+                    [capturedId](Napi::Env env, Napi::Function fn) {
+                        fn.Call({Napi::String::New(env, capturedId)});
+                    });
+            }
+            return true;
+        }
+        case GHOSTTY_ACTION_SEARCH_TOTAL: {
+            if (target.tag != GHOSTTY_TARGET_SURFACE) return false;
+            std::string surfaceId = findSurfaceId(target.target.surface);
+            if (surfaceId.empty()) return false;
+            ssize_t total = action.action.search_total.total;
+            std::string capturedId = surfaceId;
+            if (g_state.searchTotalCallback) {
+                g_state.searchTotalCallback.NonBlockingCall(
+                    [capturedId, total](Napi::Env env, Napi::Function fn) {
+                        fn.Call({Napi::String::New(env, capturedId),
+                                 Napi::Number::New(env, static_cast<double>(total))});
+                    });
+            }
+            return true;
+        }
+        case GHOSTTY_ACTION_SEARCH_SELECTED: {
+            if (target.tag != GHOSTTY_TARGET_SURFACE) return false;
+            std::string surfaceId = findSurfaceId(target.target.surface);
+            if (surfaceId.empty()) return false;
+            ssize_t selected = action.action.search_selected.selected;
+            std::string capturedId = surfaceId;
+            if (g_state.searchSelectedCallback) {
+                g_state.searchSelectedCallback.NonBlockingCall(
+                    [capturedId, selected](Napi::Env env, Napi::Function fn) {
+                        fn.Call({Napi::String::New(env, capturedId),
+                                 Napi::Number::New(env, static_cast<double>(selected))});
+                    });
+            }
+            return true;
+        }
 
         // Key sequence/table indicators — consume; future UI feature.
         case GHOSTTY_ACTION_KEY_SEQUENCE:
@@ -1588,6 +1642,18 @@ static Napi::Value SetCallback(const Napi::CallbackInfo& info) {
     } else if (event == "notification") {
         g_state.notificationCallback = Napi::ThreadSafeFunction::New(
             env, callback, "notification", 0, 1);
+    } else if (event == "search-start") {
+        g_state.searchStartCallback = Napi::ThreadSafeFunction::New(
+            env, callback, "searchStart", 0, 1);
+    } else if (event == "search-end") {
+        g_state.searchEndCallback = Napi::ThreadSafeFunction::New(
+            env, callback, "searchEnd", 0, 1);
+    } else if (event == "search-total") {
+        g_state.searchTotalCallback = Napi::ThreadSafeFunction::New(
+            env, callback, "searchTotal", 0, 1);
+    } else if (event == "search-selected") {
+        g_state.searchSelectedCallback = Napi::ThreadSafeFunction::New(
+            env, callback, "searchSelected", 0, 1);
     }
     return env.Undefined();
 }

@@ -82,6 +82,54 @@ const bridge: DevspaceBridge = {
         ipcRenderer.removeListener("terminal:pwdChanged", listener);
       };
     },
+    onSearchStart: (callback) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        surfaceId: string,
+        needle: string,
+      ): void => {
+        callback(surfaceId, needle);
+      };
+      ipcRenderer.on("terminal:searchStart", listener);
+      return () => {
+        ipcRenderer.removeListener("terminal:searchStart", listener);
+      };
+    },
+    onSearchEnd: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, surfaceId: string): void => {
+        callback(surfaceId);
+      };
+      ipcRenderer.on("terminal:searchEnd", listener);
+      return () => {
+        ipcRenderer.removeListener("terminal:searchEnd", listener);
+      };
+    },
+    onSearchTotal: (callback) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        surfaceId: string,
+        total: number,
+      ): void => {
+        callback(surfaceId, total);
+      };
+      ipcRenderer.on("terminal:searchTotal", listener);
+      return () => {
+        ipcRenderer.removeListener("terminal:searchTotal", listener);
+      };
+    },
+    onSearchSelected: (callback) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        surfaceId: string,
+        selected: number,
+      ): void => {
+        callback(surfaceId, selected);
+      };
+      ipcRenderer.on("terminal:searchSelected", listener);
+      return () => {
+        ipcRenderer.removeListener("terminal:searchSelected", listener);
+      };
+    },
   },
 
   window: {

@@ -21,7 +21,16 @@ export interface GhosttyBridge {
   sendBindingAction(surfaceId: string, action: string): boolean;
   setReservedShortcuts(shortcuts: NativeBridgeShortcut[]): void;
   setCallback(
-    event: "title-changed" | "surface-closed" | "surface-focused" | "pwd-changed" | "notification",
+    event:
+      | "title-changed"
+      | "surface-closed"
+      | "surface-focused"
+      | "pwd-changed"
+      | "notification"
+      | "search-start"
+      | "search-end"
+      | "search-total"
+      | "search-selected",
     callback: (...args: unknown[]) => void,
   ): void;
 }
