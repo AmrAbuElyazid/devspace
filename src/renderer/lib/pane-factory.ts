@@ -71,7 +71,7 @@ export function createDefaultWorkspace(name: string, group: PaneGroup): Workspac
  *  1. Active tab in the specified group (if it's a terminal)
  *  2. Any terminal tab in the specified group
  *  3. Focused group's active terminal in the workspace (cross-group fallback)
- *  4. lastTerminalCwd (global fallback from last active terminal)
+ *  4. workspace.lastTerminalCwd (per-workspace fallback, persisted across restarts)
  *  5. undefined (no terminal context → defaults to $HOME)
  */
 export function findNearestTerminalCwd(
@@ -79,7 +79,6 @@ export function findNearestTerminalCwd(
   paneGroups: Record<string, PaneGroup>,
   groupId: string | undefined,
   workspace: Workspace | undefined,
-  lastTerminalCwd?: string,
 ): string | undefined {
   // Helper to extract CWD from a pane
   const getCwd = (paneId: string): string | undefined => {
@@ -117,8 +116,8 @@ export function findNearestTerminalCwd(
     }
   }
 
-  // 4. Global fallback: last known terminal CWD
-  if (lastTerminalCwd) return lastTerminalCwd;
+  // 4. Per-workspace fallback: last known terminal CWD (persisted across restarts)
+  if (workspace?.lastTerminalCwd) return workspace.lastTerminalCwd;
 
   return undefined;
 }

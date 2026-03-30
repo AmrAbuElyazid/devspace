@@ -54,4 +54,6 @@ export interface Workspace {
   zoomedGroupId: string | null;
   pinned?: boolean;
   lastActiveAt: number;
+  /** Last known terminal CWD in this workspace — used as fallback for CWD inheritance. Persisted across restarts. */
+  lastTerminalCwd?: string;
 }

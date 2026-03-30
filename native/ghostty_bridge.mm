@@ -1183,6 +1183,21 @@ static Napi::Value InitGhostty(const Napi::CallbackInfo& info) {
     g_state.config = ghostty_config_new();
     ghostty_config_load_default_files(g_state.config);
     ghostty_config_load_recursive_files(g_state.config);
+
+    // Disable libghostty's built-in shell integration injection.
+    // Devspace handles shell integration itself via per-surface env vars
+    // and ZDOTDIR wrapping. Without this,
+    // libghostty's ZDOTDIR hijacking conflicts with the embedded terminal.
+    {
+        NSString* tmpDir = NSTemporaryDirectory();
+        NSString* tmpConf = [tmpDir stringByAppendingPathComponent:
+            [NSString stringWithFormat:@"devspace-ghostty-%d.conf", getpid()]];
+        NSString* confContent = @"shell-integration = none\n";
+        [confContent writeToFile:tmpConf atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        ghostty_config_load_file(g_state.config, [tmpConf UTF8String]);
+        [[NSFileManager defaultManager] removeItemAtPath:tmpConf error:nil];
+    }
+
     ghostty_config_finalize(g_state.config);
 
     // Set up runtime config
@@ -1262,13 +1277,37 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
 
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
 
-    // Optionally accept a second argument (options object with `cwd`)
+    // Optionally accept a second argument (options object with `cwd` and `envVars`)
     NSString* workingDirectory = nil;
+    std::vector<ghostty_env_var_s> envVars;
+    std::vector<std::string> envStorage; // keep strings alive until surface is created
     if (info.Length() > 1 && info[1].IsObject()) {
         Napi::Object opts = info[1].As<Napi::Object>();
         Napi::Value cwdVal = opts.Get("cwd");
         if (cwdVal.IsString()) {
             workingDirectory = [NSString stringWithUTF8String:cwdVal.As<Napi::String>().Utf8Value().c_str()];
+        }
+        // Parse env vars: { envVars: { KEY: "value", ... } }
+        Napi::Value envVal = opts.Get("envVars");
+        if (envVal.IsObject()) {
+            Napi::Object envObj = envVal.As<Napi::Object>();
+            Napi::Array keys = envObj.GetPropertyNames();
+            for (uint32_t i = 0; i < keys.Length(); i++) {
+                std::string key = keys.Get(i).As<Napi::String>().Utf8Value();
+                Napi::Value val = envObj.Get(key);
+                if (val.IsString()) {
+                    std::string value = val.As<Napi::String>().Utf8Value();
+                    envStorage.push_back(key);
+                    envStorage.push_back(value);
+                }
+            }
+            // Build ghostty_env_var_s array from storage (pairs of key, value)
+            for (size_t i = 0; i + 1 < envStorage.size(); i += 2) {
+                ghostty_env_var_s ev;
+                ev.key = envStorage[i].c_str();
+                ev.value = envStorage[i + 1].c_str();
+                envVars.push_back(ev);
+            }
         }
     }
 
@@ -1308,6 +1347,11 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
 
     if (workingDirectory) {
         surface_cfg.working_directory = [workingDirectory UTF8String];
+    }
+
+    if (!envVars.empty()) {
+        surface_cfg.env_vars = envVars.data();
+        surface_cfg.env_var_count = envVars.size();
     }
 
     ghostty_surface_t surface = ghostty_surface_new(g_state.app, &surface_cfg);

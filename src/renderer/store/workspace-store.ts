@@ -122,9 +122,6 @@ interface WorkspaceState {
   paneGroups: Record<string, PaneGroup>;
   pinnedSidebarNodes: SidebarNode[];
   sidebarTree: SidebarNode[];
-  /** Last known terminal CWD across all workspaces — used as final fallback for CWD inheritance. */
-  lastTerminalCwd: string | undefined;
-
   /** Set by addWorkspace/addFolder when the newly created item should enter edit mode */
   pendingEditId: string | null;
   pendingEditType: "workspace" | "folder" | "tab" | null;
@@ -517,7 +514,6 @@ function activateAdjacentTab(get: StoreGet, set: StoreSet, groupId: string, delt
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   ...buildInitialState(),
-  lastTerminalCwd: undefined,
   pendingEditId: null,
   pendingEditType: null,
   clearPendingEdit: () => set({ pendingEditId: null, pendingEditType: null }),
@@ -529,16 +525,15 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   addWorkspace: (name, parentFolderId = null, container = "main", defaultType) => {
     const paneType = defaultType ?? "terminal";
     // Inherit CWD from the currently focused terminal in the active workspace
+    const currentState = get();
+    const activeWs = currentState.workspaces.find((w) => w.id === currentState.activeWorkspaceId);
     let inheritedConfig: Partial<PaneConfig> | undefined;
     if (paneType === "terminal") {
-      const currentState = get();
-      const activeWs = currentState.workspaces.find((w) => w.id === currentState.activeWorkspaceId);
       const cwd = findNearestTerminalCwd(
         currentState.panes,
         currentState.paneGroups,
         activeWs?.focusedGroupId ?? undefined,
         activeWs,
-        currentState.lastTerminalCwd,
       );
       if (cwd) inheritedConfig = { cwd };
     }
@@ -546,6 +541,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const group = createPaneGroup(pane);
     const wsName = name ?? nextWorkspaceName(get().workspaces);
     const ws = createDefaultWorkspace(wsName, group);
+    if (activeWs?.lastTerminalCwd) {
+      ws.lastTerminalCwd = activeWs.lastTerminalCwd;
+    }
     set((state) => {
       const targetNodes = getSidebarNodesForContainer(state, container);
       const insertedNodes = insertSidebarNode(
@@ -732,16 +730,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     if (!group) return;
 
     const paneType = defaultType ?? "terminal";
-    // Inherit CWD from the nearest terminal (same group → focused group → lastTerminalCwd → $HOME)
+    // Inherit CWD from the nearest terminal (same group → focused group → workspace.lastTerminalCwd → $HOME)
     let inheritedConfig: Partial<PaneConfig> | undefined;
     if (paneType === "terminal") {
-      const cwd = findNearestTerminalCwd(
-        panes,
-        paneGroups,
-        groupId,
-        workspace,
-        state.lastTerminalCwd,
-      );
+      const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, workspace);
       if (cwd) inheritedConfig = { cwd };
     }
     const pane = createPane(paneType, inheritedConfig);
@@ -1124,7 +1116,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     // Inherit CWD from the pane being split
     let inheritedConfig: Partial<PaneConfig> | undefined;
     if (paneType === "terminal") {
-      const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, ws, state.lastTerminalCwd);
+      const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, ws);
       if (cwd) inheritedConfig = { cwd };
     }
     const newPane = createPane(paneType, inheritedConfig);
@@ -1318,8 +1310,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   },
 
   updatePaneConfig(paneId, updates) {
-    const { panes } = get();
-    const pane = panes[paneId];
+    const state = get();
+    const pane = state.panes[paneId];
     if (!pane) return;
 
     const nextConfig = { ...pane.config, ...updates };
@@ -1329,14 +1321,25 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
 
     const patch: Partial<WorkspaceState> = {
       panes: {
-        ...panes,
+        ...state.panes,
         [paneId]: { ...pane, config: nextConfig } as Pane,
       },
     };
 
-    // Track last terminal CWD globally for inheritance fallback
+    // Track last terminal CWD on the owning workspace for inheritance fallback
     if (pane.type === "terminal" && "cwd" in updates && typeof updates.cwd === "string") {
-      patch.lastTerminalCwd = updates.cwd;
+      const ownerWs = state.workspaces.find((ws) => {
+        const groupIds = collectGroupIds(ws.root);
+        return groupIds.some((gid) => {
+          const group = state.paneGroups[gid];
+          return group?.tabs.some((tab) => tab.paneId === paneId);
+        });
+      });
+      if (ownerWs) {
+        patch.workspaces = state.workspaces.map((ws) =>
+          ws.id === ownerWs.id ? { ...ws, lastTerminalCwd: updates.cwd as string } : ws,
+        );
+      }
     }
 
     set(patch);

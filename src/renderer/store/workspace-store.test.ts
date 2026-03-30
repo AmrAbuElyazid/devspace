@@ -1262,6 +1262,135 @@ test("moveTabToWorkspace from a nested last-tab group does not leave orphaned le
   }
 });
 
+// ---------------------------------------------------------------------------
+// Per-workspace lastTerminalCwd tests
+// ---------------------------------------------------------------------------
+
+test("updatePaneConfig with CWD change updates lastTerminalCwd on owning workspace", () => {
+  const wsId = setupWorkspace();
+  const ws = getWorkspace(wsId);
+  expect(ws).toBeTruthy();
+  expect(ws!.lastTerminalCwd).toBeUndefined();
+
+  // Find the terminal pane in the workspace
+  const groupId = ws!.focusedGroupId!;
+  const group = useWorkspaceStore.getState().paneGroups[groupId]!;
+  const paneId = group.tabs[0]!.paneId;
+  const pane = useWorkspaceStore.getState().panes[paneId];
+  expect(pane!.type).toBe("terminal");
+
+  // Simulate a pwd-changed event
+  useWorkspaceStore.getState().updatePaneConfig(paneId, { cwd: "/Users/test/project-a" });
+
+  const wsAfter = getWorkspace(wsId);
+  expect(wsAfter!.lastTerminalCwd).toBe("/Users/test/project-a");
+
+  // Simulate another cd
+  useWorkspaceStore.getState().updatePaneConfig(paneId, { cwd: "/Users/test/project-b" });
+
+  const wsAfter2 = getWorkspace(wsId);
+  expect(wsAfter2!.lastTerminalCwd).toBe("/Users/test/project-b");
+});
+
+test("updatePaneConfig CWD change only affects owning workspace, not others", () => {
+  resetWorkspaceStore();
+  useWorkspaceStore.getState().addWorkspace("WS A");
+  const wsAId = useWorkspaceStore.getState().activeWorkspaceId;
+
+  useWorkspaceStore.getState().addWorkspace("WS B");
+  const wsBId = useWorkspaceStore.getState().activeWorkspaceId;
+
+  // Get pane from WS B
+  const wsB = getWorkspace(wsBId)!;
+  const groupB = useWorkspaceStore.getState().paneGroups[wsB.focusedGroupId!]!;
+  const paneBId = groupB.tabs[0]!.paneId;
+
+  // Update CWD on WS B's pane
+  useWorkspaceStore.getState().updatePaneConfig(paneBId, { cwd: "/Users/test/ws-b-dir" });
+
+  // WS B should have the updated CWD
+  expect(getWorkspace(wsBId)!.lastTerminalCwd).toBe("/Users/test/ws-b-dir");
+
+  // WS A should be unaffected
+  expect(getWorkspace(wsAId)!.lastTerminalCwd).toBeUndefined();
+});
+
+test("new workspace inherits lastTerminalCwd from active workspace", () => {
+  const wsAId = setupWorkspace();
+  const wsA = getWorkspace(wsAId)!;
+  const groupA = useWorkspaceStore.getState().paneGroups[wsA.focusedGroupId!]!;
+  const paneAId = groupA.tabs[0]!.paneId;
+
+  // Set CWD on WS A
+  useWorkspaceStore.getState().updatePaneConfig(paneAId, { cwd: "/Users/test/project" });
+  expect(getWorkspace(wsAId)!.lastTerminalCwd).toBe("/Users/test/project");
+
+  // Create a new workspace (while WS A is active)
+  useWorkspaceStore.getState().setActiveWorkspace(wsAId);
+  useWorkspaceStore.getState().addWorkspace("WS B");
+  const wsBId = useWorkspaceStore.getState().activeWorkspaceId;
+
+  // New workspace should have inherited lastTerminalCwd
+  expect(getWorkspace(wsBId)!.lastTerminalCwd).toBe("/Users/test/project");
+});
+
+test("findNearestTerminalCwd falls back to workspace.lastTerminalCwd when no terminals exist", () => {
+  const wsId = setupWorkspace();
+  const ws = getWorkspace(wsId)!;
+  const groupId = ws.focusedGroupId!;
+  const group = useWorkspaceStore.getState().paneGroups[groupId]!;
+  const paneId = group.tabs[0]!.paneId;
+
+  // Set CWD then close the terminal (replace with a browser tab)
+  useWorkspaceStore.getState().updatePaneConfig(paneId, { cwd: "/Users/test/remembered" });
+
+  // Add a browser tab and remove the terminal tab
+  useWorkspaceStore.getState().addGroupTab(wsId, groupId, "browser");
+  const groupAfterAdd = useWorkspaceStore.getState().paneGroups[groupId]!;
+  const terminalTab = groupAfterAdd.tabs.find((t) => {
+    const p = useWorkspaceStore.getState().panes[t.paneId];
+    return p?.type === "terminal";
+  });
+  expect(terminalTab).toBeTruthy();
+  useWorkspaceStore.getState().removeGroupTab(wsId, groupId, terminalTab!.id);
+
+  // Now there are no terminal panes — add a new terminal tab
+  useWorkspaceStore.getState().addGroupTab(wsId, groupId, "terminal");
+
+  // The new terminal should have inherited CWD from workspace.lastTerminalCwd
+  const finalGroup = useWorkspaceStore.getState().paneGroups[groupId]!;
+  const newTerminalTab = finalGroup.tabs.find((t) => {
+    const p = useWorkspaceStore.getState().panes[t.paneId];
+    return p?.type === "terminal";
+  });
+  expect(newTerminalTab).toBeTruthy();
+  const newTerminalPane = useWorkspaceStore.getState().panes[newTerminalTab!.paneId]!;
+  expect(newTerminalPane.type).toBe("terminal");
+  expect(newTerminalPane.config).toEqual({ cwd: "/Users/test/remembered" });
+});
+
+test("updatePaneConfig does not update lastTerminalCwd for non-terminal panes", () => {
+  const wsId = setupWorkspace();
+  const ws = getWorkspace(wsId)!;
+  const groupId = ws.focusedGroupId!;
+
+  // Add a browser pane
+  useWorkspaceStore.getState().addGroupTab(wsId, groupId, "browser");
+  const group = useWorkspaceStore.getState().paneGroups[groupId]!;
+  const browserTab = group.tabs.find((t) => {
+    const p = useWorkspaceStore.getState().panes[t.paneId];
+    return p?.type === "browser";
+  });
+  expect(browserTab).toBeTruthy();
+
+  // Update the browser pane's config — should not affect lastTerminalCwd
+  useWorkspaceStore
+    .getState()
+    .updatePaneConfig(browserTab!.paneId, { url: "https://example.com/new" });
+
+  expect(getWorkspace(wsId)!.lastTerminalCwd).toBeUndefined();
+});
+
 test("closing both panes on the left side of a 2x2 layout collapses to the right column", () => {
   const { wsId, groupIds } = setupFourGroupWorkspace();
   expect(groupIds.length).toBe(4);
