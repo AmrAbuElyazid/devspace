@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
-import { useTerminalBounds } from "../hooks/useTerminalBounds";
+import { useNativeView } from "../hooks/useNativeView";
 import { useWorkspaceStore } from "../store/workspace-store";
 import { useTerminalStore } from "../store/terminal-store";
 import TerminalFindBar from "./terminal/TerminalFindBar";
@@ -21,16 +21,12 @@ export function markSurfaceDestroyed(surfaceId: string): void {
 interface TerminalPaneProps {
   paneId: string;
   config: TerminalConfig;
-  isVisible: boolean;
-  hideNativeView: boolean;
   isFocused: boolean;
 }
 
 export default function TerminalPane({
   paneId,
   config,
-  isVisible,
-  hideNativeView,
   isFocused,
 }: TerminalPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
@@ -40,15 +36,11 @@ export default function TerminalPane({
   const searchState = useTerminalStore((s) => s.searchStateByPaneId[paneId]);
   const closeFindBar = useTerminalStore((s) => s.closeFindBar);
 
-  const shouldShowNativeView = isVisible && !hideNativeView;
-
-  // Track bounds and send to main process.
-  // The native addon uses show-when-ready: the surface only becomes visible
-  // when BOTH show has been called AND setBounds has been called at least once.
-  // This eliminates the race where show fires before bounds are set.
-  useTerminalBounds({
-    surfaceId: paneId,
-    enabled: shouldShowNativeView,
+  // Centralized native view management — replaces the old show/hide effect
+  // and useTerminalBounds hook.
+  const { isVisible } = useNativeView({
+    id: paneId,
+    type: "terminal",
     ref: placeholderRef,
   });
 
@@ -61,22 +53,13 @@ export default function TerminalPane({
     void window.api.terminal.create(paneId, config.cwd ? { cwd: config.cwd } : undefined);
   }, [paneId, config.cwd]);
 
-  // Show/hide based on visibility.
-  // The native addon's show-when-ready pattern ensures the surface only
-  // actually appears after setBounds has been called at least once.
-  useEffect(() => {
-    if (!createdSurfaces.has(paneId)) return;
-    const action = shouldShowNativeView ? window.api.terminal.show : window.api.terminal.hide;
-    void action(paneId);
-  }, [shouldShowNativeView, paneId]);
-
   // Auto-focus when this pane becomes visible AND is the focused pane,
   // but NOT when the find bar is open (keyboard focus belongs to the input).
   useEffect(() => {
-    if (!createdSurfaces.has(paneId) || !shouldShowNativeView || !isFocused) return;
+    if (!createdSurfaces.has(paneId) || !isVisible || !isFocused) return;
     if (isFindBarOpen) return;
     void window.api.terminal.focus(paneId);
-  }, [shouldShowNativeView, isFocused, paneId, isFindBarOpen]);
+  }, [isVisible, isFocused, paneId, isFindBarOpen]);
 
   // When the find bar opens, blur the native terminal so the DOM input can
   // receive keyboard focus. Without this, the GhosttyView holds macOS first
@@ -133,7 +116,7 @@ export default function TerminalPane({
       <div
         ref={placeholderRef}
         className="terminal-native-view-slot flex-1 min-h-0"
-        data-native-view-hidden={!shouldShowNativeView ? "true" : undefined}
+        data-native-view-hidden={!isVisible ? "true" : undefined}
         onMouseDown={handleFocus}
       />
     </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { useBrowserBounds } from "../hooks/useBrowserBounds";
+import { useNativeView } from "../hooks/useNativeView";
 import { Button } from "./ui/button";
 import type { ReactElement } from "react";
 
@@ -14,8 +14,6 @@ export function markT3CodeDestroyed(paneId: string): void {
 
 interface T3CodePaneProps {
   paneId: string;
-  isVisible: boolean;
-  hideNativeView: boolean;
 }
 
 type T3CodeState =
@@ -24,13 +22,8 @@ type T3CodeState =
   | { status: "error"; message: string }
   | { status: "unavailable" };
 
-export default function T3CodePane({
-  paneId,
-  isVisible,
-  hideNativeView,
-}: T3CodePaneProps): ReactElement {
+export default function T3CodePane({ paneId }: T3CodePaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
-  const shouldShowNativeView = isVisible && !hideNativeView;
 
   const [state, setState] = useState<T3CodeState>(() => {
     if (startedInstances.has(paneId)) {
@@ -39,11 +32,13 @@ export default function T3CodePane({
     return { status: "starting" };
   });
 
-  // Track bounds for the WebContentsView
-  useBrowserBounds({
-    paneId,
-    enabled: shouldShowNativeView && state.status === "running",
+  // Centralized native view management — only register once the
+  // WebContentsView actually exists (status === "running").
+  const { isVisible } = useNativeView({
+    id: paneId,
+    type: "browser",
     ref: placeholderRef,
+    enabled: state.status === "running",
   });
 
   // Start the T3 Code server immediately on mount
@@ -81,13 +76,6 @@ export default function T3CodePane({
       cancelled = true;
     };
   }, [paneId, state.status]);
-
-  // Show/hide the WebContentsView based on visibility
-  useEffect(() => {
-    if (state.status !== "running") return;
-    const action = shouldShowNativeView ? window.api.browser.show : window.api.browser.hide;
-    void action(paneId);
-  }, [shouldShowNativeView, paneId, state.status]);
 
   const handleRetry = useCallback(() => {
     setState({ status: "starting" });
@@ -144,7 +132,7 @@ export default function T3CodePane({
     <div
       ref={placeholderRef}
       className="browser-native-view-slot"
-      data-native-view-hidden={!shouldShowNativeView ? "true" : undefined}
+      data-native-view-hidden={!isVisible ? "true" : undefined}
     />
   );
 }

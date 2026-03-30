@@ -223,6 +223,7 @@ const bridge: DevspaceBridge = {
     destroy: (paneId) => ipcRenderer.invoke("browser:destroy", paneId),
     show: (paneId) => ipcRenderer.invoke("browser:show", paneId),
     hide: (paneId) => ipcRenderer.invoke("browser:hide", paneId),
+    setVisiblePanes: (paneIds) => ipcRenderer.invoke("browser:setVisiblePanes", paneIds),
     getRuntimeState: (paneId) => ipcRenderer.invoke("browser:getRuntimeState", paneId),
     navigate: (paneId, url) => ipcRenderer.invoke("browser:navigate", paneId, url),
     back: (paneId) => ipcRenderer.invoke("browser:back", paneId),

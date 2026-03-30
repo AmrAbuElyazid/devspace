@@ -11,7 +11,7 @@ import {
   markBrowserPaneCreated,
   markBrowserPaneDestroyed,
 } from "../lib/browser-pane-session";
-import { useBrowserBounds } from "../hooks/useBrowserBounds";
+import { useNativeView } from "../hooks/useNativeView";
 import { useBrowserStore } from "../store/browser-store";
 import { useWorkspaceStore } from "../store/workspace-store";
 import { Button } from "./ui/button";
@@ -29,8 +29,6 @@ interface BrowserPaneProps {
   paneId: string;
   workspaceId: string;
   config: BrowserConfig;
-  isVisible: boolean;
-  hideNativeView: boolean;
 }
 
 type BrowserContextMenuAction =
@@ -78,8 +76,6 @@ export default function BrowserPane({
   paneId,
   workspaceId,
   config,
-  isVisible,
-  hideNativeView,
 }: BrowserPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -97,14 +93,17 @@ export default function BrowserPane({
   );
   const [inputUrl, setInputUrl] = useState(initialUrl);
   const failure = runtimeState?.failure ?? null;
-  const shouldHideNativeView = hideNativeView || failure !== null;
   const activePermissionRequest =
     pendingPermissionRequest?.paneId === paneId ? pendingPermissionRequest : null;
 
-  useBrowserBounds({
-    paneId,
-    enabled: isVisible && !shouldHideNativeView,
+  // Centralized native view management — replaces the old show/hide effect
+  // and useBrowserBounds hook.  When in a failure state the view is
+  // unregistered so the manager hides the WebContentsView.
+  const { isVisible } = useNativeView({
+    id: paneId,
+    type: "browser",
     ref: placeholderRef,
+    enabled: failure === null,
   });
 
   useEffect(() => {
@@ -153,12 +152,6 @@ export default function BrowserPane({
     inputRef.current?.focus();
     inputRef.current?.select();
   }, [addressBarFocusToken]);
-
-  useEffect(() => {
-    const nextVisible = isVisible && !shouldHideNativeView;
-    const action = nextVisible ? window.api.browser.show : window.api.browser.hide;
-    void action(paneId);
-  }, [isVisible, paneId, shouldHideNativeView]);
 
   const currentUrl = runtimeState?.url ?? initialUrl;
   const isLoading = runtimeState?.isLoading ?? false;
@@ -395,7 +388,7 @@ export default function BrowserPane({
         <div
           ref={placeholderRef}
           className="browser-native-view-slot"
-          data-native-view-hidden={!isVisible || shouldHideNativeView ? "true" : undefined}
+          data-native-view-hidden={!isVisible ? "true" : undefined}
         />
       </div>
     </div>

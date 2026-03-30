@@ -1,8 +1,8 @@
 import { memo, useRef, useCallback, useEffect, type ReactElement } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { shouldHideBrowserNativeViewForDrag } from "../lib/browser-pane-visibility";
 import { paneTypeIcons, paneTypeLabels } from "../lib/pane-type-meta";
 import { useWorkspaceStore, getTopLeftGroupId } from "../store/workspace-store";
+import { useNativeViewStore } from "../store/native-view-store";
 import { useDragContext } from "../hooks/useDragAndDrop";
 import GroupTabBar from "./GroupTabBar";
 import type {
@@ -72,7 +72,6 @@ function PaneContentDropZone({
 interface PaneGroupContainerProps {
   groupId: string;
   workspaceId: string;
-  overlayActive: boolean;
   sidebarOpen: boolean;
   dndEnabled: boolean;
 }
@@ -83,16 +82,12 @@ const PaneContent = memo(function PaneContent({
   paneType,
   paneConfig,
   workspaceId,
-  isVisible,
-  hideNativeView,
   isFocused,
 }: {
   paneId: string;
   paneType: PaneType;
   paneConfig: unknown;
   workspaceId: string;
-  isVisible: boolean;
-  hideNativeView: boolean;
   isFocused: boolean;
 }): ReactElement {
   switch (paneType) {
@@ -101,39 +96,27 @@ const PaneContent = memo(function PaneContent({
         <TerminalPane
           paneId={paneId}
           config={(paneConfig as TerminalConfig) ?? {}}
-          isVisible={isVisible}
-          hideNativeView={hideNativeView}
           isFocused={isFocused}
         />
       );
     case "editor":
-      return (
-        <EditorPane
-          paneId={paneId}
-          config={(paneConfig as EditorConfig) ?? {}}
-          isVisible={isVisible}
-          hideNativeView={hideNativeView}
-        />
-      );
+      return <EditorPane paneId={paneId} config={(paneConfig as EditorConfig) ?? {}} />;
     case "browser":
       return (
         <BrowserPane
           paneId={paneId}
           workspaceId={workspaceId}
           config={(paneConfig as BrowserConfig) ?? { url: "https://www.google.com" }}
-          isVisible={isVisible}
-          hideNativeView={hideNativeView}
         />
       );
     case "t3code":
-      return <T3CodePane paneId={paneId} isVisible={isVisible} hideNativeView={hideNativeView} />;
+      return <T3CodePane paneId={paneId} />;
   }
 });
 
 export default function PaneGroupContainer({
   groupId,
   workspaceId,
-  overlayActive,
   sidebarOpen,
   dndEnabled,
 }: PaneGroupContainerProps): ReactElement | null {
@@ -144,7 +127,6 @@ export default function PaneGroupContainer({
   });
   const isTopLeftGroup = !sidebarOpen && groupId === topLeftGroupId;
   const panes = useWorkspaceStore((s) => s.panes);
-  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const focusedGroupId = useWorkspaceStore((s) => {
     const ws = s.workspaces.find((w) => w.id === workspaceId);
     return ws?.focusedGroupId ?? null;
@@ -152,10 +134,8 @@ export default function PaneGroupContainer({
   const setFocusedGroup = useWorkspaceStore((s) => s.setFocusedGroup);
 
   const { activeDrag, dropIntent } = useDragContext();
-  const isVisibleWorkspace = workspaceId === activeWorkspaceId;
   const isFocused = focusedGroupId === groupId;
-  const shouldHideNative =
-    overlayActive || shouldHideBrowserNativeViewForDrag(activeDrag, isVisibleWorkspace);
+  const dragHidesViews = useNativeViewStore((s) => s.dragHidesViews);
   const previewSide =
     dropIntent?.kind === "split-group" && dropIntent.targetGroupId === groupId
       ? dropIntent.side
@@ -199,7 +179,7 @@ export default function PaneGroupContainer({
           if (!pane) return null;
 
           const showDragPlaceholder =
-            isActiveTab && shouldHideNative && activeDrag?.type === "group-tab";
+            isActiveTab && dragHidesViews && activeDrag?.type === "group-tab";
 
           return (
             <div key={tab.paneId} className="pane-tab-layer" data-active={isActiveTab || undefined}>
@@ -208,8 +188,6 @@ export default function PaneGroupContainer({
                 paneType={pane.type}
                 paneConfig={pane.config}
                 workspaceId={workspaceId}
-                isVisible={isVisibleWorkspace && isActiveTab}
-                hideNativeView={shouldHideNative || !isActiveTab}
                 isFocused={isFocused && isActiveTab}
               />
               {showDragPlaceholder && <DragPlaceholder pane={pane} />}
