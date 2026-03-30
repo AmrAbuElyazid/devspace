@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import type { Pane, PaneType, PaneConfig, PaneGroup, Workspace } from "../types/workspace";
+import { collectGroupIds } from "./split-tree";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -71,6 +72,7 @@ export function createDefaultWorkspace(name: string, group: PaneGroup): Workspac
  *  1. Active tab in the specified group (if it's a terminal)
  *  2. Any terminal tab in the specified group
  *  3. Focused group's active terminal in the workspace (cross-group fallback)
+ *  3.5. Any terminal in any other workspace group (full scan)
  *  4. workspace.lastTerminalCwd (per-workspace fallback, persisted across restarts)
  *  5. undefined (no terminal context → defaults to $HOME)
  */
@@ -111,6 +113,26 @@ export function findNearestTerminalCwd(
       const activeTab = focusedGroup.tabs.find((t) => t.id === focusedGroup.activeTabId);
       if (activeTab) {
         const cwd = getCwd(activeTab.paneId);
+        if (cwd) return cwd;
+      }
+    }
+  }
+
+  // 3.5. Scan all groups in workspace for any terminal with a CWD
+  if (workspace) {
+    const allGroupIds = collectGroupIds(workspace.root);
+    for (const gId of allGroupIds) {
+      if (gId === groupId || gId === workspace.focusedGroupId) continue; // already checked
+      const g = paneGroups[gId];
+      if (!g) continue;
+      // Check active tab first, then any tab
+      const activeTab = g.tabs.find((t) => t.id === g.activeTabId);
+      if (activeTab) {
+        const cwd = getCwd(activeTab.paneId);
+        if (cwd) return cwd;
+      }
+      for (const tab of g.tabs) {
+        const cwd = getCwd(tab.paneId);
         if (cwd) return cwd;
       }
     }

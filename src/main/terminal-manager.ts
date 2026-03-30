@@ -8,6 +8,60 @@ import {
   type TerminalBounds,
 } from "./native";
 
+/**
+ * Detect the user's default shell name from SHELL env var.
+ * Returns the basename (e.g. "zsh", "bash", "fish").
+ */
+export function detectShellName(): string {
+  const shell = process.env.SHELL || "/bin/zsh";
+  return shell.split("/").pop() || "zsh";
+}
+
+/**
+ * Build per-surface env vars for shell integration injection.
+ * Pure function — testable without native bridge.
+ */
+export function buildShellIntegrationEnvVars(
+  shellName: string,
+  dirs: {
+    zshDir: string | null;
+    ghosttyResourcesDir: string | null;
+  },
+  callerEnvVars?: Record<string, string>,
+  currentEnv?: Record<string, string | undefined>,
+): Record<string, string> {
+  const env = currentEnv ?? process.env;
+  const merged: Record<string, string> = { ...callerEnvVars };
+
+  if (shellName === "zsh" && dirs.zshDir) {
+    if (env.ZDOTDIR) {
+      merged.DEVSPACE_ORIG_ZDOTDIR = env.ZDOTDIR;
+    }
+    merged.ZDOTDIR = dirs.zshDir;
+  } else if (shellName === "bash" && dirs.ghosttyResourcesDir) {
+    // One-shot PROMPT_COMMAND that sources Ghostty's bash integration
+    // on the first interactive prompt, then removes itself.
+    // This matches cmux's approach for macOS bash 3.2 compatibility.
+    const bashIntegration = `${dirs.ghosttyResourcesDir}/shell-integration/bash/ghostty.bash`;
+    merged.PROMPT_COMMAND = [
+      "unset PROMPT_COMMAND;",
+      `[ -f "${bashIntegration}" ] && . "${bashIntegration}";`,
+    ].join(" ");
+  } else if (shellName === "fish" && dirs.ghosttyResourcesDir) {
+    // Fish sources vendor_conf.d/*.fish from directories in XDG_DATA_DIRS.
+    // Ghostty's fish integration lives at:
+    //   $GHOSTTY_RESOURCES_DIR/shell-integration/fish/vendor_conf.d/ghostty-shell-integration.fish
+    // We prepend the fish integration parent dir to XDG_DATA_DIRS.
+    const fishDataDir = `${dirs.ghosttyResourcesDir}/shell-integration/fish`;
+    const existing = env.XDG_DATA_DIRS || "/usr/local/share:/usr/share";
+    merged.XDG_DATA_DIRS = `${fishDataDir}:${existing}`;
+    // The fish integration script uses this to restore XDG_DATA_DIRS after loading
+    merged.GHOSTTY_SHELL_INTEGRATION_XDG_DIR = fishDataDir;
+  }
+
+  return merged;
+}
+
 type TerminalCallback = {
   onTitleChanged?: (surfaceId: string, title: string) => void;
   onSurfaceClosed?: (surfaceId: string) => void;
@@ -100,22 +154,22 @@ export class TerminalManager {
     if (!this.bridge) return;
     this.activeSurfaces.add(surfaceId);
 
-    // Inject shell integration env vars for zsh (ZDOTDIR wrapping).
+    // Inject shell integration env vars based on user's shell (zsh, bash, fish).
     // This is how cmux does it — per-surface env vars via ghostty_surface_config_s.
-    if (this.shellIntegrationZshDir) {
-      const envVars: Record<string, string> = { ...options?.envVars };
-      // Save the user's current ZDOTDIR so the wrapper can restore it
-      if (process.env.ZDOTDIR) {
-        envVars.DEVSPACE_ORIG_ZDOTDIR = process.env.ZDOTDIR;
-      }
-      // Point ZDOTDIR to Devspace's wrapper
-      envVars.ZDOTDIR = this.shellIntegrationZshDir;
+    const shellName = detectShellName();
+    const envVars = buildShellIntegrationEnvVars(
+      shellName,
+      {
+        zshDir: this.shellIntegrationZshDir,
+        ghosttyResourcesDir: process.env.GHOSTTY_RESOURCES_DIR || null,
+      },
+      options?.envVars,
+    );
 
-      const merged = { ...options, envVars };
-      this.bridge.createSurface(surfaceId, merged);
-    } else {
-      this.bridge.createSurface(surfaceId, options);
-    }
+    // Only pass envVars if we actually have entries
+    const merged = Object.keys(envVars).length > 0 ? { ...options, envVars } : options;
+
+    this.bridge.createSurface(surfaceId, merged);
   }
 
   destroySurface(surfaceId: string): void {
