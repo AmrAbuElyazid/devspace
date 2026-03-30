@@ -229,6 +229,22 @@ export function registerIpcHandlers(
     mainWindow.webContents.send("terminal:pwdChanged", surfaceId, pwd);
   });
 
+  terminalManager.onSearchStart((surfaceId, needle) => {
+    mainWindow.webContents.send("terminal:searchStart", surfaceId, needle);
+  });
+
+  terminalManager.onSearchEnd((surfaceId) => {
+    mainWindow.webContents.send("terminal:searchEnd", surfaceId);
+  });
+
+  terminalManager.onSearchTotal((surfaceId, total) => {
+    mainWindow.webContents.send("terminal:searchTotal", surfaceId, total);
+  });
+
+  terminalManager.onSearchSelected((surfaceId, selected) => {
+    mainWindow.webContents.send("terminal:searchSelected", surfaceId, selected);
+  });
+
   // --- Window handlers ---
 
   safeOn("window:minimize", () => {

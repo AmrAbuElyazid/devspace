@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useBrowserStore } from "../store/browser-store";
+import { useTerminalStore } from "../store/terminal-store";
 import {
   getActiveFocusedBrowserPane,
   getActiveFocusedWebViewPane,
@@ -304,8 +305,15 @@ export function useAppShortcuts(): void {
           break;
         }
         case "app:browser-find": {
+          // Context-aware Cmd+F: browser find if a browser pane is focused,
+          // terminal search if a terminal pane is focused.
           const ctx = getBrowserContext();
-          if (ctx) useBrowserStore.getState().requestFindBarFocus(ctx.paneId);
+          if (ctx) {
+            useBrowserStore.getState().requestFindBarFocus(ctx.paneId);
+          } else {
+            const surfaceId = getFocusedTerminalSurfaceId();
+            if (surfaceId) useTerminalStore.getState().requestFindBarFocus(surfaceId);
+          }
           break;
         }
         case "app:browser-zoom-in": {

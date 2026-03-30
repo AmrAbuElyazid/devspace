@@ -1050,6 +1050,11 @@
   z-index: 2;
 }
 
+.terminal-pane-shell {
+  display: flex;
+  flex-direction: column;
+}
+
 .browser-find-bar {
   height: 34px;
   display: flex;
