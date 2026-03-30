@@ -15,6 +15,10 @@ function thirtyDays(): number {
   return Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
 }
 
+function getElectronNet(): typeof import("electron").net {
+  return (require("electron") as typeof import("electron")).net;
+}
+
 interface BrowserSessionModule {
   fromPartition(partition: string): Session;
 }
@@ -107,6 +111,7 @@ function getElectronApp(): NonNullable<BrowserSessionManagerDeps["appModule"]> {
 
 export class BrowserSessionManager {
   private certificateErrorListenerRegistered = false;
+  private sessionLevelHandlersInstalled = false;
   private currentDeps: BrowserSessionManagerDeps | undefined;
   private currentLog: (message: string, meta?: Record<string, unknown>) => void = (
     message,
@@ -118,8 +123,48 @@ export class BrowserSessionManager {
 
   constructor(private readonly sessionModule: BrowserSessionModule = getElectronSession()) {}
 
+  /**
+   * Return the shared browser session, creating it on first access.
+   *
+   * On macOS, `session.fromPartition("persist:…")` triggers Chromium's
+   * `OSCrypt` init which accesses the Keychain.  By deferring this call
+   * until the session is actually needed (first browser or editor pane)
+   * we avoid the "devspace Safe Storage" Keychain prompt at startup.
+   *
+   * Session-level handlers (cookie persistence, CORS overrides, secret
+   * key protocol handler) are installed once on the first call.
+   */
   getSession(): Session {
-    return this.sessionModule.fromPartition(BROWSER_PARTITION);
+    const ses = this.sessionModule.fromPartition(BROWSER_PARTITION);
+    if (!this.sessionLevelHandlersInstalled) {
+      this.sessionLevelHandlersInstalled = true;
+      this.installSessionLevelHandlers(ses);
+    }
+    return ses;
+  }
+
+  /**
+   * One-time setup for session-level handlers.  These are installed lazily
+   * on first `getSession()` call rather than eagerly at app startup.
+   *
+   * Each handler is guarded so the class remains usable with minimal mocks
+   * in unit tests (where cookies/webRequest/protocol may be absent).
+   */
+  private installSessionLevelHandlers(ses: Session): void {
+    // Cast once — the guards below check for existence before calling.
+    const sessionAny = ses as unknown as Record<string, unknown>;
+
+    if (sessionAny.cookies) {
+      this.persistSessionCookies(ses);
+    }
+    if (
+      typeof (sessionAny.webRequest as Record<string, unknown>)?.onHeadersReceived === "function"
+    ) {
+      this.installCorsOverrides(ses);
+    }
+    if (typeof (sessionAny.protocol as Record<string, unknown>)?.handle === "function") {
+      this.registerSecretKeyHandler(ses);
+    }
   }
 
   /**
@@ -128,8 +173,7 @@ export class BrowserSessionManager {
    * in Chromium — without this, VS Code web logs the user out on every
    * quit because its auth cookies have no Expires header.
    */
-  persistSessionCookies(): void {
-    const ses = this.getSession();
+  private persistSessionCookies(ses: Session): void {
     const cookies = ses.cookies as unknown as {
       on?: (event: string, listener: (...args: unknown[]) => void) => void;
       get?: (filter: Record<string, unknown>) => Promise<Array<Record<string, unknown>>>;
@@ -357,9 +401,7 @@ export class BrowserSessionManager {
    * Since this session is isolated to devspace browser panes, we can safely
    * inject permissive CORS headers on every response.
    */
-  installCorsOverrides(): void {
-    const ses = this.getSession();
-
+  private installCorsOverrides(ses: Session): void {
     ses.webRequest.onHeadersReceived((details, callback) => {
       const headers = { ...details.responseHeaders };
 
@@ -404,9 +446,8 @@ export class BrowserSessionManager {
    * POST and return our own *stable* key instead, so secrets encrypted and
    * stored in localStorage can be decrypted on subsequent app launches.
    */
-  registerSecretKeyHandler(): void {
-    const ses = this.getSession();
-    const { net } = require("electron") as typeof import("electron");
+  private registerSecretKeyHandler(ses: Session): void {
+    const net = getElectronNet();
 
     // Paths used by VS Code CLI / Cursor CLI for the secret key endpoint.
     const MINT_KEY_PATHS = new Set([

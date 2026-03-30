@@ -251,11 +251,11 @@ app.whenReady().then(() => {
   vscodeServerManager = new VscodeServerManager();
   t3codeServerManager = new T3CodeServerManager();
 
-  // Session-level setup — runs once, NOT per-window.
-  // protocol.handle('http', ...) can only be registered once per session.
-  browserSessionManager.persistSessionCookies();
-  browserSessionManager.installCorsOverrides();
-  browserSessionManager.registerSecretKeyHandler();
+  // Session-level setup (cookie persistence, CORS overrides, secret key
+  // handler) is now deferred — BrowserSessionManager.getSession() installs
+  // all handlers lazily on first access.  This avoids triggering the macOS
+  // Keychain prompt at startup; the "devspace Safe Storage" prompt will only
+  // appear when the user first opens a browser or editor pane.
 
   // Initialize shortcut store and register IPC handlers
   const shortcutStore = new ShortcutStore();
