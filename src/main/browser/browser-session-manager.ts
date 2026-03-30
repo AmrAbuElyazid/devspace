@@ -407,7 +407,6 @@ export class BrowserSessionManager {
   registerSecretKeyHandler(): void {
     const ses = this.getSession();
     const { net } = require("electron") as typeof import("electron");
-    const keyBuffer = getSecretKey();
 
     // Paths used by VS Code CLI / Cursor CLI for the secret key endpoint.
     const MINT_KEY_PATHS = new Set([
@@ -418,6 +417,13 @@ export class BrowserSessionManager {
     ses.protocol.handle("http", (request) => {
       const url = new URL(request.url);
       if (MINT_KEY_PATHS.has(url.pathname) && request.method === "POST") {
+        // Defer getSecretKey() to the first actual request instead of calling
+        // it eagerly at startup.  The key is cached after the first call, so
+        // subsequent requests are instant.  This avoids a concurrent macOS
+        // Keychain access (safeStorage) racing with Chromium's session cookie
+        // encryption init, which caused two "devspace Safe Storage" prompts
+        // on every launch.
+        const keyBuffer = getSecretKey();
         console.log(
           `[browser-session] intercepted ${url.pathname} — serving stable secret key (${keyBuffer.length} bytes) for ${url.origin}`,
         );
