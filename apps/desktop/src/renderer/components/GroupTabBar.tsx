@@ -3,7 +3,7 @@ import { Plus, Columns2, Rows2, X, Menu } from "lucide-react";
 import { SortableContext, useSortable, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
-import { useDragContext } from "../hooks/useDragAndDrop";
+import { useDragContext } from "../hooks/useDndOrchestrator";
 import { useSettingsStore } from "../store/settings-store";
 import { useModifierHeldContext } from "../App";
 import { resolveDisplayString } from "../../shared/shortcuts";

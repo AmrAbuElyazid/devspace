@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { useDragContext } from "../../hooks/useDragAndDrop";
+import { useDragContext } from "../../hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
 import type { SidebarContainer } from "../../types/dnd";
@@ -76,21 +76,33 @@ export function SortableWorkspaceItem({
     "vertical",
   );
 
+  // Insertion line for tab drags (edge zones only — center zone stays as tab drop target)
+  const isTabDrag = activeDrag?.type === "group-tab";
+  const tabInsertPosition = useInsertionIndicator(
+    isOver && !isDragging && !!isTabDrag && activeDrag.workspaceId !== workspaceId,
+    false,
+    mergedRef,
+    "vertical",
+    0.25,
+  );
+
   const isTabDropTarget =
     isOver &&
     !isDragging &&
     activeDrag?.type === "group-tab" &&
-    activeDrag.workspaceId !== workspaceId;
+    activeDrag.workspaceId !== workspaceId &&
+    tabInsertPosition === null;
 
   const style = {
     paddingLeft: depth * 16,
     opacity: isDragging ? 0.4 : undefined,
   };
 
+  const effectiveInsertPosition = insertPosition ?? tabInsertPosition;
   const insertClass =
-    insertPosition === "before"
+    effectiveInsertPosition === "before"
       ? "sidebar-insert-before"
-      : insertPosition === "after"
+      : effectiveInsertPosition === "after"
         ? "sidebar-insert-after"
         : "";
 

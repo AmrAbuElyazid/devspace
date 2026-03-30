@@ -1,7 +1,7 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { ChevronDown, ChevronRight, FolderClosed } from "lucide-react";
-import { useDragContext } from "../../hooks/useDragAndDrop";
+import { useDragContext } from "../../hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
 import { SidebarTreeLevel, type SidebarTreeLevelProps } from "./SidebarTreeLevel";
@@ -70,10 +70,12 @@ export function SortableFolderItem({
 
   // Folder uses edge zones (0.25 threshold): edges show insertion line, center shows folder highlight
   const { activeDrag: activeDragCtx } = useDragContext();
-  const isSidebarDrag =
-    activeDragCtx?.type === "sidebar-workspace" || activeDragCtx?.type === "sidebar-folder";
+  const isRelevantDrag =
+    activeDragCtx?.type === "sidebar-workspace" ||
+    activeDragCtx?.type === "sidebar-folder" ||
+    activeDragCtx?.type === "group-tab";
   const insertPosition = useInsertionIndicator(
-    isOver && !isDragging && isSidebarDrag,
+    isOver && !isDragging && isRelevantDrag,
     false,
     folderRef,
     "vertical",
@@ -81,7 +83,7 @@ export function SortableFolderItem({
   );
 
   // Show folder highlight only when pointer is in center zone (insertPosition === null means center)
-  const showDragOver = isOver && !isDragging && isSidebarDrag && insertPosition === null;
+  const showDragOver = isOver && !isDragging && isRelevantDrag && insertPosition === null;
   const insertClass =
     insertPosition === "before"
       ? "sidebar-insert-before"
