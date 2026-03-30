@@ -24,7 +24,9 @@ export type DropIntent =
   | { kind: "reorder-sidebar"; nodeId: string; nodeType: "workspace" | "folder";
       sourceContainer: SidebarContainer; targetContainer: SidebarContainer;
       targetParentId: string | null; targetIndex: number }
-  // Tab reorder within/between groups
+  // Tab reorder within same group or move between groups (always same workspace --
+  // cross-workspace tab moves go through sidebar-workspace targets, not group-tab targets,
+  // because only the active workspace's tab bars are visible)
   | { kind: "reorder-tab"; workspaceId: string; sourceGroupId: string; sourceTabId: string;
       targetGroupId: string; targetTabId: string }
   // Tab split pane
@@ -180,7 +182,7 @@ Existing files to delete after migration:
 `opts: { parentFolderId?: string | null; container?: SidebarContainer; insertIndex?: number }`
 
 1. Find the tab and its pane in the source group
-2. Extract the tab from the source group (use existing `resolveSourceGroupAfterRemoval` for cleanup)
+2. Extract the tab from the source group (use existing `resolveSourceGroupAfterTabRemoval` for cleanup)
 3. Create a new workspace:
    - Name: use the pane's title
    - Root: single leaf group containing the extracted tab
@@ -188,12 +190,16 @@ Existing files to delete after migration:
 4. Insert into sidebar tree at the specified position
 5. Set the new workspace as active
 
-**Conflict resolution with Handler 4**: Both handlers accept `group-tab` drags over `sidebar-workspace` targets. Resolution uses pointer position:
-- Handler 6 checks edge zones (top/bottom 25%) and returns intent for those
-- Handler 4 checks center zone (middle 50%) and returns intent for that
-- The orchestrator calls handlers in priority order. Handler 4 (move-to-workspace) should have higher priority for sidebar-workspace targets. Handler 6 only wins when the pointer is in the edge zone of a workspace item, or on a folder/root target.
+**Conflict resolution with Handler 4**: Both handlers accept `group-tab` drags over `sidebar-workspace` targets. Resolution uses null-return delegation (not priority ordering):
 
-Implementation: Handler 6's `resolveIntent` for sidebar-workspace targets returns `null` for center zone, allowing Handler 4 to handle it. For edge zones, Handler 6 returns `create-workspace-from-tab`.
+- The orchestrator iterates handlers and calls `resolveIntent` on each. The first non-null intent wins.
+- Handler 6 is checked first for `sidebar-workspace` targets. It inspects pointer position:
+  - **Edge zone** (top/bottom 25%): returns `create-workspace-from-tab` intent
+  - **Center zone** (middle 50%): returns `null`, delegating to the next handler
+- Handler 4 then checks the same target. Since the pointer is in center zone, it returns `move-to-workspace` intent.
+- For `sidebar-root` and `sidebar-folder` targets, only Handler 6 matches, so no conflict arises.
+
+Note: handler ordering in the registry matters -- Handler 6 must appear before Handler 4 so it gets first chance to claim edge-zone drops. The orchestrator does not use a separate priority mechanism.
 
 **Visual feedback**: When dragging a tab to the sidebar:
 - Edge zone of workspace item: insertion line indicator (same `sidebar-insert-before`/`sidebar-insert-after` CSS)
@@ -203,14 +209,7 @@ Implementation: Handler 6's `resolveIntent` for sidebar-workspace targets return
 
 ### Sidebar Visual Redesign
 
-Enhance the sidebar visual design while implementing the new DnD features:
-
-- Richer workspace items with pane type indicators (small icons showing terminal/browser/editor composition)
-- Subtle visual hierarchy improvements for folders vs workspaces
-- Better drag feedback with smooth animations
-- Refined spacing and typography
-
-The specific visual changes will be designed during implementation using the frontend-design skill.
+Out of scope for this spec. Visual improvements to the sidebar will be handled as a separate effort after the DnD handler registry and new features are complete.
 
 ### DragContext Changes
 
@@ -240,8 +239,7 @@ Each handler is a pure function (given context, return intent; given intent + st
 The refactor preserves all existing behavior:
 1. Create the handler interface and registry
 2. Extract existing logic into handlers 1-4 (no behavior change)
-3. Replace `useDragAndDrop` with `useDndOrchestrator`
+3. Replace `useDragAndDrop` with `useDndOrchestrator` -- run existing tests as regression checkpoint
 4. Add handlers 5-6 with new store methods
 5. Update components for new drop targets
 6. Delete old files
-7. Apply sidebar visual improvements
