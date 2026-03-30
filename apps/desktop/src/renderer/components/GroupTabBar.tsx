@@ -106,7 +106,10 @@ function SortableGroupTab({
     opacity: isDragging ? 0.4 : undefined,
   };
 
-  const isDropTarget = isOver && !isDragging && activeDrag?.type === "group-tab";
+  const isDropTarget =
+    isOver &&
+    !isDragging &&
+    (activeDrag?.type === "group-tab" || activeDrag?.type === "sidebar-workspace");
 
   const Icon = pane ? paneTypeIcons[pane.type] : paneTypeIcons.terminal;
 

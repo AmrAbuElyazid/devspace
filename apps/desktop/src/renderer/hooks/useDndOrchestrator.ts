@@ -77,6 +77,10 @@ function filterCollisions(
 export function useDndOrchestrator() {
   const [activeDrag, setActiveDrag] = useState<DragItemData | null>(null);
   const [dropIntent, setDropIntent] = useState<DropIntent | null>(null);
+  // Ref mirror of dropIntent — onDragEnd reads from this to avoid stale
+  // closure issues where React hasn't re-rendered between the last onDragMove
+  // and onDragEnd.
+  const dropIntentRef = useRef<DropIntent | null>(null);
   const folderExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoveredFolderIdRef = useRef<string | null>(null);
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null);
@@ -138,6 +142,7 @@ export function useDndOrchestrator() {
     const data = event.active.data.current as DragItemData;
     setActiveDrag(data);
     setDropIntent(null);
+    dropIntentRef.current = null;
   }, []);
 
   const onDragMove = useCallback(
@@ -148,6 +153,7 @@ export function useDndOrchestrator() {
 
       if (!dragData || !pointer) {
         setDropIntent(null);
+        dropIntentRef.current = null;
         return;
       }
 
@@ -164,11 +170,13 @@ export function useDndOrchestrator() {
         });
         if (intent) {
           setDropIntent(intent);
+          dropIntentRef.current = intent;
           return;
         }
       }
 
       setDropIntent(null);
+      dropIntentRef.current = null;
     },
     [store],
   );
@@ -206,8 +214,11 @@ export function useDndOrchestrator() {
       const { active } = event;
       setActiveDrag(null);
       clearFolderExpandTimer();
-      const currentDropIntent = dropIntent;
+      // Read from ref to avoid stale closure — onDragMove may have updated
+      // the intent after the last React render that created this callback.
+      const currentDropIntent = dropIntentRef.current;
       pointerPosRef.current = null;
+      dropIntentRef.current = null;
       setDropIntent(null);
 
       if (!currentDropIntent) return;
@@ -224,12 +235,13 @@ export function useDndOrchestrator() {
         handler.execute(currentDropIntent, store);
       }
     },
-    [clearFolderExpandTimer, dropIntent, store],
+    [clearFolderExpandTimer, store],
   );
 
   const onDragCancel = useCallback(() => {
     setActiveDrag(null);
     setDropIntent(null);
+    dropIntentRef.current = null;
     pointerPosRef.current = null;
     clearFolderExpandTimer();
   }, [clearFolderExpandTimer]);
