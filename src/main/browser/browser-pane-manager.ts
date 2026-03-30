@@ -220,6 +220,39 @@ export class BrowserPaneManager implements BrowserPaneController {
     pane.isVisible = false;
   }
 
+  setVisiblePanes(paneIds: string[]): void {
+    const desiredVisible = new Set(paneIds);
+
+    // Hide panes that should no longer be visible
+    for (const [paneId, pane] of this.panes) {
+      if (pane.isVisible && !desiredVisible.has(paneId)) {
+        this.deps.removeChildView(pane.view);
+        pane.isVisible = false;
+      }
+    }
+
+    // Show panes that should become visible (bounds-first to prevent flash)
+    for (const paneId of paneIds) {
+      const pane = this.panes.get(paneId);
+      if (!pane || pane.isVisible) {
+        continue;
+      }
+
+      if (pane.bounds) {
+        const setBounds = pane.view.setBounds;
+        if (typeof setBounds === "function") {
+          setBounds.call(pane.view, pane.bounds);
+        }
+      }
+      this.deps.addChildView(pane.view);
+      const setZoomFactor = pane.view.webContents?.setZoomFactor;
+      if (typeof setZoomFactor === "function") {
+        void setZoomFactor.call(pane.view.webContents, pane.runtimeState.currentZoom);
+      }
+      pane.isVisible = true;
+    }
+  }
+
   isPaneVisible(paneId: string): boolean {
     return this.panes.get(paneId)?.isVisible ?? false;
   }

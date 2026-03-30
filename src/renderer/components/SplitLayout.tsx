@@ -16,7 +16,6 @@ function getNodeIdentity(node: SplitNode): string {
 interface SplitLayoutProps {
   node: SplitNode;
   workspaceId: string;
-  overlayActive: boolean;
   sidebarOpen: boolean;
   dndEnabled: boolean;
   path?: number[];
@@ -25,7 +24,6 @@ interface SplitLayoutProps {
 export default function SplitLayout({
   node,
   workspaceId,
-  overlayActive,
   sidebarOpen,
   dndEnabled,
   path = [],
@@ -55,7 +53,6 @@ export default function SplitLayout({
       <PaneGroupContainer
         groupId={node.groupId}
         workspaceId={workspaceId}
-        overlayActive={overlayActive}
         sidebarOpen={sidebarOpen}
         dndEnabled={dndEnabled}
       />
@@ -76,7 +73,6 @@ export default function SplitLayout({
           <SplitLayout
             node={child}
             workspaceId={workspaceId}
-            overlayActive={overlayActive}
             sidebarOpen={sidebarOpen}
             dndEnabled={dndEnabled}
             path={[...path, i]}

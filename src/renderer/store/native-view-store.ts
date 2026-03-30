@@ -1,0 +1,192 @@
+import { create } from "zustand";
+import { useWorkspaceStore } from "./workspace-store";
+import { useSettingsStore } from "./settings-store";
+import { collectGroupIds } from "../lib/split-tree";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type NativeViewType = "terminal" | "browser";
+
+interface ViewBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface NativeViewState {
+  /** Registered native views: paneId → view type. */
+  views: Record<string, NativeViewType>;
+  /** Terminal IDs that the main process currently considers visible. */
+  visibleTerminals: string[];
+  /** Browser IDs (incl. editor/t3code) that the main process currently considers visible. */
+  visibleBrowsers: string[];
+  /** When true, all native views are hidden (e.g. during a group-tab drag). */
+  dragHidesViews: boolean;
+
+  register: (id: string, type: NativeViewType) => void;
+  unregister: (id: string) => void;
+  setDragHidesViews: (active: boolean) => void;
+  reconcile: () => void;
+}
+
+// ---------------------------------------------------------------------------
+// Module-level bounds cache (not reactive — avoids re-renders on resize)
+// ---------------------------------------------------------------------------
+
+const boundsCache = new Map<string, ViewBounds>();
+
+/**
+ * Update the cached bounds for a native view and, if the view is currently
+ * visible, immediately send the new bounds to the main process via IPC.
+ */
+export function updateNativeViewBounds(id: string, bounds: ViewBounds): void {
+  boundsCache.set(id, bounds);
+
+  const state = useNativeViewStore.getState();
+  const viewType = state.views[id];
+  if (viewType === undefined) return;
+
+  if (viewType === "terminal" && state.visibleTerminals.includes(id)) {
+    void window.api.terminal.setBounds(id, bounds);
+  } else if (viewType === "browser" && state.visibleBrowsers.includes(id)) {
+    void window.api.browser.setBounds(id, bounds);
+  }
+}
+
+export function clearNativeViewBounds(id: string): void {
+  boundsCache.delete(id);
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// Store
+// ---------------------------------------------------------------------------
+
+export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
+  views: {},
+  visibleTerminals: [],
+  visibleBrowsers: [],
+  dragHidesViews: false,
+
+  register(id, type) {
+    const { views } = get();
+    if (views[id] === type) return;
+    set({ views: { ...views, [id]: type } });
+    get().reconcile();
+  },
+
+  unregister(id) {
+    const { views } = get();
+    if (!(id in views)) return;
+    const next = { ...views };
+    delete next[id];
+    boundsCache.delete(id);
+    set({ views: next });
+    get().reconcile();
+  },
+
+  setDragHidesViews(active) {
+    if (get().dragHidesViews === active) return;
+    set({ dragHidesViews: active });
+    get().reconcile();
+  },
+
+  reconcile() {
+    const { views, visibleTerminals, visibleBrowsers, dragHidesViews } = get();
+    const wsState = useWorkspaceStore.getState();
+    const overlayActive = useSettingsStore.getState().isOverlayActive();
+    const shouldShowAny = !overlayActive && !dragHidesViews;
+
+    const desiredTerminals: string[] = [];
+    const desiredBrowsers: string[] = [];
+
+    if (shouldShowAny) {
+      const activeWs = wsState.workspaces.find((w) => w.id === wsState.activeWorkspaceId);
+      if (activeWs) {
+        const groupIds = collectGroupIds(activeWs.root);
+        for (const groupId of groupIds) {
+          const group = wsState.paneGroups[groupId];
+          if (!group) continue;
+          const activeTab = group.tabs.find((t) => t.id === group.activeTabId);
+          if (!activeTab) continue;
+          const viewType = views[activeTab.paneId];
+          if (viewType === "terminal") {
+            desiredTerminals.push(activeTab.paneId);
+          } else if (viewType === "browser") {
+            desiredBrowsers.push(activeTab.paneId);
+          }
+        }
+      }
+    }
+
+    const terminalsChanged = !arraysEqual(desiredTerminals, visibleTerminals);
+    const browsersChanged = !arraysEqual(desiredBrowsers, visibleBrowsers);
+    if (!terminalsChanged && !browsersChanged) return;
+
+    // Send bounds for newly-visible views BEFORE showing them (prevents flash)
+    if (terminalsChanged) {
+      for (const id of desiredTerminals) {
+        if (!visibleTerminals.includes(id)) {
+          const b = boundsCache.get(id);
+          if (b) void window.api.terminal.setBounds(id, b);
+        }
+      }
+      void window.api.terminal.setVisibleSurfaces(desiredTerminals);
+    }
+
+    if (browsersChanged) {
+      for (const id of desiredBrowsers) {
+        if (!visibleBrowsers.includes(id)) {
+          const b = boundsCache.get(id);
+          if (b) void window.api.browser.setBounds(id, b);
+        }
+      }
+      void window.api.browser.setVisiblePanes(desiredBrowsers);
+    }
+
+    // Blur terminals when transitioning from visible to hidden
+    if (overlayActive && visibleTerminals.length > 0 && desiredTerminals.length === 0) {
+      void window.api.terminal.blur();
+    }
+
+    set({
+      visibleTerminals: desiredTerminals,
+      visibleBrowsers: desiredBrowsers,
+    });
+  },
+}));
+
+// ---------------------------------------------------------------------------
+// Cross-store subscriptions — fire reconcile when workspace or settings change.
+// Must be initialized explicitly (not at module level) to avoid import-order
+// issues in tests where stores may not yet be defined.
+// ---------------------------------------------------------------------------
+
+let subscriptionsInitialized = false;
+
+export function initNativeViewSubscriptions(): void {
+  if (subscriptionsInitialized) return;
+  subscriptionsInitialized = true;
+
+  useWorkspaceStore.subscribe(() => {
+    useNativeViewStore.getState().reconcile();
+  });
+
+  useSettingsStore.subscribe(() => {
+    useNativeViewStore.getState().reconcile();
+  });
+}

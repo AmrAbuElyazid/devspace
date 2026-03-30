@@ -98,11 +98,10 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       openPanePicker(context) {
-        // Blur terminal immediately — native Ghostty surfaces capture keyboard
-        // events at the OS level, so they must resign first responder BEFORE
-        // the user can press the next key. Setting overlayCount atomically
-        // ensures App.tsx hides native views on the very first render.
-        void window.api.terminal.blur();
+        // Incrementing overlayCount triggers the NativeViewManager store
+        // subscription which calls reconcile(). reconcile() sees overlay
+        // active, hides all native views, and blurs the terminal — all
+        // synchronously in the same microtask.
         set((s) => ({ panePickerContext: context, overlayCount: s.overlayCount + 1 }));
       },
 

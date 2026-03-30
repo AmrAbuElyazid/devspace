@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { useBrowserBounds } from "../hooks/useBrowserBounds";
+import { useNativeView } from "../hooks/useNativeView";
 import { useWorkspaceStore } from "../store/workspace-store";
 import { Button } from "./ui/button";
 import type { EditorConfig } from "../types/workspace";
@@ -17,8 +17,6 @@ export function markEditorDestroyed(paneId: string): void {
 interface EditorPaneProps {
   paneId: string;
   config: EditorConfig;
-  isVisible: boolean;
-  hideNativeView: boolean;
 }
 
 type EditorState =
@@ -28,17 +26,10 @@ type EditorState =
   | { status: "error"; message: string }
   | { status: "unavailable" };
 
-export default function EditorPane({
-  paneId,
-  config,
-  isVisible,
-  hideNativeView,
-}: EditorPaneProps): ReactElement {
+export default function EditorPane({ paneId, config }: EditorPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig);
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
-
-  const shouldShowNativeView = isVisible && !hideNativeView;
 
   // Determine initial state based on config
   const [state, setState] = useState<EditorState>(() => {
@@ -53,11 +44,13 @@ export default function EditorPane({
     return { status: "checking" };
   });
 
-  // Track bounds for the WebContentsView (reuses browser bounds hook)
-  useBrowserBounds({
-    paneId,
-    enabled: shouldShowNativeView && state.status === "running",
+  // Centralized native view management — only register once the
+  // WebContentsView actually exists (status === "running").
+  const { isVisible } = useNativeView({
+    id: paneId,
+    type: "browser",
     ref: placeholderRef,
+    enabled: state.status === "running",
   });
 
   // Check availability on mount, then immediately transition to starting
@@ -118,13 +111,6 @@ export default function EditorPane({
     };
   }, [paneId, stateStatus, stateFolderPath, updatePaneConfig, updatePaneTitle]);
 
-  // Show/hide the WebContentsView based on visibility
-  useEffect(() => {
-    if (state.status !== "running") return;
-    const action = shouldShowNativeView ? window.api.browser.show : window.api.browser.hide;
-    void action(paneId);
-  }, [shouldShowNativeView, paneId, state.status]);
-
   // Retry on error
   const handleRetry = useCallback(() => {
     setState({ status: "starting", folderPath: config.folderPath });
@@ -183,7 +169,7 @@ export default function EditorPane({
     <div
       ref={placeholderRef}
       className="browser-native-view-slot"
-      data-native-view-hidden={!shouldShowNativeView ? "true" : undefined}
+      data-native-view-hidden={!isVisible ? "true" : undefined}
     />
   );
 }

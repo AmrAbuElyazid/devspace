@@ -426,6 +426,12 @@ export function registerIpcHandlers(
     browserPaneManager.hidePane(paneId);
   });
 
+  safeHandle("browser:setVisiblePanes", (_event, paneIds: unknown) => {
+    if (!Array.isArray(paneIds)) return;
+    const valid = paneIds.filter((id): id is string => typeof id === "string");
+    browserPaneManager.setVisiblePanes(valid);
+  });
+
   safeHandle("browser:getRuntimeState", (_event, paneId: unknown) => {
     if (typeof paneId !== "string") return undefined;
     return browserPaneManager.getRuntimeState(paneId);

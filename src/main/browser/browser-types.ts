@@ -48,6 +48,7 @@ export interface BrowserPaneController {
   destroyPane(paneId: string): void;
   showPane(paneId: string): void;
   hidePane(paneId: string): void;
+  setVisiblePanes(paneIds: string[]): void;
   isPaneVisible(paneId: string): boolean;
   getRuntimeState(paneId: string): BrowserRuntimeState | undefined;
   applyRuntimePatch(paneId: string, patch: BrowserRuntimePatch): void;

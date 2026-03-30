@@ -115,6 +115,7 @@ export interface BrowserBridge {
   destroy: (paneId: string) => Promise<void>;
   show: (paneId: string) => Promise<void>;
   hide: (paneId: string) => Promise<void>;
+  setVisiblePanes: (paneIds: string[]) => Promise<void>;
   getRuntimeState: (paneId: string) => Promise<BrowserRuntimeState | undefined>;
   navigate: (paneId: string, url: string) => Promise<void>;
   back: (paneId: string) => Promise<void>;

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo } from "react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { useWorkspaceStore } from "./store/workspace-store";
 import { useSettingsStore } from "./store/settings-store";
+import { useNativeViewStore, initNativeViewSubscriptions } from "./store/native-view-store";
 import { useTheme } from "./hooks/useTheme";
 import { useDragAndDrop, DragContext } from "./hooks/useDragAndDrop";
 import { useModifierHeld, type HeldModifier } from "./hooks/useModifierHeld";
@@ -21,6 +22,9 @@ const ModifierHeldContext = createContext<HeldModifier>(null);
 export function useModifierHeldContext(): HeldModifier {
   return useContext(ModifierHeldContext);
 }
+
+// Initialize cross-store subscriptions once when the app module loads.
+initNativeViewSubscriptions();
 
 export default function App() {
   useTheme();
@@ -46,16 +50,14 @@ export default function App() {
     window.api?.editor?.setKeepServerRunning(keepVscodeServerRunning);
   }, [keepVscodeServerRunning]);
 
-  // When a full-screen overlay (settings, dialog) is active, native views
-  // must be hidden so the DOM overlay is visible. Also resign first
-  // responder from any terminal so keyboard events flow to the DOM.
-  const overlayCount = useSettingsStore((s) => s.overlayCount);
-  const overlayActive = settingsOpen || overlayCount > 0;
+  // Sync drag state to NativeViewManager — during a group-tab drag on the
+  // active workspace, all native views must be hidden so the DOM drag
+  // overlay is visible above them.
+  const setDragHidesViews = useNativeViewStore((s) => s.setDragHidesViews);
   useEffect(() => {
-    if (overlayActive) {
-      void window.api.terminal.blur();
-    }
-  }, [overlayActive]);
+    const isGroupTabDrag = activeDrag?.type === "group-tab";
+    setDragHidesViews(isGroupTabDrag);
+  }, [activeDrag, setDragHidesViews]);
 
   // Listen for CLI-triggered "open editor" requests from the main process.
   const openEditorTab = useWorkspaceStore((s) => s.openEditorTab);
@@ -100,7 +102,6 @@ export default function App() {
                       <SplitLayout
                         node={ws.root}
                         workspaceId={ws.id}
-                        overlayActive={overlayActive}
                         sidebarOpen={sidebarOpen}
                         dndEnabled={isVisible}
                       />
