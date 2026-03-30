@@ -21,7 +21,7 @@ import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { ScrollArea } from "../ui/scroll-area";
 import { AlertDialog } from "../ui/alert-dialog";
-import { useDragContext } from "../../hooks/useDragAndDrop";
+import { useDragContext } from "../../hooks/useDndOrchestrator";
 import { findSidebarNode } from "../../lib/sidebar-tree";
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
 import type { ContextMenuItem } from "../../../shared/types";
@@ -96,6 +96,7 @@ export default function Sidebar() {
 
   const isSidebarDrag =
     activeDrag?.type === "sidebar-workspace" || activeDrag?.type === "sidebar-folder";
+  const isRelevantDrag = isSidebarDrag || activeDrag?.type === "group-tab";
   const { setNodeRef: setPinnedRootRef, isOver: isPinnedRootOver } = useDroppable({
     id: "sidebar-root-pinned",
     data: { type: "sidebar-root" as const, container: "pinned", visible: true },
@@ -247,14 +248,14 @@ export default function Sidebar() {
       </div>
 
       {/* Pinned section */}
-      {(pinnedSidebarNodes.length > 0 || isSidebarDrag) && (
+      {(pinnedSidebarNodes.length > 0 || isRelevantDrag) && (
         <>
           <div className="sidebar-section-header">
             <span className="sidebar-label">Pinned</span>
           </div>
           <div
             ref={setPinnedRootRef}
-            className={`sidebar-pinned-list ${isSidebarDrag && isPinnedRootOver ? "sidebar-item-drag-over-folder" : ""}`}
+            className={`sidebar-pinned-list ${isRelevantDrag && isPinnedRootOver ? "sidebar-item-drag-over-folder" : ""}`}
           >
             <SidebarTreeLevel
               nodes={pinnedSidebarNodes}
@@ -322,7 +323,7 @@ export default function Sidebar() {
       {/* Sidebar tree with DnD */}
       <div
         ref={setMainRootRef}
-        className={`sidebar-tree-root ${isSidebarDrag && isMainRootOver ? "sidebar-item-drag-over-folder" : ""}`}
+        className={`sidebar-tree-root ${isRelevantDrag && isMainRootOver ? "sidebar-item-drag-over-folder" : ""}`}
       >
         <ScrollArea className="ws-list">
           <SidebarTreeLevel

@@ -197,6 +197,22 @@ interface WorkspaceState {
     tabId: string,
     destWorkspaceId: string,
   ) => void;
+  mergeWorkspaceIntoGroup: (sourceWorkspaceId: string, targetGroupId: string) => void;
+  splitGroupWithWorkspace: (
+    sourceWorkspaceId: string,
+    targetGroupId: string,
+    side: DropSide,
+  ) => void;
+  createWorkspaceFromTab: (
+    tabId: string,
+    sourceGroupId: string,
+    sourceWorkspaceId: string,
+    opts?: {
+      parentFolderId?: string | null;
+      container?: SidebarContainer;
+      insertIndex?: number;
+    },
+  ) => void;
 
   // Browser in group
   openBrowserInGroup: (workspaceId: string, groupId: string, url: string) => void;
@@ -1031,6 +1047,238 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
       workspaces: newWorkspaces,
       panes: newPanes,
       paneGroups: newPaneGroups,
+    });
+  },
+
+  mergeWorkspaceIntoGroup(sourceWorkspaceId, targetGroupId) {
+    const state = get();
+    const sourceWs = state.workspaces.find((w) => w.id === sourceWorkspaceId);
+    if (!sourceWs) return;
+
+    const targetGroup = state.paneGroups[targetGroupId];
+    if (!targetGroup) return;
+
+    // Find which workspace contains the target group
+    const targetWs = state.workspaces.find((w) => treeHasGroup(w.root, targetGroupId));
+    if (!targetWs) return;
+
+    // Guard: source must not be the same workspace as target
+    if (sourceWs.id === targetWs.id) return;
+
+    // Collect all tabs from all groups in source workspace
+    const sourceGroupIds = collectGroupIds(sourceWs.root);
+    const allSourceTabs: PaneGroupTab[] = [];
+    for (const gid of sourceGroupIds) {
+      const group = state.paneGroups[gid];
+      if (group) {
+        for (const tab of group.tabs) {
+          allSourceTabs.push({ id: nanoid(), paneId: tab.paneId });
+        }
+      }
+    }
+
+    // Append new tabs to target group, set last as active
+    const lastNewTab = allSourceTabs[allSourceTabs.length - 1];
+    const newPaneGroups = {
+      ...state.paneGroups,
+      [targetGroupId]: {
+        ...targetGroup,
+        tabs: [...targetGroup.tabs, ...allSourceTabs],
+        activeTabId: lastNewTab?.id ?? targetGroup.activeTabId,
+      },
+    };
+
+    // Clean up source workspace groups (don't cleanup pane resources — panes are moved)
+    for (const gid of sourceGroupIds) {
+      delete newPaneGroups[gid];
+    }
+
+    // Remove source workspace from workspaces array
+    const remaining = state.workspaces.filter((w) => w.id !== sourceWorkspaceId);
+
+    // Remove from sidebar trees
+    const [newTree] = removeSidebarNode(state.sidebarTree, sourceWorkspaceId, "workspace");
+    const [newPinnedTree] = removeSidebarNode(
+      state.pinnedSidebarNodes,
+      sourceWorkspaceId,
+      "workspace",
+    );
+
+    // If source was active, switch to target workspace
+    const newActiveId =
+      state.activeWorkspaceId === sourceWorkspaceId ? targetWs.id : state.activeWorkspaceId;
+
+    set({
+      workspaces: remaining,
+      activeWorkspaceId: newActiveId,
+      paneGroups: newPaneGroups,
+      sidebarTree: newTree,
+      pinnedSidebarNodes: newPinnedTree,
+    });
+  },
+
+  splitGroupWithWorkspace(sourceWorkspaceId, targetGroupId, side) {
+    const state = get();
+    const sourceWs = state.workspaces.find((w) => w.id === sourceWorkspaceId);
+    if (!sourceWs) return;
+
+    const targetGroup = state.paneGroups[targetGroupId];
+    if (!targetGroup) return;
+
+    // Find which workspace contains the target group
+    const targetWs = state.workspaces.find((w) => treeHasGroup(w.root, targetGroupId));
+    if (!targetWs) return;
+
+    // Guard: source must not be the same workspace as target
+    if (sourceWs.id === targetWs.id) return;
+
+    // Collect all tabs from all groups in source workspace (flatten with fresh tab IDs)
+    const sourceGroupIds = collectGroupIds(sourceWs.root);
+    const allSourceTabs: PaneGroupTab[] = [];
+    for (const gid of sourceGroupIds) {
+      const group = state.paneGroups[gid];
+      if (group) {
+        for (const tab of group.tabs) {
+          allSourceTabs.push({ id: nanoid(), paneId: tab.paneId });
+        }
+      }
+    }
+
+    // Create a new PaneGroup with all collected tabs
+    const lastTab = allSourceTabs[allSourceTabs.length - 1];
+    const newGroup: PaneGroup = {
+      id: nanoid(),
+      tabs: allSourceTabs,
+      activeTabId: lastTab?.id ?? "",
+    };
+
+    // Build the split
+    const direction: SplitDirection =
+      side === "left" || side === "right" ? "horizontal" : "vertical";
+    const newLeaf: SplitNode = { type: "leaf", groupId: newGroup.id };
+    const targetLeaf: SplitNode = { type: "leaf", groupId: targetGroupId };
+    const children: SplitNode[] =
+      side === "left" || side === "top" ? [newLeaf, targetLeaf] : [targetLeaf, newLeaf];
+
+    const replacement: SplitNode = {
+      type: "branch",
+      direction,
+      children,
+      sizes: [50, 50],
+    };
+
+    const newRoot = replaceLeafInTree(targetWs.root, targetGroupId, replacement);
+
+    // Clean up source workspace groups (don't cleanup pane resources)
+    const newPaneGroups = { ...state.paneGroups, [newGroup.id]: newGroup };
+    for (const gid of sourceGroupIds) {
+      delete newPaneGroups[gid];
+    }
+
+    // Remove source workspace
+    const remaining = state.workspaces.filter((w) => w.id !== sourceWorkspaceId);
+
+    // Remove from sidebar trees
+    const [newTree] = removeSidebarNode(state.sidebarTree, sourceWorkspaceId, "workspace");
+    const [newPinnedTree] = removeSidebarNode(
+      state.pinnedSidebarNodes,
+      sourceWorkspaceId,
+      "workspace",
+    );
+
+    // Update target workspace root and focus
+    const newActiveId =
+      state.activeWorkspaceId === sourceWorkspaceId ? targetWs.id : state.activeWorkspaceId;
+
+    set({
+      workspaces: remaining.map((w) =>
+        w.id === targetWs.id ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
+      ),
+      activeWorkspaceId: newActiveId,
+      paneGroups: newPaneGroups,
+      sidebarTree: newTree,
+      pinnedSidebarNodes: newPinnedTree,
+    });
+  },
+
+  createWorkspaceFromTab(tabId, sourceGroupId, sourceWorkspaceId, opts) {
+    const state = get();
+    const sourceWs = state.workspaces.find((w) => w.id === sourceWorkspaceId);
+    if (!sourceWs) return;
+    if (!treeHasGroup(sourceWs.root, sourceGroupId)) return;
+
+    const sourceGroup = state.paneGroups[sourceGroupId];
+    if (!sourceGroup) return;
+
+    const tab = sourceGroup.tabs.find((t) => t.id === tabId);
+    if (!tab) return;
+
+    const pane = state.panes[tab.paneId];
+    if (!pane) return;
+
+    // Create a new PaneGroup with a single tab referencing the same paneId
+    const newTabId = nanoid();
+    const newGroup: PaneGroup = {
+      id: nanoid(),
+      tabs: [{ id: newTabId, paneId: tab.paneId }],
+      activeTabId: newTabId,
+    };
+
+    // Create new workspace using pane title as workspace name
+    const newWs = createDefaultWorkspace(pane.title, newGroup);
+
+    // Handle source group cleanup
+    const newPaneGroups = { ...state.paneGroups, [newGroup.id]: newGroup };
+    let newWorkspaces = [...state.workspaces, newWs];
+    let newPanes = state.panes;
+
+    const resolution = resolveSourceGroupAfterTabRemoval(
+      sourceWs,
+      sourceGroupId,
+      sourceGroup,
+      tabId,
+    );
+    switch (resolution.kind) {
+      case "tabs-remaining":
+        newPaneGroups[sourceGroupId] = resolution.srcGroup;
+        break;
+      case "group-removed":
+        delete newPaneGroups[sourceGroupId];
+        newWorkspaces = newWorkspaces.map((w) =>
+          w.id === sourceWorkspaceId
+            ? { ...w, root: resolution.newRoot, focusedGroupId: resolution.newFocusedGroupId }
+            : w,
+        );
+        break;
+      case "group-replaced-with-fallback":
+        newPanes = { ...state.panes, [resolution.fallbackPane.id]: resolution.fallbackPane };
+        newPaneGroups[sourceGroupId] = resolution.srcGroup;
+        break;
+    }
+
+    // Insert new workspace node into sidebar tree
+    const container = opts?.container ?? "main";
+    const parentFolderId = opts?.parentFolderId ?? null;
+    const targetNodes = getSidebarNodesForContainer(
+      { sidebarTree: state.sidebarTree, pinnedSidebarNodes: state.pinnedSidebarNodes },
+      container,
+    );
+    const insertIndex = opts?.insertIndex ?? targetNodes.length;
+    const newSidebarNode: SidebarNode = { type: "workspace" as const, workspaceId: newWs.id };
+    const insertedNodes = insertSidebarNode(
+      targetNodes,
+      newSidebarNode,
+      parentFolderId,
+      insertIndex,
+    );
+
+    set({
+      workspaces: newWorkspaces,
+      activeWorkspaceId: newWs.id,
+      panes: newPanes,
+      paneGroups: newPaneGroups,
+      sidebarTree: container === "main" ? insertedNodes : state.sidebarTree,
+      pinnedSidebarNodes: container === "pinned" ? insertedNodes : state.pinnedSidebarNodes,
     });
   },
 

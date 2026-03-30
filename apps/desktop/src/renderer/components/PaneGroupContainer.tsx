@@ -3,7 +3,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { paneTypeIcons, paneTypeLabels } from "../lib/pane-type-meta";
 import { useWorkspaceStore, getTopLeftGroupId } from "../store/workspace-store";
 import { useNativeViewStore } from "../store/native-view-store";
-import { useDragContext } from "../hooks/useDragAndDrop";
+import { useDragContext } from "../hooks/useDndOrchestrator";
 import GroupTabBar from "./GroupTabBar";
 import type {
   PaneType,
@@ -139,7 +139,9 @@ export default function PaneGroupContainer({
   const previewSide =
     dropIntent?.kind === "split-group" && dropIntent.targetGroupId === groupId
       ? dropIntent.side
-      : null;
+      : dropIntent?.kind === "split-with-workspace" && dropIntent.targetGroupId === groupId
+        ? dropIntent.side
+        : null;
 
   const handleFocus = useCallback(() => {
     setFocusedGroup(workspaceId, groupId);
@@ -165,7 +167,7 @@ export default function PaneGroupContainer({
         dndEnabled={dndEnabled}
       />
       <div className="pane-group-content">
-        {activeDrag?.type === "group-tab" && (
+        {(activeDrag?.type === "group-tab" || activeDrag?.type === "sidebar-workspace") && (
           <PaneContentDropZone
             groupId={groupId}
             workspaceId={workspaceId}

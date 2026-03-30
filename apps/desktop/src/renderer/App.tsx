@@ -4,7 +4,7 @@ import { useWorkspaceStore } from "./store/workspace-store";
 import { useSettingsStore } from "./store/settings-store";
 import { useNativeViewStore, initNativeViewSubscriptions } from "./store/native-view-store";
 import { useTheme } from "./hooks/useTheme";
-import { useDragAndDrop, DragContext } from "./hooks/useDragAndDrop";
+import { useDndOrchestrator, DragContext } from "./hooks/useDndOrchestrator";
 import { useModifierHeld, type HeldModifier } from "./hooks/useModifierHeld";
 import { useAppShortcuts } from "./hooks/useAppShortcuts";
 import { useBrowserBridge } from "./hooks/useBrowserBridge";
@@ -35,7 +35,7 @@ export default function App() {
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
   const keepVscodeServerRunning = useSettingsStore((s) => s.keepVscodeServerRunning);
 
-  const dnd = useDragAndDrop();
+  const dnd = useDndOrchestrator();
   const { activeDrag, dropIntent } = dnd;
   const dragContextValue = useMemo(() => ({ activeDrag, dropIntent }), [activeDrag, dropIntent]);
   const modifierHeld = useModifierHeld();
