@@ -21,7 +21,6 @@ export default function SettingsPage() {
     terminalScrollback,
     terminalCursorStyle,
     keepVscodeServerRunning,
-    defaultPaneType,
     updateSetting,
     setSettingsOpen,
   } = useSettingsStore();
@@ -45,19 +44,6 @@ export default function SettingsPage() {
         {/* General */}
         <section>
           <SectionTitle>General</SectionTitle>
-          <SettingRow label="Default new tab">
-            <SegmentedControl
-              options={[
-                { label: "Terminal", value: "terminal" as const },
-                { label: "Browser", value: "browser" as const },
-                { label: "Picker", value: "empty" as const },
-              ]}
-              value={defaultPaneType}
-              onChange={(v) =>
-                updateSetting("defaultPaneType", v as "empty" | "terminal" | "browser")
-              }
-            />
-          </SettingRow>
           <SettingRow label="Shell command">
             <InstallCliButton />
           </SettingRow>

@@ -14,7 +14,6 @@ import type {
 } from "../types/workspace";
 
 // Import the actual pane content components
-import EmptyPane from "./EmptyPane";
 import TerminalPane from "./TerminalPane";
 import EditorPane from "./EditorPane";
 import BrowserPane from "./BrowserPane";
@@ -84,7 +83,6 @@ const PaneContent = memo(function PaneContent({
   paneType,
   paneConfig,
   workspaceId,
-  groupId,
   isVisible,
   hideNativeView,
   isFocused,
@@ -93,14 +91,11 @@ const PaneContent = memo(function PaneContent({
   paneType: PaneType;
   paneConfig: unknown;
   workspaceId: string;
-  groupId: string;
   isVisible: boolean;
   hideNativeView: boolean;
   isFocused: boolean;
 }): ReactElement {
   switch (paneType) {
-    case "empty":
-      return <EmptyPane paneId={paneId} workspaceId={workspaceId} groupId={groupId} />;
     case "terminal":
       return (
         <TerminalPane
@@ -204,10 +199,7 @@ export default function PaneGroupContainer({
           if (!pane) return null;
 
           const showDragPlaceholder =
-            isActiveTab &&
-            shouldHideNative &&
-            activeDrag?.type === "group-tab" &&
-            pane.type !== "empty";
+            isActiveTab && shouldHideNative && activeDrag?.type === "group-tab";
 
           return (
             <div key={tab.paneId} className="pane-tab-layer" data-active={isActiveTab || undefined}>
@@ -216,7 +208,6 @@ export default function PaneGroupContainer({
                 paneType={pane.type}
                 paneConfig={pane.config}
                 workspaceId={workspaceId}
-                groupId={groupId}
                 isVisible={isVisibleWorkspace && isActiveTab}
                 hideNativeView={shouldHideNative || !isActiveTab}
                 isFocused={isFocused && isActiveTab}

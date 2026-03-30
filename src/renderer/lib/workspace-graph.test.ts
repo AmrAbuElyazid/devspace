@@ -25,8 +25,8 @@ function makeGroup(id: string, paneId: string): PaneGroup {
 function makePane(id: string): Pane {
   return {
     id,
-    type: "empty",
-    title: "Empty",
+    type: "terminal",
+    title: "Terminal",
     config: {},
   };
 }

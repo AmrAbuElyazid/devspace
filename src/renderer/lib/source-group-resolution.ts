@@ -7,7 +7,7 @@ import {
   findSiblingGroupId,
   findFirstGroupId,
 } from "./split-tree";
-import { createEmptyPane } from "./pane-factory";
+import { createPane } from "./pane-factory";
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -31,10 +31,10 @@ type SourceGroupResolution =
       newFocusedGroupId: string | null;
     }
   | {
-      /** The source group was emptied but is the only group — replaced with an empty pane. */
-      kind: "group-replaced-with-empty";
+      /** The source group was emptied but is the only group — replaced with a fallback pane. */
+      kind: "group-replaced-with-fallback";
       srcGroup: PaneGroup;
-      emptyPane: Pane;
+      fallbackPane: Pane;
     };
 
 // ---------------------------------------------------------------------------
@@ -101,12 +101,12 @@ export function resolveSourceGroupAfterTabRemoval(
     };
   }
 
-  // Only group — replace with an empty pane
-  const emptyPane = createEmptyPane();
-  const emptyTab: PaneGroupTab = { id: nanoid(), paneId: emptyPane.id };
+  // Only group — replace with a fresh terminal pane
+  const fallbackPane = createPane("terminal");
+  const fallbackTab: PaneGroupTab = { id: nanoid(), paneId: fallbackPane.id };
   return {
-    kind: "group-replaced-with-empty",
-    srcGroup: { ...srcGroup, tabs: [emptyTab], activeTabId: emptyTab.id },
-    emptyPane,
+    kind: "group-replaced-with-fallback",
+    srcGroup: { ...srcGroup, tabs: [fallbackTab], activeTabId: fallbackTab.id },
+    fallbackPane,
   };
 }

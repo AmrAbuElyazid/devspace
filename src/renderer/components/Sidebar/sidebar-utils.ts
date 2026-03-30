@@ -25,7 +25,7 @@ export function getWorkspaceMetadata(
     if (!group) continue;
     for (const tab of group.tabs) {
       const pane = panes[tab.paneId];
-      if (!pane || pane.type === "empty") continue;
+      if (!pane) continue;
       paneCount++;
       if (!primaryDir && pane.type === "terminal") {
         const cwd = pane.config.cwd;

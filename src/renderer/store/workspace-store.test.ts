@@ -1,4 +1,17 @@
 import { test, expect } from "vitest";
+
+// Mock window.api so that cleanupPaneResources doesn't crash when destroying
+// terminal/browser/editor/t3code panes in a test environment.
+const noop = () => {};
+globalThis.window = {
+  api: {
+    terminal: { destroy: noop, blur: noop },
+    browser: { destroy: noop },
+    editor: { stop: noop },
+    t3code: { stop: noop },
+  },
+} as any;
+
 import { cleanupPaneResources } from "../lib/pane-cleanup";
 import {
   useWorkspaceStore,
@@ -170,11 +183,11 @@ test("addGroupTab creates empty pane in group", () => {
   expect(newTab).toBeTruthy();
   expect(groupAfter!.activeTabId).toBe(newTab!.id);
 
-  // The new pane should exist and be an empty pane
+  // The new pane should exist and default to a terminal pane
   const newPane = useWorkspaceStore.getState().panes[newTab!.paneId];
   expect(newPane).toBeTruthy();
-  expect(newPane!.type).toBe("empty");
-  expect(newPane!.title).toBe("Empty");
+  expect(newPane!.type).toBe("terminal");
+  expect(newPane!.title).toBe("Terminal");
 });
 
 test("removeGroupTab last tab with siblings removes group", () => {
@@ -252,10 +265,10 @@ test("removeGroupTab last tab without siblings adds empty", () => {
   expect(replacementTab).toBeTruthy();
   expect(groupAfter!.activeTabId).toBe(replacementTab!.id);
 
-  // The replacement pane should be a new empty pane
+  // The replacement pane should be a new terminal pane (default)
   const replacementPane = useWorkspaceStore.getState().panes[replacementTab!.paneId];
   expect(replacementPane).toBeTruthy();
-  expect(replacementPane!.type).toBe("empty");
+  expect(replacementPane!.type).toBe("terminal");
 
   // The old pane should be removed
   expect(useWorkspaceStore.getState().panes[oldPaneId]).toBe(undefined);
@@ -300,14 +313,14 @@ test("splitGroup creates new group with empty pane", () => {
   const newGroupId = second!.groupId;
   expect(newGroupId).not.toBe(originalGroupId);
 
-  // New group exists and has exactly 1 empty pane tab
+  // New group exists and has exactly 1 terminal pane tab (default)
   const newGroup = useWorkspaceStore.getState().paneGroups[newGroupId];
   expect(newGroup).toBeTruthy();
   expect(newGroup!.tabs.length).toBe(1);
 
   const newPane = useWorkspaceStore.getState().panes[newGroup!.tabs[0]!.paneId];
   expect(newPane).toBeTruthy();
-  expect(newPane!.type).toBe("empty");
+  expect(newPane!.type).toBe("terminal");
 
   // Focus moved to the new group
   expect(wsAfter!.focusedGroupId).toBe(newGroupId);
@@ -848,16 +861,16 @@ test("splitGroupWithTab with single tab on same group populates src with empty p
   expect(ws2.root.direction).toBe("horizontal");
   expect(ws2.root.children.length).toBe(2);
 
-  // The original group (left child) should still exist with an empty pane tab
+  // The original group (left child) should still exist with a default terminal pane tab
   const leftChild = ws2.root.children[0]!;
   const leftGroupId = leftChild.type === "leaf" ? leftChild.groupId : "";
   expect(leftGroupId).toBe(groupId);
   const origGroup = s.paneGroups[groupId];
   expect(origGroup).toBeTruthy();
   expect(origGroup!.tabs.length).toBe(1);
-  const emptyPane = s.panes[origGroup!.tabs[0]!.paneId];
-  expect(emptyPane).toBeTruthy();
-  expect(emptyPane!.type).toBe("empty");
+  const defaultPane = s.panes[origGroup!.tabs[0]!.paneId];
+  expect(defaultPane).toBeTruthy();
+  expect(defaultPane!.type).toBe("terminal");
 
   // The new group (right child) should have the moved tab's pane
   const rightChild = ws2.root.children[1]!;
@@ -990,11 +1003,11 @@ test("moveTabToWorkspace adds empty pane when only group becomes empty", () => {
   useWorkspaceStore.getState().moveTabToWorkspace(srcWs.id, srcGroupId, tabToMove.id, destWs.id);
 
   const s4 = useWorkspaceStore.getState();
-  // Source group should still exist with an empty pane tab
+  // Source group should still exist with a default terminal pane tab
   expect(s4.paneGroups[srcGroupId]).toBeTruthy();
   expect(s4.paneGroups[srcGroupId]!.tabs.length).toBe(1);
   const replacementPane = s4.panes[s4.paneGroups[srcGroupId]!.tabs[0]!.paneId]!;
-  expect(replacementPane.type).toBe("empty");
+  expect(replacementPane.type).toBe("terminal");
 });
 
 // ── repairTree ──

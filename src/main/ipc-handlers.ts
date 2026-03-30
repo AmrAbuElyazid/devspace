@@ -94,8 +94,13 @@ export function registerIpcHandlers(
     terminalManager.setVisibleSurfaces(valid);
   });
 
-  safeHandle("terminal:blur", () => {
+  safeHandle("terminal:blur", (event) => {
     terminalManager.blurSurfaces();
+    // After native surfaces resign first responder, explicitly focus the web
+    // content so keyboard events flow to the renderer's DOM. Without this,
+    // keystrokes reach the BrowserWindow but not the web content, causing
+    // macOS to beep (no responder handles the event).
+    event.sender.focus();
   });
 
   safeHandle("terminal:sendBindingAction", (_event, surfaceId: unknown, action: unknown) => {

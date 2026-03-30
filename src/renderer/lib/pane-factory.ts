@@ -10,21 +10,19 @@ export const titleForType: Record<PaneType, string> = {
   browser: "Browser",
   editor: "Editor",
   t3code: "T3 Code",
-  empty: "Empty",
 };
 
 // ---------------------------------------------------------------------------
 // Factory functions
 // ---------------------------------------------------------------------------
 
-export function createEmptyPane(type?: PaneType, configOverride?: Partial<PaneConfig>): Pane {
-  const paneType = type ?? "empty";
+export function createPane(type: PaneType, configOverride?: Partial<PaneConfig>): Pane {
   // Type assertion needed: we construct from dynamic PaneType values, but the
   // result is always a valid Pane discriminated union member at runtime.
   return {
     id: nanoid(),
-    type: paneType,
-    title: titleForType[paneType] ?? "Empty",
+    type,
+    title: titleForType[type] ?? "Terminal",
     config: configOverride ?? {},
   } as Pane;
 }
@@ -73,13 +71,15 @@ export function createDefaultWorkspace(name: string, group: PaneGroup): Workspac
  *  1. Active tab in the specified group (if it's a terminal)
  *  2. Any terminal tab in the specified group
  *  3. Focused group's active terminal in the workspace (cross-group fallback)
- *  4. undefined (no terminal context → defaults to $HOME)
+ *  4. lastTerminalCwd (global fallback from last active terminal)
+ *  5. undefined (no terminal context → defaults to $HOME)
  */
 export function findNearestTerminalCwd(
   panes: Record<string, Pane>,
   paneGroups: Record<string, PaneGroup>,
   groupId: string | undefined,
   workspace: Workspace | undefined,
+  lastTerminalCwd?: string,
 ): string | undefined {
   // Helper to extract CWD from a pane
   const getCwd = (paneId: string): string | undefined => {
@@ -116,6 +116,9 @@ export function findNearestTerminalCwd(
       }
     }
   }
+
+  // 4. Global fallback: last known terminal CWD
+  if (lastTerminalCwd) return lastTerminalCwd;
 
   return undefined;
 }
