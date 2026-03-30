@@ -43,8 +43,8 @@ export const tabToWorkspaceHandler: DndHandler = {
     return null;
   },
 
-  execute(intent: DropIntent, store: typeof useWorkspaceStore): void {
-    if (intent.kind !== "move-to-workspace") return;
+  execute(intent: DropIntent, store: typeof useWorkspaceStore): boolean {
+    if (intent.kind !== "move-to-workspace") return false;
 
     store
       .getState()
@@ -54,5 +54,6 @@ export const tabToWorkspaceHandler: DndHandler = {
         intent.sourceTabId,
         intent.targetWorkspaceId,
       );
+    return true;
   },
 };

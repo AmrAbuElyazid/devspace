@@ -121,8 +121,8 @@ export const sidebarReorderHandler: DndHandler = {
     };
   },
 
-  execute(intent: DropIntent, store: typeof useWorkspaceStore): void {
-    if (intent.kind !== "reorder-sidebar") return;
+  execute(intent: DropIntent, store: typeof useWorkspaceStore): boolean {
+    if (intent.kind !== "reorder-sidebar") return false;
 
     const state = store.getState();
     state.moveSidebarNode({
@@ -138,5 +138,6 @@ export const sidebarReorderHandler: DndHandler = {
     if (intent.targetParentId !== null) {
       state.expandFolder(intent.targetParentId);
     }
+    return true;
   },
 };

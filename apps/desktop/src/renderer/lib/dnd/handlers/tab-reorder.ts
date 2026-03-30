@@ -35,8 +35,8 @@ export const tabReorderHandler: DndHandler = {
     return null;
   },
 
-  execute(intent: DropIntent, store: typeof useWorkspaceStore): void {
-    if (intent.kind !== "reorder-tab") return;
+  execute(intent: DropIntent, store: typeof useWorkspaceStore): boolean {
+    if (intent.kind !== "reorder-tab") return false;
 
     const { workspaceId, sourceGroupId, sourceTabId, targetGroupId, targetTabId } = intent;
     const state = store.getState();
@@ -44,15 +44,15 @@ export const tabReorderHandler: DndHandler = {
     if (sourceGroupId === targetGroupId) {
       // Intra-group reorder
       const group = state.paneGroups[sourceGroupId];
-      if (!group) return;
+      if (!group) return true;
       const fromIndex = group.tabs.findIndex((t) => t.id === sourceTabId);
       const toIndex = group.tabs.findIndex((t) => t.id === targetTabId);
-      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return;
+      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return true;
       state.reorderGroupTabs(workspaceId, sourceGroupId, fromIndex, toIndex);
     } else {
       // Cross-group move — insert at position of target tab
       const destGroup = state.paneGroups[targetGroupId];
-      if (!destGroup) return;
+      if (!destGroup) return true;
       const insertIndex = destGroup.tabs.findIndex((t) => t.id === targetTabId);
       state.moveTabToGroup(
         workspaceId,
@@ -62,5 +62,6 @@ export const tabReorderHandler: DndHandler = {
         insertIndex !== -1 ? insertIndex : undefined,
       );
     }
+    return true;
   },
 };

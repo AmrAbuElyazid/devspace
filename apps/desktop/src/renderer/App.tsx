@@ -50,13 +50,13 @@ export default function App() {
     window.api?.editor?.setKeepServerRunning(keepVscodeServerRunning);
   }, [keepVscodeServerRunning]);
 
-  // Sync drag state to NativeViewManager — during a group-tab drag on the
-  // active workspace, all native views must be hidden so the DOM drag
-  // overlay is visible above them.
+  // Sync drag state to NativeViewManager — during any drag that targets the
+  // workspace area, all native views must be hidden so the DOM drag overlay
+  // and drop zone indicators are visible above them.
   const setDragHidesViews = useNativeViewStore((s) => s.setDragHidesViews);
   useEffect(() => {
-    const isGroupTabDrag = activeDrag?.type === "group-tab";
-    setDragHidesViews(isGroupTabDrag);
+    const needsHide = activeDrag?.type === "group-tab" || activeDrag?.type === "sidebar-workspace";
+    setDragHidesViews(needsHide);
   }, [activeDrag, setDragHidesViews]);
 
   // Listen for CLI-triggered "open editor" requests from the main process.

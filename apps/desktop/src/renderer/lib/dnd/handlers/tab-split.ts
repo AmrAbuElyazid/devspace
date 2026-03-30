@@ -55,7 +55,7 @@ export const tabSplitHandler: DndHandler = {
   },
 
   execute(intent, store) {
-    if (intent.kind !== "split-group") return;
+    if (intent.kind !== "split-group") return false;
     store
       .getState()
       .splitGroupWithTab(
@@ -65,5 +65,6 @@ export const tabSplitHandler: DndHandler = {
         intent.targetGroupId,
         intent.side,
       );
+    return true;
   },
 };
