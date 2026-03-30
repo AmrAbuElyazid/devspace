@@ -43,7 +43,7 @@ import {
 } from "../lib/split-tree";
 import {
   titleForType,
-  createEmptyPane,
+  createPane,
   createPaneGroup,
   nextWorkspaceName,
   createDefaultWorkspace,
@@ -122,6 +122,8 @@ interface WorkspaceState {
   paneGroups: Record<string, PaneGroup>;
   pinnedSidebarNodes: SidebarNode[];
   sidebarTree: SidebarNode[];
+  /** Last known terminal CWD across all workspaces — used as final fallback for CWD inheritance. */
+  lastTerminalCwd: string | undefined;
 
   /** Set by addWorkspace/addFolder when the newly created item should enter edit mode */
   pendingEditId: string | null;
@@ -229,7 +231,6 @@ interface WorkspaceState {
   updatePaneConfig: (paneId: string, updates: Partial<PaneConfig>) => void;
   updateBrowserPaneZoom: (paneId: string, zoom: number) => void;
   updatePaneTitle: (paneId: string, title: string) => void;
-  changePaneType: (paneId: string, type: PaneType, config?: PaneConfig) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -283,12 +284,12 @@ function migratePersistedState(
         if (!newPanes[paneId]) {
           newPanes[paneId] = {
             id: paneId,
-            type: "empty",
-            title: "Empty",
+            type: "terminal",
+            title: "Terminal",
             config: {},
           };
         }
-        const group = createPaneGroup(newPanes[paneId]);
+        const group = createPaneGroup(newPanes[paneId]!);
         newPaneGroups[group.id] = group;
         firstGroupId.push(group.id);
         return { type: "leaf", groupId: group.id };
@@ -316,8 +317,8 @@ function migratePersistedState(
           if (!newPanes[paneId]) {
             newPanes[paneId] = {
               id: paneId,
-              type: "empty",
-              title: "Empty",
+              type: "terminal",
+              title: "Terminal",
               config: {},
             };
           }
@@ -383,9 +384,9 @@ function loadPersistedState(): Pick<
         const repaired = repairTree(ws.root, validGroupIds);
         if (!repaired) {
           // Entire tree was orphaned — create a fresh group
-          const emptyPane = createEmptyPane();
-          const freshGroup = createPaneGroup(emptyPane);
-          persisted.panes[emptyPane.id] = emptyPane;
+          const freshPane = createPane("terminal");
+          const freshGroup = createPaneGroup(freshPane);
+          persisted.panes[freshPane.id] = freshPane;
           persisted.paneGroups[freshGroup.id] = freshGroup;
           return {
             ...ws,
@@ -411,10 +412,18 @@ function loadPersistedState(): Pick<
         sidebarTree: persisted.sidebarTree as SidebarNode[],
       });
 
+      // Migrate any lingering 'empty' panes to 'terminal'
+      const migratedPanes: Record<string, Pane> = persisted.panes ?? {};
+      for (const [id, pane] of Object.entries(migratedPanes)) {
+        if ((pane as Record<string, unknown>).type === "empty") {
+          migratedPanes[id] = { ...pane, type: "terminal", title: "Terminal", config: {} };
+        }
+      }
+
       return {
         workspaces: repairedWorkspaces,
         activeWorkspaceId: persisted.activeWorkspaceId,
-        panes: persisted.panes ?? {},
+        panes: migratedPanes,
         paneGroups: persisted.paneGroups,
         pinnedSidebarNodes: normalizedSidebar.pinnedSidebarNodes,
         sidebarTree: normalizedSidebar.sidebarTree,
@@ -452,7 +461,7 @@ function buildInitialState(): Pick<
       return persisted;
     }
   }
-  const pane = createEmptyPane();
+  const pane = createPane("terminal");
   const group = createPaneGroup(pane);
   const ws = createDefaultWorkspace("Workspace 1", group);
   return {
@@ -508,6 +517,7 @@ function activateAdjacentTab(get: StoreGet, set: StoreSet, groupId: string, delt
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   ...buildInitialState(),
+  lastTerminalCwd: undefined,
   pendingEditId: null,
   pendingEditType: null,
   clearPendingEdit: () => set({ pendingEditId: null, pendingEditType: null }),
@@ -517,9 +527,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   // -------------------------------------------------------------------
 
   addWorkspace: (name, parentFolderId = null, container = "main", defaultType) => {
+    const paneType = defaultType ?? "terminal";
     // Inherit CWD from the currently focused terminal in the active workspace
     let inheritedConfig: Partial<PaneConfig> | undefined;
-    if (defaultType === "terminal") {
+    if (paneType === "terminal") {
       const currentState = get();
       const activeWs = currentState.workspaces.find((w) => w.id === currentState.activeWorkspaceId);
       const cwd = findNearestTerminalCwd(
@@ -527,10 +538,11 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
         currentState.paneGroups,
         activeWs?.focusedGroupId ?? undefined,
         activeWs,
+        currentState.lastTerminalCwd,
       );
       if (cwd) inheritedConfig = { cwd };
     }
-    const pane = createEmptyPane(defaultType, inheritedConfig);
+    const pane = createPane(paneType, inheritedConfig);
     const group = createPaneGroup(pane);
     const wsName = name ?? nextWorkspaceName(get().workspaces);
     const ws = createDefaultWorkspace(wsName, group);
@@ -583,7 +595,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const remaining = state.workspaces.filter((w) => w.id !== id);
 
     if (remaining.length === 0) {
-      const newPane = createEmptyPane();
+      const newPane = createPane("terminal");
       const newGroup = createPaneGroup(newPane);
       const newWs = createDefaultWorkspace("Workspace 1", newGroup);
       newPanes[newPane.id] = newPane;
@@ -719,13 +731,20 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const group = paneGroups[groupId];
     if (!group) return;
 
-    // Inherit CWD from the nearest terminal (same group → focused group → $HOME)
+    const paneType = defaultType ?? "terminal";
+    // Inherit CWD from the nearest terminal (same group → focused group → lastTerminalCwd → $HOME)
     let inheritedConfig: Partial<PaneConfig> | undefined;
-    if (defaultType === "terminal") {
-      const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, workspace);
+    if (paneType === "terminal") {
+      const cwd = findNearestTerminalCwd(
+        panes,
+        paneGroups,
+        groupId,
+        workspace,
+        state.lastTerminalCwd,
+      );
       if (cwd) inheritedConfig = { cwd };
     }
-    const pane = createEmptyPane(defaultType, inheritedConfig);
+    const pane = createPane(paneType, inheritedConfig);
     const newTab: PaneGroupTab = { id: nanoid(), paneId: pane.id };
 
     set({
@@ -778,8 +797,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
           paneGroups: newPaneGroups,
         });
         break;
-      case "group-replaced-with-empty":
-        newPanes[resolution.emptyPane.id] = resolution.emptyPane;
+      case "group-replaced-with-fallback":
+        newPanes[resolution.fallbackPane.id] = resolution.fallbackPane;
         newPaneGroups[groupId] = resolution.srcGroup;
         set({ panes: newPanes, paneGroups: newPaneGroups });
         break;
@@ -872,8 +891,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
             : w,
         );
         break;
-      case "group-replaced-with-empty":
-        newPanes = { ...state.panes, [resolution.emptyPane.id]: resolution.emptyPane };
+      case "group-replaced-with-fallback":
+        newPanes = { ...state.panes, [resolution.fallbackPane.id]: resolution.fallbackPane };
         newPaneGroups[srcGroupId] = resolution.srcGroup;
         break;
     }
@@ -929,7 +948,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     // We use the *original* workspace tree for resolution — the tree modification
     // (replaceLeafInTree) only affects the target, not the source group count.
     // Special case: when srcGroupId === targetGroupId, the original tree has
-    // only 1 group (the same leaf), so it correctly falls into "group-replaced-with-empty"
+    // only 1 group (the same leaf), so it correctly falls into "group-replaced-with-fallback"
     // rather than "group-removed".
     const resolution = resolveSourceGroupAfterTabRemoval(ws, srcGroupId, srcGroup, tabId);
     switch (resolution.kind) {
@@ -945,8 +964,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
         }
         delete newPaneGroups[srcGroupId];
         break;
-      case "group-replaced-with-empty":
-        newPanes = { ...state.panes, [resolution.emptyPane.id]: resolution.emptyPane };
+      case "group-replaced-with-fallback":
+        newPanes = { ...state.panes, [resolution.fallbackPane.id]: resolution.fallbackPane };
         newPaneGroups[srcGroupId] = resolution.srcGroup;
         break;
     }
@@ -1010,8 +1029,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
             : w,
         );
         break;
-      case "group-replaced-with-empty":
-        newPanes = { ...state.panes, [resolution.emptyPane.id]: resolution.emptyPane };
+      case "group-replaced-with-fallback":
+        newPanes = { ...state.panes, [resolution.fallbackPane.id]: resolution.fallbackPane };
         newPaneGroups[srcGroupId] = resolution.srcGroup;
         break;
     }
@@ -1095,18 +1114,20 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   // -------------------------------------------------------------------
 
   splitGroup(workspaceId, groupId, direction, defaultType) {
-    const { workspaces, panes, paneGroups } = get();
+    const state = get();
+    const { workspaces, panes, paneGroups } = state;
     const ws = workspaces.find((w) => w.id === workspaceId);
     if (!ws) return;
     if (!treeHasGroup(ws.root, groupId)) return;
 
+    const paneType = defaultType ?? "terminal";
     // Inherit CWD from the pane being split
     let inheritedConfig: Partial<PaneConfig> | undefined;
-    if (defaultType === "terminal") {
-      const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, ws);
+    if (paneType === "terminal") {
+      const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, ws, state.lastTerminalCwd);
       if (cwd) inheritedConfig = { cwd };
     }
-    const newPane = createEmptyPane(defaultType, inheritedConfig);
+    const newPane = createPane(paneType, inheritedConfig);
     const newGroup = createPaneGroup(newPane);
 
     const replacement: SplitNode = {
@@ -1154,10 +1175,10 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const newPaneGroups = { ...state.paneGroups };
 
     if (allGroupIds.length <= 1) {
-      // Last group — create fresh empty group
-      const emptyPane = createEmptyPane();
-      newPanes[emptyPane.id] = emptyPane;
-      const freshGroup = createPaneGroup(emptyPane);
+      // Last group — create fresh terminal group
+      const fallbackPane = createPane("terminal");
+      newPanes[fallbackPane.id] = fallbackPane;
+      const freshGroup = createPaneGroup(fallbackPane);
       delete newPaneGroups[groupId];
       newPaneGroups[freshGroup.id] = freshGroup;
 
@@ -1306,12 +1327,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const hasChange = keys.some((key) => pane.config[key] !== nextConfig[key]);
     if (!hasChange) return;
 
-    set({
+    const patch: Partial<WorkspaceState> = {
       panes: {
         ...panes,
         [paneId]: { ...pane, config: nextConfig } as Pane,
       },
-    });
+    };
+
+    // Track last terminal CWD globally for inheritance fallback
+    if (pane.type === "terminal" && "cwd" in updates && typeof updates.cwd === "string") {
+      patch.lastTerminalCwd = updates.cwd;
+    }
+
+    set(patch);
   },
 
   updateBrowserPaneZoom(paneId, zoom) {
@@ -1339,28 +1367,6 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
 
     set({
       panes: { ...panes, [paneId]: { ...pane, title } },
-    });
-  },
-
-  changePaneType(paneId, type, config) {
-    const { panes } = get();
-    const pane = panes[paneId];
-    if (!pane) return;
-
-    if (pane.type !== type) {
-      cleanupPaneResources(panes, paneId, defaultPaneCleanupDeps);
-    }
-
-    set({
-      panes: {
-        ...panes,
-        [paneId]: {
-          ...pane,
-          type,
-          title: titleForType[type],
-          config: config ?? {},
-        } as Pane,
-      },
     });
   },
 

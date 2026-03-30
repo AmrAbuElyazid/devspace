@@ -1,4 +1,4 @@
-import { Terminal, FileCode, Globe, Bot, Square } from "lucide-react";
+import { Terminal, FileCode, Globe, Bot } from "lucide-react";
 import type { PaneType } from "../types/workspace";
 
 export const paneTypeIcons: Record<PaneType, typeof Terminal> = {
@@ -6,7 +6,6 @@ export const paneTypeIcons: Record<PaneType, typeof Terminal> = {
   editor: FileCode,
   browser: Globe,
   t3code: Bot,
-  empty: Square,
 };
 
 export const paneTypeLabels: Record<PaneType, string> = {
@@ -14,5 +13,4 @@ export const paneTypeLabels: Record<PaneType, string> = {
   editor: "VS Code",
   browser: "Browser",
   t3code: "T3 Code",
-  empty: "Empty",
 };

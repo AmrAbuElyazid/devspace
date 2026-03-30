@@ -108,7 +108,7 @@ function SortableGroupTab({
 
   const isDropTarget = isOver && !isDragging && activeDrag?.type === "group-tab";
 
-  const Icon = pane ? paneTypeIcons[pane.type] : paneTypeIcons.empty;
+  const Icon = pane ? paneTypeIcons[pane.type] : paneTypeIcons.terminal;
 
   return (
     <div
@@ -184,7 +184,6 @@ export default function GroupTabBar({
   const addGroupTab = useWorkspaceStore((s) => s.addGroupTab);
   const removeGroupTab = useWorkspaceStore((s) => s.removeGroupTab);
   const setActiveGroupTab = useWorkspaceStore((s) => s.setActiveGroupTab);
-  const splitGroup = useWorkspaceStore((s) => s.splitGroup);
   const closeGroup = useWorkspaceStore((s) => s.closeGroup);
   const addWorkspace = useWorkspaceStore((s) => s.addWorkspace);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
@@ -209,7 +208,15 @@ export default function GroupTabBar({
             </button>
             <button
               className="tabbar-ctl-btn no-drag"
-              onClick={() => addWorkspace(undefined, null, "main", defaultPaneType)}
+              onClick={() => {
+                if (defaultPaneType === "picker") {
+                  useSettingsStore
+                    .getState()
+                    .openPanePicker({ action: "new-workspace", container: "main" });
+                } else {
+                  addWorkspace(undefined, null, "main", defaultPaneType);
+                }
+              }}
               title={`New workspace (${resolveDisplayString("new-workspace")})`}
             >
               <Plus size={13} />
@@ -251,7 +258,13 @@ export default function GroupTabBar({
 
       <button
         className="group-tabbar-add no-drag"
-        onClick={() => addGroupTab(workspaceId, groupId, defaultPaneType)}
+        onClick={() => {
+          if (defaultPaneType === "picker") {
+            useSettingsStore.getState().openPanePicker({ action: "new-tab", workspaceId, groupId });
+          } else {
+            addGroupTab(workspaceId, groupId, defaultPaneType);
+          }
+        }}
         title="New tab"
       >
         <Plus size={12} />
@@ -260,14 +273,28 @@ export default function GroupTabBar({
       <div className="group-tabbar-actions">
         <button
           className="group-tabbar-action no-drag"
-          onClick={() => splitGroup(workspaceId, groupId, "horizontal")}
+          onClick={() =>
+            useSettingsStore.getState().openPanePicker({
+              action: "split",
+              workspaceId,
+              groupId,
+              splitDirection: "horizontal",
+            })
+          }
           title="Split Right"
         >
           <Columns2 size={12} />
         </button>
         <button
           className="group-tabbar-action no-drag"
-          onClick={() => splitGroup(workspaceId, groupId, "vertical")}
+          onClick={() =>
+            useSettingsStore.getState().openPanePicker({
+              action: "split",
+              workspaceId,
+              groupId,
+              splitDirection: "vertical",
+            })
+          }
           title="Split Down"
         >
           <Rows2 size={12} />

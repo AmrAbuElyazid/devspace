@@ -1,9 +1,22 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { Plus, Settings, ChevronLeft, FolderClosed, Search, X } from "lucide-react";
-import { useWorkspaceStore } from "../../store/workspace-store";
-import { useSettingsStore } from "../../store/settings-store";
+import {
+  Plus,
+  Settings,
+  ChevronLeft,
+  FolderClosed,
+  Search,
+  X,
+  Terminal,
+  Globe,
+  FileCode,
+  Bot,
+  CircleHelp,
+} from "lucide-react";
+import { useWorkspaceStore, collectGroupIds } from "../../store/workspace-store";
+import { useSettingsStore, type DefaultPaneType } from "../../store/settings-store";
 import { resolveDisplayString } from "../../../shared/shortcuts";
+import type { PaneType } from "../../types/workspace";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { ScrollArea } from "../ui/scroll-area";
@@ -173,9 +186,15 @@ export default function Sidebar() {
       else if (result === "pin") {
         if (isPinned) unpinFolder(folderId);
         else pinFolder(folderId);
-      } else if (result === "add-workspace")
-        addWorkspace(undefined, folderId, container, defaultPaneType);
-      else if (result === "add-subfolder") addFolder("New Folder", folderId, container);
+      } else if (result === "add-workspace") {
+        if (defaultPaneType === "picker") {
+          useSettingsStore
+            .getState()
+            .openPanePicker({ action: "new-workspace", parentFolderId: folderId, container });
+        } else {
+          addWorkspace(undefined, folderId, container, defaultPaneType);
+        }
+      } else if (result === "add-subfolder") addFolder("New Folder", folderId, container);
       else if (result === "delete") removeFolder(folderId);
     },
     [
@@ -283,7 +302,15 @@ export default function Sidebar() {
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={() => addWorkspace(undefined, null, "main", defaultPaneType)}
+              onClick={() => {
+                if (defaultPaneType === "picker") {
+                  useSettingsStore
+                    .getState()
+                    .openPanePicker({ action: "new-workspace", container: "main" });
+                } else {
+                  addWorkspace(undefined, null, "main", defaultPaneType);
+                }
+              }}
               className="no-drag"
             >
               <Plus size={13} />
@@ -295,7 +322,7 @@ export default function Sidebar() {
       {/* Sidebar tree with DnD */}
       <div
         ref={setMainRootRef}
-        className={isSidebarDrag && isMainRootOver ? "sidebar-item-drag-over-folder" : ""}
+        className={`sidebar-tree-root ${isSidebarDrag && isMainRootOver ? "sidebar-item-drag-over-folder" : ""}`}
       >
         <ScrollArea className="ws-list">
           <SidebarTreeLevel
@@ -339,28 +366,118 @@ export default function Sidebar() {
         variant="destructive"
       />
 
-      {/* Footer — gear icon */}
-      <div
-        className="sidebar-footer"
-        style={{ padding: "8px 12px", borderTop: "1px solid var(--border)" }}
-      >
+      {/* Footer — quick-create buttons + settings */}
+      <SidebarFooter />
+
+      {sidebarOpen && <div className="sidebar-resize-handle" onMouseDown={handleResizeStart} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sidebar Footer — quick-create buttons + settings row
+// ---------------------------------------------------------------------------
+
+const quickCreateOptions: { type: PaneType; icon: typeof Terminal; label: string }[] = [
+  { type: "terminal", icon: Terminal, label: "Terminal" },
+  { type: "browser", icon: Globe, label: "Browser" },
+  { type: "editor", icon: FileCode, label: "VS Code" },
+  { type: "t3code", icon: Bot, label: "T3 Code" },
+];
+
+function SidebarFooter() {
+  const defaultPaneType = useSettingsStore((s) => s.defaultPaneType);
+  const addWorkspace = useWorkspaceStore((s) => s.addWorkspace);
+  const addGroupTab = useWorkspaceStore((s) => s.addGroupTab);
+  const toggleSettings = useSettingsStore((s) => s.toggleSettings);
+  const [showHelp, setShowHelp] = useState(false);
+
+  const handleQuickCreate = useCallback(
+    (type: PaneType) => {
+      // Quick create: add a tab of this type in the current workspace's focused group
+      const wsState = useWorkspaceStore.getState();
+      const ws = wsState.workspaces.find((w) => w.id === wsState.activeWorkspaceId);
+      if (!ws) return;
+      const gid = ws.focusedGroupId ?? collectGroupIds(ws.root)[0];
+      if (gid) {
+        addGroupTab(ws.id, gid, type);
+      } else {
+        addWorkspace(undefined, null, "main", type);
+      }
+    },
+    [addGroupTab, addWorkspace],
+  );
+
+  const handleContextMenu = useCallback(
+    (e: React.MouseEvent, type: PaneType) => {
+      e.preventDefault();
+      const settings = useSettingsStore.getState();
+      // Toggle: if already default, unset (→ picker mode). Otherwise set as default.
+      const newDefault: DefaultPaneType = defaultPaneType === type ? "picker" : type;
+      settings.updateSetting("defaultPaneType", newDefault);
+    },
+    [defaultPaneType],
+  );
+
+  return (
+    <div className="sidebar-footer">
+      {/* Row 1: Quick-create buttons + help */}
+      <div className="sidebar-footer-qc-row">
+        <div className="sidebar-footer-qc-buttons">
+          {quickCreateOptions.map(({ type, icon: Icon, label }) => (
+            <button
+              key={type}
+              type="button"
+              className={`sidebar-qc-btn no-drag ${defaultPaneType === type ? "sidebar-qc-default" : ""}`}
+              title={`${label}${defaultPaneType === type ? " (default for ⌘T)" : ""}`}
+              onClick={() => handleQuickCreate(type)}
+              onContextMenu={(e) => handleContextMenu(e, type)}
+            >
+              <Icon size={13} />
+            </button>
+          ))}
+        </div>
         <button
-          onClick={() => useSettingsStore.getState().toggleSettings()}
-          className="no-drag flex items-center justify-center rounded-md p-1 transition-colors"
-          style={{ color: "var(--foreground-faint)" }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "var(--foreground-muted)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = "var(--foreground-faint)";
-          }}
-          title={`Settings (${resolveDisplayString("toggle-settings")})`}
+          type="button"
+          className="sidebar-help-btn no-drag"
+          title="Quick-create help"
+          onMouseEnter={() => setShowHelp(true)}
+          onMouseLeave={() => setShowHelp(false)}
+          onClick={() => setShowHelp((v) => !v)}
         >
-          <Settings size={15} />
+          <CircleHelp size={12} />
+          {showHelp && (
+            <div className="sidebar-help-tooltip">
+              <div>
+                <strong>Click</strong> — create pane now
+              </div>
+              <div>
+                <strong>Right-click</strong> — set as ⌘T default
+              </div>
+              <div>
+                <strong>Right-click</strong> active — unset (use picker)
+              </div>
+              <div className="sidebar-help-divider" />
+              <div>
+                <span style={{ color: "var(--accent)" }}>●</span> Highlighted = ⌘T default
+              </div>
+              <div>No highlight = picker dialog on ⌘T</div>
+            </div>
+          )}
         </button>
       </div>
 
-      {sidebarOpen && <div className="sidebar-resize-handle" onMouseDown={handleResizeStart} />}
+      {/* Row 2: Settings */}
+      <button
+        type="button"
+        className="sidebar-footer-settings no-drag"
+        onClick={toggleSettings}
+        title={`Settings (${resolveDisplayString("toggle-settings")})`}
+      >
+        <Settings size={14} />
+        <span>Settings</span>
+        <span className="sidebar-footer-shortcut">{resolveDisplayString("toggle-settings")}</span>
+      </button>
     </div>
   );
 }

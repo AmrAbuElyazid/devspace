@@ -1,6 +1,22 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import type { PaneType, SplitDirection } from "../types/workspace";
+
+/** The default pane type for new tabs, or 'picker' to always show the dialog. */
+export type DefaultPaneType = PaneType | "picker";
+
+/** Context for the pane picker dialog — describes what action triggered it. */
+export interface PanePickerContext {
+  action: "new-tab" | "new-workspace" | "split";
+  workspaceId?: string;
+  groupId?: string;
+  splitDirection?: SplitDirection;
+  /** For new-workspace created via folder context menu */
+  parentFolderId?: string | null;
+  container?: "main" | "pinned";
+}
+
 interface SettingsState {
   sidebarOpen: boolean;
   settingsOpen: boolean;
@@ -10,8 +26,11 @@ interface SettingsState {
   terminalCursorStyle: "block" | "underline" | "bar";
   keepVscodeServerRunning: boolean;
   sidebarWidth: number;
-  /** Pane type to open by default for new tabs ('empty' shows the picker) */
-  defaultPaneType: "empty" | "terminal" | "browser" | "editor" | "t3code";
+  /** Pane type to open by default for new tabs ('picker' shows the dialog) */
+  defaultPaneType: DefaultPaneType;
+
+  /** When non-null, the pane picker dialog is open with this context. */
+  panePickerContext: PanePickerContext | null;
 
   /** Count of open overlays (dialogs, popovers) that should hide native views */
   overlayCount: number;
@@ -25,6 +44,8 @@ interface SettingsState {
   setSidebarOpen: (open: boolean) => void;
   toggleSettings: () => void;
   setSettingsOpen: (open: boolean) => void;
+  openPanePicker: (context: PanePickerContext) => void;
+  closePanePicker: () => void;
   updateSetting: <K extends keyof SettingsState>(key: K, value: SettingsState[K]) => void;
 }
 
@@ -40,6 +61,7 @@ export const useSettingsStore = create<SettingsState>()(
       keepVscodeServerRunning: true,
       sidebarWidth: 220,
       defaultPaneType: "terminal" as const,
+      panePickerContext: null,
       overlayCount: 0,
 
       isOverlayActive() {
@@ -75,6 +97,22 @@ export const useSettingsStore = create<SettingsState>()(
         set({ settingsOpen: open });
       },
 
+      openPanePicker(context) {
+        // Blur terminal immediately — native Ghostty surfaces capture keyboard
+        // events at the OS level, so they must resign first responder BEFORE
+        // the user can press the next key. Setting overlayCount atomically
+        // ensures App.tsx hides native views on the very first render.
+        void window.api.terminal.blur();
+        set((s) => ({ panePickerContext: context, overlayCount: s.overlayCount + 1 }));
+      },
+
+      closePanePicker() {
+        set((s) => ({
+          panePickerContext: null,
+          overlayCount: Math.max(0, s.overlayCount - 1),
+        }));
+      },
+
       updateSetting(key, value) {
         set({ [key]: value } as Partial<SettingsState>);
       },
@@ -83,9 +121,18 @@ export const useSettingsStore = create<SettingsState>()(
       name: "devspace:settings",
       partialize: (state) => {
         // Exclude ephemeral state from persistence
-        const { overlayCount: _overlayCount, ...persisted } = state;
+        const { overlayCount: _ov, panePickerContext: _pp, ...persisted } = state;
         return persisted;
       },
+      migrate: (persisted: unknown) => {
+        const s = persisted as Record<string, unknown>;
+        // Migrate 'empty' -> 'picker' for defaultPaneType
+        if (s.defaultPaneType === "empty") {
+          s.defaultPaneType = "picker";
+        }
+        return s;
+      },
+      version: 1,
     },
   ),
 );

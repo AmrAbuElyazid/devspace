@@ -89,9 +89,13 @@ export function useAppShortcuts(): void {
 
         // ── Workspaces ───────────────────────────────────────────────
         case "app:new-workspace":
-          useWorkspaceStore
-            .getState()
-            .addWorkspace(undefined, null, "main", settings.defaultPaneType);
+          if (settings.defaultPaneType === "picker") {
+            settings.openPanePicker({ action: "new-workspace", container: "main" });
+          } else {
+            useWorkspaceStore
+              .getState()
+              .addWorkspace(undefined, null, "main", settings.defaultPaneType);
+          }
           break;
         case "app:close-workspace": {
           const ctx = getActiveWorkspace();
@@ -130,7 +134,12 @@ export function useAppShortcuts(): void {
           const ctx = getActiveWorkspace();
           if (!ctx) break;
           const gid = getFocusedGroupId(ctx.ws);
-          if (gid) ctx.store.addGroupTab(ctx.ws.id, gid, settings.defaultPaneType);
+          if (!gid) break;
+          if (settings.defaultPaneType === "picker") {
+            settings.openPanePicker({ action: "new-tab", workspaceId: ctx.ws.id, groupId: gid });
+          } else {
+            ctx.store.addGroupTab(ctx.ws.id, gid, settings.defaultPaneType);
+          }
           break;
         }
         case "app:close-tab": {
@@ -191,14 +200,28 @@ export function useAppShortcuts(): void {
           const ctx = getActiveWorkspace();
           if (!ctx) break;
           const gid = getSplitShortcutTargetGroupId(ctx.ws);
-          if (gid) ctx.store.splitGroup(ctx.ws.id, gid, "horizontal", settings.defaultPaneType);
+          if (gid) {
+            settings.openPanePicker({
+              action: "split",
+              workspaceId: ctx.ws.id,
+              groupId: gid,
+              splitDirection: "horizontal",
+            });
+          }
           break;
         }
         case "app:split-down": {
           const ctx = getActiveWorkspace();
           if (!ctx) break;
           const gid = getSplitShortcutTargetGroupId(ctx.ws);
-          if (gid) ctx.store.splitGroup(ctx.ws.id, gid, "vertical", settings.defaultPaneType);
+          if (gid) {
+            settings.openPanePicker({
+              action: "split",
+              workspaceId: ctx.ws.id,
+              groupId: gid,
+              splitDirection: "vertical",
+            });
+          }
           break;
         }
         case "app:focus-pane-left": {
@@ -316,6 +339,8 @@ export function useAppShortcuts(): void {
     });
 
     // DOM keydown handler -- Escape is not in the menu, so it needs a DOM handler.
+    // Note: pane picker dialog handles its own Escape via a capture-phase
+    // window listener, so we only need to handle settings here.
     const handler = (e: KeyboardEvent): void => {
       if (e.key === "Escape") {
         const settings = useSettingsStore.getState();

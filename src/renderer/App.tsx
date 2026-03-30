@@ -11,6 +11,7 @@ import { useTerminalEvents } from "./hooks/useTerminalEvents";
 import Sidebar from "./components/Sidebar";
 import SplitLayout from "./components/SplitLayout";
 import SettingsPage from "./components/SettingsPage";
+import { PanePickerDialog } from "./components/PanePickerDialog";
 import { ToastViewport } from "./components/ui/toast";
 import { FolderClosed } from "lucide-react";
 import { findFolder } from "./lib/sidebar-tree";
@@ -109,6 +110,9 @@ export default function App() {
 
                 {/* Settings overlay */}
                 {settingsOpen && <SettingsPage />}
+
+                {/* Pane picker dialog */}
+                <PanePickerDialog />
               </div>
             </div>
             <ToastViewport />
