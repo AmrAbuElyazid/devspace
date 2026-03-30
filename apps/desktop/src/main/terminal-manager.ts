@@ -1,12 +1,7 @@
 import type { BrowserWindow } from "electron";
 import { existsSync } from "fs";
-import { join } from "path";
-import {
-  loadNativeAddon,
-  type GhosttyBridge,
-  type NativeBridgeShortcut,
-  type TerminalBounds,
-} from "./native";
+import { join, resolve } from "path";
+import { GhosttyTerminal, type ReservedShortcut, type TerminalBounds } from "ghostty-electron";
 
 /**
  * Detect the user's default shell name from SHELL env var.
@@ -75,16 +70,24 @@ type TerminalCallback = {
 };
 
 export class TerminalManager {
-  private bridge: GhosttyBridge | null = null;
+  private terminal: GhosttyTerminal | null = null;
   private callbacks: TerminalCallback = {};
-  private activeSurfaces = new Set<string>();
   /** Resolved path to Devspace's ZDOTDIR wrapper for zsh shell integration. */
   private shellIntegrationZshDir: string | null = null;
 
   init(mainWindow: BrowserWindow): void {
-    this.bridge = loadNativeAddon();
+    this.terminal = new GhosttyTerminal();
     const handle = mainWindow.getNativeWindowHandle();
-    this.bridge.init(handle);
+
+    // Resolve the native addon path relative to this file's directory.
+    // In dev mode, __dirname is apps/desktop/out/main — the addon is in the
+    // ghostty-electron package's native build output.
+    const nativeAddonPath = resolve(
+      __dirname,
+      "../../../../packages/ghostty-electron/native/build/Release/ghostty_bridge.node",
+    );
+
+    this.terminal.init({ windowHandle: handle, nativeAddonPath });
 
     // Resolve shell integration wrapper path (set up in index.ts).
     // Devspace's .zshenv wrapper sources Ghostty's shell integration
@@ -99,59 +102,41 @@ export class TerminalManager {
       }
     }
 
-    this.bridge.setCallback("title-changed", (surfaceId: unknown, title: unknown) => {
-      if (typeof surfaceId === "string" && typeof title === "string") {
-        this.callbacks.onTitleChanged?.(surfaceId, title);
-      }
+    // Wire up events to callbacks
+    this.terminal.on("title-changed", (surfaceId, title) => {
+      this.callbacks.onTitleChanged?.(surfaceId, title);
     });
 
-    this.bridge.setCallback("surface-closed", (surfaceId: unknown) => {
-      if (typeof surfaceId === "string") {
-        this.activeSurfaces.delete(surfaceId);
-        this.callbacks.onSurfaceClosed?.(surfaceId);
-      }
+    this.terminal.on("surface-closed", (surfaceId) => {
+      this.callbacks.onSurfaceClosed?.(surfaceId);
     });
 
-    this.bridge.setCallback("surface-focused", (surfaceId: unknown) => {
-      if (typeof surfaceId === "string") {
-        this.callbacks.onSurfaceFocused?.(surfaceId);
-      }
+    this.terminal.on("surface-focused", (surfaceId) => {
+      this.callbacks.onSurfaceFocused?.(surfaceId);
     });
 
-    this.bridge.setCallback("pwd-changed", (surfaceId: unknown, pwd: unknown) => {
-      if (typeof surfaceId === "string" && typeof pwd === "string") {
-        this.callbacks.onPwdChanged?.(surfaceId, pwd);
-      }
+    this.terminal.on("pwd-changed", (surfaceId, pwd) => {
+      this.callbacks.onPwdChanged?.(surfaceId, pwd);
     });
 
-    this.bridge.setCallback("notification", (surfaceId: unknown, title: unknown, body: unknown) => {
-      if (typeof surfaceId === "string" && typeof title === "string" && typeof body === "string") {
-        this.callbacks.onNotification?.(surfaceId, title, body);
-      }
+    this.terminal.on("notification", (surfaceId, title, body) => {
+      this.callbacks.onNotification?.(surfaceId, title, body);
     });
 
-    this.bridge.setCallback("search-start", (surfaceId: unknown, needle: unknown) => {
-      if (typeof surfaceId === "string" && typeof needle === "string") {
-        this.callbacks.onSearchStart?.(surfaceId, needle);
-      }
+    this.terminal.on("search-start", (surfaceId, needle) => {
+      this.callbacks.onSearchStart?.(surfaceId, needle);
     });
 
-    this.bridge.setCallback("search-end", (surfaceId: unknown) => {
-      if (typeof surfaceId === "string") {
-        this.callbacks.onSearchEnd?.(surfaceId);
-      }
+    this.terminal.on("search-end", (surfaceId) => {
+      this.callbacks.onSearchEnd?.(surfaceId);
     });
 
-    this.bridge.setCallback("search-total", (surfaceId: unknown, total: unknown) => {
-      if (typeof surfaceId === "string" && typeof total === "number") {
-        this.callbacks.onSearchTotal?.(surfaceId, total);
-      }
+    this.terminal.on("search-total", (surfaceId, total) => {
+      this.callbacks.onSearchTotal?.(surfaceId, total);
     });
 
-    this.bridge.setCallback("search-selected", (surfaceId: unknown, selected: unknown) => {
-      if (typeof surfaceId === "string" && typeof selected === "number") {
-        this.callbacks.onSearchSelected?.(surfaceId, selected);
-      }
+    this.terminal.on("search-selected", (surfaceId, selected) => {
+      this.callbacks.onSearchSelected?.(surfaceId, selected);
     });
   }
 
@@ -195,11 +180,9 @@ export class TerminalManager {
     surfaceId: string,
     options?: { cwd?: string; envVars?: Record<string, string> },
   ): void {
-    if (!this.bridge) return;
-    this.activeSurfaces.add(surfaceId);
+    if (!this.terminal) return;
 
     // Inject shell integration env vars based on user's shell (zsh, bash, fish).
-    // This is how cmux does it — per-surface env vars via ghostty_surface_config_s.
     const shellName = detectShellName();
     const envVars = buildShellIntegrationEnvVars(
       shellName,
@@ -213,62 +196,59 @@ export class TerminalManager {
     // Only pass envVars if we actually have entries
     const merged = Object.keys(envVars).length > 0 ? { ...options, envVars } : options;
 
-    this.bridge.createSurface(surfaceId, merged);
+    this.terminal.createSurface(surfaceId, merged);
   }
 
   destroySurface(surfaceId: string): void {
-    if (!this.bridge) return;
-    this.activeSurfaces.delete(surfaceId);
-    this.bridge.destroySurface(surfaceId);
+    if (!this.terminal) return;
+    this.terminal.destroySurface(surfaceId);
   }
 
   showSurface(surfaceId: string): void {
-    if (!this.bridge) return;
-    this.bridge.showSurface(surfaceId);
+    if (!this.terminal) return;
+    this.terminal.showSurface(surfaceId);
   }
 
   hideSurface(surfaceId: string): void {
-    if (!this.bridge) return;
-    this.bridge.hideSurface(surfaceId);
+    if (!this.terminal) return;
+    this.terminal.hideSurface(surfaceId);
   }
 
   focusSurface(surfaceId: string): void {
-    if (!this.bridge) return;
-    this.bridge.focusSurface(surfaceId);
+    if (!this.terminal) return;
+    this.terminal.focusSurface(surfaceId);
   }
 
   setVisibleSurfaces(surfaceIds: string[]): void {
-    if (!this.bridge) return;
-    this.bridge.setVisibleSurfaces(surfaceIds);
+    if (!this.terminal) return;
+    this.terminal.setVisibleSurfaces(surfaceIds);
   }
 
   setBounds(surfaceId: string, bounds: TerminalBounds): void {
-    if (!this.bridge) return;
-    this.bridge.resizeSurface(surfaceId, bounds.x, bounds.y, bounds.width, bounds.height);
+    if (!this.terminal) return;
+    this.terminal.setBounds(surfaceId, bounds);
   }
 
   blurSurfaces(): void {
-    if (!this.bridge) return;
-    this.bridge.blurSurfaces();
+    if (!this.terminal) return;
+    this.terminal.blurSurfaces();
   }
 
   /** Send a Ghostty binding action to a surface (e.g. "increase_font_size:1"). */
   sendBindingAction(surfaceId: string, action: string): boolean {
-    if (!this.bridge) return false;
-    return this.bridge.sendBindingAction(surfaceId, action);
+    if (!this.terminal) return false;
+    return this.terminal.sendBindingAction(surfaceId, action);
   }
 
   /** Sync the reserved shortcuts list to the native bridge. */
-  setReservedShortcuts(shortcuts: NativeBridgeShortcut[]): void {
-    if (!this.bridge) return;
-    this.bridge.setReservedShortcuts(shortcuts);
+  setReservedShortcuts(shortcuts: ReservedShortcut[]): void {
+    if (!this.terminal) return;
+    this.terminal.setReservedShortcuts(shortcuts);
   }
 
   destroyAll(): void {
-    if (!this.bridge) return;
-    for (const surfaceId of this.activeSurfaces) {
-      this.bridge.destroySurface(surfaceId);
-    }
-    this.activeSurfaces.clear();
+    if (!this.terminal) return;
+    this.terminal.destroy();
+    this.terminal = null;
   }
 }

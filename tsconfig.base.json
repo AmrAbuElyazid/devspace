@@ -1,21 +1,16 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
     "module": "ESNext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "Bundler",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
     "forceConsistentCasingInFileNames": true,
-    "jsx": "react-jsx",
-    "esModuleInterop": true,
     "skipLibCheck": true,
-    "composite": true,
-    "resolveJsonModule": true,
     "allowSyntheticDefaultImports": true,
-    "outDir": "./out"
-  },
-  "include": ["src/renderer/**/*", "src/shared/**/*"]
+    "esModuleInterop": true,
+    "resolveJsonModule": true
+  }
 }

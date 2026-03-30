@@ -1,16 +1,15 @@
-export interface TerminalBounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import type { ReservedShortcut } from "./types";
 
-export type { NativeBridgeShortcut } from "../shared/shortcuts";
-import type { NativeBridgeShortcut } from "../shared/shortcuts";
-
-export interface GhosttyBridge {
+/**
+ * Low-level N-API interface to the Ghostty native bridge.
+ * This matches the exports from ghostty_bridge.node.
+ */
+export interface GhosttyNativeBridge {
   init(windowHandle: Buffer): void;
-  createSurface(surfaceId: string, options?: { cwd?: string }): void;
+  createSurface(
+    surfaceId: string,
+    options?: { cwd?: string; envVars?: Record<string, string> },
+  ): void;
   destroySurface(surfaceId: string): void;
   showSurface(surfaceId: string): void;
   hideSurface(surfaceId: string): void;
@@ -19,7 +18,7 @@ export interface GhosttyBridge {
   setVisibleSurfaces(surfaceIds: string[]): void;
   blurSurfaces(): void;
   sendBindingAction(surfaceId: string, action: string): boolean;
-  setReservedShortcuts(shortcuts: NativeBridgeShortcut[]): void;
+  setReservedShortcuts(shortcuts: ReservedShortcut[]): void;
   setCallback(
     event:
       | "title-changed"
@@ -35,9 +34,16 @@ export interface GhosttyBridge {
   ): void;
 }
 
-export function loadNativeAddon(): GhosttyBridge {
-  const raw = require("../../native/build/Release/ghostty_bridge.node");
+/**
+ * Load the compiled native addon (.node file).
+ *
+ * @param addonPath - Absolute path to the ghostty_bridge.node file.
+ *   Bundlers (vite, webpack) can't resolve native addon paths after
+ *   inlining this package, so the consuming app must provide the path.
+ */
+export function loadNativeAddon(addonPath: string): GhosttyNativeBridge {
+  const raw = require(addonPath);
   // Vite's ESM bundling may wrap the require result in { default: <addon> }
   const addon = raw.default ?? raw;
-  return addon as GhosttyBridge;
+  return addon as GhosttyNativeBridge;
 }

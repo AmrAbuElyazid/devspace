@@ -1,6 +1,15 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "ignorePatterns": ["out", "dist", "release", "node_modules", "native/build", "deps"],
+  "ignorePatterns": [
+    "out",
+    "dist",
+    "dist-electron",
+    "release",
+    "node_modules",
+    "native/build",
+    "deps",
+    ".turbo"
+  ],
   "plugins": ["eslint", "oxc", "react", "unicorn", "typescript"],
   "categories": {
     "correctness": "warn",
