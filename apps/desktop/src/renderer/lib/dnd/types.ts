@@ -96,6 +96,6 @@ export interface DndHandler {
   /** Resolve the drop intent from collision/pointer data. Return null to delegate. */
   resolveIntent(ctx: ResolveContext): DropIntent | null;
 
-  /** Execute the resolved intent. */
-  execute(intent: DropIntent, store: typeof useWorkspaceStore): void;
+  /** Execute the resolved intent. Return true if handled, false to delegate. */
+  execute(intent: DropIntent, store: typeof useWorkspaceStore): boolean;
 }

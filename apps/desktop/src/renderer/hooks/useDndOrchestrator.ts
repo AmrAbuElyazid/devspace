@@ -43,7 +43,8 @@ function droppableType(collision: CollisionDescriptor): string | undefined {
 
 /**
  * Filter collisions using the active handlers' `isValidTarget`, then apply
- * priority filtering for group-tab drags (tab > pane > sidebar-workspace).
+ * priority filtering so workspace-area targets win over sidebar targets
+ * when both are present.
  */
 function filterCollisions(
   drag: DragItemData,
@@ -69,6 +70,19 @@ function filterCollisions(
     if (workspaceTargets.length > 0) return workspaceTargets;
 
     return [];
+  }
+
+  // Priority filtering for sidebar-workspace drags:
+  // Workspace-area targets (group-tab, pane-drop) take priority over sidebar
+  // targets. Without this, closestCenter often returns sidebar-root as closest
+  // when the pointer is on the tab bar spacer, causing the workspace to snap
+  // to pinned instead of merging.
+  if (drag.type === "sidebar-workspace") {
+    const wsAreaTargets = filtered.filter((c) => {
+      const t = droppableType(c);
+      return t === "group-tab" || t === "pane-drop";
+    });
+    if (wsAreaTargets.length > 0) return wsAreaTargets;
   }
 
   return filtered;
@@ -114,16 +128,22 @@ export function useDndOrchestrator() {
         );
       }
 
-      // closestCenter fallback — EXCLUDE pane-drop zones. Drop zones require
-      // strict pointer containment (pointerWithin), not proximity.
+      // closestCenter fallback — exclude targets that require strict pointer
+      // containment (pane-drop zones). Also exclude sidebar targets when
+      // dragging a sidebar-workspace, so the nearest tab wins over
+      // sidebar-root when the pointer is on the tab bar spacer.
       const centerCollisions = closestCenter(args);
+      const SIDEBAR_TYPES = new Set(["sidebar-workspace", "sidebar-folder", "sidebar-root"]);
       return filterCollisions(
         activeDrag,
-        centerCollisions.filter(
-          (c) =>
-            (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type !==
-            "pane-drop",
-        ) as CollisionDescriptor[],
+        centerCollisions.filter((c) => {
+          const t = (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type as
+            | string
+            | undefined;
+          if (t === "pane-drop") return false;
+          if (activeDrag.type === "sidebar-workspace" && t && SIDEBAR_TYPES.has(t)) return false;
+          return true;
+        }) as CollisionDescriptor[],
         activeHandlers,
       );
     },
@@ -226,13 +246,12 @@ export function useDndOrchestrator() {
       const dragData = active.data.current as DragItemData;
       if (!dragData) return;
 
-      // Find the handler that can execute this intent
+      // Dispatch to the handler that owns this intent kind. Each handler's
+      // resolveIntent produced the intent, so only one handler should match.
+      // We iterate in registry order and stop after the first match.
       const activeHandlers = dndHandlers.filter((h) => h.canHandle(dragData));
       for (const handler of activeHandlers) {
-        // The handler's execute() checks intent.kind internally and returns
-        // early if it's not their kind. We call execute on the first handler
-        // that can handle this drag type — each handler guards by intent kind.
-        handler.execute(currentDropIntent, store);
+        if (handler.execute(currentDropIntent, store)) break;
       }
     },
     [clearFolderExpandTimer, store],

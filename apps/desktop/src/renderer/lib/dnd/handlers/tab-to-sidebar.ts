@@ -132,8 +132,8 @@ export const tabToSidebarHandler: DndHandler = {
     return null;
   },
 
-  execute(intent: DropIntent, store: typeof useWorkspaceStore): void {
-    if (intent.kind !== "create-workspace-from-tab") return;
+  execute(intent: DropIntent, store: typeof useWorkspaceStore): boolean {
+    if (intent.kind !== "create-workspace-from-tab") return false;
 
     store
       .getState()
@@ -142,5 +142,6 @@ export const tabToSidebarHandler: DndHandler = {
         container: intent.targetContainer,
         insertIndex: intent.targetIndex,
       });
+    return true;
   },
 };

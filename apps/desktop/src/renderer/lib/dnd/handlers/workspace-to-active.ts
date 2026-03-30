@@ -72,10 +72,14 @@ export const workspaceToActiveHandler: DndHandler = {
   execute(intent, store) {
     if (intent.kind === "merge-workspace") {
       store.getState().mergeWorkspaceIntoGroup(intent.sourceWorkspaceId, intent.targetGroupId);
-    } else if (intent.kind === "split-with-workspace") {
+      return true;
+    }
+    if (intent.kind === "split-with-workspace") {
       store
         .getState()
         .splitGroupWithWorkspace(intent.sourceWorkspaceId, intent.targetGroupId, intent.side);
+      return true;
     }
+    return false;
   },
 };

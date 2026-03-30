@@ -181,7 +181,9 @@ export default function PaneGroupContainer({
           if (!pane) return null;
 
           const showDragPlaceholder =
-            isActiveTab && dragHidesViews && activeDrag?.type === "group-tab";
+            isActiveTab &&
+            dragHidesViews &&
+            (activeDrag?.type === "group-tab" || activeDrag?.type === "sidebar-workspace");
 
           return (
             <div key={tab.paneId} className="pane-tab-layer" data-active={isActiveTab || undefined}>
