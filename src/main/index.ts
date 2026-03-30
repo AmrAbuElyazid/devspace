@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu } from "electron";
 import { createServer as createHttpServer } from "http";
 import { join } from "path";
-import { statSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, statSync, writeFileSync, mkdirSync } from "fs";
 import { randomBytes } from "crypto";
 import { syncShellEnvironment } from "./shell-env";
 import { TerminalManager } from "./terminal-manager";
@@ -177,6 +177,28 @@ function createWindow(): void {
       );
     },
   });
+
+  // Set up Ghostty resources before initializing the terminal bridge.
+  // GHOSTTY_RESOURCES_DIR: tells libghostty where shell integration scripts live.
+  // Terminfo is stored OUTSIDE GHOSTTY_RESOURCES_DIR to prevent the native bridge
+  // from forcing TERM=xterm-ghostty (which causes display issues). TERMINFO is set
+  // separately so the xterm-ghostty entry is available if libghostty requests it.
+  if (!process.env.GHOSTTY_RESOURCES_DIR) {
+    const bundledResources = app.isPackaged
+      ? join(process.resourcesPath, "ghostty")
+      : join(app.getAppPath(), "deps/libghostty/share/ghostty");
+    if (existsSync(bundledResources)) {
+      process.env.GHOSTTY_RESOURCES_DIR = bundledResources;
+    }
+  }
+  if (!process.env.TERMINFO) {
+    const terminfoDir = app.isPackaged
+      ? join(process.resourcesPath, "terminfo")
+      : join(app.getAppPath(), "deps/libghostty/share/terminfo");
+    if (existsSync(terminfoDir)) {
+      process.env.TERMINFO = terminfoDir;
+    }
+  }
 
   terminalManager.init(window);
   registerIpcHandlers(

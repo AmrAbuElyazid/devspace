@@ -65,7 +65,23 @@ export function registerIpcHandlers(
     const opts =
       typeof options === "object" && options !== null ? (options as Record<string, unknown>) : {};
     const cwd = typeof opts["cwd"] === "string" ? opts["cwd"] : undefined;
-    terminalManager.createSurface(surfaceId, cwd ? { cwd } : undefined);
+    // Extract env vars (Record<string, string>)
+    let envVars: Record<string, string> | undefined;
+    if (typeof opts["envVars"] === "object" && opts["envVars"] !== null) {
+      const raw = opts["envVars"] as Record<string, unknown>;
+      envVars = {};
+      for (const [k, v] of Object.entries(raw)) {
+        if (typeof v === "string") envVars[k] = v;
+      }
+      if (Object.keys(envVars).length === 0) envVars = undefined;
+    }
+    const createOpts: { cwd?: string; envVars?: Record<string, string> } = {};
+    if (cwd) createOpts.cwd = cwd;
+    if (envVars) createOpts.envVars = envVars;
+    terminalManager.createSurface(
+      surfaceId,
+      Object.keys(createOpts).length > 0 ? createOpts : undefined,
+    );
   });
 
   safeHandle("terminal:destroy", (_event, surfaceId: unknown) => {

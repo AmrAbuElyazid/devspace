@@ -50,13 +50,13 @@ function PanePickerDialogInner({
 
   const inheritedCwd = useWorkspaceStore((s) => {
     const ws = s.workspaces.find((w) => w.id === s.activeWorkspaceId);
-    if (!ws?.focusedGroupId) return s.lastTerminalCwd;
+    if (!ws?.focusedGroupId) return ws?.lastTerminalCwd;
     const g = s.paneGroups[ws.focusedGroupId];
-    if (!g) return s.lastTerminalCwd;
+    if (!g) return ws.lastTerminalCwd;
     const tab = g.tabs.find((t) => t.id === g.activeTabId);
-    if (!tab) return s.lastTerminalCwd;
+    if (!tab) return ws.lastTerminalCwd;
     const p = s.panes[tab.paneId];
-    return p?.type === "terminal" ? p.config.cwd || s.lastTerminalCwd : s.lastTerminalCwd;
+    return p?.type === "terminal" ? p.config.cwd || ws.lastTerminalCwd : ws.lastTerminalCwd;
   });
 
   const handleSelect = useCallback(

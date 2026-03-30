@@ -23,6 +23,7 @@ export interface TerminalBounds {
 
 export interface TerminalCreateOptions {
   cwd?: string;
+  envVars?: Record<string, string>;
 }
 
 export interface DevspaceBridge {
