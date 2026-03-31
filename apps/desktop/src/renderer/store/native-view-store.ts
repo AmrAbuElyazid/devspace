@@ -178,15 +178,50 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
 
 let subscriptionsInitialized = false;
 
+/**
+ * Extract a lightweight fingerprint of the workspace state that affects
+ * native-view visibility.  Only changes to this fingerprint should trigger
+ * a reconcile — title/cwd/focus/sidebar changes are irrelevant.
+ */
+function getVisibilityKey(wsState: {
+  activeWorkspaceId: string;
+  workspaces: { id: string; root: import("../types/workspace").SplitNode }[];
+  paneGroups: Record<string, { activeTabId: string; tabs: { id: string; paneId: string }[] }>;
+}): string {
+  const activeWs = wsState.workspaces.find((w) => w.id === wsState.activeWorkspaceId);
+  if (!activeWs) return wsState.activeWorkspaceId;
+  const groupIds = collectGroupIds(activeWs.root);
+  const parts = [wsState.activeWorkspaceId];
+  for (const gid of groupIds) {
+    const group = wsState.paneGroups[gid];
+    if (!group) continue;
+    const activeTab = group.tabs.find((t) => t.id === group.activeTabId);
+    if (activeTab) parts.push(activeTab.paneId);
+  }
+  return parts.join(",");
+}
+
 export function initNativeViewSubscriptions(): void {
   if (subscriptionsInitialized) return;
   subscriptionsInitialized = true;
 
+  // Only reconcile when fields that affect visibility actually change:
+  // activeWorkspaceId, split-tree structure, or which tab is active per group.
+  let lastVisibilityKey = getVisibilityKey(useWorkspaceStore.getState());
   useWorkspaceStore.subscribe(() => {
+    const state = useWorkspaceStore.getState();
+    const key = getVisibilityKey(state);
+    if (key === lastVisibilityKey) return;
+    lastVisibilityKey = key;
     useNativeViewStore.getState().reconcile();
   });
 
+  // Only reconcile when overlay state actually changes.
+  let lastOverlayActive = useSettingsStore.getState().isOverlayActive();
   useSettingsStore.subscribe(() => {
+    const current = useSettingsStore.getState().isOverlayActive();
+    if (current === lastOverlayActive) return;
+    lastOverlayActive = current;
     useNativeViewStore.getState().reconcile();
   });
 }

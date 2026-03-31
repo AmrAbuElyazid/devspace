@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useMemo } from "react";
+import { createContext, useContext, useEffect, useMemo, memo } from "react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
+import { useShallow } from "zustand/react/shallow";
 import { useWorkspaceStore } from "./store/workspace-store";
 import { useSettingsStore } from "./store/settings-store";
 import { useNativeViewStore, initNativeViewSubscriptions } from "./store/native-view-store";
@@ -26,10 +27,40 @@ export function useModifierHeldContext(): HeldModifier {
 // Initialize cross-store subscriptions once when the app module loads.
 initNativeViewSubscriptions();
 
+/**
+ * Renders a single workspace layer.  Reads its own root from the store so
+ * that changes to OTHER workspaces (rename, focus, CWD) don't re-render
+ * this layer.
+ */
+const WorkspaceLayer = memo(function WorkspaceLayer({
+  workspaceId,
+  isActive,
+  sidebarOpen,
+}: {
+  workspaceId: string;
+  isActive: boolean;
+  sidebarOpen: boolean;
+}) {
+  const root = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.root);
+  if (!root) return null;
+  return (
+    <div className="app-workspace-layer" data-active={isActive || undefined}>
+      <SplitLayout
+        node={root}
+        workspaceId={workspaceId}
+        sidebarOpen={sidebarOpen}
+        dndEnabled={isActive}
+      />
+    </div>
+  );
+});
+
 export default function App() {
   useTheme();
 
-  const workspaces = useWorkspaceStore((s) => s.workspaces);
+  // Only re-render App when the list of workspace IDs changes (add/remove),
+  // not on every name/focus/CWD update.
+  const workspaceIds = useWorkspaceStore(useShallow((s) => s.workspaces.map((w) => w.id)));
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const settingsOpen = useSettingsStore((s) => s.settingsOpen);
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
@@ -91,23 +122,14 @@ export default function App() {
                 {/* Render ALL workspaces stacked. Only the active workspace is visible.
                   Using visibility:hidden instead of display:none so native views
                   (xterm, WebContentsView) keep their canvas dimensions. */}
-                {workspaces.map((ws) => {
-                  const isVisible = ws.id === activeWorkspaceId;
-                  return (
-                    <div
-                      key={ws.id}
-                      className="app-workspace-layer"
-                      data-active={isVisible || undefined}
-                    >
-                      <SplitLayout
-                        node={ws.root}
-                        workspaceId={ws.id}
-                        sidebarOpen={sidebarOpen}
-                        dndEnabled={isVisible}
-                      />
-                    </div>
-                  );
-                })}
+                {workspaceIds.map((wsId) => (
+                  <WorkspaceLayer
+                    key={wsId}
+                    workspaceId={wsId}
+                    isActive={wsId === activeWorkspaceId}
+                    sidebarOpen={sidebarOpen}
+                  />
+                ))}
 
                 {/* Settings overlay */}
                 {settingsOpen && <SettingsPage />}
@@ -122,7 +144,9 @@ export default function App() {
           <DragOverlay dropAnimation={null}>
             {activeDrag?.type === "sidebar-workspace" &&
               (() => {
-                const ws = workspaces.find((w) => w.id === activeDrag.workspaceId);
+                const ws = useWorkspaceStore
+                  .getState()
+                  .workspaces.find((w) => w.id === activeDrag.workspaceId);
                 return ws ? <div className="drag-overlay-workspace">{ws.name}</div> : null;
               })()}
             {activeDrag?.type === "sidebar-folder" &&
