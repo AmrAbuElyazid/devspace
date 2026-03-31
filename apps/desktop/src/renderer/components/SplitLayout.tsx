@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 import { Allotment } from "allotment";
 import "allotment/dist/style.css";
 import { useWorkspaceStore } from "../store/workspace-store";
@@ -21,7 +21,7 @@ interface SplitLayoutProps {
   path?: number[];
 }
 
-export default function SplitLayout({
+export default memo(function SplitLayout({
   node,
   workspaceId,
   sidebarOpen,
@@ -31,15 +31,26 @@ export default function SplitLayout({
   const updateSplitSizes = useWorkspaceStore((s) => s.updateSplitSizes);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Stabilize the path array reference so child callbacks don't re-create
+  // on every parent render.  We keep a ref to the "stable" array and only
+  // replace it when the serialized content actually changes.
+  const pathKeyRef = useRef("");
+  const stablePathRef = useRef(path);
+  const pathKey = path.join(",");
+  if (pathKey !== pathKeyRef.current) {
+    pathKeyRef.current = pathKey;
+    stablePathRef.current = path;
+  }
+
   const handleChange = useCallback(
     (sizes: number[]) => {
       if (!sizes) return;
       if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = setTimeout(() => {
-        updateSplitSizes(workspaceId, path, sizes);
+        updateSplitSizes(workspaceId, stablePathRef.current, sizes);
       }, 100);
     },
-    [updateSplitSizes, workspaceId, path],
+    [updateSplitSizes, workspaceId],
   );
 
   useEffect(() => {
@@ -75,10 +86,10 @@ export default function SplitLayout({
             workspaceId={workspaceId}
             sidebarOpen={sidebarOpen}
             dndEnabled={dndEnabled}
-            path={[...path, i]}
+            path={[...stablePathRef.current, i]}
           />
         </Allotment.Pane>
       ))}
     </Allotment>
   );
-}
+});

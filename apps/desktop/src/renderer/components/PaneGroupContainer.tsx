@@ -19,6 +19,7 @@ import GroupTabBar from "./GroupTabBar";
 import type {
   PaneType,
   Pane,
+  PaneGroupTab,
   TerminalConfig,
   EditorConfig,
   BrowserConfig,
@@ -138,6 +139,45 @@ function PaneContentDropZone({
   );
 }
 
+/**
+ * Renders a single tab layer.  Each TabLayer has its own selector for the
+ * pane data it needs, so a title change on one pane only re-renders its own
+ * layer — not every PaneGroupContainer in the app.
+ */
+const TabLayer = memo(function TabLayer({
+  tab,
+  isActiveTab,
+  workspaceId,
+  isFocused,
+  dragHidesViews,
+  hasDragOverlay,
+}: {
+  tab: PaneGroupTab;
+  isActiveTab: boolean;
+  workspaceId: string;
+  isFocused: boolean;
+  dragHidesViews: boolean;
+  hasDragOverlay: boolean;
+}): ReactElement | null {
+  const pane = useWorkspaceStore((s) => s.panes[tab.paneId]);
+  if (!pane) return null;
+
+  const showDragPlaceholder = isActiveTab && dragHidesViews && hasDragOverlay;
+
+  return (
+    <div className="pane-tab-layer" data-active={isActiveTab || undefined}>
+      <PaneContent
+        paneId={tab.paneId}
+        paneType={pane.type}
+        paneConfig={pane.config}
+        workspaceId={workspaceId}
+        isFocused={isFocused}
+      />
+      {showDragPlaceholder && <DragPlaceholder pane={pane} />}
+    </div>
+  );
+});
+
 interface PaneGroupContainerProps {
   groupId: string;
   workspaceId: string;
@@ -206,7 +246,7 @@ const PaneContent = memo(function PaneContent({
   }
 });
 
-export default function PaneGroupContainer({
+export default memo(function PaneGroupContainer({
   groupId,
   workspaceId,
   sidebarOpen,
@@ -218,7 +258,6 @@ export default function PaneGroupContainer({
     return ws ? getTopLeftGroupId(ws.root) : null;
   });
   const isTopLeftGroup = !sidebarOpen && groupId === topLeftGroupId;
-  const panes = useWorkspaceStore((s) => s.panes);
   const focusedGroupId = useWorkspaceStore((s) => {
     const ws = s.workspaces.find((w) => w.id === workspaceId);
     return ws?.focusedGroupId ?? null;
@@ -228,6 +267,8 @@ export default function PaneGroupContainer({
   const { activeDrag, dropIntent } = useDragContext();
   const isFocused = focusedGroupId === groupId;
   const dragHidesViews = useNativeViewStore((s) => s.dragHidesViews);
+  const hasDragOverlay =
+    activeDrag?.type === "group-tab" || activeDrag?.type === "sidebar-workspace";
   const previewSide =
     dropIntent?.kind === "split-group" && dropIntent.targetGroupId === groupId
       ? dropIntent.side
@@ -259,7 +300,7 @@ export default function PaneGroupContainer({
         dndEnabled={dndEnabled}
       />
       <div className="pane-group-content">
-        {(activeDrag?.type === "group-tab" || activeDrag?.type === "sidebar-workspace") && (
+        {hasDragOverlay && (
           <PaneContentDropZone
             groupId={groupId}
             workspaceId={workspaceId}
@@ -269,28 +310,19 @@ export default function PaneGroupContainer({
         )}
         {group.tabs.map((tab) => {
           const isActiveTab = tab.id === group.activeTabId;
-          const pane = panes[tab.paneId];
-          if (!pane) return null;
-
-          const showDragPlaceholder =
-            isActiveTab &&
-            dragHidesViews &&
-            (activeDrag?.type === "group-tab" || activeDrag?.type === "sidebar-workspace");
-
           return (
-            <div key={tab.paneId} className="pane-tab-layer" data-active={isActiveTab || undefined}>
-              <PaneContent
-                paneId={tab.paneId}
-                paneType={pane.type}
-                paneConfig={pane.config}
-                workspaceId={workspaceId}
-                isFocused={isFocused && isActiveTab}
-              />
-              {showDragPlaceholder && <DragPlaceholder pane={pane} />}
-            </div>
+            <TabLayer
+              key={tab.paneId}
+              tab={tab}
+              isActiveTab={isActiveTab}
+              workspaceId={workspaceId}
+              isFocused={isFocused && isActiveTab}
+              dragHidesViews={dragHidesViews}
+              hasDragOverlay={hasDragOverlay}
+            />
           );
         })}
       </div>
     </div>
   );
-}
+});

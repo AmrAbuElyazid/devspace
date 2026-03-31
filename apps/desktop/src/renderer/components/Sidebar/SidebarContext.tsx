@@ -1,5 +1,4 @@
 import { createContext, useContext } from "react";
-import type { Workspace, Pane, PaneGroup } from "../../types/workspace";
 import type { SidebarContainer } from "../../types/dnd";
 
 export interface SidebarContextValue {
@@ -24,11 +23,6 @@ export interface SidebarContextValue {
   // Folder operations
   toggleFolderCollapsed: (folderId: string) => void;
   onAddWorkspaceToFolder: (folderId: string, container: SidebarContainer) => void;
-
-  // Data for metadata computation
-  workspaces: Workspace[];
-  panes: Record<string, Pane>;
-  paneGroups: Record<string, PaneGroup>;
 
   // Delete state
   deleteTarget: string | null;

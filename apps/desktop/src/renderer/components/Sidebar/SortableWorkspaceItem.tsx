@@ -1,9 +1,12 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { X } from "lucide-react";
+import { useWorkspaceStore } from "../../store/workspace-store";
 import { useDragContext } from "../../hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
+import { getWorkspaceMetadata } from "./sidebar-utils";
+import type { HeldModifier } from "../../hooks/useModifierHeld";
 import type { SidebarContainer } from "../../types/dnd";
 
 interface SortableWorkspaceItemProps {
@@ -13,10 +16,7 @@ interface SortableWorkspaceItemProps {
   depth: number;
   isActive: boolean;
   isEditing: boolean;
-  name: string;
-  metadata: string;
-  shortcutHint: string | null;
-  canDelete: boolean;
+  modifierHeld: HeldModifier;
   onSelect: () => void;
   onStartEditing: () => void;
   onRename: (name: string) => void;
@@ -32,10 +32,7 @@ export function SortableWorkspaceItem({
   depth,
   isActive,
   isEditing,
-  name,
-  metadata,
-  shortcutHint,
-  canDelete,
+  modifierHeld,
   onSelect,
   onStartEditing,
   onRename,
@@ -43,6 +40,25 @@ export function SortableWorkspaceItem({
   onContextMenu,
   onDelete,
 }: SortableWorkspaceItemProps) {
+  // Each workspace item reads its own data from the store so that
+  // title/CWD/pane changes in OTHER workspaces don't cascade here.
+  const name = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.name ?? "");
+  const metadata = useWorkspaceStore((s) => {
+    const ws = s.workspaces.find((w) => w.id === workspaceId);
+    if (!ws) return "";
+    return getWorkspaceMetadata(ws, s.panes, s.paneGroups);
+  });
+  const canDelete = useWorkspaceStore((s) => s.workspaces.length > 1);
+
+  // Compute shortcut hint from workspace index
+  const shortcutHint = useWorkspaceStore((s) => {
+    if (modifierHeld !== "command") return null;
+    const idx = s.workspaces.findIndex((w) => w.id === workspaceId);
+    if (idx < 0) return null;
+    if (idx < 8) return `⌘${idx + 1}`;
+    if (idx === s.workspaces.length - 1) return "⌘9";
+    return null;
+  });
   const { activeDrag } = useDragContext();
   const mergedRef = useRef<HTMLDivElement | null>(null);
 

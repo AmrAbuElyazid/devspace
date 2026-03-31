@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { Plus, Columns2, Rows2, X, Menu } from "lucide-react";
 import { SortableContext, useSortable, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
+import { useWorkspaceStore } from "../store/workspace-store";
+import { collectGroupIds } from "../lib/split-tree";
 import { useDragContext } from "../hooks/useDndOrchestrator";
 import { useSettingsStore } from "../store/settings-store";
 import { useModifierHeldContext } from "../App";
@@ -29,7 +30,7 @@ interface GroupTabBarProps {
   dndEnabled: boolean;
 }
 
-function SortableGroupTab({
+const SortableGroupTab = memo(function SortableGroupTab({
   tabId,
   paneId,
   groupId,
@@ -174,9 +175,9 @@ function SortableGroupTab({
       )}
     </div>
   );
-}
+});
 
-export default function GroupTabBar({
+export default memo(function GroupTabBar({
   group,
   groupId,
   workspaceId,
@@ -191,10 +192,14 @@ export default function GroupTabBar({
   const addWorkspace = useWorkspaceStore((s) => s.addWorkspace);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
   const defaultPaneType = useSettingsStore((s) => s.defaultPaneType);
-  const wsRoot = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.root);
+  // Return a boolean instead of the root object to avoid re-renders on split
+  // resize (which creates a new root just to update sizes).
+  const hasMultipleGroups = useWorkspaceStore((s) => {
+    const root = s.workspaces.find((w) => w.id === workspaceId)?.root;
+    return root ? collectGroupIds(root).length > 1 : false;
+  });
 
   const modifierHeld = useModifierHeldContext();
-  const hasMultipleGroups = wsRoot ? collectGroupIds(wsRoot).length > 1 : false;
 
   return (
     <div className={`group-tabbar ${isFocused ? "group-focused" : ""}`}>
@@ -314,4 +319,4 @@ export default function GroupTabBar({
       </div>
     </div>
   );
-}
+});

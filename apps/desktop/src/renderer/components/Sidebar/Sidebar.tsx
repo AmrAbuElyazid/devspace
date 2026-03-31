@@ -34,8 +34,6 @@ export default function Sidebar() {
   const togglePinWorkspace = useWorkspaceStore((s) => s.togglePinWorkspace);
   const pinFolder = useWorkspaceStore((s) => s.pinFolder);
   const unpinFolder = useWorkspaceStore((s) => s.unpinFolder);
-  const panes = useWorkspaceStore((s) => s.panes);
-  const paneGroups = useWorkspaceStore((s) => s.paneGroups);
   const pendingEditId = useWorkspaceStore((s) => s.pendingEditId);
   const pendingEditType = useWorkspaceStore((s) => s.pendingEditType);
   const clearPendingEdit = useWorkspaceStore((s) => s.clearPendingEdit);
@@ -228,9 +226,6 @@ export default function Sidebar() {
       onSelectWorkspace: setActiveWorkspace,
       onAddWorkspaceToFolder: handleAddWorkspaceToFolder,
       activeWorkspaceId,
-      workspaces,
-      panes,
-      paneGroups,
       toggleFolderCollapsed,
       deleteTarget,
       setDeleteTarget,
@@ -249,9 +244,6 @@ export default function Sidebar() {
       setActiveWorkspace,
       handleAddWorkspaceToFolder,
       activeWorkspaceId,
-      workspaces,
-      panes,
-      paneGroups,
       toggleFolderCollapsed,
       deleteTarget,
     ],
