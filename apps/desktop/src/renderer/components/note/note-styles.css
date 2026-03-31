@@ -12,3 +12,14 @@
   font-size: 13px;
   color: var(--foreground-faint);
 }
+
+.note-save-error {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  padding: 6px 12px;
+  font-size: 12px;
+  background: var(--destructive);
+  color: #fff;
+  text-align: center;
+}

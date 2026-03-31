@@ -70,7 +70,7 @@ export interface DevspaceBridge {
   };
   notes: {
     read: (noteId: string) => Promise<string | null>;
-    save: (noteId: string, content: string) => Promise<void>;
+    save: (noteId: string, content: string) => Promise<void | { error: string }>;
     list: () => Promise<string[]>;
   };
   shell: {
