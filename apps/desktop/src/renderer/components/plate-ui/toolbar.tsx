@@ -67,7 +67,7 @@ export function ToolbarSeparator({
 
 // From toggleVariants
 const toolbarButtonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium text-sm outline-none transition-[color,box-shadow] hover:bg-muted hover:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-checked:bg-accent aria-checked:text-accent-foreground aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium text-sm outline-none transition-[color,box-shadow] hover:bg-muted hover:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-checked:bg-secondary aria-checked:text-secondary-foreground aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
       size: "default",
@@ -82,7 +82,7 @@ const toolbarButtonVariants = cva(
       variant: {
         default: "bg-transparent",
         outline:
-          "border border-input bg-transparent shadow-xs hover:bg-accent hover:text-accent-foreground",
+          "border border-input bg-transparent shadow-xs hover:bg-secondary hover:text-secondary-foreground",
       },
     },
   },
@@ -105,9 +105,9 @@ const dropdownArrowVariants = cva(
       },
       variant: {
         default:
-          "bg-transparent hover:bg-muted hover:text-muted-foreground aria-checked:bg-accent aria-checked:text-accent-foreground",
+          "bg-transparent hover:bg-muted hover:text-muted-foreground aria-checked:bg-secondary aria-checked:text-secondary-foreground",
         outline:
-          "border border-input border-l-0 bg-transparent hover:bg-accent hover:text-accent-foreground",
+          "border border-input border-l-0 bg-transparent hover:bg-secondary hover:text-secondary-foreground",
       },
     },
   },
@@ -204,7 +204,7 @@ export function ToolbarSplitButtonPrimary({
           variant,
         }),
         "rounded-r-none",
-        "group-data-[pressed=true]:bg-accent group-data-[pressed=true]:text-accent-foreground",
+        "group-data-[pressed=true]:bg-secondary group-data-[pressed=true]:text-secondary-foreground",
         className,
       )}
       {...props}
@@ -227,7 +227,7 @@ export function ToolbarSplitButtonSecondary({
           size,
           variant,
         }),
-        "group-data-[pressed=true]:bg-accent group-data-[pressed=true]:text-accent-foreground",
+        "group-data-[pressed=true]:bg-secondary group-data-[pressed=true]:text-secondary-foreground",
         className,
       )}
       onClick={(e) => e.stopPropagation()}
