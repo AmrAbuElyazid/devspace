@@ -1,5 +1,5 @@
 import { ipcMain, app, dialog, shell, BrowserWindow, Menu } from "electron";
-import { readFile, writeFile } from "fs/promises";
+import { readFile, writeFile, mkdir, readdir } from "fs/promises";
 import { existsSync, unlinkSync, symlinkSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
@@ -345,6 +345,37 @@ export function registerIpcHandlers(
     } catch (err) {
       console.warn("[ipc] fs:writeFile failed:", err);
       return { error: `Failed to write file: ${validPath}` };
+    }
+  });
+
+  // --- Notes handlers ---
+
+  const notesDir = join(app.getPath("userData"), "notes");
+
+  safeHandle("notes:read", async (_event, noteId: unknown) => {
+    if (typeof noteId !== "string" || noteId.length === 0) return null;
+    const filePath = join(notesDir, `${noteId}.json`);
+    try {
+      return await readFile(filePath, "utf-8");
+    } catch {
+      return null;
+    }
+  });
+
+  safeHandle("notes:save", async (_event, noteId: unknown, content: unknown) => {
+    if (typeof noteId !== "string" || noteId.length === 0) return;
+    if (typeof content !== "string") return;
+    await mkdir(notesDir, { recursive: true });
+    const filePath = join(notesDir, `${noteId}.json`);
+    await writeFile(filePath, content, "utf-8");
+  });
+
+  safeHandle("notes:list", async () => {
+    try {
+      const files = await readdir(notesDir);
+      return files.filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
+    } catch {
+      return [];
     }
   });
 

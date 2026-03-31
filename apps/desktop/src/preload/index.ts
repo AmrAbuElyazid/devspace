@@ -177,6 +177,12 @@ const bridge: DevspaceBridge = {
     writeFile: (filePath, content) => ipcRenderer.invoke("fs:writeFile", filePath, content),
   },
 
+  notes: {
+    read: (noteId) => ipcRenderer.invoke("notes:read", noteId),
+    save: (noteId, content) => ipcRenderer.invoke("notes:save", noteId, content),
+    list: () => ipcRenderer.invoke("notes:list"),
+  },
+
   shell: {
     openExternal: (url) => ipcRenderer.send("shell:openExternal", url),
   },

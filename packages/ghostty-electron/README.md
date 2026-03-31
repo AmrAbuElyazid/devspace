@@ -55,10 +55,7 @@ const terminal = new GhosttyTerminal();
 // 2. Initialize with the Electron window handle and native addon path
 terminal.init({
   windowHandle: mainWindow.getNativeWindowHandle(),
-  nativeAddonPath: resolve(
-    __dirname,
-    "path/to/ghostty_bridge.node",
-  ),
+  nativeAddonPath: resolve(__dirname, "path/to/ghostty_bridge.node"),
 });
 
 // 3. Listen for events
@@ -101,9 +98,9 @@ The main class. One instance per `BrowserWindow`.
 
 Initialize the native bridge. Must be called before any other method.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `windowHandle` | `Buffer` | From `BrowserWindow.getNativeWindowHandle()` |
+| Property          | Type     | Description                                     |
+| ----------------- | -------- | ----------------------------------------------- |
+| `windowHandle`    | `Buffer` | From `BrowserWindow.getNativeWindowHandle()`    |
 | `nativeAddonPath` | `string` | Absolute path to compiled `ghostty_bridge.node` |
 
 #### `createSurface(surfaceId: string, options?: CreateSurfaceOptions)`
@@ -111,9 +108,9 @@ Initialize the native bridge. Must be called before any other method.
 Spawn a new terminal surface. Each surface is an independent shell session
 rendered via Metal.
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `cwd` | `string?` | Initial working directory |
+| Option    | Type                      | Description                      |
+| --------- | ------------------------- | -------------------------------- |
+| `cwd`     | `string?`                 | Initial working directory        |
 | `envVars` | `Record<string, string>?` | Additional environment variables |
 
 #### `destroySurface(surfaceId: string)`
@@ -151,17 +148,17 @@ instead of handling itself.
 
 Type-safe event subscription. Available events:
 
-| Event | Callback Signature |
-|-------|-------------------|
-| `title-changed` | `(surfaceId, title) => void` |
-| `surface-closed` | `(surfaceId) => void` |
-| `surface-focused` | `(surfaceId) => void` |
-| `pwd-changed` | `(surfaceId, pwd) => void` |
-| `notification` | `(surfaceId, title, body) => void` |
-| `search-start` | `(surfaceId, needle) => void` |
-| `search-end` | `(surfaceId) => void` |
-| `search-total` | `(surfaceId, total) => void` |
-| `search-selected` | `(surfaceId, selected) => void` |
+| Event             | Callback Signature                 |
+| ----------------- | ---------------------------------- |
+| `title-changed`   | `(surfaceId, title) => void`       |
+| `surface-closed`  | `(surfaceId) => void`              |
+| `surface-focused` | `(surfaceId) => void`              |
+| `pwd-changed`     | `(surfaceId, pwd) => void`         |
+| `notification`    | `(surfaceId, title, body) => void` |
+| `search-start`    | `(surfaceId, needle) => void`      |
+| `search-end`      | `(surfaceId) => void`              |
+| `search-total`    | `(surfaceId, total) => void`       |
+| `search-selected` | `(surfaceId, selected) => void`    |
 
 #### `destroy()`
 

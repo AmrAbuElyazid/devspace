@@ -11,6 +11,7 @@ import {
   Globe,
   FileCode,
   Bot,
+  StickyNote,
   CircleHelp,
 } from "lucide-react";
 import { useWorkspaceStore, collectGroupIds } from "../../store/workspace-store";
@@ -384,6 +385,7 @@ const quickCreateOptions: { type: PaneType; icon: typeof Terminal; label: string
   { type: "browser", icon: Globe, label: "Browser" },
   { type: "editor", icon: FileCode, label: "VS Code" },
   { type: "t3code", icon: Bot, label: "T3 Code" },
+  { type: "note", icon: StickyNote, label: "Note" },
 ];
 
 function SidebarFooter() {

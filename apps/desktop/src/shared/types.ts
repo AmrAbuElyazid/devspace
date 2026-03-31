@@ -68,6 +68,11 @@ export interface DevspaceBridge {
     readFile: (filePath: string) => Promise<string>;
     writeFile: (filePath: string, content: string) => Promise<void>;
   };
+  notes: {
+    read: (noteId: string) => Promise<string | null>;
+    save: (noteId: string, content: string) => Promise<void>;
+    list: () => Promise<string[]>;
+  };
   shell: {
     openExternal: (url: string) => void;
   };

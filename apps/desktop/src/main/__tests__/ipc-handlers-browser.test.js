@@ -14,6 +14,9 @@ vi.mock("electron", () => ({
       handlers.set(channel, handler);
     },
   },
+  app: {
+    getPath: () => "/tmp/devspace-test",
+  },
   dialog: {
     showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
   },

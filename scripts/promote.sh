@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 APP_NAME="Devspace.app"
 INSTALL_DIR="/Applications"
-RELEASE_DIR="$PROJECT_DIR/release/mac-arm64"
+RELEASE_DIR="$PROJECT_DIR/apps/desktop/release/mac-arm64"
 BUILT_APP="$RELEASE_DIR/$APP_NAME"
 INSTALLED_APP="$INSTALL_DIR/$APP_NAME"
 

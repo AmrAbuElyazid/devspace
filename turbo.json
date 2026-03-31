@@ -19,6 +19,11 @@
       "cache": false,
       "outputs": []
     },
+    "dist": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "outputs": ["release/**"]
+    },
     "knip": {
       "cache": false,
       "outputs": []
