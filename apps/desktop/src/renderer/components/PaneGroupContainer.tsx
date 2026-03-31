@@ -65,6 +65,22 @@ class NotePaneErrorBoundary extends Component<{ children: ReactNode }, { error: 
         >
           <span>Note editor failed to load</span>
           <span style={{ fontSize: 11, opacity: 0.6 }}>{this.state.error.message}</span>
+          <button
+            type="button"
+            style={{
+              marginTop: 8,
+              padding: "4px 12px",
+              fontSize: 12,
+              borderRadius: 4,
+              border: "1px solid var(--border)",
+              background: "var(--surface)",
+              color: "var(--foreground)",
+              cursor: "pointer",
+            }}
+            onClick={() => this.setState({ error: null })}
+          >
+            Try Again
+          </button>
         </div>
       );
     }

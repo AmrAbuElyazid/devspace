@@ -1,5 +1,5 @@
 import { ipcMain, app, dialog, shell, BrowserWindow, Menu } from "electron";
-import { readFile, writeFile, mkdir, readdir } from "fs/promises";
+import { readFile, writeFile, mkdir, readdir, rename } from "fs/promises";
 import { existsSync, unlinkSync, symlinkSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
@@ -351,14 +351,45 @@ export function registerIpcHandlers(
   // --- Notes handlers ---
 
   const notesDir = join(app.getPath("userData"), "notes");
+  /** Only allow alphanumeric, dashes, and underscores in noteId to prevent path traversal. */
+  const SAFE_NOTE_ID = /^[\w-]+$/;
 
   safeHandle("notes:read", async (_event, noteId: unknown) => {
-    if (typeof noteId !== "string" || noteId.length === 0) return null;
+    if (typeof noteId !== "string" || !SAFE_NOTE_ID.test(noteId)) return null;
     const filePath = join(notesDir, `${noteId}.json`);
     try {
       return await readFile(filePath, "utf-8");
     } catch {
       return null;
+    }
+  });
+
+  safeHandle("notes:save", async (_event, noteId: unknown, content: unknown) => {
+    if (typeof noteId !== "string" || !SAFE_NOTE_ID.test(noteId)) {
+      return { error: "Invalid note ID" };
+    }
+    if (typeof content !== "string") {
+      return { error: "Content must be a string" };
+    }
+    try {
+      await mkdir(notesDir, { recursive: true });
+      // Atomic write: write to temp file then rename to prevent corruption
+      const filePath = join(notesDir, `${noteId}.json`);
+      const tmpPath = join(notesDir, `${noteId}.tmp`);
+      await writeFile(tmpPath, content, "utf-8");
+      await rename(tmpPath, filePath);
+    } catch (err) {
+      console.error("[notes:save] Failed to save note:", noteId, err);
+      return { error: `Failed to save note: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  });
+
+  safeHandle("notes:list", async () => {
+    try {
+      const files = await readdir(notesDir);
+      return files.filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
+    } catch {
+      return [];
     }
   });
 
