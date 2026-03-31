@@ -138,9 +138,9 @@ describe("notes:read", () => {
 
   test("returns content for existing note", async () => {
     await mkdir(notesDir, { recursive: true });
-    const content = JSON.stringify([{ type: "p", children: [{ text: "hello" }] }]);
+    const content = "# Hello\n\nSome note content.";
     const { writeFile: wf } = await import("fs/promises");
-    await wf(join(notesDir, "test-note.json"), content, "utf-8");
+    await wf(join(notesDir, "test-note.md"), content, "utf-8");
 
     const result = await callHandler("notes:read", "test-note");
     expect(result).toBe(content);
@@ -177,23 +177,23 @@ describe("notes:read", () => {
 // ---------------------------------------------------------------------------
 describe("notes:save", () => {
   test("saves note to disk", async () => {
-    const content = JSON.stringify([{ type: "p", children: [{ text: "saved" }] }]);
+    const content = "# Test\n\nSome content.";
     await callHandler("notes:save", "save-test", content);
 
-    const onDisk = await readFile(join(notesDir, "save-test.json"), "utf-8");
+    const onDisk = await readFile(join(notesDir, "save-test.md"), "utf-8");
     expect(onDisk).toBe(content);
   });
 
   test("creates notes directory if missing", async () => {
     expect(existsSync(notesDir)).toBe(false);
-    await callHandler("notes:save", "first-note", "[]");
+    await callHandler("notes:save", "first-note", "# First note");
     expect(existsSync(notesDir)).toBe(true);
   });
 
   test("atomic write — no .tmp file left behind on success", async () => {
-    await callHandler("notes:save", "atomic-test", '{"data":true}');
+    await callHandler("notes:save", "atomic-test", "# Atomic");
     expect(existsSync(join(notesDir, "atomic-test.tmp"))).toBe(false);
-    expect(existsSync(join(notesDir, "atomic-test.json"))).toBe(true);
+    expect(existsSync(join(notesDir, "atomic-test.md"))).toBe(true);
   });
 
   test("rejects path traversal in noteId", async () => {
@@ -212,10 +212,10 @@ describe("notes:save", () => {
   });
 
   test("overwrites existing note", async () => {
-    await callHandler("notes:save", "overwrite-test", '"first"');
-    await callHandler("notes:save", "overwrite-test", '"second"');
-    const onDisk = await readFile(join(notesDir, "overwrite-test.json"), "utf-8");
-    expect(onDisk).toBe('"second"');
+    await callHandler("notes:save", "overwrite-test", "first version");
+    await callHandler("notes:save", "overwrite-test", "second version");
+    const onDisk = await readFile(join(notesDir, "overwrite-test.md"), "utf-8");
+    expect(onDisk).toBe("second version");
   });
 });
 
@@ -228,17 +228,17 @@ describe("notes:list", () => {
     expect(result).toEqual([]);
   });
 
-  test("lists note IDs without .json extension", async () => {
-    await callHandler("notes:save", "note-a", "{}");
-    await callHandler("notes:save", "note-b", "{}");
+  test("lists note IDs without .md extension", async () => {
+    await callHandler("notes:save", "note-a", "# A");
+    await callHandler("notes:save", "note-b", "# B");
     const result = (await callHandler("notes:list")) as string[];
     expect(result.toSorted()).toEqual(["note-a", "note-b"]);
   });
 
-  test("excludes non-json files", async () => {
+  test("excludes non-md files", async () => {
     await mkdir(notesDir, { recursive: true });
     const { writeFile: wf } = await import("fs/promises");
-    await wf(join(notesDir, "note-a.json"), "{}", "utf-8");
+    await wf(join(notesDir, "note-a.md"), "# A", "utf-8");
     await wf(join(notesDir, "note-b.tmp"), "{}", "utf-8");
     await wf(join(notesDir, "readme.txt"), "hello", "utf-8");
     const result = (await callHandler("notes:list")) as string[];

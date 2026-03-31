@@ -356,7 +356,7 @@ export function registerIpcHandlers(
 
   safeHandle("notes:read", async (_event, noteId: unknown) => {
     if (typeof noteId !== "string" || !SAFE_NOTE_ID.test(noteId)) return null;
-    const filePath = join(notesDir, `${noteId}.json`);
+    const filePath = join(notesDir, `${noteId}.md`);
     try {
       return await readFile(filePath, "utf-8");
     } catch {
@@ -374,7 +374,7 @@ export function registerIpcHandlers(
     try {
       await mkdir(notesDir, { recursive: true });
       // Atomic write: write to temp file then rename to prevent corruption
-      const filePath = join(notesDir, `${noteId}.json`);
+      const filePath = join(notesDir, `${noteId}.md`);
       const tmpPath = join(notesDir, `${noteId}.tmp`);
       await writeFile(tmpPath, content, "utf-8");
       await rename(tmpPath, filePath);
@@ -387,7 +387,7 @@ export function registerIpcHandlers(
   safeHandle("notes:list", async () => {
     try {
       const files = await readdir(notesDir);
-      return files.filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
+      return files.filter((f) => f.endsWith(".md")).map((f) => f.replace(/\.md$/, ""));
     } catch {
       return [];
     }
