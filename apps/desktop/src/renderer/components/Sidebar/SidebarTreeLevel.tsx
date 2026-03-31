@@ -3,33 +3,15 @@ import { useModifierHeldContext } from "../../App";
 import { getWorkspaceMetadata } from "./sidebar-utils";
 import { SortableWorkspaceItem } from "./SortableWorkspaceItem";
 import { SortableFolderItem } from "./SortableFolderItem";
-import type { SidebarNode, Workspace, Pane, PaneGroup } from "../../types/workspace";
+import { useSidebarContext } from "./SidebarContext";
+import type { SidebarNode } from "../../types/workspace";
 import type { SidebarContainer } from "../../types/dnd";
 
-export interface SidebarTreeLevelProps {
+interface SidebarTreeLevelProps {
   nodes: SidebarNode[];
   container: SidebarContainer;
   parentFolderId: string | null;
   depth: number;
-  editingId: string | null;
-  editingType: "workspace" | "folder" | null;
-  filteredWorkspaceIds: Set<string> | null;
-  onStartEditingFolder: (id: string) => void;
-  onStartEditingWorkspace: (id: string) => void;
-  onRenameFolder: (id: string, name: string) => void;
-  onRenameWorkspace: (id: string, name: string) => void;
-  onStopEditing: () => void;
-  onContextMenuFolder: (e: React.MouseEvent, folderId: string) => void;
-  onContextMenuWorkspace: (e: React.MouseEvent, workspaceId: string) => void;
-  onSelectWorkspace: (id: string) => void;
-  onAddWorkspaceToFolder: (folderId: string, container: SidebarContainer) => void;
-  activeWorkspaceId: string;
-  workspaces: Workspace[];
-  panes: Record<string, Pane>;
-  paneGroups: Record<string, PaneGroup>;
-  toggleFolderCollapsed: (folderId: string) => void;
-  deleteTarget: string | null;
-  setDeleteTarget: (id: string | null) => void;
 }
 
 export function SidebarTreeLevel({
@@ -37,26 +19,25 @@ export function SidebarTreeLevel({
   container,
   parentFolderId,
   depth,
-  editingId,
-  editingType,
-  filteredWorkspaceIds,
-  onStartEditingFolder,
-  onStartEditingWorkspace,
-  onRenameFolder,
-  onRenameWorkspace,
-  onStopEditing,
-  onContextMenuFolder,
-  onContextMenuWorkspace,
-  onSelectWorkspace,
-  onAddWorkspaceToFolder,
-  activeWorkspaceId,
-  workspaces,
-  panes,
-  paneGroups,
-  toggleFolderCollapsed,
-  deleteTarget,
-  setDeleteTarget,
 }: SidebarTreeLevelProps) {
+  const {
+    editingId,
+    editingType,
+    filteredWorkspaceIds,
+    onStartEditingWorkspace,
+    onRenameWorkspace,
+    onStopEditing,
+    onContextMenuWorkspace,
+    onSelectWorkspace,
+    onAddWorkspaceToFolder,
+    activeWorkspaceId,
+    workspaces,
+    panes,
+    paneGroups,
+    toggleFolderCollapsed,
+    setDeleteTarget,
+  } = useSidebarContext();
+
   const sortableIds = nodes.map((n) =>
     n.type === "workspace" ? `ws-${n.workspaceId}` : `folder-${n.id}`,
   );
@@ -114,27 +95,8 @@ export function SidebarTreeLevel({
             parentFolderId={parentFolderId}
             depth={depth}
             isEditing={editingId === node.id && editingType === "folder"}
-            editingId={editingId}
-            editingType={editingType}
-            filteredWorkspaceIds={filteredWorkspaceIds}
             onToggle={() => toggleFolderCollapsed(node.id)}
             onAddWorkspace={() => onAddWorkspaceToFolder(node.id, container)}
-            onAddWorkspaceToFolder={onAddWorkspaceToFolder}
-            onStartEditingFolder={onStartEditingFolder}
-            onStartEditingWorkspace={onStartEditingWorkspace}
-            onRenameFolder={onRenameFolder}
-            onRenameWorkspace={onRenameWorkspace}
-            onStopEditing={onStopEditing}
-            onContextMenuFolder={onContextMenuFolder}
-            onContextMenuWorkspace={onContextMenuWorkspace}
-            onSelectWorkspace={onSelectWorkspace}
-            activeWorkspaceId={activeWorkspaceId}
-            workspaces={workspaces}
-            panes={panes}
-            paneGroups={paneGroups}
-            toggleFolderCollapsed={toggleFolderCollapsed}
-            deleteTarget={deleteTarget}
-            setDeleteTarget={setDeleteTarget}
           />
         );
       })}

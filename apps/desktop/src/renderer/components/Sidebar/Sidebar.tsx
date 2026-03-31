@@ -1,23 +1,10 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import "./sidebar.css";
 import { useDroppable } from "@dnd-kit/core";
-import {
-  Plus,
-  Settings,
-  ChevronLeft,
-  FolderClosed,
-  Search,
-  X,
-  Terminal,
-  Globe,
-  FileCode,
-  Bot,
-  StickyNote,
-  CircleHelp,
-} from "lucide-react";
-import { useWorkspaceStore, collectGroupIds } from "../../store/workspace-store";
-import { useSettingsStore, type DefaultPaneType } from "../../store/settings-store";
+import { Plus, ChevronLeft, FolderClosed, Search, X } from "lucide-react";
+import { useWorkspaceStore } from "../../store/workspace-store";
+import { useSettingsStore } from "../../store/settings-store";
 import { resolveDisplayString } from "../../../shared/shortcuts";
-import type { PaneType } from "../../types/workspace";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { ScrollArea } from "../ui/scroll-area";
@@ -25,6 +12,8 @@ import { AlertDialog } from "../ui/alert-dialog";
 import { useDragContext } from "../../hooks/useDndOrchestrator";
 import { findSidebarNode } from "../../lib/sidebar-tree";
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
+import { SidebarProvider, type SidebarContextValue } from "./SidebarContext";
+import { SidebarFooter } from "./SidebarFooter";
 import type { ContextMenuItem } from "../../../shared/types";
 import type { SidebarContainer } from "../../types/dnd";
 
@@ -224,284 +213,189 @@ export default function Sidebar() {
     [addWorkspace, defaultPaneType],
   );
 
+  const sidebarContextValue = useMemo<SidebarContextValue>(
+    () => ({
+      editingId,
+      editingType,
+      filteredWorkspaceIds,
+      onStartEditingFolder: startEditingFolder,
+      onStartEditingWorkspace: startEditingWorkspace,
+      onRenameFolder: renameFolder,
+      onRenameWorkspace: renameWorkspace,
+      onStopEditing: stopEditing,
+      onContextMenuFolder: handleFolderContextMenu,
+      onContextMenuWorkspace: handleWorkspaceContextMenu,
+      onSelectWorkspace: setActiveWorkspace,
+      onAddWorkspaceToFolder: handleAddWorkspaceToFolder,
+      activeWorkspaceId,
+      workspaces,
+      panes,
+      paneGroups,
+      toggleFolderCollapsed,
+      deleteTarget,
+      setDeleteTarget,
+    }),
+    [
+      editingId,
+      editingType,
+      filteredWorkspaceIds,
+      startEditingFolder,
+      startEditingWorkspace,
+      renameFolder,
+      renameWorkspace,
+      stopEditing,
+      handleFolderContextMenu,
+      handleWorkspaceContextMenu,
+      setActiveWorkspace,
+      handleAddWorkspaceToFolder,
+      activeWorkspaceId,
+      workspaces,
+      panes,
+      paneGroups,
+      toggleFolderCollapsed,
+      deleteTarget,
+    ],
+  );
+
   return (
-    <div
-      className={`sidebar ${!sidebarOpen ? "sidebar-collapsed" : ""} ${isResizing ? "sidebar-resizing" : ""}`}
-      style={sidebarOpen ? { width: sidebarWidth, minWidth: sidebarWidth } : undefined}
-    >
-      {/* Header — drag region with traffic light space + branding */}
-      <div className="sidebar-header drag-region">
-        <span className="sidebar-wordmark no-drag">
-          <span className="sidebar-wordmark-accent">dev</span>space
-        </span>
-        <button
-          className="sidebar-collapse-btn no-drag"
-          onClick={toggleSidebar}
-          title={`Toggle sidebar (${resolveDisplayString("toggle-sidebar")})`}
-        >
-          <ChevronLeft size={14} />
-        </button>
-      </div>
-
-      {/* Search bar */}
-      <div className="sidebar-search">
-        <Search size={12} className="sidebar-search-icon" />
-        <input
-          type="text"
-          placeholder="Search..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") setSearchQuery("");
-          }}
-          className="sidebar-search-input no-drag"
-        />
-        {searchQuery ? (
-          <button className="sidebar-search-clear no-drag" onClick={() => setSearchQuery("")}>
-            <X size={10} />
-          </button>
-        ) : (
-          <span className="sidebar-search-shortcut">/</span>
-        )}
-      </div>
-
-      {/* Pinned section */}
-      {(pinnedSidebarNodes.length > 0 || isRelevantDrag) && (
-        <>
-          <div className="sidebar-section-divider" />
-          <div className="sidebar-section-header">
-            <span className="sidebar-label">Pinned</span>
-          </div>
-          <div
-            ref={setPinnedRootRef}
-            className={`sidebar-pinned-list ${isRelevantDrag && isPinnedRootOver ? "sidebar-item-drag-over-folder" : ""}`}
+    <SidebarProvider value={sidebarContextValue}>
+      <div
+        className={`sidebar ${!sidebarOpen ? "sidebar-collapsed" : ""} ${isResizing ? "sidebar-resizing" : ""}`}
+        style={sidebarOpen ? { width: sidebarWidth, minWidth: sidebarWidth } : undefined}
+      >
+        {/* Header — drag region with traffic light space + branding */}
+        <div className="sidebar-header drag-region">
+          <span className="sidebar-wordmark no-drag">
+            <span className="sidebar-wordmark-accent">dev</span>space
+          </span>
+          <button
+            className="sidebar-collapse-btn no-drag"
+            onClick={toggleSidebar}
+            aria-label="Toggle sidebar"
+            title={`Toggle sidebar (${resolveDisplayString("toggle-sidebar")})`}
           >
+            <ChevronLeft size={14} />
+          </button>
+        </div>
+
+        {/* Search bar */}
+        <div className="sidebar-search">
+          <Search size={12} className="sidebar-search-icon" />
+          <input
+            type="text"
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") setSearchQuery("");
+            }}
+            aria-label="Search workspaces"
+            className="sidebar-search-input no-drag"
+          />
+          {searchQuery ? (
+            <button
+              className="sidebar-search-clear no-drag"
+              aria-label="Clear search"
+              onClick={() => setSearchQuery("")}
+            >
+              <X size={10} />
+            </button>
+          ) : (
+            <span className="sidebar-search-shortcut">/</span>
+          )}
+        </div>
+
+        {/* Pinned section */}
+        {(pinnedSidebarNodes.length > 0 || isRelevantDrag) && (
+          <>
+            <div className="sidebar-section-divider" />
+            <div className="sidebar-section-header">
+              <span className="sidebar-label">Pinned</span>
+            </div>
+            <div
+              ref={setPinnedRootRef}
+              className={`sidebar-pinned-list ${isRelevantDrag && isPinnedRootOver ? "sidebar-item-drag-over-folder" : ""}`}
+            >
+              <SidebarTreeLevel
+                nodes={pinnedSidebarNodes}
+                container="pinned"
+                parentFolderId={null}
+                depth={0}
+              />
+            </div>
+          </>
+        )}
+
+        {/* Section label + add buttons */}
+        <div className="sidebar-section-divider" />
+        <div className="sidebar-section-header">
+          <span className="sidebar-label">Workspaces</span>
+          <div className="flex items-center gap-0.5">
+            <Tooltip content="New folder">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => addFolder("New Folder")}
+                className="no-drag"
+              >
+                <FolderClosed size={12} />
+              </Button>
+            </Tooltip>
+            <Tooltip content="New workspace" shortcut={resolveDisplayString("new-workspace")}>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => {
+                  if (defaultPaneType === "picker") {
+                    useSettingsStore
+                      .getState()
+                      .openPanePicker({ action: "new-workspace", container: "main" });
+                  } else {
+                    addWorkspace(undefined, null, "main", defaultPaneType);
+                  }
+                }}
+                className="no-drag"
+              >
+                <Plus size={13} />
+              </Button>
+            </Tooltip>
+          </div>
+        </div>
+
+        {/* Sidebar tree with DnD */}
+        <div
+          ref={setMainRootRef}
+          className={`sidebar-tree-root ${isRelevantDrag && isMainRootOver ? "sidebar-item-drag-over-folder" : ""}`}
+        >
+          <ScrollArea className="ws-list">
             <SidebarTreeLevel
-              nodes={pinnedSidebarNodes}
-              container="pinned"
+              nodes={sidebarTree}
+              container="main"
               parentFolderId={null}
               depth={0}
-              editingId={editingId}
-              editingType={editingType}
-              filteredWorkspaceIds={filteredWorkspaceIds}
-              onStartEditingFolder={startEditingFolder}
-              onStartEditingWorkspace={startEditingWorkspace}
-              onRenameFolder={(id, name) => renameFolder(id, name)}
-              onRenameWorkspace={(id, name) => renameWorkspace(id, name)}
-              onStopEditing={stopEditing}
-              onContextMenuFolder={handleFolderContextMenu}
-              onContextMenuWorkspace={handleWorkspaceContextMenu}
-              onSelectWorkspace={(id) => setActiveWorkspace(id)}
-              onAddWorkspaceToFolder={handleAddWorkspaceToFolder}
-              activeWorkspaceId={activeWorkspaceId}
-              workspaces={workspaces}
-              panes={panes}
-              paneGroups={paneGroups}
-              toggleFolderCollapsed={toggleFolderCollapsed}
-              deleteTarget={deleteTarget}
-              setDeleteTarget={setDeleteTarget}
             />
-          </div>
-        </>
-      )}
-
-      {/* Section label + add buttons */}
-      <div className="sidebar-section-divider" />
-      <div className="sidebar-section-header">
-        <span className="sidebar-label">Workspaces</span>
-        <div className="flex items-center gap-0.5">
-          <Tooltip content="New folder">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => addFolder("New Folder")}
-              className="no-drag"
-            >
-              <FolderClosed size={12} />
-            </Button>
-          </Tooltip>
-          <Tooltip content="New workspace" shortcut={resolveDisplayString("new-workspace")}>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => {
-                if (defaultPaneType === "picker") {
-                  useSettingsStore
-                    .getState()
-                    .openPanePicker({ action: "new-workspace", container: "main" });
-                } else {
-                  addWorkspace(undefined, null, "main", defaultPaneType);
-                }
-              }}
-              className="no-drag"
-            >
-              <Plus size={13} />
-            </Button>
-          </Tooltip>
+          </ScrollArea>
         </div>
+
+        {/* Delete confirmation dialog */}
+        <AlertDialog
+          open={!!deleteTarget}
+          onOpenChange={() => setDeleteTarget(null)}
+          title="Delete workspace?"
+          description="This workspace and all its tabs will be permanently removed. This action cannot be undone."
+          confirmLabel="Delete"
+          cancelLabel="Cancel"
+          onConfirm={() => {
+            if (deleteTarget) removeWorkspace(deleteTarget);
+          }}
+          variant="destructive"
+        />
+
+        {/* Footer — quick-create buttons + settings */}
+        <SidebarFooter />
+
+        {sidebarOpen && <div className="sidebar-resize-handle" onMouseDown={handleResizeStart} />}
       </div>
-
-      {/* Sidebar tree with DnD */}
-      <div
-        ref={setMainRootRef}
-        className={`sidebar-tree-root ${isRelevantDrag && isMainRootOver ? "sidebar-item-drag-over-folder" : ""}`}
-      >
-        <ScrollArea className="ws-list">
-          <SidebarTreeLevel
-            nodes={sidebarTree}
-            container="main"
-            parentFolderId={null}
-            depth={0}
-            editingId={editingId}
-            editingType={editingType}
-            filteredWorkspaceIds={filteredWorkspaceIds}
-            onStartEditingFolder={startEditingFolder}
-            onStartEditingWorkspace={startEditingWorkspace}
-            onRenameFolder={(id, name) => renameFolder(id, name)}
-            onRenameWorkspace={(id, name) => renameWorkspace(id, name)}
-            onStopEditing={stopEditing}
-            onContextMenuFolder={handleFolderContextMenu}
-            onContextMenuWorkspace={handleWorkspaceContextMenu}
-            onSelectWorkspace={(id) => setActiveWorkspace(id)}
-            onAddWorkspaceToFolder={handleAddWorkspaceToFolder}
-            activeWorkspaceId={activeWorkspaceId}
-            workspaces={workspaces}
-            panes={panes}
-            paneGroups={paneGroups}
-            toggleFolderCollapsed={toggleFolderCollapsed}
-            deleteTarget={deleteTarget}
-            setDeleteTarget={setDeleteTarget}
-          />
-        </ScrollArea>
-      </div>
-
-      {/* Delete confirmation dialog */}
-      <AlertDialog
-        open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
-        title="Delete workspace?"
-        description="This workspace and all its tabs will be permanently removed. This action cannot be undone."
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
-        onConfirm={() => {
-          if (deleteTarget) removeWorkspace(deleteTarget);
-        }}
-        variant="destructive"
-      />
-
-      {/* Footer — quick-create buttons + settings */}
-      <SidebarFooter />
-
-      {sidebarOpen && <div className="sidebar-resize-handle" onMouseDown={handleResizeStart} />}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Sidebar Footer — quick-create buttons + settings row
-// ---------------------------------------------------------------------------
-
-const quickCreateOptions: { type: PaneType; icon: typeof Terminal; label: string }[] = [
-  { type: "terminal", icon: Terminal, label: "Terminal" },
-  { type: "browser", icon: Globe, label: "Browser" },
-  { type: "editor", icon: FileCode, label: "VS Code" },
-  { type: "t3code", icon: Bot, label: "T3 Code" },
-  { type: "note", icon: StickyNote, label: "Note" },
-];
-
-function SidebarFooter() {
-  const defaultPaneType = useSettingsStore((s) => s.defaultPaneType);
-  const addWorkspace = useWorkspaceStore((s) => s.addWorkspace);
-  const addGroupTab = useWorkspaceStore((s) => s.addGroupTab);
-  const toggleSettings = useSettingsStore((s) => s.toggleSettings);
-  const [showHelp, setShowHelp] = useState(false);
-
-  const handleQuickCreate = useCallback(
-    (type: PaneType) => {
-      // Quick create: add a tab of this type in the current workspace's focused group
-      const wsState = useWorkspaceStore.getState();
-      const ws = wsState.workspaces.find((w) => w.id === wsState.activeWorkspaceId);
-      if (!ws) return;
-      const gid = ws.focusedGroupId ?? collectGroupIds(ws.root)[0];
-      if (gid) {
-        addGroupTab(ws.id, gid, type);
-      } else {
-        addWorkspace(undefined, null, "main", type);
-      }
-    },
-    [addGroupTab, addWorkspace],
-  );
-
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent, type: PaneType) => {
-      e.preventDefault();
-      const settings = useSettingsStore.getState();
-      // Toggle: if already default, unset (→ picker mode). Otherwise set as default.
-      const newDefault: DefaultPaneType = defaultPaneType === type ? "picker" : type;
-      settings.updateSetting("defaultPaneType", newDefault);
-    },
-    [defaultPaneType],
-  );
-
-  return (
-    <div className="sidebar-footer">
-      {/* Row 1: Quick-create buttons + help */}
-      <div className="sidebar-footer-qc-row">
-        <div className="sidebar-footer-qc-buttons">
-          {quickCreateOptions.map(({ type, icon: Icon, label }) => (
-            <button
-              key={type}
-              type="button"
-              className={`sidebar-qc-btn no-drag ${defaultPaneType === type ? "sidebar-qc-default" : ""}`}
-              title={`${label}${defaultPaneType === type ? " (default for ⌘T)" : ""}`}
-              onClick={() => handleQuickCreate(type)}
-              onContextMenu={(e) => handleContextMenu(e, type)}
-            >
-              <Icon size={12} />
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          className="sidebar-help-btn no-drag"
-          title="Quick-create help"
-          onMouseEnter={() => setShowHelp(true)}
-          onMouseLeave={() => setShowHelp(false)}
-          onClick={() => setShowHelp((v) => !v)}
-        >
-          <CircleHelp size={11} />
-          {showHelp && (
-            <div className="sidebar-help-tooltip">
-              <div>
-                <strong>Click</strong> — create pane now
-              </div>
-              <div>
-                <strong>Right-click</strong> — set as ⌘T default
-              </div>
-              <div>
-                <strong>Right-click</strong> active — unset (use picker)
-              </div>
-              <div className="sidebar-help-divider" />
-              <div>
-                <span style={{ color: "var(--accent)" }}>●</span> Highlighted = ⌘T default
-              </div>
-              <div>No highlight = picker dialog on ⌘T</div>
-            </div>
-          )}
-        </button>
-      </div>
-
-      {/* Row 2: Settings */}
-      <button
-        type="button"
-        className="sidebar-footer-settings no-drag"
-        onClick={toggleSettings}
-        title={`Settings (${resolveDisplayString("toggle-settings")})`}
-      >
-        <Settings size={13} strokeWidth={1.8} />
-        <span>Settings</span>
-        <kbd className="sidebar-footer-shortcut">{resolveDisplayString("toggle-settings")}</kbd>
-      </button>
-    </div>
+    </SidebarProvider>
   );
 }

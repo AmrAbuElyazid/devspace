@@ -148,6 +148,7 @@ export function SortableWorkspaceItem({
         <button
           type="button"
           className="ws-delete"
+          aria-label="Delete workspace"
           title="Delete workspace"
           onClick={(e) => {
             e.stopPropagation();

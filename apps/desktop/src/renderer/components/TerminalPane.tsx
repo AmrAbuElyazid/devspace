@@ -115,7 +115,7 @@ export default function TerminalPane({
       )}
       <div
         ref={placeholderRef}
-        className="terminal-native-view-slot flex-1 min-h-0"
+        className="flex-1 min-h-0"
         data-native-view-hidden={!isVisible ? "true" : undefined}
         onMouseDown={handleFocus}
       />

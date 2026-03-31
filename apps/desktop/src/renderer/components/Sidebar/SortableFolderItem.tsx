@@ -4,14 +4,12 @@ import { ChevronDown, ChevronRight, FolderClosed, FolderOpen, Plus } from "lucid
 import { useDragContext } from "../../hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
-import { SidebarTreeLevel, type SidebarTreeLevelProps } from "./SidebarTreeLevel";
+import { SidebarTreeLevel } from "./SidebarTreeLevel";
+import { useSidebarContext } from "./SidebarContext";
 import type { SidebarNode } from "../../types/workspace";
 import type { SidebarContainer } from "../../types/dnd";
 
-interface SortableFolderItemProps extends Omit<
-  SidebarTreeLevelProps,
-  "nodes" | "container" | "parentFolderId" | "depth"
-> {
+interface SortableFolderItemProps {
   folder: SidebarNode & { type: "folder" };
   container: SidebarContainer;
   parentFolderId: string | null;
@@ -29,27 +27,9 @@ export function SortableFolderItem({
   isEditing,
   onToggle,
   onAddWorkspace,
-  // SidebarTreeLevel passthrough props:
-  onAddWorkspaceToFolder,
-  editingId,
-  editingType,
-  filteredWorkspaceIds,
-  onStartEditingFolder,
-  onStartEditingWorkspace,
-  onRenameFolder,
-  onRenameWorkspace,
-  onStopEditing,
-  onContextMenuFolder,
-  onContextMenuWorkspace,
-  onSelectWorkspace,
-  activeWorkspaceId,
-  workspaces,
-  panes,
-  paneGroups,
-  toggleFolderCollapsed,
-  deleteTarget,
-  setDeleteTarget,
 }: SortableFolderItemProps) {
+  const { filteredWorkspaceIds, onContextMenuFolder, onRenameFolder, onStopEditing } =
+    useSidebarContext();
   const folderRef = useRef<HTMLDivElement | null>(null);
 
   const { attributes, listeners, setNodeRef, isDragging, isOver } = useSortable({
@@ -72,11 +52,11 @@ export function SortableFolderItem({
   );
 
   // Folder uses edge zones (0.25 threshold): edges show insertion line, center shows folder highlight
-  const { activeDrag: activeDragCtx } = useDragContext();
+  const { activeDrag } = useDragContext();
   const isRelevantDrag =
-    activeDragCtx?.type === "sidebar-workspace" ||
-    activeDragCtx?.type === "sidebar-folder" ||
-    activeDragCtx?.type === "group-tab";
+    activeDrag?.type === "sidebar-workspace" ||
+    activeDrag?.type === "sidebar-folder" ||
+    activeDrag?.type === "group-tab";
   const insertPosition = useInsertionIndicator(
     isOver && !isDragging && isRelevantDrag,
     false,
@@ -136,6 +116,7 @@ export function SortableFolderItem({
           <button
             type="button"
             className="folder-add-btn"
+            aria-label="Add workspace to folder"
             title="Add workspace"
             onClick={(e) => {
               e.stopPropagation();
@@ -153,25 +134,6 @@ export function SortableFolderItem({
           container={container}
           parentFolderId={folder.id}
           depth={depth + 1}
-          editingId={editingId}
-          editingType={editingType}
-          filteredWorkspaceIds={filteredWorkspaceIds}
-          onStartEditingFolder={onStartEditingFolder}
-          onStartEditingWorkspace={onStartEditingWorkspace}
-          onRenameFolder={onRenameFolder}
-          onRenameWorkspace={onRenameWorkspace}
-          onStopEditing={onStopEditing}
-          onContextMenuFolder={onContextMenuFolder}
-          onContextMenuWorkspace={onContextMenuWorkspace}
-          onSelectWorkspace={onSelectWorkspace}
-          onAddWorkspaceToFolder={onAddWorkspaceToFolder}
-          activeWorkspaceId={activeWorkspaceId}
-          workspaces={workspaces}
-          panes={panes}
-          paneGroups={paneGroups}
-          toggleFolderCollapsed={toggleFolderCollapsed}
-          deleteTarget={deleteTarget}
-          setDeleteTarget={setDeleteTarget}
         />
       )}
     </div>
