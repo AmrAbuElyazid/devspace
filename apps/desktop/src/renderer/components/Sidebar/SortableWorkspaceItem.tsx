@@ -1,5 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
+import { X } from "lucide-react";
 import { useDragContext } from "../../hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
@@ -15,11 +16,13 @@ interface SortableWorkspaceItemProps {
   name: string;
   metadata: string;
   shortcutHint: string | null;
+  canDelete: boolean;
   onSelect: () => void;
   onStartEditing: () => void;
   onRename: (name: string) => void;
   onStopEditing: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
+  onDelete: () => void;
 }
 
 export function SortableWorkspaceItem({
@@ -32,11 +35,13 @@ export function SortableWorkspaceItem({
   name,
   metadata,
   shortcutHint,
+  canDelete,
   onSelect,
   onStartEditing,
   onRename,
   onStopEditing,
   onContextMenu,
+  onDelete,
 }: SortableWorkspaceItemProps) {
   const { activeDrag } = useDragContext();
   const mergedRef = useRef<HTMLDivElement | null>(null);
@@ -94,7 +99,7 @@ export function SortableWorkspaceItem({
     tabInsertPosition === null;
 
   const style = {
-    paddingLeft: depth * 16,
+    marginLeft: depth * 16,
     opacity: isDragging ? 0.4 : undefined,
   };
 
@@ -122,12 +127,6 @@ export function SortableWorkspaceItem({
     >
       <div className="ws-item-content">
         <div className="ws-item-row">
-          <span
-            className="ws-dot"
-            style={{
-              background: isActive ? "var(--accent)" : "var(--foreground-faint)",
-            }}
-          />
           {isEditing ? (
             <InlineRenameInput
               initialValue={name}
@@ -145,6 +144,19 @@ export function SortableWorkspaceItem({
         {!isEditing && metadata && <div className="ws-meta">{metadata}</div>}
       </div>
       {shortcutHint && <span className="ws-shortcut-hint">{shortcutHint}</span>}
+      {canDelete && !isEditing && !shortcutHint && (
+        <button
+          type="button"
+          className="ws-delete"
+          title="Delete workspace"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        >
+          <X size={12} />
+        </button>
+      )}
     </div>
   );
 }

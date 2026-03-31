@@ -568,7 +568,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
         targetNodes,
         { type: "workspace" as const, workspaceId: ws.id },
         parentFolderId,
-        parentFolderId === null ? targetNodes.length : Infinity,
+        0,
       );
 
       return {
@@ -1721,12 +1721,7 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     const folderNode: SidebarNode = { type: "folder", id, name, collapsed: false, children: [] };
     set((state) => {
       const targetNodes = getSidebarNodesForContainer(state, container);
-      const insertedNodes = insertSidebarNode(
-        targetNodes,
-        folderNode,
-        parentId,
-        parentId === null ? targetNodes.length : Infinity,
-      );
+      const insertedNodes = insertSidebarNode(targetNodes, folderNode, parentId, 0);
 
       return {
         sidebarTree: container === "main" ? insertedNodes : state.sidebarTree,

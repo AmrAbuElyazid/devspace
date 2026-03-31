@@ -211,6 +211,19 @@ export default function Sidebar() {
     ],
   );
 
+  const handleAddWorkspaceToFolder = useCallback(
+    (folderId: string, container: SidebarContainer) => {
+      if (defaultPaneType === "picker") {
+        useSettingsStore
+          .getState()
+          .openPanePicker({ action: "new-workspace", parentFolderId: folderId, container });
+      } else {
+        addWorkspace(undefined, folderId, container, defaultPaneType);
+      }
+    },
+    [addWorkspace, defaultPaneType],
+  );
+
   return (
     <div
       className={`sidebar ${!sidebarOpen ? "sidebar-collapsed" : ""} ${isResizing ? "sidebar-resizing" : ""}`}
@@ -218,7 +231,9 @@ export default function Sidebar() {
     >
       {/* Header — drag region with traffic light space + branding */}
       <div className="sidebar-header drag-region">
-        <span className="sidebar-label no-drag">DevSpace</span>
+        <span className="sidebar-wordmark no-drag">
+          <span className="sidebar-wordmark-accent">dev</span>space
+        </span>
         <button
           className="sidebar-collapse-btn no-drag"
           onClick={toggleSidebar}
@@ -233,7 +248,7 @@ export default function Sidebar() {
         <Search size={12} className="sidebar-search-icon" />
         <input
           type="text"
-          placeholder="Search workspaces..."
+          placeholder="Search..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyDown={(e) => {
@@ -241,16 +256,19 @@ export default function Sidebar() {
           }}
           className="sidebar-search-input no-drag"
         />
-        {searchQuery && (
+        {searchQuery ? (
           <button className="sidebar-search-clear no-drag" onClick={() => setSearchQuery("")}>
             <X size={10} />
           </button>
+        ) : (
+          <span className="sidebar-search-shortcut">/</span>
         )}
       </div>
 
       {/* Pinned section */}
       {(pinnedSidebarNodes.length > 0 || isRelevantDrag) && (
         <>
+          <div className="sidebar-section-divider" />
           <div className="sidebar-section-header">
             <span className="sidebar-label">Pinned</span>
           </div>
@@ -274,6 +292,7 @@ export default function Sidebar() {
               onContextMenuFolder={handleFolderContextMenu}
               onContextMenuWorkspace={handleWorkspaceContextMenu}
               onSelectWorkspace={(id) => setActiveWorkspace(id)}
+              onAddWorkspaceToFolder={handleAddWorkspaceToFolder}
               activeWorkspaceId={activeWorkspaceId}
               workspaces={workspaces}
               panes={panes}
@@ -287,6 +306,7 @@ export default function Sidebar() {
       )}
 
       {/* Section label + add buttons */}
+      <div className="sidebar-section-divider" />
       <div className="sidebar-section-header">
         <span className="sidebar-label">Workspaces</span>
         <div className="flex items-center gap-0.5">
@@ -343,6 +363,7 @@ export default function Sidebar() {
             onContextMenuFolder={handleFolderContextMenu}
             onContextMenuWorkspace={handleWorkspaceContextMenu}
             onSelectWorkspace={(id) => setActiveWorkspace(id)}
+            onAddWorkspaceToFolder={handleAddWorkspaceToFolder}
             activeWorkspaceId={activeWorkspaceId}
             workspaces={workspaces}
             panes={panes}
@@ -436,7 +457,7 @@ function SidebarFooter() {
               onClick={() => handleQuickCreate(type)}
               onContextMenu={(e) => handleContextMenu(e, type)}
             >
-              <Icon size={13} />
+              <Icon size={12} />
             </button>
           ))}
         </div>
@@ -448,7 +469,7 @@ function SidebarFooter() {
           onMouseLeave={() => setShowHelp(false)}
           onClick={() => setShowHelp((v) => !v)}
         >
-          <CircleHelp size={12} />
+          <CircleHelp size={11} />
           {showHelp && (
             <div className="sidebar-help-tooltip">
               <div>
@@ -477,9 +498,9 @@ function SidebarFooter() {
         onClick={toggleSettings}
         title={`Settings (${resolveDisplayString("toggle-settings")})`}
       >
-        <Settings size={14} />
+        <Settings size={13} strokeWidth={1.8} />
         <span>Settings</span>
-        <span className="sidebar-footer-shortcut">{resolveDisplayString("toggle-settings")}</span>
+        <kbd className="sidebar-footer-shortcut">{resolveDisplayString("toggle-settings")}</kbd>
       </button>
     </div>
   );
