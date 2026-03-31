@@ -7,6 +7,8 @@ const config: KnipConfig = {
     "@vitejs/plugin-react", // used in electron.vite.config.ts
     "@tailwindcss/postcss", // used in postcss.config.mjs
     "tailwindcss", // peer dep of @tailwindcss/postcss, used via CSS
+    "remark-gfm", // used internally by @platejs/markdown for GFM support
+    "remark-stringify", // type dependency for @platejs/markdown plugin inference
   ],
   ignoreBinaries: [
     "node-gyp", // used in rebuild-native script, installed via ghostty-electron

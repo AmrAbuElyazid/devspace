@@ -32,6 +32,7 @@
     "@platejs/indent": "^52.3.10",
     "@platejs/link": "^52.3.17",
     "@platejs/list": "^52.3.10",
+    "@platejs/markdown": "^52.3.19",
     "@platejs/selection": "^52.3.10",
     "@platejs/slash-command": "^52.3.10",
     "@platejs/suggestion": "^52.3.10",
@@ -47,6 +48,8 @@
     "nanoid": "^5.1.7",
     "platejs": "^52.3.16",
     "radix-ui": "^1.4.3",
+    "remark-gfm": "^4.0.1",
+    "remark-stringify": "^11.0.0",
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
