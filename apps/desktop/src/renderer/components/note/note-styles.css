@@ -3,11 +3,6 @@
   overflow-y: auto;
   background: var(--background);
   color: var(--foreground);
-
-  /* Override accent inside the note editor so Plate UI hover/active states
-     use a neutral tone instead of the app's yellow accent */
-  --accent: var(--secondary);
-  --accent-foreground: var(--secondary-foreground);
 }
 
 .note-pane-center {
