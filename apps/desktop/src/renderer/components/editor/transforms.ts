@@ -9,7 +9,7 @@ import { KEYS } from "platejs";
 
 /** Get the block type of the current selection's first block. */
 export function getBlockType(editor: PlateEditor): string {
-  const entry = editor.api.block();
+  const entry = editor.api?.block?.();
   if (!entry) return KEYS.p;
   const [node] = entry;
   return (node as TElement).type ?? KEYS.p;
