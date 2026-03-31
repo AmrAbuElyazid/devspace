@@ -128,9 +128,7 @@ test("cleanupPaneResources destroys browser panes and clears runtime state", () 
 });
 
 test("updateBrowserPaneZoom persists zoom on browser pane config only", () => {
-  const initialState = useWorkspaceStore.getState();
-  const originalPanes = initialState.panes;
-
+  resetWorkspaceStore();
   useWorkspaceStore.setState({
     panes: {
       "pane-1": {
@@ -156,8 +154,6 @@ test("updateBrowserPaneZoom persists zoom on browser pane config only", () => {
     zoom: 1.25,
   });
   expect(useWorkspaceStore.getState().panes["pane-2"]?.config).toEqual({});
-
-  useWorkspaceStore.setState({ panes: originalPanes });
 });
 
 test("addGroupTab creates empty pane in group", () => {
@@ -1233,12 +1229,6 @@ test("removeGroupTab on a nested last-tab group does not leave orphaned leaves",
 });
 
 test("moveTabToWorkspace from a nested last-tab group does not leave orphaned leaves", () => {
-  resetWorkspaceStore();
-  useWorkspaceStore.getState().addWorkspace("Source");
-  useWorkspaceStore.getState().addWorkspace("Dest");
-
-  resetWorkspaceStore();
-  useWorkspaceStore.getState().addWorkspace("Source");
   const { wsId, groupIds } = setupFourGroupWorkspace();
   useWorkspaceStore.getState().addWorkspace("Dest");
 

@@ -6,7 +6,7 @@ import { collectGroupIds } from "./split-tree";
 // Constants
 // ---------------------------------------------------------------------------
 
-export const titleForType: Record<PaneType, string> = {
+const titleForType: Record<PaneType, string> = {
   terminal: "Terminal",
   browser: "Browser",
   editor: "Editor",

@@ -134,7 +134,7 @@ function SortableGroupTab({
       {...attributes}
       {...listeners}
     >
-      <Icon size={10} className="tab-icon" />
+      <Icon size={10} />
       {isEditing ? (
         <input
           ref={inputRef}
