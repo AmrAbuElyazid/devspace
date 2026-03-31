@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { ChevronDown, ChevronRight, FolderClosed } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderClosed, FolderOpen, Plus } from "lucide-react";
 import { useDragContext } from "../../hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
@@ -18,6 +18,7 @@ interface SortableFolderItemProps extends Omit<
   depth: number;
   isEditing: boolean;
   onToggle: () => void;
+  onAddWorkspace: () => void;
 }
 
 export function SortableFolderItem({
@@ -27,7 +28,9 @@ export function SortableFolderItem({
   depth,
   isEditing,
   onToggle,
+  onAddWorkspace,
   // SidebarTreeLevel passthrough props:
+  onAddWorkspaceToFolder,
   editingId,
   editingType,
   filteredWorkspaceIds,
@@ -102,27 +105,20 @@ export function SortableFolderItem({
         className={`folder-header no-drag ${showDragOver ? "sidebar-item-drag-over-folder" : ""} ${insertClass}`}
         onClick={onToggle}
         onContextMenu={(e) => onContextMenuFolder(e, folder.id)}
-        style={{
-          position: "relative",
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "5px 10px",
-          paddingLeft: depth * 16 + 10,
-          fontSize: 11,
-          fontWeight: 600,
-          textTransform: "uppercase" as const,
-          letterSpacing: "0.03em",
-          color: "var(--foreground-faint)",
-          cursor: "pointer",
-          userSelect: "none",
-          marginTop: 4,
-        }}
+        style={{ marginLeft: depth * 16 }}
         {...attributes}
         {...listeners}
       >
-        {!isExpanded ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
-        <FolderClosed size={12} style={{ opacity: 0.6 }} />
+        {!isExpanded ? (
+          <ChevronRight size={10} className="folder-chevron" />
+        ) : (
+          <ChevronDown size={10} className="folder-chevron" />
+        )}
+        {isExpanded ? (
+          <FolderOpen size={11} className="folder-icon" />
+        ) : (
+          <FolderClosed size={11} className="folder-icon" />
+        )}
         {isEditing ? (
           <InlineRenameInput
             initialValue={folder.name}
@@ -131,10 +127,23 @@ export function SortableFolderItem({
               onStopEditing();
             }}
             onCancel={onStopEditing}
-            className="text-[12px]"
+            className="text-[11px]"
           />
         ) : (
           <span className="flex-1 truncate">{folder.name}</span>
+        )}
+        {!isEditing && (
+          <button
+            type="button"
+            className="folder-add-btn"
+            title="Add workspace"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddWorkspace();
+            }}
+          >
+            <Plus size={12} />
+          </button>
         )}
       </div>
 
@@ -155,6 +164,7 @@ export function SortableFolderItem({
           onContextMenuFolder={onContextMenuFolder}
           onContextMenuWorkspace={onContextMenuWorkspace}
           onSelectWorkspace={onSelectWorkspace}
+          onAddWorkspaceToFolder={onAddWorkspaceToFolder}
           activeWorkspaceId={activeWorkspaceId}
           workspaces={workspaces}
           panes={panes}

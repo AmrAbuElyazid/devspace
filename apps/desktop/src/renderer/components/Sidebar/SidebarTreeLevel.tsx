@@ -22,6 +22,7 @@ export interface SidebarTreeLevelProps {
   onContextMenuFolder: (e: React.MouseEvent, folderId: string) => void;
   onContextMenuWorkspace: (e: React.MouseEvent, workspaceId: string) => void;
   onSelectWorkspace: (id: string) => void;
+  onAddWorkspaceToFolder: (folderId: string, container: SidebarContainer) => void;
   activeWorkspaceId: string;
   workspaces: Workspace[];
   panes: Record<string, Pane>;
@@ -47,6 +48,7 @@ export function SidebarTreeLevel({
   onContextMenuFolder,
   onContextMenuWorkspace,
   onSelectWorkspace,
+  onAddWorkspaceToFolder,
   activeWorkspaceId,
   workspaces,
   panes,
@@ -92,11 +94,13 @@ export function SidebarTreeLevel({
               name={ws.name}
               metadata={metadata}
               shortcutHint={shortcutHint}
+              canDelete={workspaces.length > 1}
               onSelect={() => onSelectWorkspace(ws.id)}
               onStartEditing={() => onStartEditingWorkspace(ws.id)}
               onRename={(name) => onRenameWorkspace(ws.id, name)}
               onStopEditing={onStopEditing}
               onContextMenu={(e) => onContextMenuWorkspace(e, ws.id)}
+              onDelete={() => setDeleteTarget(ws.id)}
             />
           );
         }
@@ -114,6 +118,8 @@ export function SidebarTreeLevel({
             editingType={editingType}
             filteredWorkspaceIds={filteredWorkspaceIds}
             onToggle={() => toggleFolderCollapsed(node.id)}
+            onAddWorkspace={() => onAddWorkspaceToFolder(node.id, container)}
+            onAddWorkspaceToFolder={onAddWorkspaceToFolder}
             onStartEditingFolder={onStartEditingFolder}
             onStartEditingWorkspace={onStartEditingWorkspace}
             onRenameFolder={onRenameFolder}

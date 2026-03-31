@@ -51,6 +51,7 @@ test("renders pinned folders and workspaces from pinnedSidebarNodes", () => {
       onContextMenuFolder={() => {}}
       onContextMenuWorkspace={() => {}}
       onSelectWorkspace={() => {}}
+      onAddWorkspaceToFolder={() => {}}
       activeWorkspaceId="ws-1"
       workspaces={state.workspaces}
       panes={state.panes}
@@ -92,6 +93,7 @@ test("renders expanded folders without crashing", () => {
       onContextMenuFolder={() => {}}
       onContextMenuWorkspace={() => {}}
       onSelectWorkspace={() => {}}
+      onAddWorkspaceToFolder={() => {}}
       activeWorkspaceId="ws-1"
       workspaces={state.workspaces}
       panes={state.panes}
@@ -132,6 +134,7 @@ test("renders expanded folders with child workspaces without crashing", () => {
       onContextMenuFolder={() => {}}
       onContextMenuWorkspace={() => {}}
       onSelectWorkspace={() => {}}
+      onAddWorkspaceToFolder={() => {}}
       activeWorkspaceId="ws-1"
       workspaces={state.workspaces}
       panes={state.panes}

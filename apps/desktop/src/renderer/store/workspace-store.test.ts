@@ -675,6 +675,7 @@ test("moveSidebarNode moves a workspace from a folder back to root", () => {
 
 test("moveSidebarNode adjusts same-parent downward reorders to the intended sibling position", () => {
   resetWorkspaceStore();
+  // New items insert at the top, so after adding A, B, C the tree is [C, B, A].
   useWorkspaceStore.getState().addWorkspace("WS A");
   const wsAId = useWorkspaceStore.getState().activeWorkspaceId;
   useWorkspaceStore.getState().addWorkspace("WS B");
@@ -682,8 +683,9 @@ test("moveSidebarNode adjusts same-parent downward reorders to the intended sibl
   useWorkspaceStore.getState().addWorkspace("WS C");
   const wsCId = useWorkspaceStore.getState().activeWorkspaceId;
 
+  // Move C (index 0) to target index 2 → should land between B and A.
   useWorkspaceStore.getState().moveSidebarNode({
-    nodeId: wsAId,
+    nodeId: wsCId,
     nodeType: "workspace",
     sourceContainer: "main",
     targetContainer: "main",
@@ -693,8 +695,8 @@ test("moveSidebarNode adjusts same-parent downward reorders to the intended sibl
 
   expect(useWorkspaceStore.getState().sidebarTree).toEqual([
     { type: "workspace", workspaceId: wsBId },
-    { type: "workspace", workspaceId: wsAId },
     { type: "workspace", workspaceId: wsCId },
+    { type: "workspace", workspaceId: wsAId },
   ]);
 });
 
