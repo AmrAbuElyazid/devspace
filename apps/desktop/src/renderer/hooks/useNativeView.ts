@@ -66,11 +66,34 @@ export function useNativeView({
   // ── Registration ────────────────────────────────────────────────────
   useEffect(() => {
     if (!enabled) return;
+
+    // Eagerly populate the bounds cache from the placeholder's current
+    // layout BEFORE calling register().  register() synchronously calls
+    // reconcile(), which reads from the cache to send bounds to the main
+    // process before making the view visible.  Without this, a freshly-
+    // mounted view (new tab) or a remounted view (split restructure,
+    // where unregister cleared the cache) would be shown with missing or
+    // zero bounds, causing a black/mis-sized frame.
+    const el = ref.current;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      const width = Math.max(0, Math.round(rect.width));
+      const height = Math.max(0, Math.round(rect.height));
+      if (width > 0 && height > 0) {
+        updateNativeViewBounds(id, {
+          x: Math.round(rect.left),
+          y: Math.round(rect.top),
+          width,
+          height,
+        });
+      }
+    }
+
     register(id, type);
     return () => {
       unregister(id);
     };
-  }, [id, type, enabled, register, unregister]);
+  }, [id, type, enabled, ref, register, unregister]);
 
   // ── Bounds syncing ──────────────────────────────────────────────────
   useEffect(() => {

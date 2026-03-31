@@ -36,22 +36,32 @@ export default function TerminalPane({
   const searchState = useTerminalStore((s) => s.searchStateByPaneId[paneId]);
   const closeFindBar = useTerminalStore((s) => s.closeFindBar);
 
-  // Centralized native view management — replaces the old show/hide effect
-  // and useTerminalBounds hook.
+  // Create the native surface synchronously during render — before any effects
+  // run. This guarantees the `terminal:create` IPC is in the queue before
+  // `useNativeView`'s registration effect calls `reconcile()` →
+  // `setVisibleSurfaces`. The module-level `createdSurfaces` set ensures this
+  // only fires once per surface, surviving StrictMode double-renders and split
+  // remounts.
+  const surfaceReady = useRef(false);
+  if (!surfaceReady.current) {
+    if (createdSurfaces.has(paneId)) {
+      surfaceReady.current = true;
+    } else {
+      createdSurfaces.add(paneId);
+      void window.api.terminal.create(paneId, config.cwd ? { cwd: config.cwd } : undefined);
+      surfaceReady.current = true;
+    }
+  }
+
+  // Centralized native view management. Registration is gated on
+  // `surfaceReady` so that `reconcile()` → `setVisibleSurfaces` never fires
+  // for a surface whose `create` IPC hasn't been sent yet.
   const { isVisible } = useNativeView({
     id: paneId,
     type: "terminal",
     ref: placeholderRef,
+    enabled: surfaceReady.current,
   });
-
-  // Create the native surface on mount — but only if it doesn't already exist.
-  // The module-level createdSurfaces set persists across React remounts.
-  useEffect(() => {
-    if (createdSurfaces.has(paneId)) return;
-    createdSurfaces.add(paneId);
-
-    void window.api.terminal.create(paneId, config.cwd ? { cwd: config.cwd } : undefined);
-  }, [paneId, config.cwd]);
 
   // Auto-focus when this pane becomes visible AND is the focused pane,
   // but NOT when the find bar is open (keyboard focus belongs to the input).
