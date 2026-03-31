@@ -40,6 +40,8 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
+  --color-brand: var(--brand);
+  --color-highlight: var(--highlight);
 }
 
 /* ─── Base Layer ─────────────────────────────────────────────────────── */
@@ -264,6 +266,15 @@
     --secondary-foreground: rgba(255, 255, 255, 0.9);
     --muted: #27272a;
     --muted-foreground: rgba(255, 255, 255, 0.4);
+  }
+
+  --highlight: oklch(0.75 0.1 70);
+
+  --brand: oklch(0.623 0.214 259.815);
+
+  @variant dark {
+    --highlight: oklch(0.45 0.08 70);
+    --brand: oklch(0.707 0.165 254.624);
   }
 }
 

@@ -1,4 +1,15 @@
-import { memo, useRef, useCallback, useEffect, type ReactElement } from "react";
+import {
+  memo,
+  useRef,
+  useCallback,
+  useEffect,
+  lazy,
+  Suspense,
+  Component,
+  type ReactElement,
+  type ReactNode,
+  type ErrorInfo,
+} from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { paneTypeIcons, paneTypeLabels } from "../lib/pane-type-meta";
 import { useWorkspaceStore, getTopLeftGroupId } from "../store/workspace-store";
@@ -11,6 +22,7 @@ import type {
   TerminalConfig,
   EditorConfig,
   BrowserConfig,
+  NoteConfig,
 } from "../types/workspace";
 
 // Import the actual pane content components
@@ -18,6 +30,47 @@ import TerminalPane from "./TerminalPane";
 import EditorPane from "./EditorPane";
 import BrowserPane from "./BrowserPane";
 import T3CodePane from "./T3CodePane";
+
+// Lazy-load NotePane so Plate/editor deps are in a separate chunk
+const NotePane = lazy(() => import("./note/NotePane"));
+
+/** Error boundary to prevent Plate crashes from taking down the whole app */
+class NotePaneErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  override state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  override componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[NotePane] Render error:", error, info.componentStack);
+  }
+
+  override render() {
+    if (this.state.error) {
+      return (
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            height: "100%",
+            gap: 8,
+            color: "var(--foreground-faint)",
+            fontSize: 13,
+            padding: 20,
+            textAlign: "center",
+          }}
+        >
+          <span>Note editor failed to load</span>
+          <span style={{ fontSize: 11, opacity: 0.6 }}>{this.state.error.message}</span>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 /** Lightweight placeholder shown over panes whose native view is hidden during drag. */
 function DragPlaceholder({ pane }: { pane: Pane }): ReactElement {
@@ -111,6 +164,29 @@ const PaneContent = memo(function PaneContent({
       );
     case "t3code":
       return <T3CodePane paneId={paneId} />;
+    case "note":
+      return (
+        <NotePaneErrorBoundary>
+          <Suspense
+            fallback={
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "100%",
+                  color: "var(--foreground-faint)",
+                  fontSize: 13,
+                }}
+              >
+                Loading editor...
+              </div>
+            }
+          >
+            <NotePane paneId={paneId} config={(paneConfig as NoteConfig) ?? { noteId: "" }} />
+          </Suspense>
+        </NotePaneErrorBoundary>
+      );
   }
 });
 

@@ -18,11 +18,11 @@ inside workspace windows.
 
 The repository is a **Turborepo monorepo** with Bun workspaces:
 
-| Workspace | Path | Description |
-|-----------|------|-------------|
-| `@devspace/desktop` | `apps/desktop/` | Electron desktop app |
-| `ghostty-electron` | `packages/ghostty-electron/` | Reusable Ghostty terminal bridge (N-API + TypeScript) |
-| `@devspace/scripts` | `scripts/` | Monorepo-level utility scripts |
+| Workspace           | Path                         | Description                                           |
+| ------------------- | ---------------------------- | ----------------------------------------------------- |
+| `@devspace/desktop` | `apps/desktop/`              | Electron desktop app                                  |
+| `ghostty-electron`  | `packages/ghostty-electron/` | Reusable Ghostty terminal bridge (N-API + TypeScript) |
+| `@devspace/scripts` | `scripts/`                   | Monorepo-level utility scripts                        |
 
 **Package manager**: Bun (use `bun` / `bunx`, not `npm` / `npx`).
 

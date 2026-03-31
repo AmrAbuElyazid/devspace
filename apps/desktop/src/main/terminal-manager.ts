@@ -1,4 +1,4 @@
-import type { BrowserWindow } from "electron";
+import { app, type BrowserWindow } from "electron";
 import { existsSync } from "fs";
 import { join, resolve } from "path";
 import { GhosttyTerminal, type ReservedShortcut, type TerminalBounds } from "ghostty-electron";
@@ -79,13 +79,18 @@ export class TerminalManager {
     this.terminal = new GhosttyTerminal();
     const handle = mainWindow.getNativeWindowHandle();
 
-    // Resolve the native addon path relative to this file's directory.
-    // In dev mode, __dirname is apps/desktop/out/main — the addon is in the
-    // ghostty-electron package's native build output.
-    const nativeAddonPath = resolve(
-      __dirname,
-      "../../../../packages/ghostty-electron/native/build/Release/ghostty_bridge.node",
-    );
+    // Resolve the native addon path.
+    // In dev mode, app.getAppPath() is apps/desktop — resolve up to packages/.
+    // In production, the addon is unpacked from the asar into app.asar.unpacked/.
+    const nativeAddonPath = app.isPackaged
+      ? resolve(
+          app.getAppPath() + ".unpacked",
+          "node_modules/ghostty-electron/native/build/Release/ghostty_bridge.node",
+        )
+      : resolve(
+          app.getAppPath(),
+          "../../packages/ghostty-electron/native/build/Release/ghostty_bridge.node",
+        );
 
     this.terminal.init({ windowHandle: handle, nativeAddonPath });
 

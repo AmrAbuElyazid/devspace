@@ -552,6 +552,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
         activeWs,
       );
       if (cwd) inheritedConfig = { cwd };
+    } else if (paneType === "note") {
+      inheritedConfig = { noteId: nanoid() };
     }
     const pane = createPane(paneType, inheritedConfig);
     const group = createPaneGroup(pane);
@@ -751,6 +753,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     if (paneType === "terminal") {
       const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, workspace);
       if (cwd) inheritedConfig = { cwd };
+    } else if (paneType === "note") {
+      inheritedConfig = { noteId: nanoid() };
     }
     const pane = createPane(paneType, inheritedConfig);
     const newTab: PaneGroupTab = { id: nanoid(), paneId: pane.id };
@@ -1366,6 +1370,8 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
     if (paneType === "terminal") {
       const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, ws);
       if (cwd) inheritedConfig = { cwd };
+    } else if (paneType === "note") {
+      inheritedConfig = { noteId: nanoid() };
     }
     const newPane = createPane(paneType, inheritedConfig);
     const newGroup = createPaneGroup(newPane);

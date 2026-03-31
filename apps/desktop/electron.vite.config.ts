@@ -1,3 +1,4 @@
+import path from "path";
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 import react from "@vitejs/plugin-react";
 
@@ -14,6 +15,11 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: "./src/renderer/index.html",
+      },
+    },
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src/renderer"),
       },
     },
   },

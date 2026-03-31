@@ -11,6 +11,7 @@ export const titleForType: Record<PaneType, string> = {
   browser: "Browser",
   editor: "Editor",
   t3code: "T3 Code",
+  note: "Note",
 };
 
 // ---------------------------------------------------------------------------

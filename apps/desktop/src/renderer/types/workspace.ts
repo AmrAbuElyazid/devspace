@@ -1,4 +1,4 @@
-export type PaneType = "terminal" | "browser" | "editor" | "t3code";
+export type PaneType = "terminal" | "browser" | "editor" | "t3code" | "note";
 
 export interface TerminalConfig {
   cwd?: string;
@@ -15,14 +15,19 @@ export interface EditorConfig {
 
 export interface T3CodeConfig {}
 
-export type PaneConfig = TerminalConfig | BrowserConfig | EditorConfig | T3CodeConfig;
+export interface NoteConfig {
+  noteId: string;
+}
+
+export type PaneConfig = TerminalConfig | BrowserConfig | EditorConfig | T3CodeConfig | NoteConfig;
 
 /** Discriminated union coupling `type` with the correct `config` shape. */
 export type Pane =
   | { id: string; title: string; type: "terminal"; config: TerminalConfig }
   | { id: string; title: string; type: "browser"; config: BrowserConfig }
   | { id: string; title: string; type: "editor"; config: EditorConfig }
-  | { id: string; title: string; type: "t3code"; config: T3CodeConfig };
+  | { id: string; title: string; type: "t3code"; config: T3CodeConfig }
+  | { id: string; title: string; type: "note"; config: NoteConfig };
 
 export type SplitDirection = "horizontal" | "vertical";
 

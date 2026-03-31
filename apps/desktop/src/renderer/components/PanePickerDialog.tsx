@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Terminal, Globe, FileCode, Bot } from "lucide-react";
+import { Terminal, Globe, FileCode, Bot, StickyNote } from "lucide-react";
 
 import { useSettingsStore, type PanePickerContext } from "../store/settings-store";
 import { useWorkspaceStore } from "../store/workspace-store";
@@ -10,6 +10,7 @@ const options: { type: PaneType; label: string; icon: typeof Terminal; shortcut:
   { type: "browser", label: "Browser", icon: Globe, shortcut: "B" },
   { type: "editor", label: "VS Code", icon: FileCode, shortcut: "E" },
   { type: "t3code", label: "T3 Code", icon: Bot, shortcut: "C" },
+  { type: "note", label: "Note", icon: StickyNote, shortcut: "N" },
 ];
 
 const shortcutMap: Record<string, PaneType> = {
@@ -17,6 +18,7 @@ const shortcutMap: Record<string, PaneType> = {
   b: "browser",
   e: "editor",
   c: "t3code",
+  n: "note",
 };
 
 function formatCwd(cwd: string): string {
