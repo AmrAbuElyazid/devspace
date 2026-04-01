@@ -8,6 +8,7 @@
       "scripts"
     ],
     "catalog": {
+      "@vitest/coverage-v8": "^4.1.2",
       "electron": "^41.0.4",
       "knip": "^6.0.6",
       "react": "^19.2.4",
@@ -27,6 +28,7 @@
     "build": "turbo build",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
+    "test:coverage": "bun run --cwd apps/desktop test:coverage",
     "lint": "oxlint --report-unused-disable-directives",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",

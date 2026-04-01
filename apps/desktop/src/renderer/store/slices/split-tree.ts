@@ -11,12 +11,16 @@ import {
   updateSizesAtPath,
 } from "../../lib/split-tree";
 import { createPane, createPaneGroup, findNearestTerminalCwd } from "../../lib/pane-factory";
-import { cleanupPaneResources, defaultPaneCleanupDeps } from "../store-helpers";
+import type { PaneCleanup } from "../store-helpers";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type SplitTreeSlice = Pick<WorkspaceState, "splitGroup" | "closeGroup" | "updateSplitSizes">;
 
-export function createSplitTreeSlice(set: StoreSet, get: StoreGet): SplitTreeSlice {
+export function createSplitTreeSlice(
+  set: StoreSet,
+  get: StoreGet,
+  cleanupPanes: PaneCleanup,
+): SplitTreeSlice {
   return {
     splitGroup(workspaceId, groupId, direction, defaultType) {
       // Read state outside set() only for side-effect-free preparation
@@ -70,10 +74,10 @@ export function createSplitTreeSlice(set: StoreSet, get: StoreGet): SplitTreeSli
       const group = snapshot.paneGroups[groupId];
       if (!group) return;
 
-      // Cleanup pane resources (IPC calls) — must happen before state update
-      for (const tab of group.tabs) {
-        cleanupPaneResources(snapshot.panes, tab.paneId, defaultPaneCleanupDeps);
-      }
+      cleanupPanes(
+        snapshot.panes,
+        group.tabs.map((tab) => tab.paneId),
+      );
 
       set((state) => {
         // Re-validate inside updater with fresh state

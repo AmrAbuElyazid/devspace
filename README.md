@@ -74,6 +74,12 @@ bun run knip
 bun run test
 ```
 
+Generate a desktop coverage report:
+
+```sh
+bun run test:coverage
+```
+
 When native Ghostty code changes, rebuild the addon:
 
 ```sh

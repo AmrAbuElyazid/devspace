@@ -10,11 +10,8 @@ import {
   findNearestTerminalCwd,
 } from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
-import {
-  getSidebarNodesForContainer,
-  cleanupPaneResources,
-  defaultPaneCleanupDeps,
-} from "../store-helpers";
+import { getSidebarNodesForContainer } from "../store-helpers";
+import type { PaneCleanup } from "../store-helpers";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type WorkspaceCrudSlice = Pick<
@@ -29,7 +26,11 @@ type WorkspaceCrudSlice = Pick<
   | "createWorkspaceFromTab"
 >;
 
-export function createWorkspaceCrudSlice(set: StoreSet, get: StoreGet): WorkspaceCrudSlice {
+export function createWorkspaceCrudSlice(
+  set: StoreSet,
+  get: StoreGet,
+  cleanupPanes: PaneCleanup,
+): WorkspaceCrudSlice {
   return {
     addWorkspace: (name, parentFolderId = null, container = "main", defaultType) => {
       const paneType = defaultType ?? "terminal";
@@ -87,17 +88,20 @@ export function createWorkspaceCrudSlice(set: StoreSet, get: StoreGet): Workspac
       const groupIds = collectGroupIds(ws.root);
       const newPanes = { ...state.panes };
       const newPaneGroups = { ...state.paneGroups };
+      const paneIdsToCleanup: string[] = [];
 
       for (const gid of groupIds) {
         const group = newPaneGroups[gid];
         if (group) {
           for (const tab of group.tabs) {
-            cleanupPaneResources(state.panes, tab.paneId, defaultPaneCleanupDeps);
+            paneIdsToCleanup.push(tab.paneId);
             delete newPanes[tab.paneId];
           }
           delete newPaneGroups[gid];
         }
       }
+
+      cleanupPanes(state.panes, paneIdsToCleanup);
 
       const [newTree] = removeSidebarNode(state.sidebarTree, id, "workspace");
       const [newPinnedTree] = removeSidebarNode(state.pinnedSidebarNodes, id, "workspace");

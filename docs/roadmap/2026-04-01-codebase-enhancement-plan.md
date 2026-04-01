@@ -26,7 +26,7 @@
       Opportunity: make IPC behavior easier to navigate, test, and evolve.
       Refs: `apps/desktop/src/main/ipc-handlers.ts`
 
-- [ ] Continue reducing side effects inside workspace store actions.
+- [x] Continue reducing side effects inside workspace store actions.
       Opportunity: keep state mutation and external resource cleanup more clearly separated.
       Refs: `apps/desktop/src/renderer/store/store-helpers.ts:25-41`, `apps/desktop/src/renderer/store/slices/pane-management.ts:20-27`
 
@@ -57,7 +57,7 @@
 
 - [x] Add CI for `bun fmt:check`, `bun run typecheck`, `bun run lint`, `bun run knip`, and `bun run test`.
 
-- [ ] Add coverage visibility for `apps/desktop`.
+- [x] Add coverage visibility for `apps/desktop`.
       Opportunity: make gaps easier to spot without slowing down the day-to-day workflow too much.
       Refs: `apps/desktop/vitest.config.ts`, `vitest.config.ts`
 
@@ -95,7 +95,7 @@
 - [ ] Add root public docs
 - [x] Split `ipc-handlers.ts`
 - [x] Remove duplicated legacy paths
-- [ ] Add coverage visibility
+- [x] Add coverage visibility
 - [ ] Add basic release/versioning notes
 
 ### Phase 3: Long-Term Product Quality

@@ -26,3 +26,6 @@ release/
 # Playwright test artifacts
 test-results/
 playwright-report/
+
+# Coverage output
+coverage/
