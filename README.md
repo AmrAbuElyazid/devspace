@@ -83,7 +83,7 @@ bun run test:coverage
 When native Ghostty code changes, rebuild the addon:
 
 ```sh
-bun run rebuild-native --filter=@devspace/desktop
+bun run rebuild-native
 ```
 
 ## Benchmarks
@@ -95,6 +95,10 @@ Terminal throughput notes live in [`BENCHMARKS.md`](./BENCHMARKS.md).
 The active improvement plan lives in:
 
 - [`docs/roadmap/2026-04-01-codebase-enhancement-plan.md`](./docs/roadmap/2026-04-01-codebase-enhancement-plan.md)
+
+## Release Notes
+
+- [`docs/release-process.md`](./docs/release-process.md)
 
 ## Contributing
 

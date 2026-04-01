@@ -57,21 +57,26 @@
 
 - [x] Add CI for `bun fmt:check`, `bun run typecheck`, `bun run lint`, `bun run knip`, and `bun run test`.
 
+- [x] Add a macOS native CI smoke lane.
+      Opportunity: keep Electron build and native Ghostty rebuild coverage on the only supported platform.
+
 - [x] Add coverage visibility for `apps/desktop`.
       Opportunity: make gaps easier to spot without slowing down the day-to-day workflow too much.
       Refs: `apps/desktop/vitest.config.ts`, `vitest.config.ts`
 
 - [ ] Expand behavior-heavy UI and integration coverage where it pays off most.
       Likely areas: pane lifecycle, native-view behavior, browser security flows, and complex drag/drop interactions.
+      Progress: added direct lifecycle tests for `useNativeView` and `TerminalPane`.
 
-- [ ] Decide whether `ghostty-electron` needs package-level tests or should remain clearly app-coupled for now.
+- [x] Decide whether `ghostty-electron` needs package-level tests or should remain clearly app-coupled for now.
       Refs: `packages/ghostty-electron/README.md:209-223`, `packages/ghostty-electron/package.json`
+      Progress: added package-level tests around `GhosttyTerminal` bridge loading, event forwarding, and lifecycle forwarding.
 
 ### 5. Release And Open-Source Readiness
 
-- [ ] Add root project docs: `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `SECURITY.md`.
+- [x] Add root project docs: `README.md`, `LICENSE`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and `SECURITY.md`.
 
-- [ ] Add a simple public release/versioning workflow.
+- [x] Add a simple public release/versioning workflow.
       Opportunity: make releases easier to cut and reason about when you decide to publish more widely.
       Refs: `apps/desktop/package.json`, `scripts/promote.sh`
 
@@ -92,11 +97,11 @@
 
 ### Phase 2: Repo Maturity
 
-- [ ] Add root public docs
+- [x] Add root public docs
 - [x] Split `ipc-handlers.ts`
 - [x] Remove duplicated legacy paths
 - [x] Add coverage visibility
-- [ ] Add basic release/versioning notes
+- [x] Add basic release/versioning notes
 
 ### Phase 3: Long-Term Product Quality
 

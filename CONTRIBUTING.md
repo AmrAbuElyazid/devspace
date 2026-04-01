@@ -27,7 +27,7 @@ bun run dev
 If the native Ghostty bridge changes:
 
 ```sh
-bun run rebuild-native --filter=@devspace/desktop
+bun run rebuild-native
 ```
 
 ## Required Checks
