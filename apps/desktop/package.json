@@ -8,7 +8,7 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "postinstall": "electron-vite postinstall 2>/dev/null; true",
-    "rebuild-native": "cd ../../packages/ghostty-electron/native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=$(node -p \"process.arch\") --dist-url=https://electronjs.org/headers",
+    "rebuild-native": "bun run --cwd ../../packages/ghostty-electron rebuild-native",
     "dist": "bun run build && bun run rebuild-native && bunx electron-builder --mac --arm64 --dir",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",

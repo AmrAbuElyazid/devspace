@@ -27,6 +27,27 @@ If the Ghostty native bridge or bundled native resources changed, rebuild it:
 bun run rebuild-native
 ```
 
+`rebuild-native` provisions the pinned `libghostty` bundle before compiling the
+N-API addon. Normal release builds should not need a source build of Ghostty.
+
+## Refreshing The Pinned Ghostty Bundle
+
+Only do this when intentionally bumping the Ghostty dependency:
+
+```sh
+bun run --cwd packages/ghostty-electron build-libghostty
+bun run --cwd packages/ghostty-electron refresh-libghostty-checksums
+bun run --cwd packages/ghostty-electron bundle-libghostty
+```
+
+Then publish the bundle with the manual GitHub Actions workflow:
+
+- `.github/workflows/publish-ghostty-bundle.yml`
+
+That workflow rebuilds the pinned bundle on macOS, verifies the committed
+checksum manifest, and uploads the release asset referenced by
+`packages/ghostty-electron/libghostty-bundle.json`.
+
 ## Build A macOS Release Directory
 
 From the repo root:

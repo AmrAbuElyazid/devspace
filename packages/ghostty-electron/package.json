@@ -26,10 +26,15 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "rebuild-native": "cd native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=$(node -p \"process.arch\") --dist-url=https://electronjs.org/headers",
+    "build-libghostty": "bash ./scripts/build-libghostty.sh",
+    "bundle-libghostty": "bash ./scripts/bundle-libghostty.sh",
+    "provision-libghostty": "bash ./scripts/provision-libghostty.sh",
+    "rebuild-native": "bash ./scripts/rebuild-native.sh",
+    "refresh-libghostty-checksums": "bash ./scripts/write-libghostty-checksums.sh",
     "knip": "knip",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify-libghostty": "bash ./scripts/verify-libghostty.sh"
   },
   "dependencies": {
     "node-addon-api": "catalog:"

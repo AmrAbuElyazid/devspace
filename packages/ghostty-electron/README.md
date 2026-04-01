@@ -13,7 +13,7 @@ within an Electron `BrowserWindow`.
 - macOS (arm64)
 - Electron >= 30
 - node-gyp build toolchain (Xcode Command Line Tools)
-- Pre-built `libghostty.a` in `deps/libghostty/lib/` (see [Building libghostty](#building-libghostty))
+- pinned `libghostty` bundle metadata from this repo
 
 ## Installation
 
@@ -30,11 +30,7 @@ Within a monorepo using workspace protocol:
 After installing, compile the native addon against your Electron version:
 
 ```sh
-cd packages/ghostty-electron/native
-npx node-gyp rebuild \
-  --target=$(node -e "console.log(require('electron/package.json').version)") \
-  --arch=$(node -p "process.arch") \
-  --dist-url=https://electronjs.org/headers
+bun run --cwd packages/ghostty-electron rebuild-native
 ```
 
 Or from the consuming app:
@@ -176,17 +172,44 @@ the Devspace desktop app (`apps/desktop/src/main/terminal-manager.ts`) for
 a reference implementation covering zsh ZDOTDIR wrapping, bash
 PROMPT_COMMAND, and fish XDG_DATA_DIRS injection.
 
-## Building libghostty
+## Provisioning libghostty
 
-The pre-built static library (`deps/libghostty/lib/libghostty.a`) is not
-checked into git due to its size. To build from source:
+`rebuild-native` first verifies the contents of `deps/libghostty/` against the
+repo-pinned checksum manifest in `libghostty-files.sha256`.
+
+If the bundle is missing, it downloads the pinned release asset described by
+`libghostty-bundle.json` and verifies the extracted contents before linking the
+native addon.
+
+For local forks or private mirrors, you can override the download URL with:
 
 ```sh
-./scripts/build-libghostty.sh
+DEVSPACE_LIBGHOSTTY_BUNDLE_URL=https://example.com/libghostty.tar.gz bun run rebuild-native
 ```
 
-This clones the Ghostty repo, builds libghostty with Zig, and copies the
-artifacts into `deps/libghostty/`.
+You can also override the GitHub repository used for release downloads:
+
+```sh
+DEVSPACE_LIBGHOSTTY_REPOSITORY=owner/devspace bun run rebuild-native
+```
+
+## Building libghostty From Source
+
+Only maintainers updating the pinned Ghostty dependency should build from
+source:
+
+```sh
+bun run build-libghostty
+bun run refresh-libghostty-checksums
+bun run bundle-libghostty
+```
+
+This clones the pinned Ghostty tag, rebuilds `libghostty`, refreshes the
+checksum manifest, and packages the publishable release bundle.
+
+The matching GitHub Actions workflow is:
+
+- `.github/workflows/publish-ghostty-bundle.yml`
 
 ## Project structure
 
@@ -196,6 +219,8 @@ src/
   types.ts              TypeScript type definitions
   terminal-manager.ts   GhosttyTerminal class
   native.ts             Native addon loader + N-API interface types
+libghostty-bundle.json  Pinned release metadata for provisioning
+libghostty-files.sha256 Pinned content checksums for verification
 native/
   binding.gyp           node-gyp build configuration
   ghostty_bridge.h      C++ header
@@ -204,6 +229,9 @@ deps/
   libghostty/           Pre-built static library + shell integration resources
 scripts/
   build-libghostty.sh   Build script for libghostty from source
+  bundle-libghostty.sh  Package pinned dependency bundle
+  provision-libghostty.sh Download/verify pinned dependency bundle
+  verify-libghostty.sh  Verify libghostty contents against repo checksums
 ```
 
 ## Known limitations and TODO

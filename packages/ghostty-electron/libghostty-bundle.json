@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "ghosttyTag": "v1.3.1",
+  "repository": "anomalyco/devspace",
+  "platform": "darwin",
+  "arch": "arm64",
+  "releaseTag": "ghostty-deps-v1.3.1",
+  "assetName": "libghostty-v1.3.1-darwin-arm64.tar.gz"
+}

@@ -13,9 +13,6 @@ const config: KnipConfig = {
     "@tailwindcss/postcss", // used in postcss.config.mjs
     "tailwindcss", // peer dep of @tailwindcss/postcss, used via CSS
   ],
-  ignoreBinaries: [
-    "node-gyp", // used in rebuild-native script, installed via ghostty-electron
-  ],
   ignore: [
     "src/renderer/components/ui/**", // UI primitives are a component library with intentional public exports
     "src/renderer/env.d.ts", // ambient type declarations for CSS modules

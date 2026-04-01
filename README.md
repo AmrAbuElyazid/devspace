@@ -87,6 +87,9 @@ When native Ghostty code changes, rebuild the addon:
 bun run rebuild-native
 ```
 
+This now provisions the pinned `libghostty` bundle automatically. Building
+Ghostty from source is only needed when updating the pinned bundle itself.
+
 ## Benchmarks
 
 Terminal throughput notes live in [`BENCHMARKS.md`](./BENCHMARKS.md).
