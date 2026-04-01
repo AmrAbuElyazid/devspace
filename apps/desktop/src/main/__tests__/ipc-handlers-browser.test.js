@@ -71,12 +71,16 @@ registerIpcHandlers(
     destroyAll: () => {},
   },
   {
-    createPane: () => {},
+    createPane: (paneId, url) => {
+      controllerCalls.push(["createPane", paneId, url]);
+    },
     destroyPane: () => {},
     showPane: () => {},
     hidePane: () => {},
     getRuntimeState: () => undefined,
-    navigate: () => {},
+    navigate: (paneId, url) => {
+      controllerCalls.push(["navigate", paneId, url]);
+    },
     back: () => {},
     forward: () => {},
     reload: () => {},
@@ -129,6 +133,24 @@ test("browser resolvePermission IPC accepts spec permission choices", async () =
   await handlers.get("browser:resolvePermission")({}, "token-1", "allow-once");
 
   expect(controllerCalls).toEqual([["resolvePermission", "token-1", "allow-once"]]);
+});
+
+test("browser create IPC only forwards allowlisted URLs", async () => {
+  controllerCalls.length = 0;
+
+  await handlers.get("browser:create")({}, "pane-1", "https://example.com");
+  await handlers.get("browser:create")({}, "pane-2", "javascript:alert(1)");
+
+  expect(controllerCalls).toEqual([["createPane", "pane-1", "https://example.com/"]]);
+});
+
+test("browser navigate IPC rejects unsupported URL schemes", async () => {
+  controllerCalls.length = 0;
+
+  await handlers.get("browser:navigate")({}, "pane-1", "about:blank");
+  await handlers.get("browser:navigate")({}, "pane-1", "file:///etc/passwd");
+
+  expect(controllerCalls).toEqual([["navigate", "pane-1", "about:blank"]]);
 });
 
 test("browser setBounds translates renderer viewport bounds into contentView coordinates", async () => {

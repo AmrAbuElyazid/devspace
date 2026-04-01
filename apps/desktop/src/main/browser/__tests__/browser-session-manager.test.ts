@@ -38,6 +38,79 @@ test("getSession uses fromPartition with the shared browser partition", () => {
   expect(session).toBe(fakeSession);
 });
 
+test("CORS overrides only apply to trusted local referrers", () => {
+  let onHeadersReceived:
+    | ((
+        details: { referrer?: string; responseHeaders?: Record<string, string[]> },
+        callback: (response: { responseHeaders?: Record<string, string[]> }) => void,
+      ) => void)
+    | undefined;
+
+  const manager = new BrowserSessionManager({
+    fromPartition: () =>
+      ({
+        webRequest: {
+          onHeadersReceived: (
+            handler: (
+              details: { referrer?: string; responseHeaders?: Record<string, string[]> },
+              callback: (response: { responseHeaders?: Record<string, string[]> }) => void,
+            ) => void,
+          ) => {
+            onHeadersReceived = handler;
+          },
+        },
+      }) as never,
+  });
+
+  manager.getSession();
+
+  let localResponse: { responseHeaders?: Record<string, string[]> } | undefined;
+  onHeadersReceived?.(
+    {
+      referrer: "http://127.0.0.1:18562/workbench",
+      responseHeaders: {
+        "Access-Control-Allow-Origin": ["https://example.com"],
+        "X-Test": ["ok"],
+      },
+    },
+    (response) => {
+      localResponse = response;
+    },
+  );
+
+  expect(localResponse).toEqual({
+    responseHeaders: {
+      "Access-Control-Allow-Origin": ["http://127.0.0.1:18562"],
+      "Access-Control-Allow-Methods": ["GET, POST, PUT, DELETE, PATCH, OPTIONS"],
+      "Access-Control-Allow-Headers": ["*"],
+      "Access-Control-Allow-Credentials": ["true"],
+      "Access-Control-Expose-Headers": ["*"],
+      "X-Test": ["ok"],
+    },
+  });
+
+  let remoteResponse: { responseHeaders?: Record<string, string[]> } | undefined;
+  onHeadersReceived?.(
+    {
+      referrer: "https://example.com/app",
+      responseHeaders: {
+        "Access-Control-Allow-Origin": ["https://example.com"],
+        "X-Test": ["ok"],
+      },
+    },
+    (response) => {
+      remoteResponse = response;
+    },
+  );
+
+  expect(remoteResponse).toEqual({
+    responseHeaders: {
+      "Access-Control-Allow-Origin": ["https://example.com"],
+      "X-Test": ["ok"],
+    },
+  });
+});
+
 test("installHandlers registers a permission check handler on the session", () => {
   let registeredHandler: PermissionCheckHandler | undefined;
   let registeredRequestHandler: PermissionRequestHandler | undefined;
