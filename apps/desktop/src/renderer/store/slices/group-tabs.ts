@@ -16,7 +16,7 @@ import {
 } from "../../lib/split-tree";
 import { createPane, findNearestTerminalCwd } from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
-import { cleanupPaneResources, defaultPaneCleanupDeps } from "../store-helpers";
+import type { PaneCleanup } from "../store-helpers";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type GroupTabsSlice = Pick<
@@ -32,7 +32,11 @@ type GroupTabsSlice = Pick<
   | "openEditorTab"
 >;
 
-export function createGroupTabsSlice(set: StoreSet, get: StoreGet): GroupTabsSlice {
+export function createGroupTabsSlice(
+  set: StoreSet,
+  get: StoreGet,
+  cleanupPanes: PaneCleanup,
+): GroupTabsSlice {
   return {
     addGroupTab(workspaceId, groupId, defaultType) {
       const state = get();
@@ -79,8 +83,7 @@ export function createGroupTabsSlice(set: StoreSet, get: StoreGet): GroupTabsSli
       const tab = group.tabs.find((t) => t.id === tabId);
       if (!tab) return;
 
-      // Cleanup the pane for this tab
-      cleanupPaneResources(state.panes, tab.paneId, defaultPaneCleanupDeps);
+      cleanupPanes(state.panes, [tab.paneId]);
       const newPanes = { ...state.panes };
       delete newPanes[tab.paneId];
 

@@ -1,7 +1,7 @@
 import type { Pane } from "../../types/workspace";
 import { collectGroupIds } from "../../lib/split-tree";
 import { createPane } from "../../lib/pane-factory";
-import { cleanupPaneResources, defaultPaneCleanupDeps } from "../store-helpers";
+import type { PaneCleanup } from "../store-helpers";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type PaneSlice = Pick<
@@ -9,7 +9,11 @@ type PaneSlice = Pick<
   "addPane" | "removePane" | "updatePaneConfig" | "updateBrowserPaneZoom" | "updatePaneTitle"
 >;
 
-export function createPaneManagementSlice(set: StoreSet, get: StoreGet): PaneSlice {
+export function createPaneManagementSlice(
+  set: StoreSet,
+  get: StoreGet,
+  cleanupPanes: PaneCleanup,
+): PaneSlice {
   return {
     addPane(type, config) {
       const pane = createPane(type, config);
@@ -18,8 +22,7 @@ export function createPaneManagementSlice(set: StoreSet, get: StoreGet): PaneSli
     },
 
     removePane(paneId) {
-      // Side effects (IPC calls) must happen before set() — read panes for cleanup only
-      cleanupPaneResources(get().panes, paneId, defaultPaneCleanupDeps);
+      cleanupPanes(get().panes, [paneId]);
       set((state) => {
         const newPanes = { ...state.panes };
         delete newPanes[paneId];

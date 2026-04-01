@@ -1,4 +1,4 @@
-import type { SidebarNode } from "../types/workspace";
+import type { Pane, SidebarNode } from "../types/workspace";
 import type { SidebarContainer } from "../types/dnd";
 import { cleanupPaneResources, type PaneCleanupDeps } from "../lib/pane-cleanup";
 import { markBrowserPaneDestroyed } from "../lib/browser-pane-session";
@@ -16,13 +16,9 @@ export function getSidebarNodesForContainer(
   return container === "main" ? state.sidebarTree : state.pinnedSidebarNodes;
 }
 
-// ---------------------------------------------------------------------------
-// Pane cleanup dependencies (shared across slices)
-// ---------------------------------------------------------------------------
+export type PaneCleanup = (panes: Record<string, Pane>, paneIds: Iterable<string>) => void;
 
-export { cleanupPaneResources };
-
-export const defaultPaneCleanupDeps: PaneCleanupDeps = {
+const defaultPaneCleanupDeps: PaneCleanupDeps = {
   destroyTerminal: (surfaceId) => {
     void window.api.terminal.destroy(surfaceId);
   },
@@ -39,4 +35,13 @@ export const defaultPaneCleanupDeps: PaneCleanupDeps = {
   clearBrowserRuntime: (paneId) => {
     useBrowserStore.getState().clearRuntimeState(paneId);
   },
+};
+
+export const defaultPaneCleanup: PaneCleanup = (panes, paneIds) => {
+  const seen = new Set<string>();
+  for (const paneId of paneIds) {
+    if (seen.has(paneId)) continue;
+    seen.add(paneId);
+    cleanupPaneResources(panes, paneId, defaultPaneCleanupDeps);
+  }
 };

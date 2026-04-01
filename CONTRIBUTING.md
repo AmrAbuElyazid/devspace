@@ -45,6 +45,7 @@ bun run test
 ## Testing
 
 - Use `bun run test`, not `bun test`
+- Use `bun run test:coverage` from the repo root when you want a coverage report for `apps/desktop`
 - Tests are primarily in `apps/desktop/`
 - Prefer adding targeted tests for behavior changes when the code path is testable
 
