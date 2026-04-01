@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-GHOSTTY_TAG="v1.3.1"
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 DEPS_DIR="$PROJECT_DIR/deps/libghostty"
 GHOSTTY_DIR="$PROJECT_DIR/.ghostty-src"
+MANIFEST_FILE="$PROJECT_DIR/libghostty-bundle.json"
+GHOSTTY_TAG="$(node -p "const manifest=require(process.argv[1]); manifest.ghosttyTag" "$MANIFEST_FILE")"
 
 # Clone Ghostty source at pinned tag
 if [ ! -d "$GHOSTTY_DIR" ]; then

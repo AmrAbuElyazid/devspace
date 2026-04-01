@@ -30,6 +30,9 @@ If the native Ghostty bridge changes:
 bun run rebuild-native
 ```
 
+This provisions the pinned `libghostty` bundle automatically. You only need
+Zig and a full Ghostty source build when refreshing the pinned bundle.
+
 ## Required Checks
 
 Before submitting changes, make sure all of these pass from the repo root:

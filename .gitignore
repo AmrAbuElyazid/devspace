@@ -16,6 +16,7 @@ packages/ghostty-electron/native/build/
 
 # Ghostty source checkout (used by build script)
 .ghostty-src/
+packages/ghostty-electron/.ghostty-src/
 
 # Large binary deps (libghostty static lib)
 packages/ghostty-electron/deps/libghostty/lib/

@@ -73,8 +73,16 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Restore pinned Ghostty dependency bundle
+        uses: actions/cache@v4
+        with:
+          path: packages/ghostty-electron/deps/libghostty
+          key: ${{ runner.os }}-libghostty-${{ hashFiles('packages/ghostty-electron/libghostty-bundle.json', 'packages/ghostty-electron/libghostty-files.sha256') }}
+
       - name: Rebuild native Ghostty bridge
-        run: bun run rebuild-native --filter=@devspace/desktop
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bun run rebuild-native
 
       - name: Build app
         run: bun run build
