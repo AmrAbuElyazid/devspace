@@ -66,12 +66,17 @@ export interface BrowserPermissionRequest {
   requestToken: string;
 }
 
-export interface ChromeProfileDescriptor {
+export type BrowserImportSource = "chrome" | "arc" | "safari" | "zen";
+
+export interface BrowserProfileDescriptor {
   name: string;
   path: string;
+  browser: BrowserImportSource;
 }
 
 export type BrowserImportMode = "cookies" | "history" | "everything";
+
+export type ClearBrowsingDataTarget = "cookies" | "history" | "cache" | "everything";
 
 export type BrowserImportResult =
   | {
@@ -88,10 +93,10 @@ export type BrowserImportResult =
       retryable?: boolean;
     };
 
-export type SafariAccessResult =
+export type BrowserAccessResult =
   | { ok: true }
   | {
       ok: false;
-      code: "SAFARI_FULL_DISK_ACCESS_REQUIRED";
+      code: string;
       message: string;
     };

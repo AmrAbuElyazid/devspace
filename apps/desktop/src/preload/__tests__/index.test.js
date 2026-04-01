@@ -42,8 +42,9 @@ test("browser bridge exposes spec-aligned browser IPC methods", async () => {
   await exposedBridge.browser.resetZoom("pane-1");
   await exposedBridge.browser.showContextMenu("pane-1", { x: 10, y: 20 });
   await exposedBridge.browser.resolvePermission("token-1", "allow-for-session");
-  await exposedBridge.browser.importChrome("/tmp/Profile 1", "history");
-  await exposedBridge.browser.importSafari("cookies");
+  await exposedBridge.browser.importBrowser("chrome", "/tmp/Profile 1", "history");
+  await exposedBridge.browser.importBrowser("safari", null, "cookies");
+  await exposedBridge.browser.clearBrowsingData("everything");
   const unsubscribeState = exposedBridge.browser.onStateChange(() => {});
   const unsubscribePermission = exposedBridge.browser.onPermissionRequest(() => {});
   const unsubscribeContextMenu = exposedBridge.browser.onContextMenuRequest(() => {});
@@ -64,8 +65,9 @@ test("browser bridge exposes spec-aligned browser IPC methods", async () => {
     ["browser:resetZoom", "pane-1"],
     ["browser:showContextMenu", "pane-1", { x: 10, y: 20 }],
     ["browser:resolvePermission", "token-1", "allow-for-session"],
-    ["browser:importChrome", "/tmp/Profile 1", "history"],
-    ["browser:importSafari", "cookies"],
+    ["browser:import", "chrome", "/tmp/Profile 1", "history"],
+    ["browser:import", "safari", null, "cookies"],
+    ["browser:clearData", "everything"],
   ]);
 
   expect(listenerRegistrations).toEqual([

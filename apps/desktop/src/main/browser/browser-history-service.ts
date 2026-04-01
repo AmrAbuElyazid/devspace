@@ -1,6 +1,8 @@
-import { copyFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
+
+const MAX_HISTORY_ENTRIES = 10_000;
 
 export interface BrowserHistoryEntry {
   id: string;
@@ -18,6 +20,7 @@ export type BrowserHistoryEntryInput = Omit<BrowserHistoryEntry, "id"> & {
 export interface BrowserHistoryRecorder {
   recordVisit(entry: BrowserHistoryEntryInput): void;
   importEntries(entries: BrowserHistoryEntryInput[]): void;
+  clearAll(): void;
 }
 
 type BrowserHistoryServiceOptions = {
@@ -58,6 +61,10 @@ function dedupeEntries(entries: BrowserHistoryEntry[]): BrowserHistoryEntry[] {
   return deduped.toSorted((left, right) => right.visitedAt - left.visitedAt);
 }
 
+function capEntries(entries: BrowserHistoryEntry[]): BrowserHistoryEntry[] {
+  return entries.length > MAX_HISTORY_ENTRIES ? entries.slice(0, MAX_HISTORY_ENTRIES) : entries;
+}
+
 export class BrowserHistoryService implements BrowserHistoryRecorder {
   private readonly storagePath: string | null;
   private readonly backupStoragePath: string | null;
@@ -73,14 +80,27 @@ export class BrowserHistoryService implements BrowserHistoryRecorder {
   }
 
   recordVisit(entry: BrowserHistoryEntryInput): void {
-    this.entries = dedupeEntries([normalizeEntry(entry), ...this.entries]);
+    this.entries = capEntries(dedupeEntries([normalizeEntry(entry), ...this.entries]));
     this.persistEntries();
   }
 
   importEntries(entries: BrowserHistoryEntryInput[]): void {
     const normalizedEntries = entries.map(normalizeEntry);
-    this.entries = dedupeEntries([...this.entries, ...normalizedEntries]);
+    this.entries = capEntries(dedupeEntries([...this.entries, ...normalizedEntries]));
     this.persistEntries();
+  }
+
+  clearAll(): void {
+    this.entries = [];
+    this.persistEntries();
+
+    if (this.backupStoragePath) {
+      try {
+        rmSync(this.backupStoragePath, { force: true });
+      } catch (err) {
+        console.warn("[browser-history] Backup removal failed:", err);
+      }
+    }
   }
 
   getEntries(): BrowserHistoryEntry[] {
@@ -94,15 +114,16 @@ export class BrowserHistoryService implements BrowserHistoryRecorder {
 
     const primaryEntries = this.readEntriesFromPath(this.storagePath);
     if (primaryEntries) {
-      return primaryEntries;
+      return capEntries(primaryEntries);
     }
 
     const backupEntries = this.backupStoragePath
       ? this.readEntriesFromPath(this.backupStoragePath)
       : null;
     if (backupEntries) {
-      this.repairPrimaryFromBackup(backupEntries);
-      return backupEntries;
+      const capped = capEntries(backupEntries);
+      this.repairPrimaryFromBackup(capped);
+      return capped;
     }
 
     return [];
