@@ -22,7 +22,7 @@
 
 ### 2. Architecture And Maintainability
 
-- [ ] Split `ipc-handlers.ts` into domain-specific registration modules.
+- [x] Split `ipc-handlers.ts` into domain-specific registration modules.
       Opportunity: make IPC behavior easier to navigate, test, and evolve.
       Refs: `apps/desktop/src/main/ipc-handlers.ts`
 
@@ -93,7 +93,7 @@
 ### Phase 2: Repo Maturity
 
 - [ ] Add root public docs
-- [ ] Split `ipc-handlers.ts`
+- [x] Split `ipc-handlers.ts`
 - [x] Remove duplicated legacy paths
 - [ ] Add coverage visibility
 - [ ] Add basic release/versioning notes
