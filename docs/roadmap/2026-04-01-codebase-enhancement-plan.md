@@ -38,6 +38,10 @@
       Example area: duplicate notes handler registrations.
       Refs: `apps/desktop/src/main/ipc-handlers.ts:367-427`
 
+- [x] Extract the pure note editor renderer core into an internal workspace package.
+      Opportunity: keep `apps/desktop` focused on pane lifecycle, persistence glue, and app-specific wiring.
+      Refs: `packages/note-editor/`, `apps/desktop/src/renderer/components/note/NotePane.tsx`
+
 ### 3. Performance And Scale
 
 - [ ] Keep improving native-view lifecycle efficiency.

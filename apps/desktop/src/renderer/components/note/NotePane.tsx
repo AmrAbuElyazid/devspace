@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import type { Value } from "platejs";
-import { type PlateEditor, Plate, usePlateEditor } from "platejs/react";
-import { MarkdownPlugin } from "@platejs/markdown";
+import {
+  type NoteEditorChangeContext,
+  type NoteEditorValue,
+  NoteEditor,
+  extractNoteTitle,
+} from "@devspace/note-editor";
+import "@devspace/note-editor/styles.css";
 import type { NoteConfig } from "../../types/workspace";
-import { createNoteEditorPlugins } from "../editor/plugins/note-editor-kit";
-import { Editor, EditorContainer } from "../plate-ui/editor";
 import { useWorkspaceStore } from "../../store/workspace-store";
-import "./note-styles.css";
 
 interface NotePaneProps {
   paneId: string;
@@ -15,31 +16,16 @@ interface NotePaneProps {
 
 type LoadState = "loading" | "ready" | "error";
 
-const DEFAULT_VALUE: Value = [
+const DEFAULT_VALUE: NoteEditorValue = [
   {
     type: "p",
     children: [{ text: "" }],
   },
 ];
 
-/** Extract a display title from editor value (first heading or first block text). */
-function extractTitle(value: Value): string {
-  const firstHeading = value.find(
-    (n: Record<string, unknown>) => n.type === "h1" || n.type === "h2" || n.type === "h3",
-  );
-  const node = firstHeading ?? value[0];
-  const children = node?.children as Array<{ text?: string }> | undefined;
-  return (
-    children
-      ?.map((c) => c.text ?? "")
-      .join("")
-      .slice(0, 40) || "Untitled Note"
-  );
-}
-
 export default function NotePane({ paneId, config }: NotePaneProps) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
-  const [initialValue, setInitialValue] = useState<Value>(DEFAULT_VALUE);
+  const [initialValue, setInitialValue] = useState<NoteEditorValue | string>(DEFAULT_VALUE);
   const [saveError, setSaveError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestMarkdown = useRef<string | null>(null);
@@ -79,7 +65,7 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
         if (raw && raw.trim().length > 0) {
           // raw is markdown — we'll deserialize it in the NoteEditor via the
           // MarkdownPlugin's value initializer
-          setInitialValue(raw as unknown as Value);
+          setInitialValue(raw);
         }
         setLoadState("ready");
       } catch {
@@ -122,19 +108,12 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
   }, [config.noteId]);
 
   const handleChange = useCallback(
-    ({ value, editor }: { value: Value; editor: PlateEditor | null }) => {
+    ({ value, editor, markdown }: NoteEditorChangeContext) => {
       if (!editor) return;
-      // Serialize to markdown for persistence
-      try {
-        const mdApi = editor.getApi(MarkdownPlugin).markdown;
-        latestMarkdown.current = mdApi.serialize();
-      } catch {
-        // Fallback to JSON if markdown serialization fails
-        latestMarkdown.current = JSON.stringify(value);
-      }
+      latestMarkdown.current = markdown;
 
       // Update tab title only when it actually changes
-      const title = extractTitle(value);
+      const title = extractNoteTitle(value);
       if (title !== lastTitle.current) {
         lastTitle.current = title;
         updatePaneTitle(paneId, title);
@@ -166,33 +145,5 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
       {saveError && <div className="note-save-error">Save failed: {saveError}</div>}
       <NoteEditor initialValue={initialValue} onChange={handleChange} />
     </div>
-  );
-}
-
-/** Inner editor component — separated so usePlateEditor is stable after load */
-function NoteEditor({
-  initialValue,
-  onChange,
-}: {
-  initialValue: Value | string;
-  onChange: (ctx: { value: Value; editor: PlateEditor | null }) => void;
-}) {
-  const plugins = createNoteEditorPlugins();
-
-  // If initialValue is a string, it's markdown — deserialize via MarkdownPlugin
-  const editor = usePlateEditor({
-    plugins,
-    value:
-      typeof initialValue === "string"
-        ? (e) => e.getApi(MarkdownPlugin).markdown.deserialize(initialValue)
-        : initialValue,
-  });
-
-  return (
-    <Plate editor={editor} onChange={onChange}>
-      <EditorContainer>
-        <Editor placeholder="Start writing..." />
-      </EditorContainer>
-    </Plate>
   );
 }
