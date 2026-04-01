@@ -70,7 +70,7 @@
 
 - [ ] Expand behavior-heavy UI and integration coverage where it pays off most.
       Likely areas: pane lifecycle, native-view behavior, browser security flows, and complex drag/drop interactions.
-      Progress: added direct lifecycle tests for `useNativeView` and `TerminalPane`.
+      Progress: added direct lifecycle tests for `useNativeView` and `TerminalPane`, plus `NoteEditor` package serialization tests.
 
 - [x] Decide whether `ghostty-electron` needs package-level tests or should remain clearly app-coupled for now.
       Refs: `packages/ghostty-electron/README.md:209-223`, `packages/ghostty-electron/package.json`
