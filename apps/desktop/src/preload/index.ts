@@ -31,13 +31,12 @@ const bridge: DevspaceBridge = {
     destroy: (surfaceId) => ipcRenderer.invoke("terminal:destroy", surfaceId),
     show: (surfaceId) => ipcRenderer.invoke("terminal:show", surfaceId),
     hide: (surfaceId) => ipcRenderer.invoke("terminal:hide", surfaceId),
-    focus: (surfaceId) => ipcRenderer.invoke("terminal:focus", surfaceId),
-    setBounds: (surfaceId, bounds) => ipcRenderer.invoke("terminal:setBounds", surfaceId, bounds),
-    setVisibleSurfaces: (surfaceIds) =>
-      ipcRenderer.invoke("terminal:setVisibleSurfaces", surfaceIds),
+    focus: (surfaceId) => ipcRenderer.send("terminal:focus", surfaceId),
+    setBounds: (surfaceId, bounds) => ipcRenderer.send("terminal:setBounds", surfaceId, bounds),
+    setVisibleSurfaces: (surfaceIds) => ipcRenderer.send("terminal:setVisibleSurfaces", surfaceIds),
     sendBindingAction: (surfaceId, action) =>
       ipcRenderer.invoke("terminal:sendBindingAction", surfaceId, action),
-    blur: () => ipcRenderer.invoke("terminal:blur"),
+    blur: () => ipcRenderer.send("terminal:blur"),
     onTitleChanged: (callback) => {
       const listener = (
         _event: Electron.IpcRendererEvent,
@@ -229,15 +228,15 @@ const bridge: DevspaceBridge = {
     destroy: (paneId) => ipcRenderer.invoke("browser:destroy", paneId),
     show: (paneId) => ipcRenderer.invoke("browser:show", paneId),
     hide: (paneId) => ipcRenderer.invoke("browser:hide", paneId),
-    setVisiblePanes: (paneIds) => ipcRenderer.invoke("browser:setVisiblePanes", paneIds),
+    setVisiblePanes: (paneIds) => ipcRenderer.send("browser:setVisiblePanes", paneIds),
     getRuntimeState: (paneId) => ipcRenderer.invoke("browser:getRuntimeState", paneId),
     navigate: (paneId, url) => ipcRenderer.invoke("browser:navigate", paneId, url),
     back: (paneId) => ipcRenderer.invoke("browser:back", paneId),
     forward: (paneId) => ipcRenderer.invoke("browser:forward", paneId),
     reload: (paneId) => ipcRenderer.invoke("browser:reload", paneId),
     stop: (paneId) => ipcRenderer.invoke("browser:stop", paneId),
-    setBounds: (paneId, bounds) => ipcRenderer.invoke("browser:setBounds", paneId, bounds),
-    setFocus: (paneId) => ipcRenderer.invoke("browser:setFocus", paneId),
+    setBounds: (paneId, bounds) => ipcRenderer.send("browser:setBounds", paneId, bounds),
+    setFocus: (paneId) => ipcRenderer.send("browser:setFocus", paneId),
     setZoom: (paneId, zoom) => ipcRenderer.invoke("browser:setZoom", paneId, zoom),
     resetZoom: (paneId) => ipcRenderer.invoke("browser:resetZoom", paneId),
     findInPage: (paneId, query, options) =>

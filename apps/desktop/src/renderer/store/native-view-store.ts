@@ -16,6 +16,17 @@ interface ViewBounds {
   height: number;
 }
 
+function boundsEqual(a: ViewBounds | null | undefined, b: ViewBounds): boolean {
+  return (
+    a !== null &&
+    a !== undefined &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.width === b.width &&
+    a.height === b.height
+  );
+}
+
 interface NativeViewState {
   /** Registered native views: paneId → view type. */
   views: Record<string, NativeViewType>;
@@ -37,12 +48,132 @@ interface NativeViewState {
 // ---------------------------------------------------------------------------
 
 const boundsCache = new Map<string, ViewBounds>();
+const elementCache = new Map<string, HTMLElement>();
+const observedElements = new Map<string, HTMLElement>();
+
+let visibleLayoutObserver: ResizeObserver | null = null;
+let resizeListenerAttached = false;
+let visibleBoundsFrameId: number | null = null;
+
+function measureElementBounds(element: HTMLElement): ViewBounds | null {
+  const rect = element.getBoundingClientRect();
+  const width = Math.max(0, Math.round(rect.width));
+  const height = Math.max(0, Math.round(rect.height));
+  if (width === 0 || height === 0) return null;
+
+  return {
+    x: Math.round(rect.left),
+    y: Math.round(rect.top),
+    width,
+    height,
+  };
+}
+
+function ensureVisibleLayoutTracking(): void {
+  if (typeof window === "undefined") return;
+
+  if (!visibleLayoutObserver) {
+    visibleLayoutObserver = new ResizeObserver(() => {
+      scheduleVisibleBoundsSync();
+    });
+  }
+
+  if (!resizeListenerAttached) {
+    window.addEventListener("resize", scheduleVisibleBoundsSync);
+    window.addEventListener("scroll", scheduleVisibleBoundsSync, true);
+    resizeListenerAttached = true;
+  }
+}
+
+function getVisibleNativeViewIds(
+  state: Pick<NativeViewState, "visibleTerminals" | "visibleBrowsers">,
+): string[] {
+  return [...state.visibleTerminals, ...state.visibleBrowsers];
+}
+
+function syncVisibleBoundsNow(): void {
+  visibleBoundsFrameId = null;
+  const state = useNativeViewStore.getState();
+  for (const id of getVisibleNativeViewIds(state)) {
+    const element = elementCache.get(id);
+    if (!element) continue;
+    const next = measureElementBounds(element);
+    if (!next) continue;
+    updateNativeViewBounds(id, next);
+  }
+}
+
+function scheduleVisibleBoundsSync(): void {
+  if (typeof window === "undefined") return;
+  ensureVisibleLayoutTracking();
+  if (visibleBoundsFrameId !== null) {
+    cancelAnimationFrame(visibleBoundsFrameId);
+  }
+  visibleBoundsFrameId = requestAnimationFrame(syncVisibleBoundsNow);
+}
+
+function refreshObservedVisibleElements(): void {
+  ensureVisibleLayoutTracking();
+  if (!visibleLayoutObserver) return;
+
+  const visibleIds = new Set(getVisibleNativeViewIds(useNativeViewStore.getState()));
+
+  for (const [id, element] of observedElements) {
+    const current = elementCache.get(id);
+    if (!visibleIds.has(id) || current !== element) {
+      visibleLayoutObserver.unobserve(element);
+      observedElements.delete(id);
+    }
+  }
+
+  for (const id of visibleIds) {
+    const element = elementCache.get(id);
+    if (!element || observedElements.get(id) === element) continue;
+    visibleLayoutObserver.observe(element);
+    observedElements.set(id, element);
+  }
+}
+
+function getLatestBounds(id: string): ViewBounds | null {
+  const element = elementCache.get(id);
+  if (element) {
+    const liveBounds = measureElementBounds(element);
+    if (liveBounds) {
+      boundsCache.set(id, liveBounds);
+      return liveBounds;
+    }
+  }
+
+  return boundsCache.get(id) ?? null;
+}
+
+export function setNativeViewElement(id: string, element: HTMLElement | null): void {
+  if (element) {
+    elementCache.set(id, element);
+    if (getVisibleNativeViewIds(useNativeViewStore.getState()).includes(id)) {
+      refreshObservedVisibleElements();
+      scheduleVisibleBoundsSync();
+    }
+    return;
+  }
+
+  elementCache.delete(id);
+  const observed = observedElements.get(id);
+  if (observed && visibleLayoutObserver) {
+    visibleLayoutObserver.unobserve(observed);
+  }
+  observedElements.delete(id);
+}
 
 /**
  * Update the cached bounds for a native view and, if the view is currently
  * visible, immediately send the new bounds to the main process via IPC.
  */
 export function updateNativeViewBounds(id: string, bounds: ViewBounds): void {
+  if (boundsEqual(boundsCache.get(id), bounds)) {
+    return;
+  }
+
   boundsCache.set(id, bounds);
 
   const state = useNativeViewStore.getState();
@@ -141,7 +272,7 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
     if (terminalsChanged) {
       for (const id of desiredTerminals) {
         if (!visibleTerminals.includes(id)) {
-          const b = boundsCache.get(id);
+          const b = getLatestBounds(id);
           if (b) void window.api.terminal.setBounds(id, b);
         }
       }
@@ -151,7 +282,7 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
     if (browsersChanged) {
       for (const id of desiredBrowsers) {
         if (!visibleBrowsers.includes(id)) {
-          const b = boundsCache.get(id);
+          const b = getLatestBounds(id);
           if (b) void window.api.browser.setBounds(id, b);
         }
       }
@@ -167,6 +298,9 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
       visibleTerminals: desiredTerminals,
       visibleBrowsers: desiredBrowsers,
     });
+
+    refreshObservedVisibleElements();
+    scheduleVisibleBoundsSync();
   },
 }));
 

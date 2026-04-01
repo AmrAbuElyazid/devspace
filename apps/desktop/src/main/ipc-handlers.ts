@@ -115,18 +115,18 @@ export function registerIpcHandlers(
     terminalManager.hideSurface(surfaceId);
   });
 
-  safeHandle("terminal:focus", (_event, surfaceId: unknown) => {
+  safeOn("terminal:focus", (_event, surfaceId: unknown) => {
     if (typeof surfaceId !== "string") return;
     terminalManager.focusSurface(surfaceId);
   });
 
-  safeHandle("terminal:setVisibleSurfaces", (_event, surfaceIds: unknown) => {
+  safeOn("terminal:setVisibleSurfaces", (_event, surfaceIds: unknown) => {
     if (!Array.isArray(surfaceIds)) return;
     const valid = surfaceIds.filter((id): id is string => typeof id === "string");
     terminalManager.setVisibleSurfaces(valid);
   });
 
-  safeHandle("terminal:blur", (event) => {
+  safeOn("terminal:blur", (event) => {
     terminalManager.blurSurfaces();
     // After native surfaces resign first responder, explicitly focus the web
     // content so keyboard events flow to the renderer's DOM. Without this,
@@ -140,7 +140,7 @@ export function registerIpcHandlers(
     return terminalManager.sendBindingAction(surfaceId, action);
   });
 
-  safeHandle("terminal:setBounds", (_event, surfaceId: unknown, bounds: unknown) => {
+  safeOn("terminal:setBounds", (_event, surfaceId: unknown, bounds: unknown) => {
     if (typeof surfaceId !== "string" || typeof bounds !== "object" || bounds === null) return;
     const b = bounds as Partial<{ x: number; y: number; width: number; height: number }>;
     if (
@@ -504,7 +504,7 @@ export function registerIpcHandlers(
     browserPaneManager.hidePane(paneId);
   });
 
-  safeHandle("browser:setVisiblePanes", (_event, paneIds: unknown) => {
+  safeOn("browser:setVisiblePanes", (_event, paneIds: unknown) => {
     if (!Array.isArray(paneIds)) return;
     const valid = paneIds.filter((id): id is string => typeof id === "string");
     browserPaneManager.setVisiblePanes(valid);
@@ -540,7 +540,7 @@ export function registerIpcHandlers(
     browserPaneManager.stop(paneId);
   });
 
-  safeHandle("browser:setBounds", (event, paneId: unknown, bounds: unknown) => {
+  safeOn("browser:setBounds", (event, paneId: unknown, bounds: unknown) => {
     if (typeof paneId !== "string" || typeof bounds !== "object" || bounds === null) return;
     const nextBounds = bounds as Partial<BrowserBounds>;
     if (
@@ -560,7 +560,7 @@ export function registerIpcHandlers(
     browserPaneManager.setBounds(paneId, translatedBounds);
   });
 
-  safeHandle("browser:setFocus", (_event, paneId: unknown) => {
+  safeOn("browser:setFocus", (_event, paneId: unknown) => {
     if (typeof paneId !== "string") return;
     browserPaneManager.focusPane(paneId);
   });
