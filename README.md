@@ -40,6 +40,7 @@ apps/
   desktop/               Electron app
 packages/
   ghostty-electron/      Ghostty native terminal bridge
+  note-editor/           Internal renderer-only note editor core
 scripts/                 Utility scripts and benchmarks
 docs/                    Roadmaps, plans, and supporting docs
 ```
