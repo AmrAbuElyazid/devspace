@@ -28,6 +28,7 @@
   "scripts": {
     "rebuild-native": "cd native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=$(node -p \"process.arch\") --dist-url=https://electronjs.org/headers",
     "knip": "knip",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -38,7 +39,8 @@
     "electron": "catalog:",
     "knip": "catalog:",
     "node-gyp": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "electron": ">=30"

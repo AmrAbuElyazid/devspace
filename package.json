@@ -9,6 +9,7 @@
     ],
     "catalog": {
       "@vitest/coverage-v8": "^4.1.2",
+      "jsdom": "^26.1.0",
       "electron": "^41.0.4",
       "knip": "^6.0.6",
       "react": "^19.2.4",
@@ -26,6 +27,7 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "rebuild-native": "bun run --cwd apps/desktop rebuild-native",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:coverage": "bun run --cwd apps/desktop test:coverage",
