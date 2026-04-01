@@ -108,16 +108,18 @@ registerIpcHandlers(
     stopAll: () => {},
   },
   {
-    listChromeProfiles: async () => [{ name: "Profile 1", path: "/tmp/Profile 1" }],
-    importChrome: async (profilePath, mode) => {
-      browserImportCalls.push(["importChrome", profilePath, mode]);
+    listProfiles: async (browser) => {
+      if (browser === "chrome") {
+        return [{ name: "Profile 1", path: "/tmp/Profile 1", browser: "chrome" }];
+      }
+      return [];
+    },
+    importBrowser: async (browser, profilePath, mode) => {
+      browserImportCalls.push(["importBrowser", browser, profilePath, mode]);
       return { ok: true, importedCookies: 0, importedHistory: 0 };
     },
-    importSafari: async (mode) => {
-      browserImportCalls.push(["importSafari", mode]);
-      return { ok: true, importedCookies: 0, importedHistory: 0 };
-    },
-    detectSafariAccess: async () => ({ ok: true }),
+    detectAccess: async () => ({ ok: true }),
+    clearBrowsingData: async () => ({ ok: true }),
   },
 );
 
@@ -146,31 +148,72 @@ test("browser setBounds translates renderer viewport bounds into contentView coo
 test("browser import IPC forwards supported import modes", async () => {
   browserImportCalls.length = 0;
 
-  await handlers.get("browser:importChrome")({}, "/tmp/Profile 1", "history");
-  await handlers.get("browser:importSafari")({}, "cookies");
+  await handlers.get("browser:import")({}, "chrome", "/tmp/Profile 1", "history");
+  await handlers.get("browser:import")({}, "safari", null, "cookies");
 
   expect(browserImportCalls).toEqual([
-    ["importChrome", "/tmp/Profile 1", "history"],
-    ["importSafari", "cookies"],
+    ["importBrowser", "chrome", "/tmp/Profile 1", "history"],
+    ["importBrowser", "safari", null, "cookies"],
   ]);
 });
 
-test("browser import IPC rejects Chrome profile paths outside discovered profiles", async () => {
+test("browser import IPC rejects profile paths outside discovered profiles", async () => {
   browserImportCalls.length = 0;
 
-  const result = await handlers.get("browser:importChrome")(
+  const result = await handlers.get("browser:import")(
     {},
+    "chrome",
     "/tmp/not-a-real-profile",
     "history",
   );
 
   expect(result).toEqual({
     ok: false,
-    code: "INVALID_CHROME_PROFILE",
+    code: "INVALID_BROWSER_PROFILE",
     importedCookies: 0,
     importedHistory: 0,
   });
   expect(browserImportCalls).toEqual([]);
+});
+
+test("browser clearData IPC forwards to clearBrowsingData", async () => {
+  const result = await handlers.get("browser:clearData")({}, "everything");
+
+  expect(result).toEqual({ ok: true });
+});
+
+test("browser clearData IPC rejects invalid target", async () => {
+  const result = await handlers.get("browser:clearData")({}, "invalid");
+
+  expect(result).toEqual({ ok: false, error: "Invalid clear data target." });
+});
+
+test("browser detectAccess IPC returns ok for non-Safari browsers", async () => {
+  const result = await handlers.get("browser:detectAccess")({}, "chrome");
+
+  expect(result).toEqual({ ok: true });
+});
+
+test("browser import IPC rejects invalid browser source", async () => {
+  const result = await handlers.get("browser:import")({}, "invalid-browser", null, "everything");
+
+  expect(result).toEqual({
+    ok: false,
+    code: "INVALID_BROWSER_IMPORT_SOURCE",
+    importedCookies: 0,
+    importedHistory: 0,
+  });
+});
+
+test("browser import IPC rejects invalid import mode", async () => {
+  const result = await handlers.get("browser:import")({}, "safari", null, "invalid-mode");
+
+  expect(result).toEqual({
+    ok: false,
+    code: "INVALID_BROWSER_IMPORT_MODE",
+    importedCookies: 0,
+    importedHistory: 0,
+  });
 });
 
 test("window setSidebarOpen IPC updates native traffic light position", async () => {

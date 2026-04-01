@@ -1,16 +1,18 @@
 import type {
+  BrowserAccessResult,
   BrowserFindInPageOptions,
   BrowserBounds,
   BrowserContextMenuRequest,
   BrowserImportMode,
   BrowserImportResult,
+  BrowserImportSource,
   BrowserOpenInNewTabRequest,
   BrowserPermissionDecision,
   BrowserPermissionRequest,
+  BrowserProfileDescriptor,
   BrowserRuntimeState,
-  ChromeProfileDescriptor,
-  SafariAccessResult,
   BrowserStopFindAction,
+  ClearBrowsingDataTarget,
 } from "./browser";
 import type { ShortcutAction, StoredShortcut } from "./shortcuts";
 
@@ -136,10 +138,17 @@ export interface BrowserBridge {
   toggleDevTools: (paneId: string) => Promise<void>;
   showContextMenu: (paneId: string, position?: { x: number; y: number }) => Promise<void>;
   resolvePermission: (requestToken: string, decision: BrowserPermissionDecision) => Promise<void>;
-  listChromeProfiles: () => Promise<ChromeProfileDescriptor[]>;
-  importChrome: (profilePath: string, mode?: BrowserImportMode) => Promise<BrowserImportResult>;
-  importSafari: (mode?: BrowserImportMode) => Promise<BrowserImportResult>;
-  detectSafariAccess: (mode?: BrowserImportMode) => Promise<SafariAccessResult>;
+  listProfiles: (browser: BrowserImportSource) => Promise<BrowserProfileDescriptor[]>;
+  importBrowser: (
+    browser: BrowserImportSource,
+    profilePath: string | null,
+    mode?: BrowserImportMode,
+  ) => Promise<BrowserImportResult>;
+  detectAccess: (
+    browser: BrowserImportSource,
+    mode?: BrowserImportMode,
+  ) => Promise<BrowserAccessResult>;
+  clearBrowsingData: (target: ClearBrowsingDataTarget) => Promise<{ ok: boolean; error?: string }>;
   onStateChange: (callback: (state: BrowserRuntimeState) => void) => BrowserBridgeUnsubscribe;
   onPermissionRequest: (
     callback: (request: BrowserPermissionRequest) => void,

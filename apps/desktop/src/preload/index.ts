@@ -249,11 +249,11 @@ const bridge: DevspaceBridge = {
       ipcRenderer.invoke("browser:showContextMenu", paneId, position),
     resolvePermission: (requestToken, decision) =>
       ipcRenderer.invoke("browser:resolvePermission", requestToken, decision),
-    listChromeProfiles: () => ipcRenderer.invoke("browser:listChromeProfiles"),
-    importChrome: (profilePath, mode) =>
-      ipcRenderer.invoke("browser:importChrome", profilePath, mode),
-    importSafari: (mode) => ipcRenderer.invoke("browser:importSafari", mode),
-    detectSafariAccess: (mode) => ipcRenderer.invoke("browser:detectSafariAccess", mode),
+    listProfiles: (browser) => ipcRenderer.invoke("browser:listProfiles", browser),
+    importBrowser: (browser, profilePath, mode) =>
+      ipcRenderer.invoke("browser:import", browser, profilePath, mode),
+    detectAccess: (browser, mode) => ipcRenderer.invoke("browser:detectAccess", browser, mode),
+    clearBrowsingData: (target) => ipcRenderer.invoke("browser:clearData", target),
     onStateChange: (callback) => {
       const listener = (
         _event: Electron.IpcRendererEvent,

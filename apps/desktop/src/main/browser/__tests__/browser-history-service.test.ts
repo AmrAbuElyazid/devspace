@@ -121,3 +121,96 @@ test("failed recovery attempt does not destroy the last good backup before a lat
     rmSync(appDataPath, { recursive: true, force: true });
   }
 });
+
+test("clearAll removes all entries and deletes backup file", () => {
+  const appDataPath = mkdtempSync(join(tmpdir(), "devspace-history-"));
+
+  try {
+    const service = new BrowserHistoryService({ appDataPath });
+    service.recordVisit({
+      url: "https://example.com",
+      title: "Example",
+      visitedAt: 1,
+      source: "devspace",
+    });
+
+    expect(service.getEntries().length).toBe(1);
+
+    const backupPath = join(appDataPath, "browser-history.json.bak");
+    expect(readFileSync(backupPath, "utf8")).toContain("example.com");
+
+    service.clearAll();
+
+    expect(service.getEntries().length).toBe(0);
+
+    // Primary file should be empty array
+    const stored = JSON.parse(readFileSync(join(appDataPath, "browser-history.json"), "utf8"));
+    expect(stored).toEqual([]);
+
+    // Backup should be removed
+    expect(() => readFileSync(backupPath, "utf8")).toThrow();
+  } finally {
+    rmSync(appDataPath, { recursive: true, force: true });
+  }
+});
+
+test("clearAll persists empty state and reload returns empty", () => {
+  const appDataPath = mkdtempSync(join(tmpdir(), "devspace-history-"));
+
+  try {
+    const service = new BrowserHistoryService({ appDataPath });
+    service.importEntries([
+      { url: "https://a.com", title: "A", visitedAt: 1, source: "test" },
+      { url: "https://b.com", title: "B", visitedAt: 2, source: "test" },
+    ]);
+
+    service.clearAll();
+
+    const reloaded = new BrowserHistoryService({ appDataPath });
+    expect(reloaded.getEntries().length).toBe(0);
+  } finally {
+    rmSync(appDataPath, { recursive: true, force: true });
+  }
+});
+
+test("importEntries enforces maximum history entry cap", () => {
+  const service = new BrowserHistoryService();
+
+  // Generate entries exceeding the cap (10,000)
+  const entries = Array.from({ length: 10_050 }, (_, i) => ({
+    url: `https://example.com/${i}`,
+    title: `Page ${i}`,
+    visitedAt: i,
+    source: "test",
+  }));
+
+  service.importEntries(entries);
+
+  expect(service.getEntries().length).toBe(10_000);
+  // Most recent entries should be kept (sorted desc by visitedAt)
+  expect(service.getEntries()[0]?.visitedAt).toBe(10_049);
+});
+
+test("cap is applied retroactively when loading oversized history from disk", () => {
+  const appDataPath = mkdtempSync(join(tmpdir(), "devspace-history-cap-"));
+
+  try {
+    // Write an oversized history file directly to disk
+    const entries = Array.from({ length: 10_050 }, (_, i) => ({
+      id: `id-${i}`,
+      url: `https://example.com/${i}`,
+      title: `Page ${i}`,
+      visitedAt: 10_050 - i,
+      source: "test",
+    }));
+
+    mkdirSync(appDataPath, { recursive: true });
+    writeFileSync(join(appDataPath, "browser-history.json"), JSON.stringify(entries), "utf8");
+
+    const service = new BrowserHistoryService({ appDataPath });
+
+    expect(service.getEntries().length).toBe(10_000);
+  } finally {
+    rmSync(appDataPath, { recursive: true, force: true });
+  }
+});
