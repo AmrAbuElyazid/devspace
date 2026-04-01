@@ -11,8 +11,10 @@ import type {
   BrowserBounds,
   BrowserFindInPageOptions,
   BrowserImportMode,
+  BrowserImportSource,
   BrowserPermissionDecision,
   BrowserStopFindAction,
+  ClearBrowsingDataTarget,
 } from "../shared/browser";
 import type { BrowserPaneController } from "./browser/browser-types";
 import type { BrowserImportService } from "./browser/browser-import-service";
@@ -44,6 +46,20 @@ const escAS = (s: string): string => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"
 function parseBrowserImportMode(mode: unknown): BrowserImportMode | null {
   if (mode === undefined) return "everything";
   if (mode === "cookies" || mode === "history" || mode === "everything") return mode;
+  return null;
+}
+
+function parseBrowserImportSource(value: unknown): BrowserImportSource | null {
+  if (value === "chrome" || value === "arc" || value === "safari" || value === "zen") {
+    return value;
+  }
+  return null;
+}
+
+function parseClearBrowsingDataTarget(value: unknown): ClearBrowsingDataTarget | null {
+  if (value === "cookies" || value === "history" || value === "cache" || value === "everything") {
+    return value;
+  }
   return null;
 }
 
@@ -600,73 +616,85 @@ export function registerIpcHandlers(
     browserPaneManager.resolvePermission(requestToken, decision as BrowserPermissionDecision);
   });
 
-  safeHandle("browser:listChromeProfiles", async () => {
-    return browserImportService?.listChromeProfiles() ?? [];
+  safeHandle("browser:listProfiles", async (_event, browser: unknown) => {
+    const source = parseBrowserImportSource(browser);
+    if (!source || !browserImportService) {
+      return [];
+    }
+
+    return browserImportService.listProfiles(source);
   });
 
-  safeHandle("browser:importChrome", async (_event, profilePath: unknown, mode?: unknown) => {
-    if (typeof profilePath !== "string" || !browserImportService) {
-      return { ok: false, code: "INVALID_CHROME_PROFILE", importedCookies: 0, importedHistory: 0 };
-    }
+  safeHandle(
+    "browser:import",
+    async (_event, browser: unknown, profilePath: unknown, mode?: unknown) => {
+      const source = parseBrowserImportSource(browser);
+      if (!source || !browserImportService) {
+        return {
+          ok: false,
+          code: "INVALID_BROWSER_IMPORT_SOURCE",
+          importedCookies: 0,
+          importedHistory: 0,
+        };
+      }
 
+      const importMode = parseBrowserImportMode(mode);
+      if (!importMode) {
+        return {
+          ok: false,
+          code: "INVALID_BROWSER_IMPORT_MODE",
+          importedCookies: 0,
+          importedHistory: 0,
+        };
+      }
+
+      const normalizedProfilePath = typeof profilePath === "string" ? profilePath : null;
+
+      // For browsers with profiles, validate the profile path is in the
+      // discovered list to prevent path traversal.
+      if (normalizedProfilePath) {
+        const allowedProfiles = await browserImportService.listProfiles(source);
+        if (!allowedProfiles.some((profile) => profile.path === normalizedProfilePath)) {
+          return {
+            ok: false,
+            code: "INVALID_BROWSER_PROFILE",
+            importedCookies: 0,
+            importedHistory: 0,
+          };
+        }
+      }
+
+      return browserImportService.importBrowser(source, normalizedProfilePath, importMode);
+    },
+  );
+
+  safeHandle("browser:detectAccess", async (_event, browser: unknown, mode?: unknown) => {
+    const source = parseBrowserImportSource(browser);
     const importMode = parseBrowserImportMode(mode);
-    if (!importMode) {
+    if (!source || !importMode) {
       return {
         ok: false,
-        code: "INVALID_BROWSER_IMPORT_MODE",
-        importedCookies: 0,
-        importedHistory: 0,
-      };
-    }
-
-    const allowedProfiles = await browserImportService.listChromeProfiles();
-    if (!allowedProfiles.some((profile) => profile.path === profilePath)) {
-      return { ok: false, code: "INVALID_CHROME_PROFILE", importedCookies: 0, importedHistory: 0 };
-    }
-
-    return browserImportService.importChrome(profilePath, importMode);
-  });
-
-  safeHandle("browser:importSafari", async (_event, mode?: unknown) => {
-    if (!browserImportService) {
-      return {
-        ok: false,
-        code: "SAFARI_IMPORT_UNAVAILABLE",
-        importedCookies: 0,
-        importedHistory: 0,
-      };
-    }
-
-    const importMode = parseBrowserImportMode(mode);
-    if (!importMode) {
-      return {
-        ok: false,
-        code: "INVALID_BROWSER_IMPORT_MODE",
-        importedCookies: 0,
-        importedHistory: 0,
-      };
-    }
-
-    return browserImportService.importSafari(importMode);
-  });
-
-  safeHandle("browser:detectSafariAccess", async (_event, mode?: unknown) => {
-    const importMode = parseBrowserImportMode(mode);
-    if (!importMode) {
-      return {
-        ok: false,
-        code: "SAFARI_FULL_DISK_ACCESS_REQUIRED",
-        message: "Invalid Safari import mode.",
+        code: "INVALID_BROWSER_IMPORT_SOURCE",
+        message: "Invalid browser or import mode.",
       };
     }
 
     return (
-      browserImportService?.detectSafariAccess(importMode) ?? {
+      browserImportService?.detectAccess(source, importMode) ?? {
         ok: false,
-        code: "SAFARI_FULL_DISK_ACCESS_REQUIRED",
-        message: "Safari import service unavailable.",
+        code: "BROWSER_IMPORT_UNAVAILABLE",
+        message: "Browser import service unavailable.",
       }
     );
+  });
+
+  safeHandle("browser:clearData", async (_event, target: unknown) => {
+    const clearTarget = parseClearBrowsingDataTarget(target);
+    if (!clearTarget || !browserImportService) {
+      return { ok: false, error: "Invalid clear data target." };
+    }
+
+    return browserImportService.clearBrowsingData(clearTarget);
   });
 
   // --- CLI install handler ---

@@ -11,20 +11,30 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { Cookie as SweetCookie, GetCookiesOptions } from "@steipete/sweet-cookie";
+import type { BrowserName, Cookie as SweetCookie, GetCookiesOptions } from "@steipete/sweet-cookie";
 import type {
+  BrowserAccessResult,
   BrowserImportMode,
   BrowserImportResult,
-  ChromeProfileDescriptor,
-  SafariAccessResult,
+  BrowserImportSource,
+  BrowserProfileDescriptor,
 } from "../../shared/browser";
 import type { BrowserHistoryEntryInput, BrowserHistoryRecorder } from "./browser-history-service";
 import type { BrowserSessionManager } from "./browser-session-manager";
 
-const CHROME_HISTORY_SOURCE = "chrome-import";
-const SAFARI_HISTORY_SOURCE = "safari-import";
-const CHROME_ROOT = join(homedir(), "Library", "Application Support", "Google", "Chrome");
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const HISTORY_SOURCES: Record<BrowserImportSource, string> = {
+  chrome: "chrome-import",
+  arc: "arc-import",
+  safari: "safari-import",
+  zen: "zen-import",
+};
+
 export const CHROME_SAFE_STORAGE_TIMEOUT_MS = 15_000;
+
 const SAFARI_COOKIE_CANDIDATES = [
   join(homedir(), "Library", "Cookies", "Cookies.binarycookies"),
   join(
@@ -39,6 +49,54 @@ const SAFARI_COOKIE_CANDIDATES = [
   ),
 ];
 const SAFARI_HISTORY_DB = join(homedir(), "Library", "Safari", "History.db");
+
+// ---------------------------------------------------------------------------
+// Chromium browser registry (Chrome, Arc, Brave, Chromium)
+// ---------------------------------------------------------------------------
+
+type ChromiumBrowserTarget = keyof typeof CHROMIUM_KEYCHAINS;
+
+const CHROMIUM_KEYCHAINS = {
+  chrome: {
+    root: join(homedir(), "Library", "Application Support", "Google", "Chrome"),
+    account: "Chrome",
+    service: "Chrome Safe Storage",
+    label: "Chrome Safe Storage",
+  },
+  brave: {
+    root: join(homedir(), "Library", "Application Support", "BraveSoftware", "Brave-Browser"),
+    account: "Brave",
+    service: "Brave Safe Storage",
+    label: "Brave Safe Storage",
+  },
+  arc: {
+    root: join(homedir(), "Library", "Application Support", "Arc", "User Data"),
+    account: "Arc",
+    service: "Arc Safe Storage",
+    label: "Arc Safe Storage",
+  },
+  chromium: {
+    root: join(homedir(), "Library", "Application Support", "Chromium"),
+    account: "Chromium",
+    service: "Chromium Safe Storage",
+    label: "Chromium Safe Storage",
+  },
+} as const;
+
+const IMPORT_SOURCE_TO_CHROMIUM: Partial<Record<BrowserImportSource, ChromiumBrowserTarget>> = {
+  chrome: "chrome",
+  arc: "arc",
+};
+
+// ---------------------------------------------------------------------------
+// Zen / Firefox paths
+// ---------------------------------------------------------------------------
+
+const ZEN_ROOT = join(homedir(), "Library", "Application Support", "zen");
+
+// ---------------------------------------------------------------------------
+// Internal types
+// ---------------------------------------------------------------------------
 
 type ImportedHistoryEntry = Omit<BrowserHistoryEntryInput, "id">;
 
@@ -73,20 +131,36 @@ type ImportedCookieInput = Electron.CookiesSetDetails & {
 
 type BrowserImportServiceDeps = {
   sessionManager: Pick<BrowserSessionManager, "getSession">;
-  historyService: Pick<BrowserHistoryRecorder, "importEntries">;
-  chromeUserDataDir?: string;
+  historyService: Pick<BrowserHistoryRecorder, "importEntries" | "clearAll">;
+  chromiumRoots?: Partial<Record<ChromiumBrowserTarget, string>>;
+  zenRoot?: string;
   safariPaths?: {
     cookiesFile?: string;
     historyDb?: string;
   };
   getCookiesImpl?: GetCookiesImpl;
-  loadChromeHistoryImpl?: (profilePath: string) => Promise<ImportedHistoryEntry[]>;
+  // Chromium overrides
+  loadChromiumHistoryImpl?: (
+    profilePath: string,
+    browser: ChromiumBrowserTarget,
+  ) => Promise<ImportedHistoryEntry[]>;
+  loadChromiumCookiesImpl?: (
+    profilePath: string,
+    browser: ChromiumBrowserTarget,
+  ) => Promise<ImportedBrowserCookie[]>;
+  // Safari overrides
   loadSafariHistoryImpl?: () => Promise<ImportedHistoryEntry[]>;
-  loadChromeCookiesImpl?: (profilePath: string) => Promise<SweetCookie[]>;
-  loadSafariCookiesImpl?: () => Promise<SweetCookie[]>;
-  detectSafariAccessImpl?: (mode: BrowserImportMode) => Promise<SafariAccessResult>;
+  loadSafariCookiesImpl?: () => Promise<ImportedBrowserCookie[]>;
+  detectSafariAccessImpl?: (mode: BrowserImportMode) => Promise<BrowserAccessResult>;
+  // Zen overrides
+  loadZenHistoryImpl?: (profilePath: string) => Promise<ImportedHistoryEntry[]>;
+  loadZenCookiesImpl?: (profilePath: string) => Promise<ImportedBrowserCookie[]>;
   statPathImpl?: (path: string) => { isFile: () => boolean; isDirectory: () => boolean };
 };
+
+// ---------------------------------------------------------------------------
+// Custom error
+// ---------------------------------------------------------------------------
 
 export class BrowserImportServiceError extends Error {
   constructor(
@@ -98,6 +172,10 @@ export class BrowserImportServiceError extends Error {
     this.name = "BrowserImportServiceError";
   }
 }
+
+// ---------------------------------------------------------------------------
+// Exported utility functions
+// ---------------------------------------------------------------------------
 
 export function dedupeHistoryEntries(entries: ImportedHistoryEntry[]): ImportedHistoryEntry[] {
   const seen = new Set<string>();
@@ -145,22 +223,104 @@ export function toElectronCookieInput(cookie: ImportedBrowserCookie): ImportedCo
   };
 }
 
+// ---------------------------------------------------------------------------
+// profiles.ini parser (Zen / Firefox)
+// ---------------------------------------------------------------------------
+
+export function parseProfilesIni(
+  iniContent: string,
+): Array<{ name: string; path: string; isRelative: boolean }> {
+  const profiles: Array<{ name: string; path: string; isRelative: boolean }> = [];
+  let current: { name?: string; path?: string; isRelative?: boolean } | null = null;
+  let isProfileSection = false;
+
+  for (const rawLine of iniContent.split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (line.startsWith("[")) {
+      if (isProfileSection && current?.name && current.path) {
+        profiles.push({
+          name: current.name,
+          path: current.path,
+          isRelative: current.isRelative ?? true,
+        });
+      }
+
+      isProfileSection = /^\[Profile\d+\]$/i.test(line);
+      current = isProfileSection ? {} : null;
+      continue;
+    }
+
+    if (!isProfileSection || !current) {
+      continue;
+    }
+
+    const equalsIndex = line.indexOf("=");
+    if (equalsIndex < 0) {
+      continue;
+    }
+
+    const key = line.slice(0, equalsIndex).trim();
+    const value = line.slice(equalsIndex + 1).trim();
+
+    if (key === "Name") {
+      current.name = value;
+    } else if (key === "Path") {
+      current.path = value;
+    } else if (key === "IsRelative") {
+      current.isRelative = value === "1";
+    }
+  }
+
+  // Flush last profile section
+  if (isProfileSection && current?.name && current.path) {
+    profiles.push({
+      name: current.name,
+      path: current.path,
+      isRelative: current.isRelative ?? true,
+    });
+  }
+
+  return profiles;
+}
+
+// ---------------------------------------------------------------------------
+// BrowserImportService
+// ---------------------------------------------------------------------------
+
 export class BrowserImportService {
-  private readonly chromeUserDataDir: string;
+  private readonly chromiumRoots: Record<ChromiumBrowserTarget, string>;
+  private readonly zenRoot: string;
   private readonly safariPaths: { cookiesFile?: string; historyDb?: string };
   private readonly getCookiesImpl: GetCookiesImpl | null;
-  private readonly loadChromeHistoryImpl: (profilePath: string) => Promise<ImportedHistoryEntry[]>;
+  private readonly loadChromiumHistoryImpl: (
+    profilePath: string,
+    browser: ChromiumBrowserTarget,
+  ) => Promise<ImportedHistoryEntry[]>;
   private readonly loadSafariHistoryImpl: () => Promise<ImportedHistoryEntry[]>;
-  private readonly loadChromeCookiesImpl: (profilePath: string) => Promise<ImportedBrowserCookie[]>;
+  private readonly loadChromiumCookiesImpl: (
+    profilePath: string,
+    browser: ChromiumBrowserTarget,
+  ) => Promise<ImportedBrowserCookie[]>;
   private readonly loadSafariCookiesImpl: () => Promise<ImportedBrowserCookie[]>;
-  private readonly detectSafariAccessImpl: (mode: BrowserImportMode) => Promise<SafariAccessResult>;
+  private readonly detectSafariAccessImpl: (
+    mode: BrowserImportMode,
+  ) => Promise<BrowserAccessResult>;
+  private readonly loadZenHistoryImpl: (profilePath: string) => Promise<ImportedHistoryEntry[]>;
+  private readonly loadZenCookiesImpl: (profilePath: string) => Promise<ImportedBrowserCookie[]>;
   private readonly statPathImpl: (path: string) => {
     isFile: () => boolean;
     isDirectory: () => boolean;
   };
 
   constructor(private readonly deps: BrowserImportServiceDeps) {
-    this.chromeUserDataDir = deps.chromeUserDataDir ?? CHROME_ROOT;
+    const roots: Record<string, string> = {};
+    for (const browser of Object.keys(CHROMIUM_KEYCHAINS) as ChromiumBrowserTarget[]) {
+      roots[browser] = deps.chromiumRoots?.[browser] ?? CHROMIUM_KEYCHAINS[browser].root;
+    }
+    this.chromiumRoots = roots as Record<ChromiumBrowserTarget, string>;
+    this.zenRoot = deps.zenRoot ?? ZEN_ROOT;
+
     const cookiesFile =
       deps.safariPaths?.cookiesFile ??
       SAFARI_COOKIE_CANDIDATES.find((candidate) => existsSync(candidate));
@@ -169,55 +329,171 @@ export class BrowserImportService {
       historyDb: deps.safariPaths?.historyDb ?? SAFARI_HISTORY_DB,
     };
     this.getCookiesImpl = deps.getCookiesImpl ?? null;
-    this.loadChromeHistoryImpl =
-      deps.loadChromeHistoryImpl ?? ((profilePath) => this.loadChromeHistory(profilePath));
+    this.loadChromiumHistoryImpl =
+      deps.loadChromiumHistoryImpl ??
+      ((profilePath, browser) => this.loadChromiumHistory(profilePath, browser));
     this.loadSafariHistoryImpl = deps.loadSafariHistoryImpl ?? (() => this.loadSafariHistory());
-    this.loadChromeCookiesImpl =
-      deps.loadChromeCookiesImpl ?? ((profilePath) => this.loadChromeCookies(profilePath));
+    this.loadChromiumCookiesImpl =
+      deps.loadChromiumCookiesImpl ??
+      ((profilePath, browser) => this.loadChromiumCookies(profilePath, browser));
     this.loadSafariCookiesImpl = deps.loadSafariCookiesImpl ?? (() => this.loadSafariCookies());
     this.detectSafariAccessImpl =
       deps.detectSafariAccessImpl ?? ((mode) => this.detectSafariAccessFromFs(mode));
+    this.loadZenHistoryImpl =
+      deps.loadZenHistoryImpl ?? ((profilePath) => this.loadZenHistory(profilePath));
+    this.loadZenCookiesImpl =
+      deps.loadZenCookiesImpl ?? ((profilePath) => this.loadZenCookies(profilePath));
     this.statPathImpl = deps.statPathImpl ?? ((path) => statSync(path));
   }
 
-  async listChromeProfiles(): Promise<ChromeProfileDescriptor[]> {
-    if (!existsSync(this.chromeUserDataDir)) {
+  // -----------------------------------------------------------------------
+  // Public API: generic routing by BrowserImportSource
+  // -----------------------------------------------------------------------
+
+  async listProfiles(browser: BrowserImportSource): Promise<BrowserProfileDescriptor[]> {
+    const chromiumTarget = IMPORT_SOURCE_TO_CHROMIUM[browser];
+    if (chromiumTarget) {
+      return this.listChromiumProfiles(chromiumTarget, browser);
+    }
+
+    if (browser === "zen") {
+      return this.listZenProfiles();
+    }
+
+    // Safari has no profiles
+    return [];
+  }
+
+  async importBrowser(
+    browser: BrowserImportSource,
+    profilePath: string | null,
+    mode: BrowserImportMode = "everything",
+  ): Promise<BrowserImportResult> {
+    const chromiumTarget = IMPORT_SOURCE_TO_CHROMIUM[browser];
+    if (chromiumTarget) {
+      return this.importChromium(chromiumTarget, browser, profilePath ?? "", mode);
+    }
+
+    if (browser === "safari") {
+      return this.importSafari(mode);
+    }
+
+    if (browser === "zen") {
+      return this.importZen(profilePath ?? "", mode);
+    }
+
+    return {
+      ok: false,
+      code: "UNSUPPORTED_BROWSER",
+      importedCookies: 0,
+      importedHistory: 0,
+      message: `Browser "${browser}" is not supported for import.`,
+    };
+  }
+
+  async detectAccess(
+    browser: BrowserImportSource,
+    mode: BrowserImportMode = "everything",
+  ): Promise<BrowserAccessResult> {
+    if (browser === "safari") {
+      return this.detectSafariAccessImpl(mode);
+    }
+
+    // No special access checks needed for Chromium or Zen browsers
+    return { ok: true };
+  }
+
+  async clearBrowsingData(
+    target: "cookies" | "history" | "cache" | "everything",
+  ): Promise<{ ok: boolean; error?: string }> {
+    try {
+      const session = this.deps.sessionManager.getSession() as CookieWriter & {
+        clearStorageData: (options?: { storages?: string[] }) => Promise<void>;
+        clearCache: () => Promise<void>;
+      };
+
+      if (target === "cookies" || target === "everything") {
+        await session.clearStorageData({ storages: ["cookies"] });
+      }
+
+      if (target === "history" || target === "everything") {
+        this.deps.historyService.clearAll();
+      }
+
+      if (target === "cache" || target === "everything") {
+        await session.clearCache();
+        await session.clearStorageData({
+          storages: ["cachestorage", "serviceworkers"],
+        });
+      }
+
+      if (target === "everything") {
+        await session.clearStorageData({
+          storages: ["localstorage", "indexdb", "websql", "shadercache"],
+        });
+      }
+
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Chromium import (Chrome, Arc)
+  // -----------------------------------------------------------------------
+
+  private async listChromiumProfiles(
+    target: ChromiumBrowserTarget,
+    source: BrowserImportSource,
+  ): Promise<BrowserProfileDescriptor[]> {
+    const root = this.chromiumRoots[target];
+    if (!existsSync(root)) {
       return [];
     }
 
-    const metadata = this.readChromeProfileMetadata();
-    const entries = readdirSync(this.chromeUserDataDir, { withFileTypes: true });
+    const metadata = readChromiumProfileMetadata(root);
+    const entries = readdirSync(root, { withFileTypes: true });
     const profiles = entries
       .filter((entry) => entry.isDirectory())
       .filter((entry) => entry.name === "Default" || /^Profile \d+$/.test(entry.name))
       .map((entry) => ({
         key: entry.name,
-        path: join(this.chromeUserDataDir, entry.name),
+        path: join(root, entry.name),
       }))
-      .filter((entry) => this.hasChromeImportableData(entry.path))
+      .filter((entry) => hasChromiumImportableData(entry.path))
       .map((entry) => ({
         name: metadata[entry.key] ?? entry.key,
         path: entry.path,
+        browser: source,
       }));
 
     return profiles.toSorted((left, right) => left.name.localeCompare(right.name));
   }
 
-  async importChrome(
+  private async importChromium(
+    target: ChromiumBrowserTarget,
+    source: BrowserImportSource,
     profilePath: string,
-    mode: BrowserImportMode = "everything",
+    mode: BrowserImportMode,
   ): Promise<BrowserImportResult> {
     let importedHistory = 0;
+    const errorPrefix = source.toUpperCase();
 
     try {
       if (mode !== "cookies") {
-        const historyEntries = dedupeHistoryEntries(await this.loadChromeHistoryImpl(profilePath));
+        const historyEntries = dedupeHistoryEntries(
+          await this.loadChromiumHistoryImpl(profilePath, target),
+        );
         importedHistory = this.importHistory(historyEntries);
       }
 
       let importedCookies = 0;
       if (mode !== "history") {
-        const cookies = await this.loadChromeCookiesImpl(profilePath);
+        const cookies = await this.loadChromiumCookiesImpl(profilePath, target);
         importedCookies = await this.importCookies(cookies);
       }
 
@@ -225,7 +501,7 @@ export class BrowserImportService {
     } catch (error) {
       if (error instanceof BrowserImportServiceError) {
         const code =
-          error.code === "COOKIE_WRITE_FAILED" ? "CHROME_COOKIE_IMPORT_FAILED" : error.code;
+          error.code === "COOKIE_WRITE_FAILED" ? `${errorPrefix}_COOKIE_IMPORT_FAILED` : error.code;
         return {
           ok: false,
           code,
@@ -238,7 +514,7 @@ export class BrowserImportService {
 
       return {
         ok: false,
-        code: "CHROME_IMPORT_FAILED",
+        code: `${errorPrefix}_IMPORT_FAILED`,
         importedCookies: 0,
         importedHistory,
         message: error instanceof Error ? error.message : String(error),
@@ -246,7 +522,104 @@ export class BrowserImportService {
     }
   }
 
-  async importSafari(mode: BrowserImportMode = "everything"): Promise<BrowserImportResult> {
+  private async loadChromiumCookies(
+    profilePath: string,
+    target: ChromiumBrowserTarget,
+  ): Promise<ImportedBrowserCookie[]> {
+    if (!this.getCookiesImpl) {
+      return loadChromiumCookiesFromProfileSnapshot(profilePath, target);
+    }
+
+    const errorPrefix = target.toUpperCase();
+
+    try {
+      const result = await this.getCookiesImpl({
+        browsers: ["chrome"],
+        chromeProfile: profilePath,
+        chromiumBrowser: target,
+        includeExpired: false,
+      } as GetCookiesOptions);
+
+      const keychainWarning = result.warnings.find((warning) => /keychain/i.test(warning));
+      if (keychainWarning) {
+        throw new BrowserImportServiceError(
+          `${errorPrefix}_KEYCHAIN_ACCESS_REQUIRED`,
+          keychainWarning,
+          true,
+        );
+      }
+
+      const providerWarning = result.warnings[0];
+      if (providerWarning) {
+        throw new BrowserImportServiceError(`${errorPrefix}_COOKIE_IMPORT_FAILED`, providerWarning);
+      }
+
+      return result.cookies;
+    } catch (error) {
+      if (error instanceof BrowserImportServiceError) {
+        throw error;
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      if (/keychain/i.test(message)) {
+        throw new BrowserImportServiceError(
+          `${errorPrefix}_KEYCHAIN_ACCESS_REQUIRED`,
+          message,
+          true,
+        );
+      }
+
+      throw new BrowserImportServiceError(`${errorPrefix}_COOKIE_IMPORT_FAILED`, message);
+    }
+  }
+
+  private async loadChromiumHistory(
+    profilePath: string,
+    target: ChromiumBrowserTarget,
+  ): Promise<ImportedHistoryEntry[]> {
+    const historyDbPath = join(profilePath, "History");
+    if (!existsSync(historyDbPath)) {
+      return [];
+    }
+
+    const rows = await queryHistoryDb(
+      historyDbPath,
+      `
+      SELECT urls.url AS url, urls.title AS title, CAST(visits.visit_time AS TEXT) AS visited_at
+      FROM visits
+      INNER JOIN urls ON urls.id = visits.url
+      ORDER BY visits.visit_time DESC
+    `,
+    );
+
+    const browserProfile = basename(profilePath);
+    const source = HISTORY_SOURCES[target as BrowserImportSource] ?? `${target}-import`;
+    const entries: ImportedHistoryEntry[] = [];
+
+    for (const row of rows) {
+      const url = asString(row.url);
+      const visitedAt = chromeTimeToUnixMs(row.visited_at);
+      if (!url || !Number.isFinite(visitedAt)) {
+        continue;
+      }
+
+      entries.push({
+        url,
+        title: asString(row.title) ?? url,
+        visitedAt,
+        source,
+        browserProfile,
+      });
+    }
+
+    return entries;
+  }
+
+  // -----------------------------------------------------------------------
+  // Safari import
+  // -----------------------------------------------------------------------
+
+  private async importSafari(mode: BrowserImportMode): Promise<BrowserImportResult> {
     const safariAccess = await this.detectSafariAccessImpl(mode);
     if (!safariAccess.ok) {
       return {
@@ -297,78 +670,6 @@ export class BrowserImportService {
     }
   }
 
-  async detectSafariAccess(mode: BrowserImportMode = "everything"): Promise<SafariAccessResult> {
-    return this.detectSafariAccessImpl(mode);
-  }
-
-  private readChromeProfileMetadata(): Record<string, string> {
-    const localStatePath = join(this.chromeUserDataDir, "Local State");
-    if (!existsSync(localStatePath)) {
-      return {};
-    }
-
-    try {
-      const parsed = JSON.parse(readFileSync(localStatePath, "utf8")) as {
-        profile?: { info_cache?: Record<string, { name?: string }> };
-      };
-      const infoCache = parsed.profile?.info_cache ?? {};
-      return Object.fromEntries(
-        Object.entries(infoCache)
-          .filter(([, value]) => typeof value?.name === "string" && value.name.length > 0)
-          .map(([key, value]) => [key, value.name as string]),
-      );
-    } catch (err) {
-      console.warn("[browser-import] Chrome profile name parsing failed:", err);
-      return {};
-    }
-  }
-
-  private hasChromeImportableData(profilePath: string): boolean {
-    return (
-      existsSync(join(profilePath, "History")) ||
-      existsSync(join(profilePath, "Network", "Cookies")) ||
-      existsSync(join(profilePath, "Cookies"))
-    );
-  }
-
-  private async loadChromeCookies(profilePath: string): Promise<ImportedBrowserCookie[]> {
-    if (!this.getCookiesImpl) {
-      return loadChromeCookiesFromProfileSnapshot(profilePath);
-    }
-
-    try {
-      const result = await this.getCookiesImpl({
-        browsers: ["chrome"],
-        chromeProfile: profilePath,
-        chromiumBrowser: "chrome",
-        includeExpired: false,
-      } as GetCookiesOptions);
-
-      const keychainWarning = result.warnings.find((warning) => /keychain/i.test(warning));
-      if (keychainWarning) {
-        throw new BrowserImportServiceError(
-          "CHROME_KEYCHAIN_ACCESS_REQUIRED",
-          keychainWarning,
-          true,
-        );
-      }
-
-      const providerWarning = result.warnings[0];
-      if (providerWarning) {
-        throw new BrowserImportServiceError("CHROME_COOKIE_IMPORT_FAILED", providerWarning);
-      }
-
-      return result.cookies;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (/keychain/i.test(message)) {
-        throw new BrowserImportServiceError("CHROME_KEYCHAIN_ACCESS_REQUIRED", message, true);
-      }
-
-      throw new BrowserImportServiceError("CHROME_COOKIE_IMPORT_FAILED", message);
-    }
-  }
-
   private async loadSafariCookies(): Promise<ImportedBrowserCookie[]> {
     if (!this.getCookiesImpl) {
       return loadSafariCookiesFromSnapshot(this.safariPaths.cookiesFile);
@@ -395,6 +696,10 @@ export class BrowserImportService {
 
       return result.cookies;
     } catch (error) {
+      if (error instanceof BrowserImportServiceError) {
+        throw error;
+      }
+
       throw new BrowserImportServiceError(
         "SAFARI_COOKIE_IMPORT_FAILED",
         error instanceof Error ? error.message : String(error),
@@ -404,51 +709,13 @@ export class BrowserImportService {
     }
   }
 
-  private async loadChromeHistory(profilePath: string): Promise<ImportedHistoryEntry[]> {
-    const historyDbPath = join(profilePath, "History");
-    if (!existsSync(historyDbPath)) {
-      return [];
-    }
-
-    const rows = await this.queryHistoryDb(
-      historyDbPath,
-      `
-      SELECT urls.url AS url, urls.title AS title, CAST(visits.visit_time AS TEXT) AS visited_at
-      FROM visits
-      INNER JOIN urls ON urls.id = visits.url
-      ORDER BY visits.visit_time DESC
-    `,
-    );
-
-    const browserProfile = basename(profilePath);
-    const entries: ImportedHistoryEntry[] = [];
-
-    for (const row of rows) {
-      const url = asString(row.url);
-      const visitedAt = chromeTimeToUnixMs(row.visited_at);
-      if (!url || !Number.isFinite(visitedAt)) {
-        continue;
-      }
-
-      entries.push({
-        url,
-        title: asString(row.title) ?? url,
-        visitedAt,
-        source: CHROME_HISTORY_SOURCE,
-        browserProfile,
-      });
-    }
-
-    return entries;
-  }
-
   private async loadSafariHistory(): Promise<ImportedHistoryEntry[]> {
     const historyDbPath = this.safariPaths.historyDb;
     if (!historyDbPath || !existsSync(historyDbPath)) {
       return [];
     }
 
-    const rows = await this.queryHistoryDb(
+    const rows = await queryHistoryDb(
       historyDbPath,
       `
       SELECT history_items.url AS url, history_visits.title AS title, CAST(history_visits.visit_time AS TEXT) AS visited_at
@@ -471,30 +738,179 @@ export class BrowserImportService {
         url,
         title: asString(row.title) ?? url,
         visitedAt,
-        source: SAFARI_HISTORY_SOURCE,
+        source: HISTORY_SOURCES.safari,
       });
     }
 
     return entries;
   }
 
-  private async queryHistoryDb(
-    dbPath: string,
-    sql: string,
-  ): Promise<Array<Record<string, unknown>>> {
+  private async detectSafariAccessFromFs(mode: BrowserImportMode): Promise<BrowserAccessResult> {
+    const protectedPaths = [
+      ...(mode !== "history" ? [this.safariPaths.cookiesFile] : []),
+      ...(mode !== "cookies" ? [this.safariPaths.historyDb] : []),
+    ].filter((value): value is string => Boolean(value));
+
+    for (const path of protectedPaths) {
+      try {
+        this.statPathImpl(path);
+      } catch (error) {
+        const code =
+          typeof error === "object" && error !== null && "code" in error
+            ? (error as { code?: string }).code
+            : undefined;
+        if (code === "EPERM" || code === "EACCES") {
+          return {
+            ok: false,
+            code: "SAFARI_FULL_DISK_ACCESS_REQUIRED",
+            message: "Grant Full Disk Access to DevSpace to import Safari data.",
+          };
+        }
+      }
+    }
+
+    return { ok: true };
+  }
+
+  // -----------------------------------------------------------------------
+  // Zen import (Firefox-based)
+  // -----------------------------------------------------------------------
+
+  private async listZenProfiles(): Promise<BrowserProfileDescriptor[]> {
+    const profilesIniPath = join(this.zenRoot, "profiles.ini");
+    if (!existsSync(profilesIniPath)) {
+      return [];
+    }
+
+    try {
+      const iniContent = readFileSync(profilesIniPath, "utf8");
+      const parsed = parseProfilesIni(iniContent);
+
+      return parsed
+        .map((profile) => ({
+          name: profile.name,
+          path: profile.isRelative ? join(this.zenRoot, profile.path) : profile.path,
+          browser: "zen" as const,
+        }))
+        .filter((profile) => hasZenImportableData(profile.path))
+        .toSorted((left, right) => left.name.localeCompare(right.name));
+    } catch (err) {
+      console.warn("[browser-import] Zen profile discovery failed:", err);
+      return [];
+    }
+  }
+
+  private async importZen(
+    profilePath: string,
+    mode: BrowserImportMode,
+  ): Promise<BrowserImportResult> {
+    let importedHistory = 0;
+
+    try {
+      if (mode !== "cookies") {
+        const historyEntries = dedupeHistoryEntries(await this.loadZenHistoryImpl(profilePath));
+        importedHistory = this.importHistory(historyEntries);
+      }
+
+      let importedCookies = 0;
+      if (mode !== "history") {
+        const cookies = await this.loadZenCookiesImpl(profilePath);
+        importedCookies = await this.importCookies(cookies);
+      }
+
+      return { ok: true, importedCookies, importedHistory };
+    } catch (error) {
+      if (error instanceof BrowserImportServiceError) {
+        const code = error.code === "COOKIE_WRITE_FAILED" ? "ZEN_COOKIE_IMPORT_FAILED" : error.code;
+        return {
+          ok: false,
+          code,
+          importedCookies: 0,
+          importedHistory,
+          ...(error.retryable ? { retryable: true } : {}),
+          message: error.message,
+        };
+      }
+
+      return {
+        ok: false,
+        code: "ZEN_IMPORT_FAILED",
+        importedCookies: 0,
+        importedHistory,
+        message: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  private async loadZenCookies(profilePath: string): Promise<ImportedBrowserCookie[]> {
+    const dbPath = join(profilePath, "cookies.sqlite");
+    if (!existsSync(dbPath)) {
+      return [];
+    }
+
     const snapshot = copyDatabaseToTemp(dbPath);
 
     try {
       const db = await openReadonlyDatabase(snapshot.dbPath);
       try {
-        return db.query(sql);
+        const rows = db.query(
+          "SELECT name, value, host, path, CAST(expiry AS TEXT) AS expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies",
+        );
+        return collectFirefoxCookies(rows, basename(profilePath));
       } finally {
         db.close();
       }
+    } catch (error) {
+      throw new BrowserImportServiceError(
+        "ZEN_COOKIE_IMPORT_FAILED",
+        error instanceof Error ? error.message : String(error),
+      );
     } finally {
       snapshot.cleanup();
     }
   }
+
+  private async loadZenHistory(profilePath: string): Promise<ImportedHistoryEntry[]> {
+    const dbPath = join(profilePath, "places.sqlite");
+    if (!existsSync(dbPath)) {
+      return [];
+    }
+
+    const rows = await queryHistoryDb(
+      dbPath,
+      `
+      SELECT moz_places.url AS url, moz_places.title AS title, CAST(moz_historyvisits.visit_date AS TEXT) AS visited_at
+      FROM moz_historyvisits
+      INNER JOIN moz_places ON moz_places.id = moz_historyvisits.place_id
+      ORDER BY moz_historyvisits.visit_date DESC
+    `,
+    );
+
+    const browserProfile = basename(profilePath);
+    const entries: ImportedHistoryEntry[] = [];
+
+    for (const row of rows) {
+      const url = asString(row.url);
+      const visitedAt = firefoxTimeToUnixMs(row.visited_at);
+      if (!url || !Number.isFinite(visitedAt)) {
+        continue;
+      }
+
+      entries.push({
+        url,
+        title: asString(row.title) ?? url,
+        visitedAt,
+        source: HISTORY_SOURCES.zen,
+        browserProfile,
+      });
+    }
+
+    return entries;
+  }
+
+  // -----------------------------------------------------------------------
+  // Shared import helpers
+  // -----------------------------------------------------------------------
 
   private async importCookies(cookies: ImportedBrowserCookie[]): Promise<number> {
     const electronCookies = cookies.map(
@@ -532,34 +948,11 @@ export class BrowserImportService {
     this.deps.historyService.importEntries(entries);
     return entries.length;
   }
-
-  private async detectSafariAccessFromFs(mode: BrowserImportMode): Promise<SafariAccessResult> {
-    const protectedPaths = [
-      ...(mode !== "history" ? [this.safariPaths.cookiesFile] : []),
-      ...(mode !== "cookies" ? [this.safariPaths.historyDb] : []),
-    ].filter((value): value is string => Boolean(value));
-
-    for (const path of protectedPaths) {
-      try {
-        this.statPathImpl(path);
-      } catch (error) {
-        const code =
-          typeof error === "object" && error !== null && "code" in error
-            ? (error as { code?: string }).code
-            : undefined;
-        if (code === "EPERM" || code === "EACCES") {
-          return {
-            ok: false,
-            code: "SAFARI_FULL_DISK_ACCESS_REQUIRED",
-            message: "Grant Full Disk Access to DevSpace to import Safari data.",
-          };
-        }
-      }
-    }
-
-    return { ok: true };
-  }
 }
+
+// ---------------------------------------------------------------------------
+// File / database helpers
+// ---------------------------------------------------------------------------
 
 function copyDatabaseToTemp(dbPath: string): { dbPath: string; cleanup: () => void } {
   const tempDir = mkdtempSync(join(tmpdir(), "devspace-browser-import-"));
@@ -603,6 +996,28 @@ function copyOptionalSidecar(sourceDbPath: string, tempDbPath: string, suffix: s
   }
 }
 
+async function queryHistoryDb(
+  dbPath: string,
+  sql: string,
+): Promise<Array<Record<string, unknown>>> {
+  const snapshot = copyDatabaseToTemp(dbPath);
+
+  try {
+    const db = await openReadonlyDatabase(snapshot.dbPath);
+    try {
+      return db.query(sql);
+    } finally {
+      db.close();
+    }
+  } finally {
+    snapshot.cleanup();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Timestamp conversion
+// ---------------------------------------------------------------------------
+
 function chromeTimeToUnixMs(value: unknown): number {
   const numeric = asNumber(value);
   if (numeric === null || numeric <= 0) {
@@ -620,6 +1035,42 @@ function safariTimeToUnixMs(value: unknown): number {
 
   return Math.round((numeric + 978_307_200) * 1000);
 }
+
+/**
+ * Firefox/Zen stores visit_date as microseconds since Unix epoch.
+ */
+function firefoxTimeToUnixMs(value: unknown): number {
+  const numeric = asNumber(value);
+  if (numeric === null || numeric <= 0) {
+    return 0;
+  }
+
+  return Math.round(numeric / 1000);
+}
+
+/**
+ * Normalize Firefox/Zen cookie expiry to seconds since Unix epoch.
+ * Zen may store expiry in milliseconds (values > 10^12), while standard
+ * Firefox uses seconds.
+ */
+function normalizeFirefoxExpiryToSeconds(value: unknown): number | undefined {
+  const numeric = asNumber(value);
+  if (numeric === null || numeric <= 0) {
+    return undefined;
+  }
+
+  // Milliseconds (13+ digits) -> convert to seconds
+  if (numeric > 1_000_000_000_000) {
+    return Math.round(numeric / 1000);
+  }
+
+  // Already in seconds
+  return Math.round(numeric);
+}
+
+// ---------------------------------------------------------------------------
+// Value helpers
+// ---------------------------------------------------------------------------
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
@@ -642,6 +1093,10 @@ function asNumber(value: unknown): number | null {
 
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// SQLite abstraction
+// ---------------------------------------------------------------------------
 
 type ReadonlyDatabase = {
   query: (sql: string) => Array<Record<string, unknown>>;
@@ -685,6 +1140,10 @@ async function importBunSqlite(): Promise<{
     };
   }>;
 }
+
+// ---------------------------------------------------------------------------
+// Cookie snapshot & rollback
+// ---------------------------------------------------------------------------
 
 async function snapshotExistingCookies(
   session: CookieWriter,
@@ -798,8 +1257,54 @@ function fromElectronCookie(cookie: Electron.Cookie): ImportedCookieSnapshot {
   };
 }
 
-async function loadChromeCookiesFromProfileSnapshot(
+// ---------------------------------------------------------------------------
+// Chromium profile helpers
+// ---------------------------------------------------------------------------
+
+function readChromiumProfileMetadata(root: string): Record<string, string> {
+  const localStatePath = join(root, "Local State");
+  if (!existsSync(localStatePath)) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(localStatePath, "utf8")) as {
+      profile?: { info_cache?: Record<string, { name?: string }> };
+    };
+    const infoCache = parsed.profile?.info_cache ?? {};
+    return Object.fromEntries(
+      Object.entries(infoCache)
+        .filter(([, value]) => typeof value?.name === "string" && value.name.length > 0)
+        .map(([key, value]) => [key, value.name as string]),
+    );
+  } catch (err) {
+    console.warn("[browser-import] Chromium profile name parsing failed:", err);
+    return {};
+  }
+}
+
+function hasChromiumImportableData(profilePath: string): boolean {
+  return (
+    existsSync(join(profilePath, "History")) ||
+    existsSync(join(profilePath, "Network", "Cookies")) ||
+    existsSync(join(profilePath, "Cookies"))
+  );
+}
+
+function hasZenImportableData(profilePath: string): boolean {
+  return (
+    existsSync(join(profilePath, "places.sqlite")) ||
+    existsSync(join(profilePath, "cookies.sqlite"))
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Chromium cookie SQLite (direct decryption fallback)
+// ---------------------------------------------------------------------------
+
+async function loadChromiumCookiesFromProfileSnapshot(
   profilePath: string,
+  target: ChromiumBrowserTarget,
 ): Promise<ImportedBrowserCookie[]> {
   const dbPath = resolveChromeCookiesDbPath(profilePath);
   if (!dbPath) {
@@ -809,23 +1314,24 @@ async function loadChromeCookiesFromProfileSnapshot(
   const snapshot = copyDatabaseToTemp(dbPath);
 
   try {
-    const key = readChromeSafeStorageKey(dbPath);
+    const key = readChromeSafeStorageKey(target);
     const metaVersion = await readChromiumMetaVersion(snapshot.dbPath);
     const rows = await queryCookieDb(snapshot.dbPath);
     return collectChromiumCookies(rows, {
-      browser: "chrome",
+      browser: target,
       profile: basename(profilePath),
       includeExpired: false,
       decrypt: (encryptedValue) =>
         decryptChromiumCookieValue(encryptedValue, key, metaVersion >= 24),
     });
   } catch (error) {
+    const errorPrefix = target.toUpperCase();
     const message = error instanceof Error ? error.message : String(error);
     if (/keychain/i.test(message)) {
-      throw new BrowserImportServiceError("CHROME_KEYCHAIN_ACCESS_REQUIRED", message, true);
+      throw new BrowserImportServiceError(`${errorPrefix}_KEYCHAIN_ACCESS_REQUIRED`, message, true);
     }
 
-    throw new BrowserImportServiceError("CHROME_COOKIE_IMPORT_FAILED", message);
+    throw new BrowserImportServiceError(`${errorPrefix}_COOKIE_IMPORT_FAILED`, message);
   } finally {
     snapshot.cleanup();
   }
@@ -860,9 +1366,8 @@ function resolveChromeCookiesDbPath(profilePath: string): string | null {
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }
 
-function readChromeSafeStorageKey(dbPath: string): Buffer {
-  const browser = resolveChromiumBrowserFromDbPath(dbPath);
-  const keychain = CHROMIUM_KEYCHAINS[browser];
+function readChromeSafeStorageKey(target: ChromiumBrowserTarget): Buffer {
+  const keychain = CHROMIUM_KEYCHAINS[target];
   const args = ["find-generic-password", "-w", "-a", keychain.account, "-s", keychain.service];
 
   try {
@@ -881,18 +1386,6 @@ function readChromeSafeStorageKey(dbPath: string): Buffer {
       cause: error,
     });
   }
-}
-
-function resolveChromiumBrowserFromDbPath(dbPath: string): ChromiumBrowserTarget {
-  const lower = dbPath.toLowerCase();
-  for (const browser of Object.keys(CHROMIUM_KEYCHAINS) as ChromiumBrowserTarget[]) {
-    const root = CHROMIUM_KEYCHAINS[browser].root.toLowerCase();
-    if (lower.includes(root)) {
-      return browser;
-    }
-  }
-
-  return "chrome";
 }
 
 async function readChromiumMetaVersion(dbPath: string): Promise<number> {
@@ -925,7 +1418,7 @@ async function queryCookieDb(dbPath: string): Promise<Array<Record<string, unkno
 export function collectChromiumCookies(
   rows: Array<Record<string, unknown>>,
   options: {
-    browser: "chrome";
+    browser: string;
     profile: string;
     includeExpired: boolean;
     decrypt: (encryptedValue: Uint8Array) => string | null;
@@ -981,7 +1474,7 @@ export function collectChromiumCookies(
       ...(expires ? { expires } : {}),
       ...(sameSite ? { sameSite } : {}),
       source: {
-        browser: options.browser,
+        browser: options.browser as BrowserName,
         profile: options.profile,
       },
     });
@@ -989,6 +1482,77 @@ export function collectChromiumCookies(
 
   return cookies;
 }
+
+// ---------------------------------------------------------------------------
+// Firefox / Zen cookie collector
+// ---------------------------------------------------------------------------
+
+export function collectFirefoxCookies(
+  rows: Array<Record<string, unknown>>,
+  profile: string,
+): ImportedBrowserCookie[] {
+  const cookies: ImportedBrowserCookie[] = [];
+  const seen = new Set<string>();
+  const now = Math.floor(Date.now() / 1000);
+
+  for (const row of rows) {
+    const name = asString(row.name);
+    const host = asString(row.host);
+    if (!name || !host) {
+      continue;
+    }
+
+    const value = typeof row.value === "string" ? row.value : "";
+    const expires = normalizeFirefoxExpiryToSeconds(row.expiry);
+    if (expires && expires < now) {
+      continue;
+    }
+
+    const domain = host.replace(/^\./, "");
+    const hostOnly = !host.startsWith(".");
+    const path = asString(row.path) ?? "/";
+    const key = `${name}|${domain}|${path}|${hostOnly ? "host" : "domain"}`;
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    const sameSite = normalizeFirefoxSameSite(row.sameSite);
+    cookies.push({
+      name,
+      value,
+      ...(domain ? { domain } : {}),
+      path,
+      ...(hostOnly ? { hostOnly: true, host: domain } : {}),
+      secure: isTruthyDbFlag(row.isSecure),
+      httpOnly: isTruthyDbFlag(row.isHttpOnly),
+      ...(expires ? { expires } : {}),
+      ...(sameSite ? { sameSite } : {}),
+      source: { browser: "firefox" as BrowserName, profile },
+    });
+  }
+
+  return cookies;
+}
+
+function normalizeFirefoxSameSite(value: unknown): SweetCookie["sameSite"] | undefined {
+  const numeric = asNumber(value);
+  if (numeric === 0) {
+    return "None";
+  }
+  if (numeric === 1) {
+    return "Lax";
+  }
+  if (numeric === 2) {
+    return "Strict";
+  }
+
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Chromium cookie decryption
+// ---------------------------------------------------------------------------
 
 function decryptChromiumCookieValue(
   encryptedValue: Uint8Array,
@@ -1105,6 +1669,10 @@ function normalizeChromiumSameSite(value: unknown): SweetCookie["sameSite"] | un
 function isTruthyDbFlag(value: unknown): boolean {
   return value === 1 || value === 1n || value === "1" || value === true;
 }
+
+// ---------------------------------------------------------------------------
+// Safari binary cookie parser
+// ---------------------------------------------------------------------------
 
 function decodeSafariBinaryCookies(buffer: Buffer): ImportedBrowserCookie[] {
   if (buffer.length < 8 || buffer.subarray(0, 4).toString("utf8") !== "cook") {
@@ -1239,35 +1807,6 @@ function dedupeCookies(cookies: ImportedBrowserCookie[]): ImportedBrowserCookie[
 
   return Array.from(merged.values());
 }
-
-type ChromiumBrowserTarget = keyof typeof CHROMIUM_KEYCHAINS;
-
-const CHROMIUM_KEYCHAINS = {
-  chrome: {
-    root: "Google/Chrome",
-    account: "Chrome",
-    service: "Chrome Safe Storage",
-    label: "Chrome Safe Storage",
-  },
-  brave: {
-    root: "BraveSoftware/Brave-Browser",
-    account: "Brave",
-    service: "Brave Safe Storage",
-    label: "Brave Safe Storage",
-  },
-  arc: {
-    root: "Arc/User Data",
-    account: "Arc",
-    service: "Arc Safe Storage",
-    label: "Arc Safe Storage",
-  },
-  chromium: {
-    root: "Chromium",
-    account: "Chromium",
-    service: "Chromium Safe Storage",
-    label: "Chromium Safe Storage",
-  },
-} as const;
 
 function toElectronSameSite(value: SweetCookie["sameSite"]): ElectronCookieSameSite {
   if (value === "Strict") {
