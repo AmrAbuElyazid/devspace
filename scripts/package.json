@@ -1,5 +1,10 @@
 {
   "name": "@devspace/scripts",
   "private": true,
-  "scripts": {}
+  "scripts": {
+    "knip": "knip"
+  },
+  "devDependencies": {
+    "knip": "catalog:"
+  }
 }

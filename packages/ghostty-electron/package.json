@@ -27,14 +27,16 @@
   },
   "scripts": {
     "rebuild-native": "cd native && npx node-gyp rebuild --target=$(node -e \"console.log(require('electron/package.json').version)\") --arch=$(node -p \"process.arch\") --dist-url=https://electronjs.org/headers",
+    "knip": "knip",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "node-addon-api": "catalog:"
   },
   "devDependencies": {
-    "@types/node": "^22.15.0",
+    "@types/node": "catalog:",
     "electron": "catalog:",
+    "knip": "catalog:",
     "node-gyp": "catalog:",
     "typescript": "catalog:"
   },
