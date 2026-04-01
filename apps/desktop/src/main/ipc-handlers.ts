@@ -23,7 +23,7 @@ import {
   findHostViewBounds,
   translateRendererBoundsToContentBounds,
 } from "./browser/browser-view-bounds";
-import { validateFilePath, getSafeExternalUrl } from "./validation";
+import { validateFilePath, getSafeBrowserUrl, getSafeExternalUrl } from "./validation";
 import { getTrafficLightPosition } from "./window-chrome";
 
 const registeredHandlers = new Set<string>();
@@ -336,7 +336,7 @@ export function registerIpcHandlers(
   // --- File system handlers ---
 
   safeHandle("fs:readFile", async (_event, filePath: unknown) => {
-    const validPath = validateFilePath(filePath, allowedRoots);
+    const validPath = await validateFilePath(filePath, allowedRoots);
     if (!validPath) {
       return { error: "File path is not allowed" };
     }
@@ -349,7 +349,7 @@ export function registerIpcHandlers(
   });
 
   safeHandle("fs:writeFile", async (_event, filePath: unknown, content: unknown) => {
-    const validPath = validateFilePath(filePath, allowedRoots);
+    const validPath = await validateFilePath(filePath, allowedRoots);
     if (!validPath) {
       return { error: "File path is not allowed" };
     }
@@ -404,23 +404,6 @@ export function registerIpcHandlers(
     try {
       const files = await readdir(notesDir);
       return files.filter((f) => f.endsWith(".md")).map((f) => f.replace(/\.md$/, ""));
-    } catch {
-      return [];
-    }
-  });
-
-  safeHandle("notes:save", async (_event, noteId: unknown, content: unknown) => {
-    if (typeof noteId !== "string" || noteId.length === 0) return;
-    if (typeof content !== "string") return;
-    await mkdir(notesDir, { recursive: true });
-    const filePath = join(notesDir, `${noteId}.json`);
-    await writeFile(filePath, content, "utf-8");
-  });
-
-  safeHandle("notes:list", async () => {
-    try {
-      const files = await readdir(notesDir);
-      return files.filter((f) => f.endsWith(".json")).map((f) => f.replace(/\.json$/, ""));
     } catch {
       return [];
     }
@@ -485,8 +468,10 @@ export function registerIpcHandlers(
   // --- Theme handlers ---
 
   safeHandle("browser:create", (_event, paneId: unknown, url: unknown) => {
-    if (typeof paneId !== "string" || typeof url !== "string") return;
-    browserPaneManager.createPane(paneId, url);
+    if (typeof paneId !== "string") return;
+    const safeUrl = getSafeBrowserUrl(url);
+    if (!safeUrl) return;
+    browserPaneManager.createPane(paneId, safeUrl);
   });
 
   safeHandle("browser:destroy", (_event, paneId: unknown) => {
@@ -516,8 +501,10 @@ export function registerIpcHandlers(
   });
 
   safeHandle("browser:navigate", (_event, paneId: unknown, url: unknown) => {
-    if (typeof paneId !== "string" || typeof url !== "string") return;
-    browserPaneManager.navigate(paneId, url);
+    if (typeof paneId !== "string") return;
+    const safeUrl = getSafeBrowserUrl(url);
+    if (!safeUrl) return;
+    browserPaneManager.navigate(paneId, safeUrl);
   });
 
   safeHandle("browser:back", (_event, paneId: unknown) => {

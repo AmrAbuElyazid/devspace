@@ -97,6 +97,34 @@ function toRequestOrigin(
   }
 }
 
+function getTrustedLocalOrigin(rawUrl: string | undefined): string | null {
+  if (!rawUrl) {
+    return null;
+  }
+
+  try {
+    const parsedUrl = new URL(rawUrl);
+    const normalizedHostname = parsedUrl.hostname.replace(/^\[|\]$/g, "");
+    const isLoopbackHost =
+      normalizedHostname === "127.0.0.1" ||
+      normalizedHostname === "localhost" ||
+      normalizedHostname === "0.0.0.0" ||
+      normalizedHostname === "::1";
+
+    if (!isLoopbackHost) {
+      return null;
+    }
+
+    if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
+      return null;
+    }
+
+    return parsedUrl.origin;
+  } catch {
+    return null;
+  }
+}
+
 function decisionAllows(decision: BrowserPermissionDecision): boolean {
   return decision === "allow-once" || decision === "allow-for-session";
 }
@@ -394,15 +422,22 @@ export class BrowserSessionManager {
   }
 
   /**
-   * Override CORS response headers for all requests in the browser session.
+   * Override CORS response headers for requests initiated by trusted local
+   * Devspace pages in the shared browser session.
    *
    * VS Code Settings Sync, GitHub auth, and Microsoft login endpoints don't
    * include `http://127.0.0.1:PORT` in their `Access-Control-Allow-Origin`.
-   * Since this session is isolated to devspace browser panes, we can safely
-   * inject permissive CORS headers on every response.
+   * We only relax CORS when the initiating page is one of our loopback-backed
+   * app surfaces rather than for arbitrary browser pages in the same session.
    */
   private installCorsOverrides(ses: Session): void {
     ses.webRequest.onHeadersReceived((details, callback) => {
+      const origin = getTrustedLocalOrigin(details.referrer);
+      if (!origin) {
+        callback({ responseHeaders: details.responseHeaders ?? {} });
+        return;
+      }
+
       const headers = { ...details.responseHeaders };
 
       // Strip any existing CORS headers (case-insensitive) so we don't
@@ -410,17 +445,6 @@ export class BrowserSessionManager {
       for (const key of Object.keys(headers)) {
         if (key.toLowerCase().startsWith("access-control-")) {
           delete headers[key];
-        }
-      }
-
-      // Derive the requesting origin from the referrer, falling back to
-      // our fixed VS Code server origin.
-      let origin = "http://127.0.0.1:18562";
-      if (details.referrer) {
-        try {
-          origin = new URL(details.referrer).origin;
-        } catch {
-          // Expected: invalid referrer URL format, keep default origin
         }
       }
 
