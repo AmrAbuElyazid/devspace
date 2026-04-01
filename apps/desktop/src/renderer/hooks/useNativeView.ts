@@ -1,17 +1,11 @@
 import { useEffect, type RefObject } from "react";
 import {
   useNativeViewStore,
+  setNativeViewElement,
   updateNativeViewBounds,
   clearNativeViewBounds,
   type NativeViewType,
 } from "../store/native-view-store";
-
-interface ViewBounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
 
 interface UseNativeViewOptions {
   /** Unique pane ID. */
@@ -34,10 +28,6 @@ interface UseNativeViewReturn {
   isVisible: boolean;
 }
 
-function boundsEqual(a: ViewBounds | null, b: ViewBounds): boolean {
-  return a !== null && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
-}
-
 /**
  * Unified hook for native view lifecycle management.
  *
@@ -45,7 +35,8 @@ function boundsEqual(a: ViewBounds | null, b: ViewBounds): boolean {
  * `useTerminalBounds` / `useBrowserBounds` hooks.
  *
  * - Registers / unregisters the view with the centralized NativeViewManager store.
- * - Syncs the placeholder element's bounds to the main process via ResizeObserver.
+ * - Registers the placeholder element so the manager can measure and observe
+ *   only the currently-visible native views.
  * - Returns the current visibility state so the pane component can react
  *   (e.g. auto-focus a terminal, set `data-native-view-hidden`).
  */
@@ -67,6 +58,9 @@ export function useNativeView({
   useEffect(() => {
     if (!enabled) return;
 
+    const el = ref.current;
+    setNativeViewElement(id, el);
+
     // Eagerly populate the bounds cache from the placeholder's current
     // layout BEFORE calling register().  register() synchronously calls
     // reconcile(), which reads from the cache to send bounds to the main
@@ -74,7 +68,6 @@ export function useNativeView({
     // mounted view (new tab) or a remounted view (split restructure,
     // where unregister cleared the cache) would be shown with missing or
     // zero bounds, causing a black/mis-sized frame.
-    const el = ref.current;
     if (el) {
       const rect = el.getBoundingClientRect();
       const width = Math.max(0, Math.round(rect.width));
@@ -92,56 +85,10 @@ export function useNativeView({
     register(id, type);
     return () => {
       unregister(id);
-    };
-  }, [id, type, enabled, ref, register, unregister]);
-
-  // ── Bounds syncing ──────────────────────────────────────────────────
-  useEffect(() => {
-    const element = ref.current;
-    if (!enabled || !element) return;
-
-    let frameId: number | null = null;
-    let lastBounds: ViewBounds | null = null;
-
-    const syncBounds = (): void => {
-      frameId = null;
-      const el = ref.current;
-      if (!el) return;
-
-      const rect = el.getBoundingClientRect();
-      const next: ViewBounds = {
-        x: Math.round(rect.left),
-        y: Math.round(rect.top),
-        width: Math.max(0, Math.round(rect.width)),
-        height: Math.max(0, Math.round(rect.height)),
-      };
-
-      if (boundsEqual(lastBounds, next)) return;
-      lastBounds = next;
-      updateNativeViewBounds(id, next);
-    };
-
-    const scheduleSync = (): void => {
-      if (frameId !== null) cancelAnimationFrame(frameId);
-      frameId = requestAnimationFrame(syncBounds);
-    };
-
-    const resizeObserver = new ResizeObserver(scheduleSync);
-    resizeObserver.observe(element);
-
-    // Initial sync + resize / scroll listeners
-    scheduleSync();
-    window.addEventListener("resize", scheduleSync);
-    window.addEventListener("scroll", scheduleSync, true);
-
-    return () => {
-      if (frameId !== null) cancelAnimationFrame(frameId);
-      resizeObserver.disconnect();
-      window.removeEventListener("resize", scheduleSync);
-      window.removeEventListener("scroll", scheduleSync, true);
+      setNativeViewElement(id, null);
       clearNativeViewBounds(id);
     };
-  }, [id, enabled, ref]);
+  }, [id, type, enabled, ref, register, unregister]);
 
   return { isVisible };
 }

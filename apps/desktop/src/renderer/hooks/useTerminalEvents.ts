@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useTerminalStore } from "../store/terminal-store";
+import { markTerminalSurfaceDestroyed } from "../lib/terminal-surface-session";
 
 /**
  * Manages terminal-related IPC event subscriptions:
@@ -10,6 +11,25 @@ import { useTerminalStore } from "../store/terminal-store";
  * - Window focus restoration (re-focus terminal after window regains focus)
  */
 export function useTerminalEvents(): void {
+  useEffect(() => {
+    return window.api.terminal.onTitleChanged((surfaceId, title) => {
+      const state = useWorkspaceStore.getState();
+      const pane = state.panes[surfaceId];
+      if (pane?.type === "terminal" && pane.title !== title) {
+        state.updatePaneTitle(surfaceId, title);
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    return window.api.terminal.onClosed((surfaceId) => {
+      markTerminalSurfaceDestroyed(surfaceId);
+      const terminalState = useTerminalStore.getState();
+      terminalState.closeFindBar(surfaceId);
+      terminalState.clearSearchState(surfaceId);
+    });
+  }, []);
+
   // Track CWD changes from terminals so new tabs can inherit the directory.
   useEffect(() => {
     return window.api.terminal.onPwdChanged((surfaceId, pwd) => {
