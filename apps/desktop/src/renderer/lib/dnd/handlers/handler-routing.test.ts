@@ -2,6 +2,7 @@ import { expect, test, vi } from "vitest";
 import type { DragItemData } from "../../../types/dnd";
 import type { SidebarNode } from "../../../types/workspace";
 import type { ResolveContext } from "../types";
+import { sidebarReorderHandler } from "./sidebar-reorder";
 import { tabToSidebarHandler } from "./tab-to-sidebar";
 import { workspaceToActiveHandler } from "./workspace-to-active";
 
@@ -31,7 +32,9 @@ function createStoreState(
     sidebarTree: SidebarNode[];
     pinnedSidebarNodes: SidebarNode[];
     createWorkspaceFromTab: ReturnType<typeof vi.fn>;
+    expandFolder: ReturnType<typeof vi.fn>;
     mergeWorkspaceIntoGroup: ReturnType<typeof vi.fn>;
+    moveSidebarNode: ReturnType<typeof vi.fn>;
     splitGroupWithWorkspace: ReturnType<typeof vi.fn>;
   }> = {},
 ) {
@@ -39,7 +42,9 @@ function createStoreState(
     sidebarTree: [] as SidebarNode[],
     pinnedSidebarNodes: [] as SidebarNode[],
     createWorkspaceFromTab: vi.fn(),
+    expandFolder: vi.fn(),
     mergeWorkspaceIntoGroup: vi.fn(),
+    moveSidebarNode: vi.fn(),
     splitGroupWithWorkspace: vi.fn(),
     ...overrides,
   };
@@ -297,4 +302,143 @@ test("tabToSidebarHandler execute dispatches workspace creation", () => {
     container: "pinned",
     insertIndex: 3,
   });
+});
+
+test("sidebarReorderHandler resolves workspace drops into folder center using folder children", () => {
+  const drag: DragItemData = {
+    type: "sidebar-workspace",
+    workspaceId: "workspace-1",
+    container: "main",
+    parentFolderId: null,
+  };
+
+  const store = createStore({
+    pinnedSidebarNodes: [
+      {
+        type: "folder",
+        id: "folder-1",
+        name: "Pinned Folder",
+        collapsed: false,
+        children: [{ type: "workspace", workspaceId: "workspace-9" }],
+      },
+    ],
+  });
+
+  const intent = sidebarReorderHandler.resolveIntent(
+    createContext(
+      drag,
+      [
+        createCollision(
+          {
+            type: "sidebar-folder",
+            folderId: "folder-1",
+            container: "pinned",
+            parentFolderId: null,
+          },
+          { left: 0, top: 0, width: 200, height: 100 },
+        ),
+      ],
+      { x: 30, y: 50 },
+      store,
+    ),
+  );
+
+  expect(intent).toEqual({
+    kind: "reorder-sidebar",
+    nodeId: "workspace-1",
+    nodeType: "workspace",
+    sourceContainer: "main",
+    targetContainer: "pinned",
+    targetParentId: "folder-1",
+    targetIndex: 1,
+  });
+});
+
+test("sidebarReorderHandler resolves folder drags onto the root container", () => {
+  const drag: DragItemData = {
+    type: "sidebar-folder",
+    folderId: "folder-9",
+    container: "pinned",
+    parentFolderId: null,
+  };
+
+  const store = createStore({
+    sidebarTree: [{ type: "workspace", workspaceId: "workspace-2" }],
+    pinnedSidebarNodes: [{ type: "workspace", workspaceId: "workspace-3" }],
+  });
+
+  const intent = sidebarReorderHandler.resolveIntent(
+    createContext(
+      drag,
+      [
+        createCollision(
+          { type: "sidebar-root", container: "main" },
+          { left: 0, top: 0, width: 200, height: 300 },
+        ),
+      ],
+      { x: 20, y: 20 },
+      store,
+    ),
+  );
+
+  expect(intent).toEqual({
+    kind: "reorder-sidebar",
+    nodeId: "folder-9",
+    nodeType: "folder",
+    sourceContainer: "pinned",
+    targetContainer: "main",
+    targetParentId: null,
+    targetIndex: 1,
+  });
+});
+
+test("sidebarReorderHandler execute moves the node and expands target folders", () => {
+  const state = createStoreState();
+
+  expect(
+    sidebarReorderHandler.execute(
+      {
+        kind: "reorder-sidebar",
+        nodeId: "workspace-1",
+        nodeType: "workspace",
+        sourceContainer: "main",
+        targetContainer: "pinned",
+        targetParentId: "folder-1",
+        targetIndex: 2,
+      },
+      { getState: () => state } as never,
+    ),
+  ).toBe(true);
+
+  expect(state.moveSidebarNode).toHaveBeenCalledWith({
+    nodeId: "workspace-1",
+    nodeType: "workspace",
+    sourceContainer: "main",
+    targetContainer: "pinned",
+    targetParentId: "folder-1",
+    targetIndex: 2,
+  });
+  expect(state.expandFolder).toHaveBeenCalledWith("folder-1");
+});
+
+test("sidebarReorderHandler execute skips folder expansion for root drops", () => {
+  const state = createStoreState();
+
+  expect(
+    sidebarReorderHandler.execute(
+      {
+        kind: "reorder-sidebar",
+        nodeId: "folder-9",
+        nodeType: "folder",
+        sourceContainer: "pinned",
+        targetContainer: "main",
+        targetParentId: null,
+        targetIndex: 0,
+      },
+      { getState: () => state } as never,
+    ),
+  ).toBe(true);
+
+  expect(state.moveSidebarNode).toHaveBeenCalledTimes(1);
+  expect(state.expandFolder).not.toHaveBeenCalled();
 });
