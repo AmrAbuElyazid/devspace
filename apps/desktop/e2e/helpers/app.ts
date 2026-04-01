@@ -103,11 +103,3 @@ export async function sendIpcToRenderer(
     { channel, payload },
   );
 }
-
-/**
- * Count panes of a specific type in the store.
- */
-export async function countPanesByType(page: Page, type: string): Promise<number> {
-  const state = await getStoreState(page);
-  return Object.values(state.panes).filter((p) => p.type === type).length;
-}

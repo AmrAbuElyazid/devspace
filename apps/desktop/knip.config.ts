@@ -1,14 +1,20 @@
 import type { KnipConfig } from "knip";
 
 const config: KnipConfig = {
-  entry: ["src/main/index.ts", "src/preload/index.ts", "src/renderer/main.tsx"],
-  project: ["src/**/*.{ts,tsx}"],
+  entry: [
+    "src/main/index.ts",
+    "src/preload/index.ts",
+    "src/renderer/main.tsx",
+    "electron.vite.config.ts",
+    "postcss.config.mjs",
+  ],
+  project: ["src/**/*.{ts,tsx}", "e2e/**/*.ts"],
   ignoreDependencies: [
-    "@vitejs/plugin-react", // used in electron.vite.config.ts
     "@tailwindcss/postcss", // used in postcss.config.mjs
     "tailwindcss", // peer dep of @tailwindcss/postcss, used via CSS
     "remark-gfm", // used internally by @platejs/markdown for GFM support
     "remark-stringify", // type dependency for @platejs/markdown plugin inference
+    "node:sqlite", // Node built-in imported dynamically in browser-import-service
   ],
   ignoreBinaries: [
     "node-gyp", // used in rebuild-native script, installed via ghostty-electron
