@@ -98,7 +98,7 @@ Terminal throughput notes live in [`BENCHMARKS.md`](./BENCHMARKS.md).
 
 The active improvement plan lives in:
 
-- [`docs/roadmap/2026-04-01-codebase-enhancement-plan.md`](./docs/roadmap/2026-04-01-codebase-enhancement-plan.md)
+- [`docs/roadmap/roadmap.md`](./docs/roadmap/roadmap.md)
 
 ## Release Notes
 
