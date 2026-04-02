@@ -45,11 +45,15 @@ test("browser bridge exposes spec-aligned browser IPC methods", async () => {
   await exposedBridge.browser.importBrowser("chrome", "/tmp/Profile 1", "history");
   await exposedBridge.browser.importBrowser("safari", null, "cookies");
   await exposedBridge.browser.clearBrowsingData("everything");
+  const unsubscribeNativeModifier = exposedBridge.window.onNativeModifierChanged(() => {});
   const unsubscribeState = exposedBridge.browser.onStateChange(() => {});
+  const unsubscribeFocused = exposedBridge.browser.onFocused(() => {});
   const unsubscribePermission = exposedBridge.browser.onPermissionRequest(() => {});
   const unsubscribeContextMenu = exposedBridge.browser.onContextMenuRequest(() => {});
   const unsubscribeOpenInNewTab = exposedBridge.browser.onOpenInNewTabRequest(() => {});
+  unsubscribeNativeModifier();
   unsubscribeState();
+  unsubscribeFocused();
   unsubscribePermission();
   unsubscribeContextMenu();
   unsubscribeOpenInNewTab();
@@ -71,11 +75,15 @@ test("browser bridge exposes spec-aligned browser IPC methods", async () => {
   ]);
 
   expect(listenerRegistrations).toEqual([
+    ["on", "window:nativeModifierChanged"],
     ["on", "browser:stateChanged"],
+    ["on", "browser:focused"],
     ["on", "browser:permissionRequested"],
     ["on", "browser:contextMenuRequested"],
     ["on", "browser:openInNewTabRequested"],
+    ["removeListener", "window:nativeModifierChanged"],
     ["removeListener", "browser:stateChanged"],
+    ["removeListener", "browser:focused"],
     ["removeListener", "browser:permissionRequested"],
     ["removeListener", "browser:contextMenuRequested"],
     ["removeListener", "browser:openInNewTabRequested"],

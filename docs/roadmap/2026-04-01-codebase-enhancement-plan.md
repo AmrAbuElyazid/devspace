@@ -47,6 +47,8 @@
 
 - [ ] Keep improving native-view lifecycle efficiency.
       Opportunity: continue reducing work that scales with total mounted panes instead of visible panes.
+      Opportunity: tighten native-view focus ownership so workspace activation, split navigation, DOM find/rename inputs, and overlapping shortcuts behave consistently across terminal, browser, VS Code, and T3 Code panes.
+      Progress: browser lifecycle is now bounds-first and focus work is shifting toward WebContents focus sync, active-pane restore, and per-group MRU tab navigation.
       Refs: `apps/desktop/src/renderer/App.tsx:122-131`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx:311-324`
 
 - [ ] Make persistence more selective over time.
@@ -112,6 +114,7 @@
 ### Phase 3: Long-Term Product Quality
 
 - [ ] Continue native-view and mounted-pane scalability work
+- [ ] Polish native-view focus, shortcut ownership, and per-group MRU tab navigation
 - [ ] Make persistence more selective
 - [ ] Add production perf counters
 - [ ] Improve mixed-workspace stress coverage

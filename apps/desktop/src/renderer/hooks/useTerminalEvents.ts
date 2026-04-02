@@ -3,6 +3,7 @@ import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useTerminalStore } from "../store/terminal-store";
 import { markTerminalSurfaceDestroyed } from "../lib/terminal-surface-session";
+import { focusActiveNativePane } from "../lib/native-pane-focus";
 
 /**
  * Manages terminal-related IPC event subscriptions:
@@ -62,25 +63,13 @@ export function useTerminalEvents(): void {
     });
   }, []);
 
-  // Re-focus the active terminal when the window regains focus.
-  // macOS restores first-responder to the Electron web content view,
-  // not to the previously-focused GhosttyView.
+  // Re-focus the active native pane when the window regains focus.
   useEffect(() => {
     return window.api.window.onFocus(() => {
       if (useSettingsStore.getState().settingsOpen || useSettingsStore.getState().overlayCount > 0)
         return;
 
-      const state = useWorkspaceStore.getState();
-      const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
-      if (!ws?.focusedGroupId) return;
-      const group = state.paneGroups[ws.focusedGroupId];
-      if (!group) return;
-      const activeTab = group.tabs.find((t) => t.id === group.activeTabId);
-      if (!activeTab) return;
-      const pane = state.panes[activeTab.paneId];
-      if (pane?.type === "terminal") {
-        void window.api.terminal.focus(activeTab.paneId);
-      }
+      focusActiveNativePane();
     });
   }, []);
 

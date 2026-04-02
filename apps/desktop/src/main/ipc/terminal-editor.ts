@@ -66,6 +66,7 @@ export function registerTerminalAndEditorIpc(
 
   safeOn("terminal:blur", (event) => {
     terminalManager.blurSurfaces();
+    mainWindow.webContents.send("window:nativeModifierChanged", null);
     event.sender.focus();
   });
 
@@ -109,7 +110,7 @@ export function registerTerminalAndEditorIpc(
     try {
       const { url } = await vscodeServerManager.start(folder);
       editorPaneFolders.set(paneId, folder);
-      browserPaneManager.createPane(paneId, url);
+      browserPaneManager.createPane(paneId, url, "editor");
       return { url };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -143,7 +144,7 @@ export function registerTerminalAndEditorIpc(
 
     try {
       const { url } = await t3codeServerManager.start();
-      browserPaneManager.createPane(paneId, url);
+      browserPaneManager.createPane(paneId, url, "t3code");
       return { url };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -167,6 +168,10 @@ export function registerTerminalAndEditorIpc(
 
   terminalManager.onSurfaceFocused((surfaceId) => {
     mainWindow.webContents.send("terminal:focused", surfaceId);
+  });
+
+  terminalManager.onModifierChanged((modifier) => {
+    mainWindow.webContents.send("window:nativeModifierChanged", modifier);
   });
 
   terminalManager.onPwdChanged((surfaceId, pwd) => {

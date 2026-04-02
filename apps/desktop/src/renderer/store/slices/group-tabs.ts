@@ -16,6 +16,12 @@ import {
 } from "../../lib/split-tree";
 import { createPane, findNearestTerminalCwd } from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
+import {
+  buildRecentTabOrder,
+  clearRecentTabTraversal,
+  removeGroupRecentState,
+  removeTabFromRecentOrder,
+} from "../tab-history";
 import type { PaneCleanup } from "../store-helpers";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
@@ -69,6 +75,7 @@ export function createGroupTabsSlice(
           },
         },
       });
+      get().recordTabActivation(groupId, newTab.id);
     },
 
     removeGroupTab(workspaceId, groupId, tabId) {
@@ -93,7 +100,21 @@ export function createGroupTabsSlice(
       switch (resolution.kind) {
         case "tabs-remaining":
           newPaneGroups[groupId] = resolution.srcGroup;
-          set({ panes: newPanes, paneGroups: newPaneGroups });
+          set({
+            panes: newPanes,
+            paneGroups: newPaneGroups,
+            tabHistoryByGroupId: {
+              ...state.tabHistoryByGroupId,
+              [groupId]: removeTabFromRecentOrder(state.tabHistoryByGroupId[groupId], tabId),
+            },
+            recentTabTraversalByGroupId: clearRecentTabTraversal(
+              state.recentTabTraversalByGroupId,
+              groupId,
+            ),
+          });
+          if (resolution.srcGroup.activeTabId !== tabId) {
+            get().recordTabActivation(groupId, resolution.srcGroup.activeTabId);
+          }
           break;
         case "group-removed":
           delete newPaneGroups[groupId];
@@ -109,12 +130,32 @@ export function createGroupTabsSlice(
             ),
             panes: newPanes,
             paneGroups: newPaneGroups,
+            tabHistoryByGroupId: {
+              ...state.tabHistoryByGroupId,
+              [groupId]: [],
+            },
+            recentTabTraversalByGroupId: clearRecentTabTraversal(
+              state.recentTabTraversalByGroupId,
+              groupId,
+            ),
           });
           break;
         case "group-replaced-with-fallback":
           newPanes[resolution.fallbackPane.id] = resolution.fallbackPane;
           newPaneGroups[groupId] = resolution.srcGroup;
-          set({ panes: newPanes, paneGroups: newPaneGroups });
+          set({
+            panes: newPanes,
+            paneGroups: newPaneGroups,
+            tabHistoryByGroupId: {
+              ...state.tabHistoryByGroupId,
+              [groupId]: removeTabFromRecentOrder(state.tabHistoryByGroupId[groupId], tabId),
+            },
+            recentTabTraversalByGroupId: clearRecentTabTraversal(
+              state.recentTabTraversalByGroupId,
+              groupId,
+            ),
+          });
+          get().recordTabActivation(groupId, resolution.srcGroup.activeTabId);
           break;
       }
     },
@@ -133,6 +174,7 @@ export function createGroupTabsSlice(
           },
         };
       });
+      get().recordTabActivation(groupId, tabId);
     },
 
     reorderGroupTabs(workspaceId, groupId, fromIndex, toIndex) {
@@ -212,10 +254,47 @@ export function createGroupTabsSlice(
           break;
       }
 
+      const nextTabHistoryByGroupId = {
+        ...state.tabHistoryByGroupId,
+        [destGroupId]: buildRecentTabOrder(
+          state.tabHistoryByGroupId[destGroupId],
+          destTabs,
+          tab.id,
+        ),
+      };
+      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
+        state.recentTabTraversalByGroupId,
+        destGroupId,
+      );
+
+      switch (resolution.kind) {
+        case "tabs-remaining":
+        case "group-replaced-with-fallback":
+          nextTabHistoryByGroupId[srcGroupId] = buildRecentTabOrder(
+            removeTabFromRecentOrder(state.tabHistoryByGroupId[srcGroupId], tabId),
+            resolution.srcGroup.tabs,
+            resolution.srcGroup.activeTabId,
+          );
+          nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
+            nextRecentTabTraversalByGroupId,
+            srcGroupId,
+          );
+          break;
+        case "group-removed":
+          delete nextTabHistoryByGroupId[srcGroupId];
+          nextRecentTabTraversalByGroupId = removeGroupRecentState(
+            nextRecentTabTraversalByGroupId,
+            srcGroupId,
+          );
+          break;
+      }
+
       set({
         workspaces: newWorkspaces,
         panes: newPanes,
         paneGroups: newPaneGroups,
+        tabHistoryByGroupId: nextTabHistoryByGroupId,
+        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
       });
     },
 
@@ -278,6 +357,37 @@ export function createGroupTabsSlice(
           break;
       }
 
+      const nextTabHistoryByGroupId = {
+        ...state.tabHistoryByGroupId,
+        [newGroup.id]: [newTabId],
+      };
+      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
+        state.recentTabTraversalByGroupId,
+        newGroup.id,
+      );
+
+      switch (resolution.kind) {
+        case "tabs-remaining":
+        case "group-replaced-with-fallback":
+          nextTabHistoryByGroupId[srcGroupId] = buildRecentTabOrder(
+            removeTabFromRecentOrder(state.tabHistoryByGroupId[srcGroupId], tabId),
+            resolution.srcGroup.tabs,
+            resolution.srcGroup.activeTabId,
+          );
+          nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
+            nextRecentTabTraversalByGroupId,
+            srcGroupId,
+          );
+          break;
+        case "group-removed":
+          delete nextTabHistoryByGroupId[srcGroupId];
+          nextRecentTabTraversalByGroupId = removeGroupRecentState(
+            nextRecentTabTraversalByGroupId,
+            srcGroupId,
+          );
+          break;
+      }
+
       newWorkspaces = state.workspaces.map((w) =>
         w.id === workspaceId ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
       );
@@ -286,6 +396,8 @@ export function createGroupTabsSlice(
         workspaces: newWorkspaces,
         panes: newPanes,
         paneGroups: newPaneGroups,
+        tabHistoryByGroupId: nextTabHistoryByGroupId,
+        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
       });
     },
 
@@ -343,10 +455,47 @@ export function createGroupTabsSlice(
           break;
       }
 
+      const nextTabHistoryByGroupId = {
+        ...state.tabHistoryByGroupId,
+        [destGroupId]: buildRecentTabOrder(
+          state.tabHistoryByGroupId[destGroupId],
+          destTabs,
+          newTab.id,
+        ),
+      };
+      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
+        state.recentTabTraversalByGroupId,
+        destGroupId,
+      );
+
+      switch (resolution.kind) {
+        case "tabs-remaining":
+        case "group-replaced-with-fallback":
+          nextTabHistoryByGroupId[srcGroupId] = buildRecentTabOrder(
+            removeTabFromRecentOrder(state.tabHistoryByGroupId[srcGroupId], tabId),
+            resolution.srcGroup.tabs,
+            resolution.srcGroup.activeTabId,
+          );
+          nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
+            nextRecentTabTraversalByGroupId,
+            srcGroupId,
+          );
+          break;
+        case "group-removed":
+          delete nextTabHistoryByGroupId[srcGroupId];
+          nextRecentTabTraversalByGroupId = removeGroupRecentState(
+            nextRecentTabTraversalByGroupId,
+            srcGroupId,
+          );
+          break;
+      }
+
       set({
         workspaces: newWorkspaces,
         panes: newPanes,
         paneGroups: newPaneGroups,
+        tabHistoryByGroupId: nextTabHistoryByGroupId,
+        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
       });
     },
 
@@ -370,6 +519,7 @@ export function createGroupTabsSlice(
           },
         };
       });
+      get().recordTabActivation(groupId, newTab.id);
     },
 
     openEditorTab(folderPath) {
@@ -405,6 +555,7 @@ export function createGroupTabsSlice(
           w.id === state.activeWorkspaceId ? { ...w, lastActiveAt: Date.now() } : w,
         ),
       });
+      get().recordTabActivation(groupId, newTab.id);
     },
   };
 }

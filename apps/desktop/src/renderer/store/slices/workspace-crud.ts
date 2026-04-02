@@ -11,6 +11,12 @@ import {
 } from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
 import { getSidebarNodesForContainer } from "../store-helpers";
+import {
+  buildRecentTabOrder,
+  clearRecentTabTraversal,
+  removeGroupRecentState,
+  removeTabFromRecentOrder,
+} from "../tab-history";
 import type { PaneCleanup } from "../store-helpers";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
@@ -120,8 +126,17 @@ export function createWorkspaceCrudSlice(
           paneGroups: newPaneGroups,
           pinnedSidebarNodes: [],
           sidebarTree: [...newTree, { type: "workspace" as const, workspaceId: newWs.id }],
+          tabHistoryByGroupId: {},
+          recentTabTraversalByGroupId: {},
         });
         return;
+      }
+
+      const nextTabHistoryByGroupId = { ...state.tabHistoryByGroupId };
+      const nextRecentTabTraversalByGroupId = { ...state.recentTabTraversalByGroupId };
+      for (const gid of groupIds) {
+        delete nextTabHistoryByGroupId[gid];
+        delete nextRecentTabTraversalByGroupId[gid];
       }
 
       let newActiveId = state.activeWorkspaceId;
@@ -137,6 +152,8 @@ export function createWorkspaceCrudSlice(
         paneGroups: newPaneGroups,
         pinnedSidebarNodes: newPinnedTree,
         sidebarTree: newTree,
+        tabHistoryByGroupId: nextTabHistoryByGroupId,
+        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
       });
     },
 
@@ -225,12 +242,35 @@ export function createWorkspaceCrudSlice(
       const newActiveId =
         state.activeWorkspaceId === sourceWorkspaceId ? targetWs.id : state.activeWorkspaceId;
 
+      const mergedTabs = [...targetGroup.tabs, ...allSourceTabs];
+      const nextTabHistoryByGroupId = {
+        ...state.tabHistoryByGroupId,
+        [targetGroupId]: buildRecentTabOrder(
+          state.tabHistoryByGroupId[targetGroupId],
+          mergedTabs,
+          lastNewTab?.id ?? targetGroup.activeTabId,
+        ),
+      };
+      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
+        state.recentTabTraversalByGroupId,
+        targetGroupId,
+      );
+      for (const gid of sourceGroupIds) {
+        delete nextTabHistoryByGroupId[gid];
+        nextRecentTabTraversalByGroupId = removeGroupRecentState(
+          nextRecentTabTraversalByGroupId,
+          gid,
+        );
+      }
+
       set({
         workspaces: remaining,
         activeWorkspaceId: newActiveId,
         paneGroups: newPaneGroups,
         sidebarTree: newTree,
         pinnedSidebarNodes: newPinnedTree,
+        tabHistoryByGroupId: nextTabHistoryByGroupId,
+        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
       });
     },
 
@@ -307,6 +347,22 @@ export function createWorkspaceCrudSlice(
       const newActiveId =
         state.activeWorkspaceId === sourceWorkspaceId ? targetWs.id : state.activeWorkspaceId;
 
+      const nextTabHistoryByGroupId = {
+        ...state.tabHistoryByGroupId,
+        [newGroup.id]: buildRecentTabOrder([], newGroup.tabs, newGroup.activeTabId),
+      };
+      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
+        state.recentTabTraversalByGroupId,
+        newGroup.id,
+      );
+      for (const gid of sourceGroupIds) {
+        delete nextTabHistoryByGroupId[gid];
+        nextRecentTabTraversalByGroupId = removeGroupRecentState(
+          nextRecentTabTraversalByGroupId,
+          gid,
+        );
+      }
+
       set({
         workspaces: remaining.map((w) =>
           w.id === targetWs.id ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
@@ -315,6 +371,8 @@ export function createWorkspaceCrudSlice(
         paneGroups: newPaneGroups,
         sidebarTree: newTree,
         pinnedSidebarNodes: newPinnedTree,
+        tabHistoryByGroupId: nextTabHistoryByGroupId,
+        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
       });
     },
 
@@ -392,6 +450,37 @@ export function createWorkspaceCrudSlice(
         insertIndex,
       );
 
+      const nextTabHistoryByGroupId = {
+        ...state.tabHistoryByGroupId,
+        [newGroup.id]: [newTabId],
+      };
+      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
+        state.recentTabTraversalByGroupId,
+        newGroup.id,
+      );
+
+      switch (resolution.kind) {
+        case "tabs-remaining":
+        case "group-replaced-with-fallback":
+          nextTabHistoryByGroupId[sourceGroupId] = buildRecentTabOrder(
+            removeTabFromRecentOrder(state.tabHistoryByGroupId[sourceGroupId], tabId),
+            resolution.srcGroup.tabs,
+            resolution.srcGroup.activeTabId,
+          );
+          nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
+            nextRecentTabTraversalByGroupId,
+            sourceGroupId,
+          );
+          break;
+        case "group-removed":
+          delete nextTabHistoryByGroupId[sourceGroupId];
+          nextRecentTabTraversalByGroupId = removeGroupRecentState(
+            nextRecentTabTraversalByGroupId,
+            sourceGroupId,
+          );
+          break;
+      }
+
       set({
         workspaces: newWorkspaces,
         activeWorkspaceId: newWs.id,
@@ -399,6 +488,8 @@ export function createWorkspaceCrudSlice(
         paneGroups: newPaneGroups,
         sidebarTree: targetContainer === "main" ? insertedNodes : state.sidebarTree,
         pinnedSidebarNodes: targetContainer === "pinned" ? insertedNodes : state.pinnedSidebarNodes,
+        tabHistoryByGroupId: nextTabHistoryByGroupId,
+        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
       });
     },
   };

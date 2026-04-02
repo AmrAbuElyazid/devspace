@@ -464,6 +464,13 @@ static bool isAppReservedShortcut(NSEvent* event) {
     return false;
 }
 
+static NSString* heldModifierName(NSEventModifierFlags flags) {
+    NSEventModifierFlags normalized = flags & NSEventModifierFlagDeviceIndependentFlagsMask;
+    if (normalized & NSEventModifierFlagCommand) return @"command";
+    if (normalized & NSEventModifierFlagControl) return @"control";
+    return nil;
+}
+
 // Intercept Cmd+key combos before Electron's menu system eats them.
 // App-reserved shortcuts are always passed through to Electron.
 // Also checks Ghostty keybindings via ghostty_surface_key_is_binding.
@@ -663,6 +670,19 @@ static bool isAppReservedShortcut(NSEvent* event) {
     key.text = nullptr;
     key.composing = false;
     ghostty_surface_key(self.surface, key);
+
+    if (g_state.modifierChangedCallback) {
+        NSString* modifierName = heldModifierName(event.modifierFlags);
+        std::string modifier = modifierName ? [modifierName UTF8String] : "";
+        g_state.modifierChangedCallback.NonBlockingCall(
+            [modifier](Napi::Env env, Napi::Function fn) {
+                if (modifier.empty()) {
+                    fn.Call({env.Null()});
+                } else {
+                    fn.Call({Napi::String::New(env, modifier)});
+                }
+            });
+    }
 }
 
 // ---- NSTextInputClient (IME) ----
@@ -1636,6 +1656,9 @@ static Napi::Value SetCallback(const Napi::CallbackInfo& info) {
     } else if (event == "surface-focused") {
         g_state.surfaceFocusedCallback = Napi::ThreadSafeFunction::New(
             env, callback, "surfaceFocused", 0, 1);
+    } else if (event == "modifier-changed") {
+        g_state.modifierChangedCallback = Napi::ThreadSafeFunction::New(
+            env, callback, "modifierChanged", 0, 1);
     } else if (event == "pwd-changed") {
         g_state.pwdChangedCallback = Napi::ThreadSafeFunction::New(
             env, callback, "pwdChanged", 0, 1);

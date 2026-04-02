@@ -11,6 +11,7 @@ import {
   updateSizesAtPath,
 } from "../../lib/split-tree";
 import { createPane, createPaneGroup, findNearestTerminalCwd } from "../../lib/pane-factory";
+import { clearRecentTabTraversal } from "../tab-history";
 import type { PaneCleanup } from "../store-helpers";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
@@ -63,6 +64,7 @@ export function createSplitTreeSlice(
         panes: { ...state.panes, [newPane.id]: newPane },
         paneGroups: { ...state.paneGroups, [newGroup.id]: newGroup },
       }));
+      get().recordTabActivation(newGroup.id, newGroup.activeTabId);
     },
 
     closeGroup(workspaceId, groupId) {
@@ -115,6 +117,14 @@ export function createSplitTreeSlice(
             ),
             panes: newPanes,
             paneGroups: newPaneGroups,
+            tabHistoryByGroupId: {
+              ...state.tabHistoryByGroupId,
+              [groupId]: [],
+            },
+            recentTabTraversalByGroupId: clearRecentTabTraversal(
+              state.recentTabTraversalByGroupId,
+              groupId,
+            ),
           };
         }
 
@@ -144,6 +154,14 @@ export function createSplitTreeSlice(
           ),
           panes: newPanes,
           paneGroups: newPaneGroups,
+          tabHistoryByGroupId: {
+            ...state.tabHistoryByGroupId,
+            [groupId]: [],
+          },
+          recentTabTraversalByGroupId: clearRecentTabTraversal(
+            state.recentTabTraversalByGroupId,
+            groupId,
+          ),
         };
       });
     },

@@ -135,6 +135,7 @@ const bridge: DevspaceBridge = {
     minimize: () => ipcRenderer.send("window:minimize"),
     maximize: () => ipcRenderer.send("window:maximize"),
     close: () => ipcRenderer.send("window:close"),
+    focusContent: () => ipcRenderer.send("window:focusContent"),
     setSidebarOpen: (open) => ipcRenderer.send("window:setSidebarOpen", open),
     isMaximized: () => ipcRenderer.invoke("window:isMaximized"),
     onMaximizeChange: (callback) => {
@@ -153,6 +154,18 @@ const bridge: DevspaceBridge = {
       ipcRenderer.on("window:focus", listener);
       return () => {
         ipcRenderer.removeListener("window:focus", listener);
+      };
+    },
+    onNativeModifierChanged: (callback) => {
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        modifier: "command" | "control" | null,
+      ): void => {
+        callback(modifier);
+      };
+      ipcRenderer.on("window:nativeModifierChanged", listener);
+      return () => {
+        ipcRenderer.removeListener("window:nativeModifierChanged", listener);
       };
     },
     onOpenEditor: (callback) => {
@@ -263,6 +276,15 @@ const bridge: DevspaceBridge = {
       ipcRenderer.on("browser:stateChanged", listener);
       return () => {
         ipcRenderer.removeListener("browser:stateChanged", listener);
+      };
+    },
+    onFocused: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, paneId: string): void => {
+        callback(paneId);
+      };
+      ipcRenderer.on("browser:focused", listener);
+      return () => {
+        ipcRenderer.removeListener("browser:focused", listener);
       };
     },
     onPermissionRequest: (callback) => {

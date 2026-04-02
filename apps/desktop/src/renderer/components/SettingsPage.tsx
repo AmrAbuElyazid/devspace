@@ -16,6 +16,7 @@ import {
 
 export default function SettingsPage() {
   const {
+    showShortcutHintsOnModifierPress,
     fontSize,
     defaultShell,
     terminalScrollback,
@@ -46,6 +47,12 @@ export default function SettingsPage() {
           <SectionTitle>General</SectionTitle>
           <SettingRow label="Shell command">
             <InstallCliButton />
+          </SettingRow>
+          <SettingRow label="Show shortcut hints on modifier press">
+            <Toggle
+              checked={showShortcutHintsOnModifierPress}
+              onChange={(value) => updateSetting("showShortcutHintsOnModifierPress", value)}
+            />
           </SettingRow>
         </section>
 

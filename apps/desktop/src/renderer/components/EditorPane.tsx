@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { hasEditableRendererFocus } from "../lib/native-pane-focus";
 import { useNativeView } from "../hooks/useNativeView";
 import { useWorkspaceStore } from "../store/workspace-store";
 import { Button } from "./ui/button";
@@ -28,6 +29,7 @@ type EditorState =
 
 export default function EditorPane({ paneId, config }: EditorPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
+  const wasVisibleRef = useRef(false);
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig);
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
 
@@ -74,6 +76,17 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): ReactEl
   // the entire `state` object which is a new reference on every setState).
   const stateStatus = state.status;
   const stateFolderPath = "folderPath" in state ? state.folderPath : undefined;
+
+  useEffect(() => {
+    const wasVisible = wasVisibleRef.current;
+    wasVisibleRef.current = isVisible;
+
+    if (!isVisible || wasVisible || stateStatus !== "running" || hasEditableRendererFocus()) {
+      return;
+    }
+
+    void window.api.browser.setFocus(paneId);
+  }, [isVisible, paneId, stateStatus]);
 
   // Start the VS Code server
   useEffect(() => {

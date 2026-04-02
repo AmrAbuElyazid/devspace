@@ -15,11 +15,17 @@ const browserBridgeMocks = vi.hoisted(() => ({
   updatePaneTitle: vi.fn(),
   updateBrowserPaneZoom: vi.fn(),
   openBrowserInGroup: vi.fn(),
+  syncWorkspaceFocusForPane: vi.fn(),
   contextMenuRequestHandler: null as
     | null
     | ((request: BrowserContextMenuRequest) => void | Promise<void>),
   permissionRequestHandler: null as null | ((request: BrowserPermissionRequest) => void),
+  focusedHandler: null as null | ((paneId: string) => void),
   onStateChange: vi.fn(() => () => {}),
+  onFocused: vi.fn((callback: (paneId: string) => void) => {
+    browserBridgeMocks.focusedHandler = callback;
+    return () => {};
+  }),
   onPermissionRequest: vi.fn((callback: (request: BrowserPermissionRequest) => void) => {
     browserBridgeMocks.permissionRequestHandler = callback;
     return () => {};
@@ -103,6 +109,10 @@ vi.mock("../lib/editor-url", () => ({
   extractEditorFolderFromUrl: vi.fn(() => null),
 }));
 
+vi.mock("../lib/native-pane-focus", () => ({
+  syncWorkspaceFocusForPane: browserBridgeMocks.syncWorkspaceFocusForPane,
+}));
+
 function HookHarness() {
   useBrowserBridge();
   return null;
@@ -122,9 +132,12 @@ beforeEach(async () => {
   browserBridgeMocks.updatePaneTitle.mockReset();
   browserBridgeMocks.updateBrowserPaneZoom.mockReset();
   browserBridgeMocks.openBrowserInGroup.mockReset();
+  browserBridgeMocks.syncWorkspaceFocusForPane.mockReset();
   browserBridgeMocks.contextMenuRequestHandler = null;
   browserBridgeMocks.permissionRequestHandler = null;
+  browserBridgeMocks.focusedHandler = null;
   browserBridgeMocks.onStateChange.mockClear();
+  browserBridgeMocks.onFocused.mockClear();
   browserBridgeMocks.onPermissionRequest.mockClear();
   browserBridgeMocks.onContextMenuRequest.mockClear();
   browserBridgeMocks.onOpenInNewTabRequest.mockClear();
@@ -139,6 +152,7 @@ beforeEach(async () => {
   window.api = {
     browser: {
       onStateChange: browserBridgeMocks.onStateChange,
+      onFocused: browserBridgeMocks.onFocused,
       onPermissionRequest: browserBridgeMocks.onPermissionRequest,
       onContextMenuRequest: browserBridgeMocks.onContextMenuRequest,
       onOpenInNewTabRequest: browserBridgeMocks.onOpenInNewTabRequest,
@@ -202,6 +216,20 @@ test("opens link context-menu targets in a new tab for the focused group", async
     "group-1",
     "https://devspace.dev/docs",
   );
+});
+
+test("syncs workspace focus when a webcontents-based pane gains focus", async () => {
+  expect(browserBridgeMocks.focusedHandler).toBeTypeOf("function");
+  const handler = browserBridgeMocks.focusedHandler;
+  if (!handler) {
+    throw new Error("expected useBrowserBridge to register a focus handler");
+  }
+
+  await act(async () => {
+    handler("pane-7");
+  });
+
+  expect(browserBridgeMocks.syncWorkspaceFocusForPane).toHaveBeenCalledWith("pane-7");
 });
 
 test("queues permission requests without denying an earlier pane", async () => {

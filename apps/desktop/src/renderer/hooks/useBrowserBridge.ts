@@ -8,6 +8,7 @@ import {
 } from "../lib/browser-context-menu";
 import { findWorkspaceIdForPane } from "../lib/browser-pane-routing";
 import { extractEditorFolderFromUrl } from "../lib/editor-url";
+import { syncWorkspaceFocusForPane } from "../lib/native-pane-focus";
 import type { BrowserBridgeListeners, BrowserBridgeUnsubscribe } from "../../shared/types";
 
 function subscribeToBrowserEvents(listeners: BrowserBridgeListeners): BrowserBridgeUnsubscribe {
@@ -15,6 +16,10 @@ function subscribeToBrowserEvents(listeners: BrowserBridgeListeners): BrowserBri
 
   if (listeners.onStateChange) {
     disposers.push(window.api.browser.onStateChange(listeners.onStateChange));
+  }
+
+  if (listeners.onFocused) {
+    disposers.push(window.api.browser.onFocused(listeners.onFocused));
   }
 
   if (listeners.onPermissionRequest) {
@@ -60,6 +65,9 @@ export function useBrowserBridge(): void {
             updateBrowserPaneZoom(paneId, zoom);
           },
         });
+      },
+      onFocused: (paneId) => {
+        syncWorkspaceFocusForPane(paneId);
       },
       onPermissionRequest: (request) => {
         setPendingPermissionRequest(request);

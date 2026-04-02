@@ -8,19 +8,31 @@ import type {
   BrowserRuntimeState,
   BrowserStopFindAction,
 } from "../../shared/browser";
+import type { ShortcutAction, ShortcutIpcChannel, StoredShortcut } from "../../shared/shortcuts";
 import type { BrowserHistoryRecorder } from "./browser-history-service";
+
+export type BrowserPaneKind = "browser" | "editor" | "t3code";
+
+export interface BrowserShortcutBinding {
+  action: ShortcutAction;
+  channel: ShortcutIpcChannel;
+  shortcut: StoredShortcut;
+  args?: unknown[];
+}
 
 export type BrowserPaneManagerDeps = {
   createView?: (options: WebContentsViewConstructorOptions) => WebContentsView;
   addChildView: (view: View) => void;
   removeChildView: (view: View) => void;
-  sendToRenderer: (channel: string, payload: unknown) => void;
+  sendToRenderer: (channel: string, ...args: unknown[]) => void;
+  getAppShortcutBindings?: () => BrowserShortcutBinding[];
   getSession?: () => Session;
   historyService?: BrowserHistoryRecorder;
 };
 
 export interface BrowserPaneRecord {
   view: WebContentsView;
+  kind: BrowserPaneKind;
   runtimeState: BrowserRuntimeState;
   bounds: BrowserBounds | null;
   isVisible: boolean;
@@ -44,7 +56,7 @@ export type BrowserRuntimePatch = Partial<
 >;
 
 export interface BrowserPaneController {
-  createPane(paneId: string, initialUrl: string): void;
+  createPane(paneId: string, initialUrl: string, kind?: BrowserPaneKind): void;
   destroyPane(paneId: string): void;
   showPane(paneId: string): void;
   hidePane(paneId: string): void;

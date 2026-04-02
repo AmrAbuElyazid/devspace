@@ -9,6 +9,7 @@ import {
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
+import { releaseNativeFocus } from "../../lib/native-pane-focus";
 
 interface BrowserFindBarProps {
   paneId: string;
@@ -35,8 +36,11 @@ export default function BrowserFindBar({
   }, [query]);
 
   useEffect(() => {
-    inputRef.current?.focus();
-    inputRef.current?.select();
+    releaseNativeFocus();
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
   }, [focusToken]);
 
   const runFind = useCallback(

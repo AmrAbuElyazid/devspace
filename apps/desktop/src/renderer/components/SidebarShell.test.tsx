@@ -124,6 +124,12 @@ beforeEach(() => {
   sidebarShellMocks.contextMenuShow.mockResolvedValue(null);
 
   window.api = {
+    terminal: {
+      blur: vi.fn(),
+    },
+    window: {
+      focusContent: vi.fn(),
+    },
     contextMenu: {
       show: sidebarShellMocks.contextMenuShow,
     },

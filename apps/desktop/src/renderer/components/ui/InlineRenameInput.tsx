@@ -1,4 +1,5 @@
 import { memo, useState, useRef, useEffect, useCallback, type KeyboardEvent } from "react";
+import { releaseNativeFocus } from "../../lib/native-pane-focus";
 
 interface InlineRenameInputProps {
   initialValue: string;
@@ -17,9 +18,8 @@ export const InlineRenameInput = memo(function InlineRenameInput({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    // Blur native views (Ghostty terminal) so the web input can receive focus,
-    // then wait a frame for the DOM to settle before focusing.
-    void window.api?.terminal?.blur?.();
+    // Release any native first responder before focusing the inline DOM input.
+    releaseNativeFocus();
     requestAnimationFrame(() => {
       const input = inputRef.current;
       if (input) {

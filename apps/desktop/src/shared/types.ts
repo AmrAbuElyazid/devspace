@@ -56,10 +56,14 @@ export interface DevspaceBridge {
     minimize: () => void;
     maximize: () => void;
     close: () => void;
+    focusContent: () => void;
     setSidebarOpen: (open: boolean) => void;
     isMaximized: () => Promise<boolean>;
     onMaximizeChange: (callback: (maximized: boolean) => void) => () => void;
     onFocus: (callback: () => void) => () => void;
+    onNativeModifierChanged: (
+      callback: (modifier: "command" | "control" | null) => void,
+    ) => () => void;
     onOpenEditor: (callback: (folderPath: string) => void) => () => void;
   };
   dialog: {
@@ -110,6 +114,7 @@ export interface DevspaceBridge {
 
 export interface BrowserBridgeListeners {
   onStateChange?: (state: BrowserRuntimeState) => void;
+  onFocused?: (paneId: string) => void;
   onPermissionRequest?: (request: BrowserPermissionRequest) => void;
   onContextMenuRequest?: (request: BrowserContextMenuRequest) => void;
   onOpenInNewTabRequest?: (request: BrowserOpenInNewTabRequest) => void;
@@ -150,6 +155,7 @@ export interface BrowserBridge {
   ) => Promise<BrowserAccessResult>;
   clearBrowsingData: (target: ClearBrowsingDataTarget) => Promise<{ ok: boolean; error?: string }>;
   onStateChange: (callback: (state: BrowserRuntimeState) => void) => BrowserBridgeUnsubscribe;
+  onFocused: (callback: (paneId: string) => void) => BrowserBridgeUnsubscribe;
   onPermissionRequest: (
     callback: (request: BrowserPermissionRequest) => void,
   ) => BrowserBridgeUnsubscribe;

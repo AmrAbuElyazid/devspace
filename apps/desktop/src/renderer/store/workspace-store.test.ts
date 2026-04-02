@@ -1,4 +1,4 @@
-import { test, expect } from "vitest";
+import { test, expect, vi } from "vitest";
 
 // Mock window.api so that cleanupPaneResources doesn't crash when destroying
 // terminal/browser/editor/t3code panes in a test environment.
@@ -36,6 +36,8 @@ function resetWorkspaceStore(): void {
     activeWorkspaceId: "",
     panes: {},
     paneGroups: {},
+    tabHistoryByGroupId: {},
+    recentTabTraversalByGroupId: {},
     pinnedSidebarNodes: [],
     sidebarTree: [],
   });
@@ -184,6 +186,43 @@ test("addGroupTab creates empty pane in group", () => {
   expect(newPane).toBeTruthy();
   expect(newPane!.type).toBe("terminal");
   expect(newPane!.title).toBe("Terminal");
+});
+
+test("activateRecentTab walks recent tabs per group and supports reverse traversal", () => {
+  const nowSpy = vi.spyOn(Date, "now");
+  const wsId = setupWorkspace();
+  const ws = getWorkspace(wsId);
+  expect(ws?.focusedGroupId).toBeTruthy();
+  const groupId = ws!.focusedGroupId!;
+
+  useWorkspaceStore.getState().addGroupTab(wsId, groupId);
+  useWorkspaceStore.getState().addGroupTab(wsId, groupId);
+
+  const group = useWorkspaceStore.getState().paneGroups[groupId]!;
+  const [firstTab, secondTab, thirdTab] = group.tabs;
+  expect(firstTab && secondTab && thirdTab).toBeTruthy();
+
+  useWorkspaceStore.getState().setActiveGroupTab(wsId, groupId, firstTab!.id);
+  expect(useWorkspaceStore.getState().paneGroups[groupId]!.activeTabId).toBe(firstTab!.id);
+
+  nowSpy.mockReturnValue(100);
+  useWorkspaceStore.getState().activateRecentTab(wsId, groupId, 1);
+  expect(useWorkspaceStore.getState().paneGroups[groupId]!.activeTabId).toBe(thirdTab!.id);
+
+  nowSpy.mockReturnValue(200);
+  useWorkspaceStore.getState().activateRecentTab(wsId, groupId, 1);
+  expect(useWorkspaceStore.getState().paneGroups[groupId]!.activeTabId).toBe(secondTab!.id);
+
+  nowSpy.mockReturnValue(300);
+  useWorkspaceStore.getState().activateRecentTab(wsId, groupId, -1);
+  expect(useWorkspaceStore.getState().paneGroups[groupId]!.activeTabId).toBe(thirdTab!.id);
+
+  useWorkspaceStore.getState().clearRecentTabTraversals();
+  nowSpy.mockReturnValue(2000);
+  useWorkspaceStore.getState().activateRecentTab(wsId, groupId, 1);
+  expect(useWorkspaceStore.getState().paneGroups[groupId]!.activeTabId).toBe(firstTab!.id);
+
+  nowSpy.mockRestore();
 });
 
 test("removeGroupTab last tab with siblings removes group", () => {

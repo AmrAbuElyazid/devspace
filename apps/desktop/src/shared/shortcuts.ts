@@ -60,6 +60,8 @@ export type ShortcutAction =
   | "close-tab"
   | "next-tab"
   | "prev-tab"
+  | "recent-tab"
+  | "recent-tab-reverse"
   | "select-tab-1"
   | "select-tab-2"
   | "select-tab-3"
@@ -255,6 +257,22 @@ export const DEFAULT_SHORTCUTS: readonly ShortcutDefinition[] = [
     category: "tabs",
     defaultShortcut: cmdShift("["),
     ipcChannel: "app:prev-tab",
+    menuGroup: "View",
+  },
+  {
+    action: "recent-tab",
+    label: "Recent Tab",
+    category: "tabs",
+    defaultShortcut: ctrl("tab"),
+    ipcChannel: "app:recent-tab",
+    menuGroup: "View",
+  },
+  {
+    action: "recent-tab-reverse",
+    label: "Recent Tab Backward",
+    category: "tabs",
+    defaultShortcut: { key: "tab", command: false, shift: true, option: false, control: true },
+    ipcChannel: "app:recent-tab-reverse",
     menuGroup: "View",
   },
   {
