@@ -3,6 +3,10 @@ import { existsSync } from "fs";
 import { join, resolve } from "path";
 import { GhosttyTerminal, type ReservedShortcut, type TerminalBounds } from "ghostty-electron";
 
+function bashSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
 /**
  * Detect the user's default shell name from SHELL env var.
  * Returns the basename (e.g. "zsh", "bash", "fish").
@@ -38,9 +42,10 @@ export function buildShellIntegrationEnvVars(
     // on the first interactive prompt, then removes itself.
     // This keeps shell integration compatible with macOS's default bash 3.2.
     const bashIntegration = `${dirs.ghosttyResourcesDir}/shell-integration/bash/ghostty.bash`;
+    const quotedBashIntegration = bashSingleQuote(bashIntegration);
     merged.PROMPT_COMMAND = [
       "unset PROMPT_COMMAND;",
-      `[ -f "${bashIntegration}" ] && . "${bashIntegration}";`,
+      `[ -f ${quotedBashIntegration} ] && . ${quotedBashIntegration};`,
     ].join(" ");
   } else if (shellName === "fish" && dirs.ghosttyResourcesDir) {
     // Fish sources vendor_conf.d/*.fish from directories in XDG_DATA_DIRS.

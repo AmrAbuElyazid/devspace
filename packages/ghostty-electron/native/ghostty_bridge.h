@@ -2,6 +2,7 @@
 
 #include <napi.h>
 #import <AppKit/AppKit.h>
+#include <mutex>
 #include <unordered_map>
 #include <vector>
 #include <string>
@@ -40,6 +41,13 @@ struct GhosttyAppState {
     Napi::ThreadSafeFunction searchEndCallback;
     Napi::ThreadSafeFunction searchTotalCallback;
     Napi::ThreadSafeFunction searchSelectedCallback;
+
+    id appDidBecomeActiveObserver = nil;
+    id appDidResignActiveObserver = nil;
+    std::vector<id> windowObserverTokens;
+    std::vector<std::string> clipboardTempFiles;
+    NSEventModifierFlags lastModifierFlags = 0;
+    std::mutex surfacesMutex;
 };
 
 extern GhosttyAppState g_state;

@@ -6,6 +6,7 @@ import type { ReservedShortcut } from "./types";
  */
 export interface GhosttyNativeBridge {
   init(windowHandle: Buffer): void;
+  shutdown(): void;
   createSurface(
     surfaceId: string,
     options?: { cwd?: string; envVars?: Record<string, string> },
@@ -35,6 +36,30 @@ export interface GhosttyNativeBridge {
   ): void;
 }
 
+const REQUIRED_BRIDGE_METHODS = [
+  "init",
+  "shutdown",
+  "createSurface",
+  "destroySurface",
+  "showSurface",
+  "hideSurface",
+  "focusSurface",
+  "resizeSurface",
+  "setVisibleSurfaces",
+  "blurSurfaces",
+  "sendBindingAction",
+  "setReservedShortcuts",
+  "setCallback",
+] as const;
+
+function isNativeBridge(value: unknown): value is GhosttyNativeBridge {
+  if (typeof value !== "object" || value === null) return false;
+
+  return REQUIRED_BRIDGE_METHODS.every((method) => {
+    return typeof (value as Record<string, unknown>)[method] === "function";
+  });
+}
+
 /**
  * Load the compiled native addon (.node file).
  *
@@ -46,5 +71,15 @@ export function loadNativeAddon(addonPath: string): GhosttyNativeBridge {
   const raw = require(addonPath);
   // Vite's ESM bundling may wrap the require result in { default: <addon> }
   const addon = raw.default ?? raw;
-  return addon as GhosttyNativeBridge;
+
+  if (!isNativeBridge(addon)) {
+    const missing = REQUIRED_BRIDGE_METHODS.filter(
+      (method) => typeof (addon as Record<string, unknown> | null)?.[method] !== "function",
+    );
+    throw new Error(
+      `Invalid Ghostty native addon at ${addonPath}: missing ${missing.join(", ") || "required bridge methods"}`,
+    );
+  }
+
+  return addon;
 }
