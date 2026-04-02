@@ -1,10 +1,7 @@
 import type {
   BrowserFindInPageOptions,
   BrowserBounds,
-  BrowserContextMenuRequest,
-  BrowserContextMenuTarget,
   BrowserFailureState,
-  BrowserOpenInNewTabRequest,
   BrowserFindState,
   BrowserPermissionRequest,
   BrowserPermissionDecision,
@@ -18,12 +15,7 @@ import type {
   BrowserPaneRecord,
   BrowserRuntimePatch,
 } from "./browser-types";
-import {
-  findShortcutBinding,
-  resolveNativeModifier,
-  toStoredShortcut,
-  type WebContentsInputEvent,
-} from "./browser-web-shortcuts";
+import { registerBrowserPaneWebContentsListeners } from "./browser-pane-webcontents-events";
 
 type PendingHistoryVisit = {
   url: string;
@@ -116,39 +108,6 @@ function createInitialRuntimeState(paneId: string, initialUrl: string): BrowserR
     failure: null,
   };
 }
-
-function normalizeContextMenuText(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function getContextMenuTarget(params: {
-  linkURL?: unknown;
-  selectionText?: unknown;
-}): BrowserContextMenuTarget {
-  if (normalizeContextMenuText(params.linkURL)) {
-    return "link";
-  }
-
-  if (normalizeContextMenuText(params.selectionText)) {
-    return "selection";
-  }
-
-  return "page";
-}
-
-type WebContentsEventEmitter = {
-  on: (event: string, listener: (...args: unknown[]) => void) => void;
-};
-
-type FoundInPageResult = {
-  activeMatchOrdinal?: number;
-  matches?: number;
-};
 
 type PendingPermissionResolution = (decision: BrowserPermissionDecision) => void;
 type PendingPermissionRequest = {
@@ -554,263 +513,26 @@ export class BrowserPaneManager implements BrowserPaneController {
     this.deps.sendToRenderer("browser:stateChanged", cloneRuntimeState(pane.runtimeState));
   }
 
-  private emitContextMenuRequest(payload: BrowserContextMenuRequest): void {
-    this.deps.sendToRenderer("browser:contextMenuRequested", payload);
-  }
-
-  private emitFocusedPane(paneId: string): void {
-    this.deps.sendToRenderer("browser:focused", paneId);
-  }
-
-  private emitNativeModifierChanged(modifier: "command" | "control" | null): void {
-    this.deps.sendToRenderer("window:nativeModifierChanged", modifier);
-  }
-
-  private emitOpenInNewTabRequest(payload: BrowserOpenInNewTabRequest): void {
-    this.deps.sendToRenderer("browser:openInNewTabRequested", payload);
-  }
-
   private registerWebContentsListeners(pane: BrowserPaneRecord): void {
-    const webContents = pane.view.webContents as Electron.WebContents &
-      Partial<WebContentsEventEmitter>;
-    const setWindowOpenHandler = (
-      webContents as {
-        setWindowOpenHandler?: (
-          handler: (details: { url: string }) => { action: "deny" | "allow" },
-        ) => void;
-      }
-    ).setWindowOpenHandler;
-    if (typeof setWindowOpenHandler === "function") {
-      setWindowOpenHandler.call(webContents, (details: { url: string }) => {
-        this.emitOpenInNewTabRequest({
-          paneId: pane.runtimeState.paneId,
-          url: details.url,
-        });
-        return { action: "deny" };
-      });
-    }
-
-    if (typeof webContents?.on !== "function") {
-      return;
-    }
-
-    // Forward WebContentsView console output to main process stdout so
-    // diagnostics are visible when launching the .app from terminal.
-    // Only forward devspace-prefixed messages — VS Code extensions generate
-    // massive amounts of warnings/errors during normal startup (Prisma
-    // duplicates, grammar scopes, sandbox notices, etc.).
-    webContents.on("console-message", (event: unknown) => {
-      // Use new Event object API (positional args are deprecated in Electron 33+).
-      const evt = event as { level?: number; message?: string };
-      const level = evt.level ?? 0;
-      const message = evt.message ?? "";
-
-      if (!message.startsWith("[devspace")) return;
-
-      const prefix = `[webview:${pane.runtimeState.paneId}]`;
-      if (level >= 3) console.error(prefix, message);
-      else if (level === 2) console.warn(prefix, message);
-      else console.log(prefix, message);
-    });
-
-    webContents.on("did-start-loading", () => {
-      this.applyRuntimePatch(pane.runtimeState.paneId, { isLoading: true, failure: null });
-    });
-
-    webContents.on("focus", () => {
-      this.emitFocusedPane(pane.runtimeState.paneId);
-    });
-
-    webContents.on("blur", () => {
-      this.emitNativeModifierChanged(null);
-    });
-
-    webContents.on("before-input-event", (event: unknown, input: WebContentsInputEvent) => {
-      const setIgnoreMenuShortcuts = (
-        webContents as {
-          setIgnoreMenuShortcuts?: (ignore: boolean) => void;
-        }
-      ).setIgnoreMenuShortcuts;
-
-      const shortcut = toStoredShortcut(input);
-      this.emitNativeModifierChanged(resolveNativeModifier(input, shortcut));
-
-      if (input.type !== "keyDown" || !shortcut) {
-        if (typeof setIgnoreMenuShortcuts === "function") {
-          setIgnoreMenuShortcuts.call(
-            webContents,
-            !(input.meta === true || input.control === true),
-          );
-        }
-        return;
-      }
-
-      const binding = findShortcutBinding(
-        this.deps.getAppShortcutBindings?.(),
-        pane.kind,
-        shortcut,
-      );
-      if (!binding) {
-        if (typeof setIgnoreMenuShortcuts === "function") {
-          setIgnoreMenuShortcuts.call(
-            webContents,
-            !(input.meta === true || input.control === true),
-          );
-        }
-        return;
-      }
-
-      if (typeof setIgnoreMenuShortcuts === "function") {
-        setIgnoreMenuShortcuts.call(webContents, true);
-      }
-
-      const preventDefault = (event as { preventDefault?: () => void }).preventDefault;
-      if (typeof preventDefault === "function") {
-        preventDefault.call(event);
-      }
-
-      this.deps.sendToRenderer(binding.channel, ...(binding.args ?? []));
-    });
-
-    webContents.on("did-stop-loading", () => {
-      this.syncNavigationState(pane);
-      this.applyRuntimePatch(pane.runtimeState.paneId, {
-        isLoading: false,
-        canGoBack: pane.runtimeState.canGoBack,
-        canGoForward: pane.runtimeState.canGoForward,
-      });
-    });
-
-    webContents.on("did-navigate", (_event: unknown, url: string) => {
-      this.syncNavigationState(pane);
-      this.recordCommittedHistoryVisit(pane, url);
-      this.applyRuntimePatch(pane.runtimeState.paneId, {
-        url,
-        canGoBack: pane.runtimeState.canGoBack,
-        canGoForward: pane.runtimeState.canGoForward,
-        isLoading: false,
-        failure: null,
-      });
-    });
-
-    webContents.on("did-navigate-in-page", (_event: unknown, url: string) => {
-      this.syncNavigationState(pane);
-      this.recordCommittedHistoryVisit(pane, url);
-      this.applyRuntimePatch(pane.runtimeState.paneId, {
-        url,
-        canGoBack: pane.runtimeState.canGoBack,
-        canGoForward: pane.runtimeState.canGoForward,
-        failure: null,
-      });
-    });
-
-    webContents.on("page-title-updated", (_event: unknown, title: string) => {
-      const nextTitle = title || "Browser";
-      this.applyRuntimePatch(pane.runtimeState.paneId, { title: nextTitle });
-      this.refreshPendingHistoryTitle(pane, nextTitle);
-    });
-
-    webContents.on("page-favicon-updated", (_event: unknown, favicons: string[]) => {
-      this.applyRuntimePatch(pane.runtimeState.paneId, { faviconUrl: favicons[0] ?? null });
-    });
-
-    webContents.on("context-menu", (event: unknown, params: unknown) => {
-      const preventDefault = (event as { preventDefault?: () => void })?.preventDefault;
-      if (typeof preventDefault === "function") {
-        preventDefault.call(event);
-      }
-
-      const nextParams =
-        typeof params === "object" && params !== null ? (params as Record<string, unknown>) : {};
-      const paneBounds = pane.bounds ?? { x: 0, y: 0 };
-      const x = typeof nextParams.x === "number" ? nextParams.x : 0;
-      const y = typeof nextParams.y === "number" ? nextParams.y : 0;
-      const linkUrl = normalizeContextMenuText(nextParams.linkURL);
-      const selectionText = normalizeContextMenuText(nextParams.selectionText);
-      const target = getContextMenuTarget(nextParams);
-
-      this.syncNavigationState(pane);
-      this.emitContextMenuRequest({
-        paneId: pane.runtimeState.paneId,
-        position: {
-          x: paneBounds.x + x,
-          y: paneBounds.y + y,
-        },
-        target,
-        pageUrl: pane.runtimeState.url,
-        linkUrl,
-        selectionText,
-        canGoBack: pane.runtimeState.canGoBack,
-        canGoForward: pane.runtimeState.canGoForward,
-      });
-    });
-
-    webContents.on("found-in-page", (_event: unknown, result: FoundInPageResult) => {
-      const query = pane.runtimeState.find?.query;
-      if (!query) {
-        return;
-      }
-
-      this.applyFindResult(pane.runtimeState.paneId, {
-        query,
-        activeMatch: result.activeMatchOrdinal ?? 0,
-        totalMatches: result.matches ?? 0,
-      });
-    });
-
-    webContents.on(
-      "did-fail-load",
-      (
-        _event: unknown,
-        errorCode: number,
-        errorDescription: string,
-        validatedURL: string,
-        isMainFrame?: boolean,
-      ) => {
-        if (isMainFrame === false) {
-          return;
-        }
-
-        if (errorCode === -3) {
-          this.applyRuntimePatch(pane.runtimeState.paneId, {
-            isLoading: false,
-          });
-          return;
-        }
-
-        const securityPatch =
-          errorCode <= -200 && errorCode >= -299
-            ? { isSecure: false, securityLabel: "Certificate error" as const }
-            : {};
-
-        this.syncNavigationState(pane);
-        this.applyRuntimePatch(pane.runtimeState.paneId, {
-          title: errorDescription || "Navigation failed",
-          faviconUrl: null,
-          isLoading: false,
-          canGoBack: pane.runtimeState.canGoBack,
-          canGoForward: pane.runtimeState.canGoForward,
-          failure: {
-            kind: "navigation",
-            detail: errorDescription || "Navigation failed",
-            url: validatedURL,
-          },
-          ...securityPatch,
-        });
+    registerBrowserPaneWebContentsListeners({
+      pane,
+      sendToRenderer: this.deps.sendToRenderer,
+      getAppShortcutBindings: this.deps.getAppShortcutBindings,
+      applyRuntimePatch: (paneId, patch) => {
+        this.applyRuntimePatch(paneId, patch);
       },
-    );
-
-    webContents.on("render-process-gone", (_event: unknown, details: { reason?: string }) => {
-      this.applyRuntimePatch(pane.runtimeState.paneId, {
-        title: "Browser pane crashed",
-        faviconUrl: null,
-        isLoading: false,
-        failure: {
-          kind: "crash",
-          detail: details.reason ?? "gone",
-          url: pane.runtimeState.url,
-        },
-      });
+      applyFindResult: (paneId, result) => {
+        this.applyFindResult(paneId, result);
+      },
+      syncNavigationState: (nextPane) => {
+        this.syncNavigationState(nextPane);
+      },
+      recordCommittedHistoryVisit: (nextPane, url) => {
+        this.recordCommittedHistoryVisit(nextPane, url);
+      },
+      refreshPendingHistoryTitle: (nextPane, title) => {
+        this.refreshPendingHistoryTitle(nextPane, title);
+      },
     });
   }
 
