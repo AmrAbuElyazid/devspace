@@ -70,7 +70,7 @@
 
 - [ ] Expand behavior-heavy UI and integration coverage where it pays off most.
       Likely areas: pane lifecycle, native-view behavior, browser security flows, and complex drag/drop interactions.
-      Progress: added direct lifecycle tests for `useNativeView` and `TerminalPane`, `NoteEditor` package serialization tests, `BrowserPane` permission/security plus context-menu routing coverage, `main/index.ts` startup/window shutdown coverage, and drag/drop tests around `useDndOrchestrator` target priority, `PaneGroupContainer` native-view placeholders, and handler-level workspace/sidebar routing including sidebar reorder execution.
+      Progress: added direct lifecycle tests for `useNativeView` and `TerminalPane`, `NoteEditor` package serialization tests, `BrowserPane` permission/security plus context-menu routing coverage, `main/index.ts` startup/window shutdown coverage, drag/drop tests around `useDndOrchestrator` target priority, `PaneGroupContainer` native-view placeholders, the core handler matrix for tab reorder/split plus workspace/sidebar routing, and `Sidebar` shell coverage for search, pending edits, workspace/folder creation routing, context-menu actions, and pinned drag state.
 
 - [x] Decide whether `ghostty-electron` needs package-level tests or should remain clearly app-coupled for now.
       Refs: `packages/ghostty-electron/README.md:209-223`, `packages/ghostty-electron/package.json`
