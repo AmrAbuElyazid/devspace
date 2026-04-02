@@ -2,7 +2,6 @@ import type {
   BrowserFindInPageOptions,
   BrowserBounds,
   BrowserFailureState,
-  BrowserFindState,
   BrowserPermissionRequest,
   BrowserPermissionDecision,
   BrowserRuntimeState,
@@ -16,6 +15,11 @@ import type {
   BrowserRuntimePatch,
 } from "./browser-types";
 import { registerBrowserPaneWebContentsListeners } from "./browser-pane-webcontents-events";
+import {
+  cloneRuntimeState,
+  createInitialRuntimeState,
+  withDerivedSecurityState,
+} from "./browser-runtime-state";
 
 type PendingHistoryVisit = {
   url: string;
@@ -56,21 +60,6 @@ function createBrowserViewOptions(
   };
 }
 
-function cloneFindState(find: BrowserFindState | null): BrowserFindState | null {
-  if (!find) {
-    return null;
-  }
-
-  return { ...find };
-}
-
-function cloneRuntimeState(state: BrowserRuntimeState): BrowserRuntimeState {
-  return {
-    ...state,
-    find: cloneFindState(state.find),
-  };
-}
-
 function getNavigationHistory(
   webContents: Electron.WebContents | undefined,
 ): WebContentsNavigationHistory | null {
@@ -83,30 +72,6 @@ function getNavigationHistory(
   )?.navigationHistory;
 
   return navigationHistory ?? null;
-}
-
-function getSecurityState(url: string): Pick<BrowserRuntimeState, "isSecure" | "securityLabel"> {
-  const isSecure = url.startsWith("https://");
-  return {
-    isSecure,
-    securityLabel: isSecure ? "Secure" : null,
-  };
-}
-
-function createInitialRuntimeState(paneId: string, initialUrl: string): BrowserRuntimeState {
-  return {
-    paneId,
-    url: initialUrl,
-    title: "Browser",
-    faviconUrl: null,
-    isLoading: false,
-    canGoBack: false,
-    canGoForward: false,
-    ...getSecurityState(initialUrl),
-    currentZoom: 1,
-    find: null,
-    failure: null,
-  };
 }
 
 type PendingPermissionResolution = (decision: BrowserPermissionDecision) => void;
@@ -500,7 +465,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     const hasExplicitSecurityState =
       patch.isSecure !== undefined || patch.securityLabel !== undefined;
     if (patch.url !== undefined && !hasExplicitSecurityState) {
-      Object.assign(pane.runtimeState, getSecurityState(patch.url));
+      Object.assign(pane.runtimeState, withDerivedSecurityState(patch.url));
     }
     this.emitStateChange(pane);
   }
