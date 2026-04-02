@@ -75,6 +75,7 @@ export function useBrowserPaneController({
   workspaceId,
   config,
 }: UseBrowserPaneControllerArgs) {
+  const paneReady = useRef(false);
   const placeholderRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId]);
@@ -84,6 +85,7 @@ export function useBrowserPaneController({
   const findBarFocusToken = useBrowserStore((s) => s.findBarFocusTokenByPaneId[paneId] ?? 0);
   const closeFindBar = useBrowserStore((s) => s.closeFindBar);
   const clearPendingPermissionRequest = useBrowserStore((s) => s.clearPendingPermissionRequest);
+  const upsertRuntimeState = useBrowserStore((s) => s.upsertRuntimeState);
   const openBrowserInGroup = useWorkspaceStore((s) => s.openBrowserInGroup);
   const initialUrl = useMemo(
     () => normalizeBrowserInput(config.url || "about:blank"),
@@ -94,33 +96,47 @@ export function useBrowserPaneController({
   const activePermissionRequest =
     pendingPermissionRequest?.paneId === paneId ? pendingPermissionRequest : null;
 
+  // Queue browser creation during render so the create IPC is already in
+  // flight before useNativeView's registration effect can reconcile
+  // visibility. This matches the terminal pane ordering and avoids a race
+  // where setVisiblePanes runs before the main process knows about the pane.
+  if (!paneReady.current) {
+    if (hasCreatedBrowserPane(paneId)) {
+      paneReady.current = true;
+    } else {
+      markBrowserPaneCreated(paneId);
+      void window.api.browser.create(paneId, initialUrl).catch(() => {
+        markBrowserPaneDestroyed(paneId);
+      });
+      paneReady.current = true;
+    }
+  }
+
   const { isVisible } = useNativeView({
     id: paneId,
     type: "browser",
     ref: placeholderRef,
-    enabled: failure === null,
+    enabled: paneReady.current && failure === null,
   });
 
   useEffect(() => {
     let cancelled = false;
 
-    if (hasCreatedBrowserPane(paneId)) {
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    markBrowserPaneCreated(paneId);
-    void window.api.browser.create(paneId, initialUrl).catch(() => {
-      if (!cancelled) {
-        markBrowserPaneDestroyed(paneId);
-      }
-    });
+    void window.api.browser
+      .getRuntimeState(paneId)
+      .then((state) => {
+        if (!cancelled && state) {
+          upsertRuntimeState(state);
+        }
+      })
+      .catch(() => {
+        // Ignore transient hydration failures; live state-change events can still recover.
+      });
 
     return () => {
       cancelled = true;
     };
-  }, [initialUrl, paneId]);
+  }, [paneId, upsertRuntimeState]);
 
   useEffect(() => {
     if (runtimeState?.url) {

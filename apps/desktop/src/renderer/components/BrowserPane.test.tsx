@@ -3,19 +3,21 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { BrowserContextMenuRequest } from "../../shared/browser";
+import type { BrowserContextMenuRequest, BrowserRuntimeState } from "../../shared/browser";
 import BrowserPane from "./BrowserPane";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const browserPaneMocks = vi.hoisted(() => ({
   useNativeView: vi.fn(),
-  createBrowserPane: vi.fn(),
-  destroyBrowserPane: vi.fn(),
   openBrowserInGroup: vi.fn(),
   clearPendingPermissionRequest: vi.fn(),
   closeFindBar: vi.fn(),
+  upsertRuntimeState: vi.fn(),
   browserCreate: vi.fn(() => Promise.resolve()),
+  browserGetRuntimeState: vi.fn<(paneId: string) => Promise<BrowserRuntimeState | undefined>>(() =>
+    Promise.resolve(undefined),
+  ),
   browserSetZoom: vi.fn(),
   browserNavigate: vi.fn(),
   browserStop: vi.fn(),
@@ -52,6 +54,7 @@ vi.mock("../store/browser-store", () => ({
       state: typeof browserPaneMocks.browserStoreState & {
         clearPendingPermissionRequest: typeof browserPaneMocks.clearPendingPermissionRequest;
         closeFindBar: typeof browserPaneMocks.closeFindBar;
+        upsertRuntimeState: typeof browserPaneMocks.upsertRuntimeState;
       },
     ) => unknown,
   ) =>
@@ -59,6 +62,7 @@ vi.mock("../store/browser-store", () => ({
       ...browserPaneMocks.browserStoreState,
       clearPendingPermissionRequest: browserPaneMocks.clearPendingPermissionRequest,
       closeFindBar: browserPaneMocks.closeFindBar,
+      upsertRuntimeState: browserPaneMocks.upsertRuntimeState,
     }),
 }));
 
@@ -131,8 +135,11 @@ beforeEach(() => {
   browserPaneMocks.openBrowserInGroup.mockReset();
   browserPaneMocks.clearPendingPermissionRequest.mockReset();
   browserPaneMocks.closeFindBar.mockReset();
+  browserPaneMocks.upsertRuntimeState.mockReset();
   browserPaneMocks.browserCreate.mockReset();
   browserPaneMocks.browserCreate.mockReturnValue(Promise.resolve());
+  browserPaneMocks.browserGetRuntimeState.mockReset();
+  browserPaneMocks.browserGetRuntimeState.mockReturnValue(Promise.resolve(undefined));
   browserPaneMocks.browserSetZoom.mockReset();
   browserPaneMocks.browserNavigate.mockReset();
   browserPaneMocks.browserStop.mockReset();
@@ -178,6 +185,7 @@ beforeEach(() => {
   window.api = {
     browser: {
       create: browserPaneMocks.browserCreate,
+      getRuntimeState: browserPaneMocks.browserGetRuntimeState,
       setZoom: browserPaneMocks.browserSetZoom,
       navigate: browserPaneMocks.browserNavigate,
       stop: browserPaneMocks.browserStop,
@@ -217,7 +225,49 @@ test("creates the browser pane and renders the current security label", async ()
   });
 
   expect(browserPaneMocks.browserCreate).toHaveBeenCalledWith("pane-1", "https://example.com/");
+  expect(browserPaneMocks.browserGetRuntimeState).toHaveBeenCalledWith("pane-1");
   expect(container.textContent).toContain("Secure connection");
+});
+
+test("hydrates runtime state for an already-created browser pane", async () => {
+  browserPaneMocks.createdPanes.add("pane-1");
+  browserPaneMocks.browserStoreState = {
+    ...browserPaneMocks.browserStoreState,
+    runtimeByPaneId: {},
+  };
+  browserPaneMocks.browserGetRuntimeState.mockResolvedValueOnce({
+    paneId: "pane-1",
+    url: "https://restored.example/",
+    title: "Restored",
+    faviconUrl: null,
+    isLoading: false,
+    canGoBack: false,
+    canGoForward: false,
+    isSecure: true,
+    securityLabel: "Restored security state",
+    currentZoom: 1,
+    find: null,
+    failure: null,
+  });
+
+  await act(async () => {
+    root?.render(
+      <BrowserPane
+        paneId="pane-1"
+        workspaceId="workspace-1"
+        config={{ url: "https://example.com/" }}
+      />,
+    );
+  });
+
+  expect(browserPaneMocks.browserCreate).not.toHaveBeenCalled();
+  expect(browserPaneMocks.browserGetRuntimeState).toHaveBeenCalledWith("pane-1");
+  expect(browserPaneMocks.upsertRuntimeState).toHaveBeenCalledWith(
+    expect.objectContaining({
+      paneId: "pane-1",
+      url: "https://restored.example/",
+    }),
+  );
 });
 
 test("dismissing or allowing a permission request clears local state and resolves the request", async () => {
