@@ -40,6 +40,26 @@ function createElectronView(
   return new WebContentsView(options);
 }
 
+function createBrowserViewOptions(
+  session?: Electron.Session,
+): Electron.WebContentsViewConstructorOptions {
+  return {
+    webPreferences: {
+      allowRunningInsecureContent: false,
+      contextIsolation: true,
+      navigateOnDragDrop: false,
+      nodeIntegration: false,
+      nodeIntegrationInSubFrames: false,
+      nodeIntegrationInWorker: false,
+      safeDialogs: true,
+      sandbox: true,
+      webSecurity: true,
+      webviewTag: false,
+      ...(session ? { session } : {}),
+    },
+  };
+}
+
 function cloneFindState(find: BrowserFindState | null): BrowserFindState | null {
   if (!find) {
     return null;
@@ -300,7 +320,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     const session = this.deps.getSession?.();
-    const view = this.createView(session ? { webPreferences: { session } } : {});
+    const view = this.createView(createBrowserViewOptions(session));
     const pane: BrowserPaneRecord = {
       view,
       kind,

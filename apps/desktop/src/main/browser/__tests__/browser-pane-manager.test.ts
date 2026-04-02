@@ -62,6 +62,44 @@ test("tracks pane lifecycle bookkeeping across create show hide and destroy", ()
   expect(manager.getRuntimeState("pane-1")).toBe(undefined);
 });
 
+test("createPane uses explicit hardened webPreferences for browser views", () => {
+  const session = { id: "session-1" } as never;
+  let receivedOptions: Record<string, unknown> | undefined;
+
+  const manager = new BrowserPaneManager({
+    createView: (options) => {
+      receivedOptions = options as unknown as Record<string, unknown>;
+      return {
+        webContents: {
+          loadURL: () => Promise.resolve(),
+        },
+      } as never;
+    },
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+    getSession: () => session,
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+
+  expect(receivedOptions).toEqual({
+    webPreferences: {
+      allowRunningInsecureContent: false,
+      contextIsolation: true,
+      navigateOnDragDrop: false,
+      nodeIntegration: false,
+      nodeIntegrationInSubFrames: false,
+      nodeIntegrationInWorker: false,
+      safeDialogs: true,
+      sandbox: true,
+      session,
+      webSecurity: true,
+      webviewTag: false,
+    },
+  });
+});
+
 test("hidePane preserves runtime state and visibility bookkeeping", () => {
   const manager = makeManager();
 
