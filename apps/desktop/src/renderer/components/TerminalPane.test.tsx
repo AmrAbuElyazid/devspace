@@ -170,3 +170,37 @@ test("renders a diagnostic when terminal creation fails", async () => {
   expect(container.textContent).toContain("Ghostty not initialized");
   expect(terminalPaneMocks.createdSurfaces.has("pane-1")).toBe(false);
 });
+
+test("retries terminal creation after an initial failure", async () => {
+  terminalPaneMocks.terminalCreate
+    .mockResolvedValueOnce({ error: "Ghostty not initialized" } as { ok: true } | { error: string })
+    .mockResolvedValueOnce({ ok: true } as { ok: true } | { error: string });
+
+  await act(async () => {
+    root?.render(
+      <TerminalPane paneId="pane-1" config={{ cwd: "/tmp/project" }} isFocused={true} />,
+    );
+  });
+
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  const retryButton = container.querySelector('button[type="button"]');
+  expect(retryButton?.textContent).toBe("Retry");
+
+  await act(async () => {
+    retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledTimes(2);
+  expect(terminalPaneMocks.terminalCreate).toHaveBeenNthCalledWith(2, "pane-1", {
+    cwd: "/tmp/project",
+  });
+  expect(container.textContent).not.toContain("Terminal failed to start");
+  expect(terminalPaneMocks.createdSurfaces.has("pane-1")).toBe(true);
+});

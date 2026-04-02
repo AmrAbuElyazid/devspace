@@ -1048,12 +1048,17 @@ static void cleanupClipboardTempFiles() {
     g_state.clipboardTempFiles.clear();
 }
 
+static NSString* clipboardTempFilenamePrefix() {
+    return [NSString stringWithFormat:@"devspace-paste-%d-", getpid()];
+}
+
 static void pruneStaleClipboardTempFiles() {
     NSFileManager* fileManager = [NSFileManager defaultManager];
     NSString* tempDir = NSTemporaryDirectory();
+    NSString* filenamePrefix = clipboardTempFilenamePrefix();
     NSArray<NSString*>* entries = [fileManager contentsOfDirectoryAtPath:tempDir error:nil];
     for (NSString* entry in entries) {
-        if (![entry hasPrefix:@"devspace-paste-"] || ![entry hasSuffix:@".png"]) continue;
+        if (![entry hasPrefix:filenamePrefix] || ![entry hasSuffix:@".png"]) continue;
         NSString* path = [tempDir stringByAppendingPathComponent:entry];
         [fileManager removeItemAtPath:path error:nil];
     }
@@ -1413,7 +1418,8 @@ static bool read_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard, voi
                 }
                 if (imageData) {
                     NSString* tempDir = NSTemporaryDirectory();
-                    NSString* filename = [NSString stringWithFormat:@"devspace-paste-%@.png",
+                    NSString* filename = [NSString stringWithFormat:@"%@%@.png",
+                        clipboardTempFilenamePrefix(),
                         [[NSUUID UUID] UUIDString]];
                     NSString* tempPath = [tempDir stringByAppendingPathComponent:filename];
                     if ([imageData writeToFile:tempPath atomically:YES]) {
@@ -1428,7 +1434,9 @@ static bool read_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard, voi
 
         if (view && view.surface) {
             const char* clipboardText = str ? [str UTF8String] : "";
-            ghostty_surface_complete_clipboard_request(view.surface, clipboardText, context, false);
+            // Devspace does not present a separate clipboard confirmation UI, so
+            // clipboard reads are completed directly on the originating surface.
+            ghostty_surface_complete_clipboard_request(view.surface, clipboardText, context, true);
             handled = true;
         }
     });
@@ -1438,19 +1446,10 @@ static bool read_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard, voi
 
 static void confirm_read_clipboard_cb(void* userdata, const char* data,
                                        void* context, ghostty_clipboard_request_e req) {
+    (void)userdata;
+    (void)data;
+    (void)context;
     (void)req;
-    std::string surfaceId = surfaceIdFromUserdata(userdata);
-
-    runOnMainQueueSync(^{
-        if (surfaceId.empty()) return;
-
-        GhosttyView* view = findSurfaceView(surfaceId);
-        if (!view || !view.surface) return;
-
-        if (view && view.surface) {
-            ghostty_surface_complete_clipboard_request(view.surface, data ? data : "", context, true);
-        }
-    });
 }
 
 static void write_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard,
@@ -1459,10 +1458,12 @@ static void write_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard,
     (void)userdata;
     (void)clipboard;
 
-    if (confirm) return;
-
     runOnMainQueueSync(^{
         if (content_count == 0 || !content) return;
+
+        // Devspace currently has no clipboard write confirmation UI.
+        // Preserve copy behavior by completing the write immediately.
+        (void)confirm;
 
         // Iterate content entries looking for text/plain MIME type
         const char* fallback = nullptr;

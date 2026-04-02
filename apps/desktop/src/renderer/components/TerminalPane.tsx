@@ -86,6 +86,12 @@ export default function TerminalPane({
     }
   }, [isFindBarOpen]);
 
+  const handleRetryCreate = useCallback(() => {
+    markTerminalSurfaceDestroyed(paneId);
+    surfaceReady.current = false;
+    setCreateError(null);
+  }, [paneId]);
+
   const handleCloseFindBar = useCallback(() => {
     closeFindBar(paneId);
     void window.api.terminal.sendBindingAction(paneId, "end_search");
@@ -103,6 +109,18 @@ export default function TerminalPane({
             Terminal failed to start
           </div>
           <div className="mt-2">{createError}</div>
+          <button
+            className="mt-4 rounded px-3 py-1.5 text-sm"
+            style={{
+              background: "var(--surface)",
+              color: "var(--foreground)",
+              border: "1px solid var(--border)",
+            }}
+            onClick={handleRetryCreate}
+            type="button"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
