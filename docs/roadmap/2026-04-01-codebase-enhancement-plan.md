@@ -32,6 +32,7 @@
 
 - [ ] Break up oversized renderer shells over time.
       Initial targets: `Sidebar`, `BrowserPane`, `PaneGroupContainer`.
+      Progress: `Sidebar` is already split across focused subcomponents, and `BrowserPane` now keeps its lifecycle and action wiring in `components/browser/useBrowserPaneController.ts`.
       Refs: `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/BrowserPane.tsx`
 
 - [x] Remove leftover dead or duplicated paths when encountered.
@@ -50,6 +51,7 @@
 
 - [ ] Make persistence more selective over time.
       Opportunity: reduce full-state serialization pressure as the app grows.
+      Progress: the persistence subscriber now ignores UI-only store changes and only schedules a save when the persisted slices actually change.
       Refs: `apps/desktop/src/renderer/store/persistence.ts:272-309`
 
 - [ ] Add lightweight production profiling counters.
