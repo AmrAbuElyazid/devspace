@@ -24,6 +24,7 @@ export interface GhosttyNativeBridge {
       | "title-changed"
       | "surface-closed"
       | "surface-focused"
+      | "modifier-changed"
       | "pwd-changed"
       | "notification"
       | "search-start"

@@ -30,6 +30,10 @@ export function registerSystemIpc(mainWindow: BrowserWindow, allowedRoots: strin
     mainWindow.close();
   });
 
+  safeOn("window:focusContent", () => {
+    mainWindow.webContents.focus();
+  });
+
   safeOn("window:setSidebarOpen", (_event, open: unknown) => {
     if (typeof open !== "boolean") return;
     mainWindow.setWindowButtonPosition(getTrafficLightPosition(open));

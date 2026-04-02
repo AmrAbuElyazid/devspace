@@ -45,9 +45,11 @@ beforeEach(() => {
 test("init loads the addon, initializes the bridge, and forwards valid events", () => {
   const terminal = new GhosttyTerminal();
   const onTitleChanged = vi.fn();
+  const onModifierChanged = vi.fn();
   const onNotification = vi.fn();
 
   terminal.on("title-changed", onTitleChanged);
+  terminal.on("modifier-changed", onModifierChanged);
   terminal.on("notification", onNotification);
 
   const windowHandle = Buffer.from("window-handle");
@@ -60,10 +62,14 @@ test("init loads the addon, initializes the bridge, and forwards valid events", 
   expect(nativeMocks.bridge.init).toHaveBeenCalledWith(windowHandle);
 
   nativeMocks.bridgeCallbacks.get("title-changed")?.("surface-1", "Shell");
+  nativeMocks.bridgeCallbacks.get("modifier-changed")?.("command");
+  nativeMocks.bridgeCallbacks.get("modifier-changed")?.(null);
   nativeMocks.bridgeCallbacks.get("notification")?.("surface-1", "Build", "Done");
   nativeMocks.bridgeCallbacks.get("title-changed")?.("surface-1", 42);
 
   expect(onTitleChanged).toHaveBeenCalledWith("surface-1", "Shell");
+  expect(onModifierChanged).toHaveBeenCalledWith("command");
+  expect(onModifierChanged).toHaveBeenCalledWith(null);
   expect(onNotification).toHaveBeenCalledWith("surface-1", "Build", "Done");
   expect(onTitleChanged).toHaveBeenCalledTimes(1);
 });

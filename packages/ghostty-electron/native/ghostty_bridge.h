@@ -33,6 +33,7 @@ struct GhosttyAppState {
     Napi::ThreadSafeFunction titleChangedCallback;
     Napi::ThreadSafeFunction surfaceClosedCallback;
     Napi::ThreadSafeFunction surfaceFocusedCallback;
+    Napi::ThreadSafeFunction modifierChangedCallback;
     Napi::ThreadSafeFunction pwdChangedCallback;
     Napi::ThreadSafeFunction notificationCallback;
     Napi::ThreadSafeFunction searchStartCallback;

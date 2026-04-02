@@ -111,6 +111,7 @@ if (!IS_DEV) {
 const terminalManager = new TerminalManager();
 let vscodeServerManager: VscodeServerManager;
 let t3codeServerManager: T3CodeServerManager;
+let shortcutStore: ShortcutStore | null = null;
 const browserSessionManager = new BrowserSessionManager();
 
 // Global error handlers
@@ -159,7 +160,27 @@ function createWindow(): void {
   const browserPaneManager = new BrowserPaneManager({
     addChildView: (view) => window.contentView.addChildView(view),
     removeChildView: (view) => window.contentView.removeChildView(view),
-    sendToRenderer: (channel, payload) => window.webContents.send(channel, payload),
+    sendToRenderer: (channel, ...args) => window.webContents.send(channel, ...args),
+    getAppShortcutBindings: () => {
+      if (!shortcutStore) {
+        return [];
+      }
+      const overrides = shortcutStore.getAllOverrides();
+      return DEFAULT_SHORTCUTS.map((def) =>
+        def.numbered
+          ? {
+              action: def.action,
+              channel: def.ipcChannel,
+              shortcut: resolveShortcut(def.action, overrides),
+              args: [parseInt(def.action.slice(-1), 10)],
+            }
+          : {
+              action: def.action,
+              channel: def.ipcChannel,
+              shortcut: resolveShortcut(def.action, overrides),
+            },
+      );
+    },
     getSession: () => browserSessionManager.getSession(),
     historyService: browserHistoryService,
   });
@@ -267,8 +288,8 @@ app.whenReady().then(() => {
   // appear when the user first opens a browser or editor pane.
 
   // Initialize shortcut store and register IPC handlers
-  const shortcutStore = new ShortcutStore();
-  shortcutStore.registerIpcHandlers();
+  const activeShortcutStore = (shortcutStore = new ShortcutStore());
+  activeShortcutStore.registerIpcHandlers();
 
   createWindow();
 
@@ -282,7 +303,7 @@ app.whenReady().then(() => {
       if (win) win.webContents.send(channel, ...args);
     };
 
-    const overrides = shortcutStore.getAllOverrides();
+    const overrides = activeShortcutStore.getAllOverrides();
 
     // Build menu items from registry, grouped by menuGroup.
     // Some groups have additional static items (roles, separators).
@@ -370,14 +391,14 @@ app.whenReady().then(() => {
 
   // Sync reserved shortcuts to the native bridge so Ghostty doesn't consume them.
   function syncNativeBridgeShortcuts(): void {
-    const overrides = shortcutStore.getAllOverrides();
+    const overrides = activeShortcutStore.getAllOverrides();
     terminalManager.setReservedShortcuts(getAllNativeBridgeShortcuts(overrides));
   }
 
   syncNativeBridgeShortcuts();
 
   // Rebuild menu and native bridge when shortcuts change, and notify all windows
-  shortcutStore.onChange(() => {
+  activeShortcutStore.onChange(() => {
     buildAppMenu();
     syncNativeBridgeShortcuts();
     for (const win of BrowserWindow.getAllWindows()) {

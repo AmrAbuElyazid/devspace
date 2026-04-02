@@ -61,6 +61,7 @@ type TerminalCallback = {
   onTitleChanged?: (surfaceId: string, title: string) => void;
   onSurfaceClosed?: (surfaceId: string) => void;
   onSurfaceFocused?: (surfaceId: string) => void;
+  onModifierChanged?: (modifier: "command" | "control" | null) => void;
   onPwdChanged?: (surfaceId: string, pwd: string) => void;
   onNotification?: (surfaceId: string, title: string, body: string) => void;
   onSearchStart?: (surfaceId: string, needle: string) => void;
@@ -120,6 +121,10 @@ export class TerminalManager {
       this.callbacks.onSurfaceFocused?.(surfaceId);
     });
 
+    this.terminal.on("modifier-changed", (modifier) => {
+      this.callbacks.onModifierChanged?.(modifier);
+    });
+
     this.terminal.on("pwd-changed", (surfaceId, pwd) => {
       this.callbacks.onPwdChanged?.(surfaceId, pwd);
     });
@@ -155,6 +160,10 @@ export class TerminalManager {
 
   onSurfaceFocused(callback: (surfaceId: string) => void): void {
     this.callbacks.onSurfaceFocused = callback;
+  }
+
+  onModifierChanged(callback: (modifier: "command" | "control" | null) => void): void {
+    this.callbacks.onModifierChanged = callback;
   }
 
   onPwdChanged(callback: (surfaceId: string, pwd: string) => void): void {

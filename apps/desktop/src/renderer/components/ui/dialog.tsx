@@ -2,6 +2,7 @@ import { forwardRef, useEffect, type ComponentProps } from "react";
 import { Dialog as DialogPrimitive } from "@base-ui-components/react/dialog";
 import { cn } from "../../lib/utils";
 import { useSettingsStore } from "../../store/settings-store";
+import { releaseNativeFocus } from "../../lib/native-pane-focus";
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 
@@ -15,7 +16,7 @@ function Dialog(props: DialogProps) {
   useEffect(() => {
     if (!props.open) return;
     pushOverlay();
-    void window.api?.terminal?.blur?.();
+    releaseNativeFocus();
     return () => {
       popOverlay();
     };

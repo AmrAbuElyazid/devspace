@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { hasEditableRendererFocus } from "../lib/native-pane-focus";
 import { useNativeView } from "../hooks/useNativeView";
 import { Button } from "./ui/button";
 import type { ReactElement } from "react";
@@ -24,6 +25,7 @@ type T3CodeState =
 
 export default function T3CodePane({ paneId }: T3CodePaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
+  const wasVisibleRef = useRef(false);
 
   const [state, setState] = useState<T3CodeState>(() => {
     if (startedInstances.has(paneId)) {
@@ -40,6 +42,17 @@ export default function T3CodePane({ paneId }: T3CodePaneProps): ReactElement {
     ref: placeholderRef,
     enabled: state.status === "running",
   });
+
+  useEffect(() => {
+    const wasVisible = wasVisibleRef.current;
+    wasVisibleRef.current = isVisible;
+
+    if (!isVisible || wasVisible || state.status !== "running" || hasEditableRendererFocus()) {
+      return;
+    }
+
+    void window.api.browser.setFocus(paneId);
+  }, [isVisible, paneId, state.status]);
 
   // Start the T3 Code server immediately on mount
   useEffect(() => {

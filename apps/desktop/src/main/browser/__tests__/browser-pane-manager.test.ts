@@ -1,4 +1,4 @@
-import { test, expect } from "vitest";
+import { test, expect, vi } from "vitest";
 import { BrowserPaneManager } from "../browser-pane-manager";
 
 function makeManager(): BrowserPaneManager {
@@ -85,6 +85,175 @@ test("runtime updates capture title, favicon, and loading state", () => {
   expect(manager.getRuntimeState("pane-1")?.title).toBe("Example");
   expect(manager.getRuntimeState("pane-1")?.faviconUrl).toBe("https://example.com/favicon.ico");
   expect(manager.getRuntimeState("pane-1")?.isLoading).toBe(true);
+});
+
+test("webcontents focus events are forwarded to the renderer", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload });
+    },
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  rendererMessages.length = 0;
+
+  listeners.get("focus")?.();
+
+  expect(rendererMessages).toEqual([{ channel: "browser:focused", payload: "pane-1" }]);
+});
+
+test("before-input-event routes app-owned shortcuts and modifier hints from webcontents", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const preventDefault = vi.fn();
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          setIgnoreMenuShortcuts: () => {},
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload });
+    },
+    getAppShortcutBindings: () => [
+      {
+        action: "new-tab",
+        channel: "app:new-tab",
+        shortcut: { key: "t", command: true, shift: false, option: false, control: false },
+      },
+    ],
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  rendererMessages.length = 0;
+
+  listeners.get("before-input-event")?.(
+    { preventDefault },
+    { type: "keyDown", key: "t", meta: true, control: false, shift: false, alt: false },
+  );
+  listeners.get("before-input-event")?.(
+    { preventDefault },
+    { type: "keyDown", key: "Meta", meta: true, control: false, shift: false, alt: false },
+  );
+  listeners.get("before-input-event")?.(
+    { preventDefault },
+    { type: "keyUp", key: "Meta", meta: false, control: false, shift: false, alt: false },
+  );
+
+  expect(preventDefault).toHaveBeenCalledTimes(1);
+  expect(rendererMessages).toContainEqual({
+    channel: "window:nativeModifierChanged",
+    payload: "command",
+  });
+  expect(rendererMessages).toContainEqual({ channel: "app:new-tab", payload: undefined });
+  expect(rendererMessages.at(-1)).toEqual({
+    channel: "window:nativeModifierChanged",
+    payload: null,
+  });
+});
+
+test("browser-only shortcuts are not intercepted for editor webcontents", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const preventDefault = vi.fn();
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          setIgnoreMenuShortcuts: () => {},
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload });
+    },
+    getAppShortcutBindings: () => [
+      {
+        action: "browser-find",
+        channel: "app:browser-find",
+        shortcut: { key: "f", command: true, shift: false, option: false, control: false },
+      },
+    ],
+  });
+
+  manager.createPane("pane-1", "https://example.com", "editor");
+  rendererMessages.length = 0;
+
+  listeners.get("before-input-event")?.(
+    { preventDefault },
+    { type: "keyDown", key: "f", meta: true, control: false, shift: false, alt: false },
+  );
+
+  expect(preventDefault).not.toHaveBeenCalled();
+  expect(rendererMessages).toEqual([
+    { channel: "window:nativeModifierChanged", payload: "command" },
+  ]);
+});
+
+test("shifted symbol shortcuts still match their base shortcut keys", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const preventDefault = vi.fn();
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          setIgnoreMenuShortcuts: () => {},
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload });
+    },
+    getAppShortcutBindings: () => [
+      {
+        action: "prev-tab",
+        channel: "app:prev-tab",
+        shortcut: { key: "[", command: true, shift: true, option: false, control: false },
+      },
+    ],
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  rendererMessages.length = 0;
+
+  listeners.get("before-input-event")?.(
+    { preventDefault },
+    { type: "keyDown", key: "{", meta: true, control: false, shift: true, alt: false },
+  );
+
+  expect(preventDefault).toHaveBeenCalledTimes(1);
+  expect(rendererMessages).toContainEqual({ channel: "app:prev-tab", payload: undefined });
 });
 
 test("navigate keeps persisted runtime url unchanged until navigation commits", () => {

@@ -20,6 +20,7 @@ export interface PanePickerContext {
 interface SettingsState {
   sidebarOpen: boolean;
   settingsOpen: boolean;
+  showShortcutHintsOnModifierPress: boolean;
   fontSize: number;
   defaultShell: string;
   terminalScrollback: number;
@@ -54,6 +55,7 @@ export const useSettingsStore = create<SettingsState>()(
     (set, get) => ({
       sidebarOpen: true,
       settingsOpen: false,
+      showShortcutHintsOnModifierPress: true,
       fontSize: 13,
       defaultShell: "",
       terminalScrollback: 5000,
@@ -129,9 +131,12 @@ export const useSettingsStore = create<SettingsState>()(
         if (s.defaultPaneType === "empty") {
           s.defaultPaneType = "picker";
         }
+        if (typeof s.showShortcutHintsOnModifierPress !== "boolean") {
+          s.showShortcutHintsOnModifierPress = true;
+        }
         return s;
       },
-      version: 1,
+      version: 2,
     },
   ),
 );

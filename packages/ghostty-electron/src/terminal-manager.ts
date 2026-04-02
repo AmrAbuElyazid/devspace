@@ -64,6 +64,12 @@ export class GhosttyTerminal {
       }
     });
 
+    this.bridge.setCallback("modifier-changed", (modifier: unknown) => {
+      if (modifier === "command" || modifier === "control" || modifier === null) {
+        this.emit("modifier-changed", modifier);
+      }
+    });
+
     this.bridge.setCallback("pwd-changed", (surfaceId: unknown, pwd: unknown) => {
       if (typeof surfaceId === "string" && typeof pwd === "string") {
         this.emit("pwd-changed", surfaceId, pwd);

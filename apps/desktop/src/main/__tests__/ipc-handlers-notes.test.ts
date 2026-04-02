@@ -64,6 +64,7 @@ registerIpcHandlers(
     onTitleChanged: () => {},
     onSurfaceClosed: () => {},
     onSurfaceFocused: () => {},
+    onModifierChanged: () => {},
     onPwdChanged: () => {},
     onSearchStart: () => {},
     onSearchEnd: () => {},

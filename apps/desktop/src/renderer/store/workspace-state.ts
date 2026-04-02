@@ -18,6 +18,13 @@ export interface WorkspaceState {
   activeWorkspaceId: string;
   panes: Record<string, Pane>;
   paneGroups: Record<string, PaneGroup>;
+  /** Most-recently-used tab order per group. Active tab is normally first. */
+  tabHistoryByGroupId: Record<string, string[]>;
+  /** Transient traversal session for Ctrl+Tab / Ctrl+Shift+Tab MRU navigation. */
+  recentTabTraversalByGroupId: Record<
+    string,
+    { order: string[]; index: number; updatedAt: number }
+  >;
   pinnedSidebarNodes: SidebarNode[];
   sidebarTree: SidebarNode[];
   /** Set by addWorkspace/addFolder when the newly created item should enter edit mode */
@@ -64,6 +71,8 @@ export interface WorkspaceState {
 
   // Focus
   setFocusedGroup: (workspaceId: string, groupId: string) => void;
+  recordTabActivation: (groupId: string, tabId: string) => void;
+  clearRecentTabTraversals: () => void;
 
   // Group tab CRUD
   addGroupTab: (workspaceId: string, groupId: string, defaultType?: PaneType) => void;
@@ -133,6 +142,7 @@ export interface WorkspaceState {
   activatePrevWorkspace: () => void;
   activateNextTab: (workspaceId: string, groupId: string) => void;
   activatePrevTab: (workspaceId: string, groupId: string) => void;
+  activateRecentTab: (workspaceId: string, groupId: string, direction: 1 | -1) => void;
   focusGroupInDirection: (workspaceId: string, direction: "left" | "right" | "up" | "down") => void;
   togglePaneZoom: (workspaceId: string) => void;
 

@@ -9,6 +9,7 @@ import { useNativeView } from "../../hooks/useNativeView";
 import { useBrowserStore } from "../../store/browser-store";
 import type { BrowserConfig } from "../../types/workspace";
 import type { BrowserPermissionDecision } from "../../../shared/browser";
+import { hasEditableRendererFocus, releaseNativeFocus } from "../../lib/native-pane-focus";
 
 interface UseBrowserPaneControllerArgs {
   paneId: string;
@@ -34,6 +35,7 @@ export function useBrowserPaneController({ paneId, config }: UseBrowserPaneContr
   );
   const [inputUrl, setInputUrl] = useState(initialUrl);
   const failure = runtimeState?.failure ?? null;
+  const wasVisibleRef = useRef(false);
   const activePermissionRequest =
     pendingPermissionRequest?.paneId === paneId ? pendingPermissionRequest : null;
 
@@ -105,9 +107,29 @@ export function useBrowserPaneController({ paneId, config }: UseBrowserPaneContr
       return;
     }
 
-    inputRef.current?.focus();
-    inputRef.current?.select();
+    releaseNativeFocus();
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
   }, [addressBarFocusToken]);
+
+  useEffect(() => {
+    const wasVisible = wasVisibleRef.current;
+    wasVisibleRef.current = isVisible;
+
+    if (
+      !isVisible ||
+      wasVisible ||
+      failure !== null ||
+      isFindBarOpen ||
+      hasEditableRendererFocus()
+    ) {
+      return;
+    }
+
+    void window.api.browser.setFocus(paneId);
+  }, [failure, isFindBarOpen, isVisible, paneId]);
 
   const currentUrl = runtimeState?.url ?? initialUrl;
   const isLoading = runtimeState?.isLoading ?? false;
@@ -164,21 +186,34 @@ export function useBrowserPaneController({ paneId, config }: UseBrowserPaneContr
         event.preventDefault();
         handleAddressBarSubmit((event.currentTarget as HTMLInputElement | null)?.value);
         inputRef.current?.blur();
+        if (isVisible && failure === null) {
+          requestAnimationFrame(() => {
+            void window.api.browser.setFocus(paneId);
+          });
+        }
         return;
       }
 
       if (event.key === "Escape") {
         setInputUrl(currentUrl);
         inputRef.current?.blur();
+        if (isVisible && failure === null) {
+          requestAnimationFrame(() => {
+            void window.api.browser.setFocus(paneId);
+          });
+        }
       }
     },
-    [currentUrl, handleAddressBarSubmit],
+    [currentUrl, failure, handleAddressBarSubmit, isVisible, paneId],
   );
 
   const handleCloseFindBar = useCallback(() => {
     closeFindBar(paneId);
     void window.api.browser.stopFindInPage(paneId);
-  }, [closeFindBar, paneId]);
+    if (isVisible && failure === null) {
+      void window.api.browser.setFocus(paneId);
+    }
+  }, [closeFindBar, failure, isVisible, paneId]);
 
   return {
     activePermissionRequest,

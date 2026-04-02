@@ -8,6 +8,7 @@ import {
   getActiveFocusedWebViewPane,
   getSplitShortcutTargetGroupId,
 } from "../lib/browser-shortcuts";
+import { focusActiveNativePane } from "../lib/native-pane-focus";
 
 function clampZoom(zoom: number): number {
   return Math.min(3, Math.max(0.25, Number(zoom.toFixed(2))));
@@ -166,6 +167,20 @@ export function useAppShortcuts(): void {
           if (gid) ctx.store.activatePrevTab(ctx.ws.id, gid);
           break;
         }
+        case "app:recent-tab": {
+          const ctx = getActiveWorkspace();
+          if (!ctx) break;
+          const gid = getFocusedGroupId(ctx.ws);
+          if (gid) ctx.store.activateRecentTab(ctx.ws.id, gid, 1);
+          break;
+        }
+        case "app:recent-tab-reverse": {
+          const ctx = getActiveWorkspace();
+          if (!ctx) break;
+          const gid = getFocusedGroupId(ctx.ws);
+          if (gid) ctx.store.activateRecentTab(ctx.ws.id, gid, -1);
+          break;
+        }
         case "app:rename-tab": {
           const ctx = getActiveWorkspace();
           if (!ctx) break;
@@ -227,22 +242,58 @@ export function useAppShortcuts(): void {
         }
         case "app:focus-pane-left": {
           const ctx = getActiveWorkspace();
-          if (ctx) ctx.store.focusGroupInDirection(ctx.ws.id, "left");
+          if (ctx) {
+            const previousGroupId = getFocusedGroupId(ctx.ws);
+            ctx.store.focusGroupInDirection(ctx.ws.id, "left");
+            const nextWorkspace = useWorkspaceStore
+              .getState()
+              .workspaces.find((workspace) => workspace.id === ctx.ws.id);
+            if (nextWorkspace && getFocusedGroupId(nextWorkspace) !== previousGroupId) {
+              focusActiveNativePane();
+            }
+          }
           break;
         }
         case "app:focus-pane-right": {
           const ctx = getActiveWorkspace();
-          if (ctx) ctx.store.focusGroupInDirection(ctx.ws.id, "right");
+          if (ctx) {
+            const previousGroupId = getFocusedGroupId(ctx.ws);
+            ctx.store.focusGroupInDirection(ctx.ws.id, "right");
+            const nextWorkspace = useWorkspaceStore
+              .getState()
+              .workspaces.find((workspace) => workspace.id === ctx.ws.id);
+            if (nextWorkspace && getFocusedGroupId(nextWorkspace) !== previousGroupId) {
+              focusActiveNativePane();
+            }
+          }
           break;
         }
         case "app:focus-pane-up": {
           const ctx = getActiveWorkspace();
-          if (ctx) ctx.store.focusGroupInDirection(ctx.ws.id, "up");
+          if (ctx) {
+            const previousGroupId = getFocusedGroupId(ctx.ws);
+            ctx.store.focusGroupInDirection(ctx.ws.id, "up");
+            const nextWorkspace = useWorkspaceStore
+              .getState()
+              .workspaces.find((workspace) => workspace.id === ctx.ws.id);
+            if (nextWorkspace && getFocusedGroupId(nextWorkspace) !== previousGroupId) {
+              focusActiveNativePane();
+            }
+          }
           break;
         }
         case "app:focus-pane-down": {
           const ctx = getActiveWorkspace();
-          if (ctx) ctx.store.focusGroupInDirection(ctx.ws.id, "down");
+          if (ctx) {
+            const previousGroupId = getFocusedGroupId(ctx.ws);
+            ctx.store.focusGroupInDirection(ctx.ws.id, "down");
+            const nextWorkspace = useWorkspaceStore
+              .getState()
+              .workspaces.find((workspace) => workspace.id === ctx.ws.id);
+            if (nextWorkspace && getFocusedGroupId(nextWorkspace) !== previousGroupId) {
+              focusActiveNativePane();
+            }
+          }
           break;
         }
         case "app:toggle-pane-zoom": {

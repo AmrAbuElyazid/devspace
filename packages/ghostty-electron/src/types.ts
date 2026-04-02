@@ -38,6 +38,7 @@ export interface GhosttyEvents {
   "title-changed": (surfaceId: string, title: string) => void;
   "surface-closed": (surfaceId: string) => void;
   "surface-focused": (surfaceId: string) => void;
+  "modifier-changed": (modifier: "command" | "control" | null) => void;
   "pwd-changed": (surfaceId: string, pwd: string) => void;
   notification: (surfaceId: string, title: string, body: string) => void;
   "search-start": (surfaceId: string, needle: string) => void;

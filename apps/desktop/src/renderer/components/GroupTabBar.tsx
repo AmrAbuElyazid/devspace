@@ -9,6 +9,7 @@ import { useSettingsStore } from "../store/settings-store";
 import { useModifierHeldContext } from "../App";
 import { resolveDisplayString } from "../../shared/shortcuts";
 import { paneTypeIcons } from "../lib/pane-type-meta";
+import { releaseNativeFocus } from "../lib/native-pane-focus";
 import type { PaneGroup } from "../types/workspace";
 import type { DragItemData } from "../types/dnd";
 
@@ -80,7 +81,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
   // Focus input when editing starts
   useEffect(() => {
     if (isEditing && inputRef.current) {
-      void window.api?.terminal?.blur?.();
+      releaseNativeFocus();
       requestAnimationFrame(() => {
         inputRef.current?.focus();
         inputRef.current?.select();
