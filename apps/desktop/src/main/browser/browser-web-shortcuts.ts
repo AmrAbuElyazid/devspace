@@ -1,7 +1,7 @@
 import { shortcutsEqual, type ShortcutAction, type StoredShortcut } from "../../shared/shortcuts";
 import type { BrowserPaneKind, BrowserShortcutBinding } from "./browser-types";
 
-export type WebContentsInputEvent = {
+type WebContentsInputEvent = {
   type?: string;
   key?: string;
   control?: boolean;
