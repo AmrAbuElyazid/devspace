@@ -17,7 +17,7 @@ export function registerIpcHandlers(
   vscodeServerManager: VscodeServerManager,
   t3codeServerManager: T3CodeServerManager,
   browserImportService?: BrowserImportService,
-  _browserSessionManager?: BrowserSessionManager,
+  browserSessionManager?: BrowserSessionManager,
 ): void {
   const allowedRoots = [homedir()];
 
@@ -27,6 +27,7 @@ export function registerIpcHandlers(
     browserPaneManager,
     vscodeServerManager,
     t3codeServerManager,
+    browserSessionManager,
   );
   registerSystemIpc(mainWindow, allowedRoots);
   registerBrowserIpc(mainWindow, browserPaneManager, browserImportService);
