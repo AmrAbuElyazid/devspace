@@ -16,6 +16,19 @@ import type {
 } from "./browser-types";
 import { registerBrowserPaneWebContentsListeners } from "./browser-pane-webcontents-events";
 import {
+  focusPaneWebContents,
+  goBackInPane,
+  goForwardInPane,
+  navigatePaneToUrl,
+  recordCommittedHistoryVisit,
+  refreshPendingHistoryTitle,
+  reloadPane,
+  setPaneZoomFactor,
+  stopPane,
+  syncPaneNavigationState,
+  type PendingHistoryVisit,
+} from "./browser-pane-navigation";
+import {
   destroyPaneView,
   hidePaneView,
   setPaneBounds,
@@ -27,18 +40,6 @@ import {
   createInitialRuntimeState,
   withDerivedSecurityState,
 } from "./browser-runtime-state";
-
-type PendingHistoryVisit = {
-  url: string;
-  visitedAt: number;
-};
-
-type WebContentsNavigationHistory = {
-  canGoBack?: () => boolean;
-  canGoForward?: () => boolean;
-  goBack?: () => void;
-  goForward?: () => void;
-};
 
 function createElectronView(
   options: Electron.WebContentsViewConstructorOptions,
@@ -65,20 +66,6 @@ function createBrowserViewOptions(
       ...(session ? { session } : {}),
     },
   };
-}
-
-function getNavigationHistory(
-  webContents: Electron.WebContents | undefined,
-): WebContentsNavigationHistory | null {
-  const navigationHistory = (
-    webContents as
-      | (Electron.WebContents & {
-          navigationHistory?: WebContentsNavigationHistory;
-        })
-      | undefined
-  )?.navigationHistory;
-
-  return navigationHistory ?? null;
 }
 
 type PendingPermissionResolution = (decision: BrowserPermissionDecision) => void;
@@ -185,10 +172,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     pane.runtimeState.failure = null;
     this.emitStateChange(pane);
 
-    const loadURL = pane.view.webContents?.loadURL;
-    if (typeof loadURL === "function") {
-      void loadURL.call(pane.view.webContents, url);
-    }
+    navigatePaneToUrl(pane, url);
   }
 
   back(paneId: string): void {
@@ -197,11 +181,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    const navigationHistory = getNavigationHistory(pane.view.webContents);
-    const goBack = navigationHistory?.goBack ?? pane?.view.webContents?.goBack;
-    if (typeof goBack === "function") {
-      goBack.call(navigationHistory ?? pane.view.webContents);
-    }
+    goBackInPane(pane);
   }
 
   forward(paneId: string): void {
@@ -210,11 +190,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    const navigationHistory = getNavigationHistory(pane.view.webContents);
-    const goForward = navigationHistory?.goForward ?? pane?.view.webContents?.goForward;
-    if (typeof goForward === "function") {
-      goForward.call(navigationHistory ?? pane.view.webContents);
-    }
+    goForwardInPane(pane);
   }
 
   reload(paneId: string): void {
@@ -223,10 +199,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    const reload = pane?.view.webContents?.reload;
-    if (typeof reload === "function") {
-      reload.call(pane.view.webContents);
-    }
+    reloadPane(pane);
   }
 
   stop(paneId: string): void {
@@ -235,10 +208,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    const stop = pane?.view.webContents?.stop;
-    if (typeof stop === "function") {
-      stop.call(pane.view.webContents);
-    }
+    stopPane(pane);
   }
 
   focusPane(paneId: string): void {
@@ -247,10 +217,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    const focus = pane?.view.webContents?.focus;
-    if (typeof focus === "function") {
-      focus.call(pane.view.webContents);
-    }
+    focusPaneWebContents(pane);
   }
 
   setZoom(paneId: string, zoom: number): void {
@@ -262,10 +229,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     pane.runtimeState.currentZoom = zoom;
     this.emitStateChange(pane);
 
-    const setZoomFactor = pane.view.webContents?.setZoomFactor;
-    if (typeof setZoomFactor === "function") {
-      void setZoomFactor.call(pane.view.webContents, zoom);
-    }
+    setPaneZoomFactor(pane, zoom);
   }
 
   resetZoom(paneId: string): void {
@@ -443,59 +407,37 @@ export class BrowserPaneManager implements BrowserPaneController {
         this.applyFindResult(paneId, result);
       },
       syncNavigationState: (nextPane) => {
-        this.syncNavigationState(nextPane);
+        syncPaneNavigationState(nextPane);
       },
       recordCommittedHistoryVisit: (nextPane, url) => {
-        this.recordCommittedHistoryVisit(nextPane, url);
+        recordCommittedHistoryVisit(
+          nextPane,
+          url,
+          this.pendingHistoryVisits,
+          this.deps.historyService,
+        );
       },
       refreshPendingHistoryTitle: (nextPane, title) => {
-        this.refreshPendingHistoryTitle(nextPane, title);
+        refreshPendingHistoryTitle(
+          nextPane,
+          title,
+          this.pendingHistoryVisits,
+          this.deps.historyService,
+        );
       },
     });
   }
 
   private syncNavigationState(pane: BrowserPaneRecord): void {
-    const navigationHistory = getNavigationHistory(pane.view.webContents);
-    const canGoBack = navigationHistory?.canGoBack ?? pane.view.webContents?.canGoBack;
-    const canGoForward = navigationHistory?.canGoForward ?? pane.view.webContents?.canGoForward;
-
-    pane.runtimeState.canGoBack =
-      typeof canGoBack === "function"
-        ? canGoBack.call(navigationHistory ?? pane.view.webContents)
-        : false;
-    pane.runtimeState.canGoForward =
-      typeof canGoForward === "function"
-        ? canGoForward.call(navigationHistory ?? pane.view.webContents)
-        : false;
+    syncPaneNavigationState(pane);
   }
 
   private recordCommittedHistoryVisit(pane: BrowserPaneRecord, url: string): void {
-    const pendingVisit = {
-      url,
-      visitedAt: Date.now(),
-    };
-
-    this.pendingHistoryVisits.set(pane.runtimeState.paneId, pendingVisit);
-    this.deps.historyService?.recordVisit({
-      url,
-      title: url,
-      visitedAt: pendingVisit.visitedAt,
-      source: "devspace",
-    });
+    recordCommittedHistoryVisit(pane, url, this.pendingHistoryVisits, this.deps.historyService);
   }
 
   private refreshPendingHistoryTitle(pane: BrowserPaneRecord, title: string): void {
-    const pendingVisit = this.pendingHistoryVisits.get(pane.runtimeState.paneId);
-    if (!pendingVisit || pendingVisit.url !== pane.runtimeState.url) {
-      return;
-    }
-
-    this.deps.historyService?.recordVisit({
-      url: pendingVisit.url,
-      title,
-      visitedAt: pendingVisit.visitedAt,
-      source: "devspace",
-    });
+    refreshPendingHistoryTitle(pane, title, this.pendingHistoryVisits, this.deps.historyService);
   }
 
   private denyPendingPermissionsForPane(paneId: string): void {
