@@ -28,6 +28,7 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "rebuild-native": "bun run --cwd apps/desktop rebuild-native",
+    "prepush": "bash ./scripts/pre-push.sh",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:coverage": "bun run --cwd apps/desktop test:coverage",
