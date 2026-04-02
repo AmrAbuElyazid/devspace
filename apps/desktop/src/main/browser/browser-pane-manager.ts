@@ -29,6 +29,12 @@ import {
   type PendingHistoryVisit,
 } from "./browser-pane-navigation";
 import {
+  denyPendingPermissionsForPane,
+  requestBrowserPermission,
+  resolveBrowserPermission,
+  type PendingPermissionRequest,
+} from "./browser-pane-permissions";
+import {
   destroyPaneView,
   hidePaneView,
   setPaneBounds,
@@ -67,12 +73,6 @@ function createBrowserViewOptions(
     },
   };
 }
-
-type PendingPermissionResolution = (decision: BrowserPermissionDecision) => void;
-type PendingPermissionRequest = {
-  paneId: string;
-  resolve: PendingPermissionResolution;
-};
 
 export class BrowserPaneManager implements BrowserPaneController {
   private readonly panes = new Map<string, BrowserPaneRecord>();
@@ -116,7 +116,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     hidePaneView(pane, this.deps);
-    this.denyPendingPermissionsForPane(paneId);
+    denyPendingPermissionsForPane(this.pendingPermissionResolutions, paneId);
     this.panes.delete(paneId);
     this.pendingHistoryVisits.delete(paneId);
     const webContentsId = pane.view.webContents?.id;
@@ -330,21 +330,16 @@ export class BrowserPaneManager implements BrowserPaneController {
     request: BrowserPermissionRequest,
     resolve: (decision: BrowserPermissionDecision) => void,
   ): void {
-    this.pendingPermissionResolutions.set(request.requestToken, {
-      paneId: request.paneId,
+    requestBrowserPermission(
+      this.pendingPermissionResolutions,
+      request,
       resolve,
-    });
-    this.deps.sendToRenderer("browser:permissionRequested", request);
+      this.deps.sendToRenderer,
+    );
   }
 
   resolvePermission(requestToken: string, decision: BrowserPermissionDecision): void {
-    const pendingRequest = this.pendingPermissionResolutions.get(requestToken);
-    if (!pendingRequest) {
-      return;
-    }
-
-    this.pendingPermissionResolutions.delete(requestToken);
-    pendingRequest.resolve(decision);
+    resolveBrowserPermission(this.pendingPermissionResolutions, requestToken, decision);
   }
 
   reportFailure(
@@ -438,16 +433,5 @@ export class BrowserPaneManager implements BrowserPaneController {
 
   private refreshPendingHistoryTitle(pane: BrowserPaneRecord, title: string): void {
     refreshPendingHistoryTitle(pane, title, this.pendingHistoryVisits, this.deps.historyService);
-  }
-
-  private denyPendingPermissionsForPane(paneId: string): void {
-    for (const [requestToken, pendingRequest] of this.pendingPermissionResolutions.entries()) {
-      if (pendingRequest.paneId !== paneId) {
-        continue;
-      }
-
-      this.pendingPermissionResolutions.delete(requestToken);
-      pendingRequest.resolve("deny");
-    }
   }
 }
