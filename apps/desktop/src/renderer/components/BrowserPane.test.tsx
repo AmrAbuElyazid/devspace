@@ -225,7 +225,7 @@ test("creates the browser pane and renders the current security label", async ()
   });
 
   expect(browserPaneMocks.browserCreate).toHaveBeenCalledWith("pane-1", "https://example.com/");
-  expect(browserPaneMocks.browserGetRuntimeState).toHaveBeenCalledWith("pane-1");
+  expect(browserPaneMocks.browserGetRuntimeState).not.toHaveBeenCalled();
   expect(container.textContent).toContain("Secure connection");
 });
 

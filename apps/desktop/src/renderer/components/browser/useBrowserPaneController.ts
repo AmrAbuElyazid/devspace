@@ -61,6 +61,10 @@ export function useBrowserPaneController({ paneId, config }: UseBrowserPaneContr
   });
 
   useEffect(() => {
+    if (runtimeState) {
+      return;
+    }
+
     let cancelled = false;
 
     void window.api.browser
@@ -77,7 +81,7 @@ export function useBrowserPaneController({ paneId, config }: UseBrowserPaneContr
     return () => {
       cancelled = true;
     };
-  }, [paneId, upsertRuntimeState]);
+  }, [paneId, runtimeState, upsertRuntimeState]);
 
   useEffect(() => {
     if (runtimeState?.url) {
