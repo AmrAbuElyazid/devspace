@@ -1,6 +1,11 @@
 import { useEffect } from "react";
 import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
 import { useBrowserStore } from "../store/browser-store";
+import {
+  buildBrowserContextMenuItems,
+  getBrowserContextMenuSearchUrl,
+  writeClipboardText,
+} from "../lib/browser-context-menu";
 import { findWorkspaceIdForPane } from "../lib/browser-pane-routing";
 import { extractEditorFolderFromUrl } from "../lib/editor-url";
 import type { BrowserBridgeListeners, BrowserBridgeUnsubscribe } from "../../shared/types";
@@ -14,6 +19,10 @@ function subscribeToBrowserEvents(listeners: BrowserBridgeListeners): BrowserBri
 
   if (listeners.onPermissionRequest) {
     disposers.push(window.api.browser.onPermissionRequest(listeners.onPermissionRequest));
+  }
+
+  if (listeners.onContextMenuRequest) {
+    disposers.push(window.api.browser.onContextMenuRequest(listeners.onContextMenuRequest));
   }
 
   if (listeners.onOpenInNewTabRequest) {
@@ -54,6 +63,78 @@ export function useBrowserBridge(): void {
       },
       onPermissionRequest: (request) => {
         setPendingPermissionRequest(request);
+      },
+      onContextMenuRequest: async (request) => {
+        const action = await window.api.contextMenu.show(
+          buildBrowserContextMenuItems(request),
+          request.position,
+        );
+
+        if (action === "page-back" && request.canGoBack) {
+          void window.api.browser.back(request.paneId);
+          return;
+        }
+
+        if (action === "page-forward" && request.canGoForward) {
+          void window.api.browser.forward(request.paneId);
+          return;
+        }
+
+        if (action === "page-reload") {
+          void window.api.browser.reload(request.paneId);
+          return;
+        }
+
+        if (action === "page-inspect") {
+          void window.api.browser.toggleDevTools(request.paneId);
+          return;
+        }
+
+        if (action === "link-copy" && request.linkUrl) {
+          await writeClipboardText(request.linkUrl);
+          return;
+        }
+
+        if (action === "selection-copy" && request.selectionText) {
+          await writeClipboardText(request.selectionText);
+          return;
+        }
+
+        if (
+          action !== "link-open-new-tab" &&
+          !(action === "selection-search-web" && request.selectionText)
+        ) {
+          return;
+        }
+
+        const state = useWorkspaceStore.getState();
+        const workspaceId = findWorkspaceIdForPane(
+          state.workspaces,
+          request.paneId,
+          state.paneGroups,
+        );
+        if (!workspaceId) {
+          return;
+        }
+
+        const workspace = state.workspaces.find((candidate) => candidate.id === workspaceId);
+        const groupId =
+          workspace?.focusedGroupId ?? (workspace ? collectGroupIds(workspace.root)[0] : null);
+        if (!groupId) {
+          return;
+        }
+
+        const targetUrl =
+          action === "link-open-new-tab"
+            ? request.linkUrl
+            : request.selectionText
+              ? getBrowserContextMenuSearchUrl(request.selectionText)
+              : null;
+        if (!targetUrl) {
+          return;
+        }
+
+        openBrowserInGroup(workspaceId, groupId, targetUrl);
       },
       onOpenInNewTabRequest: (request) => {
         const state = useWorkspaceStore.getState();
