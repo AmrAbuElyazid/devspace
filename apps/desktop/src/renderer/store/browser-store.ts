@@ -5,6 +5,7 @@ import type { BrowserPermissionRequest, BrowserRuntimeState } from "../../shared
 interface BrowserStoreState {
   runtimeByPaneId: Record<string, BrowserRuntimeState>;
   pendingPermissionRequest: BrowserPermissionRequest | null;
+  queuedPermissionRequests: BrowserPermissionRequest[];
   findBarOpenByPaneId: Record<string, boolean>;
   addressBarFocusTokenByPaneId: Record<string, number>;
   findBarFocusTokenByPaneId: Record<string, number>;
@@ -18,7 +19,7 @@ interface BrowserStoreState {
     },
   ) => void;
   clearRuntimeState: (paneId: string) => void;
-  setPendingPermissionRequest: (request: BrowserPermissionRequest) => string | null;
+  setPendingPermissionRequest: (request: BrowserPermissionRequest) => void;
   clearPendingPermissionRequest: () => void;
   toggleFindBar: (paneId: string) => void;
   openFindBar: (paneId: string) => void;
@@ -35,6 +36,7 @@ export function createBrowserStore() {
   return createStore<BrowserStoreState>()((set, get) => ({
     runtimeByPaneId: {},
     pendingPermissionRequest: null,
+    queuedPermissionRequests: [],
     findBarOpenByPaneId: {},
     addressBarFocusTokenByPaneId: {},
     findBarFocusTokenByPaneId: {},
@@ -73,15 +75,20 @@ export function createBrowserStore() {
         const findBarOpenByPaneId = { ...state.findBarOpenByPaneId };
         const addressBarFocusTokenByPaneId = { ...state.addressBarFocusTokenByPaneId };
         const findBarFocusTokenByPaneId = { ...state.findBarFocusTokenByPaneId };
-        const pendingPermissionRequest =
-          state.pendingPermissionRequest?.paneId === paneId ? null : state.pendingPermissionRequest;
+        const remainingPermissionRequests = [
+          state.pendingPermissionRequest,
+          ...state.queuedPermissionRequests,
+        ].filter(
+          (request): request is BrowserPermissionRequest => !!request && request.paneId !== paneId,
+        );
         delete runtimeByPaneId[paneId];
         delete findBarOpenByPaneId[paneId];
         delete addressBarFocusTokenByPaneId[paneId];
         delete findBarFocusTokenByPaneId[paneId];
         return {
           runtimeByPaneId,
-          pendingPermissionRequest,
+          pendingPermissionRequest: remainingPermissionRequests[0] ?? null,
+          queuedPermissionRequests: remainingPermissionRequests.slice(1),
           findBarOpenByPaneId,
           addressBarFocusTokenByPaneId,
           findBarFocusTokenByPaneId,
@@ -89,12 +96,21 @@ export function createBrowserStore() {
       });
     },
     setPendingPermissionRequest: (request) => {
-      const previousRequestToken = get().pendingPermissionRequest?.requestToken ?? null;
-      set({ pendingPermissionRequest: request });
-      return previousRequestToken;
+      set((state) => {
+        if (!state.pendingPermissionRequest) {
+          return { pendingPermissionRequest: request };
+        }
+
+        return {
+          queuedPermissionRequests: [...state.queuedPermissionRequests, request],
+        };
+      });
     },
     clearPendingPermissionRequest: () => {
-      set({ pendingPermissionRequest: null });
+      set((state) => ({
+        pendingPermissionRequest: state.queuedPermissionRequests[0] ?? null,
+        queuedPermissionRequests: state.queuedPermissionRequests.slice(1),
+      }));
     },
     toggleFindBar: (paneId) => {
       set((state) => {

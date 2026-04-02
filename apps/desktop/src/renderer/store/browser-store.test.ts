@@ -53,12 +53,14 @@ test("tracks and clears pending permission requests", () => {
 
   store.getState().setPendingPermissionRequest(request);
   expect(store.getState().pendingPermissionRequest).toEqual(request);
+  expect(store.getState().queuedPermissionRequests).toEqual([]);
 
   store.getState().clearPendingPermissionRequest();
   expect(store.getState().pendingPermissionRequest).toBe(null);
+  expect(store.getState().queuedPermissionRequests).toEqual([]);
 });
 
-test("replacing a pending permission request returns the previous request token", () => {
+test("queues later permission requests instead of replacing the current prompt", () => {
   const store = createBrowserStore();
   const firstRequest = {
     paneId: "pane-1",
@@ -73,9 +75,15 @@ test("replacing a pending permission request returns the previous request token"
     requestToken: "token-2",
   };
 
-  expect(store.getState().setPendingPermissionRequest(firstRequest)).toBe(null);
-  expect(store.getState().setPendingPermissionRequest(secondRequest)).toBe("token-1");
+  store.getState().setPendingPermissionRequest(firstRequest);
+  store.getState().setPendingPermissionRequest(secondRequest);
+
+  expect(store.getState().pendingPermissionRequest).toEqual(firstRequest);
+  expect(store.getState().queuedPermissionRequests).toEqual([secondRequest]);
+
+  store.getState().clearPendingPermissionRequest();
   expect(store.getState().pendingPermissionRequest).toEqual(secondRequest);
+  expect(store.getState().queuedPermissionRequests).toEqual([]);
 });
 
 test("clears a pending permission request when its pane runtime is removed", () => {
@@ -106,6 +114,59 @@ test("clears a pending permission request when its pane runtime is removed", () 
   store.getState().clearRuntimeState("pane-1");
 
   expect(store.getState().pendingPermissionRequest).toBe(null);
+});
+
+test("promotes the next queued permission request when the active pane runtime is removed", () => {
+  const store = createBrowserStore();
+  const firstRequest = {
+    paneId: "pane-1",
+    origin: "https://a.com",
+    permissionType: "camera" as const,
+    requestToken: "token-1",
+  };
+  const secondRequest = {
+    paneId: "pane-2",
+    origin: "https://b.com",
+    permissionType: "microphone" as const,
+    requestToken: "token-2",
+  };
+
+  store.getState().upsertRuntimeState({
+    paneId: "pane-1",
+    url: "https://a.com",
+    title: "A",
+    faviconUrl: null,
+    isLoading: false,
+    canGoBack: false,
+    canGoForward: false,
+    isSecure: true,
+    securityLabel: "Secure",
+    currentZoom: 1,
+    find: null,
+    failure: null,
+  });
+  store.getState().upsertRuntimeState({
+    paneId: "pane-2",
+    url: "https://b.com",
+    title: "B",
+    faviconUrl: null,
+    isLoading: false,
+    canGoBack: false,
+    canGoForward: false,
+    isSecure: true,
+    securityLabel: "Secure",
+    currentZoom: 1,
+    find: null,
+    failure: null,
+  });
+
+  store.getState().setPendingPermissionRequest(firstRequest);
+  store.getState().setPendingPermissionRequest(secondRequest);
+
+  store.getState().clearRuntimeState("pane-1");
+
+  expect(store.getState().pendingPermissionRequest).toEqual(secondRequest);
+  expect(store.getState().queuedPermissionRequests).toEqual([]);
 });
 
 test("handles runtime state changes and only persists changed urls", () => {
