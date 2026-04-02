@@ -6,10 +6,11 @@
  * Emits a callback when shortcuts change so the menu and native bridge can be updated.
  */
 
-import { app, ipcMain } from "electron";
+import { app } from "electron";
 import { readFileSync, writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { SHORTCUT_MAP, type ShortcutAction, type StoredShortcut } from "../shared/shortcuts";
+import { safeHandle } from "./ipc/shared";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -143,11 +144,11 @@ export class ShortcutStore {
 
   /** Register IPC handlers for renderer communication. Call once during app init. */
   registerIpcHandlers(): void {
-    ipcMain.handle("shortcuts:get-all", () => {
+    safeHandle("shortcuts:get-all", () => {
       return this.getAllOverridesObject();
     });
 
-    ipcMain.handle("shortcuts:set", (_event, action: ShortcutAction, shortcut: StoredShortcut) => {
+    safeHandle("shortcuts:set", (_event, action: ShortcutAction, shortcut: StoredShortcut) => {
       if (!SHORTCUT_MAP.has(action)) {
         throw new Error(`Unknown shortcut action: ${action}`);
       }
@@ -157,11 +158,11 @@ export class ShortcutStore {
       this.setShortcut(action, shortcut);
     });
 
-    ipcMain.handle("shortcuts:reset", (_event, action: ShortcutAction) => {
+    safeHandle("shortcuts:reset", (_event, action: ShortcutAction) => {
       this.resetShortcut(action);
     });
 
-    ipcMain.handle("shortcuts:reset-all", () => {
+    safeHandle("shortcuts:reset-all", () => {
       this.resetAll();
     });
   }
