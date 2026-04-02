@@ -37,10 +37,16 @@ export function registerTerminalAndEditorIpc(
     if (cwd) createOpts.cwd = cwd;
     if (envVars) createOpts.envVars = envVars;
 
-    terminalManager.createSurface(
-      surfaceId,
-      Object.keys(createOpts).length > 0 ? createOpts : undefined,
-    );
+    try {
+      terminalManager.createSurface(
+        surfaceId,
+        Object.keys(createOpts).length > 0 ? createOpts : undefined,
+      );
+      return { ok: true } as const;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { error: message } as const;
+    }
   });
 
   safeHandle("terminal:destroy", (_event, surfaceId: unknown) => {

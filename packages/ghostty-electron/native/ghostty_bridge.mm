@@ -473,6 +473,93 @@ static NSString* heldModifierName(NSEventModifierFlags flags) {
     return nil;
 }
 
+static NSEventModifierFlags modifierFlagForKeyCode(unsigned short keyCode) {
+    switch (keyCode) {
+        case 54:
+        case 55:
+            return NSEventModifierFlagCommand;
+        case 56:
+        case 60:
+            return NSEventModifierFlagShift;
+        case 58:
+        case 61:
+            return NSEventModifierFlagOption;
+        case 59:
+        case 62:
+            return NSEventModifierFlagControl;
+        case 57:
+            return NSEventModifierFlagCapsLock;
+        default:
+            return 0;
+    }
+}
+
+static GhosttyView* focusedGhosttyView() {
+    if (!g_state.window) return nil;
+
+    NSResponder* responder = [g_state.window firstResponder];
+    if ([responder isKindOfClass:[GhosttyView class]]) {
+        return (GhosttyView*)responder;
+    }
+
+    return nil;
+}
+
+static void emitModifierChanged(NSString* modifierName) {
+    if (!g_state.modifierChangedCallback) return;
+
+    std::string modifier = modifierName ? [modifierName UTF8String] : "";
+    g_state.modifierChangedCallback.NonBlockingCall(
+        [modifier](Napi::Env env, Napi::Function fn) {
+            if (modifier.empty()) {
+                fn.Call({env.Null()});
+            } else {
+                fn.Call({Napi::String::New(env, modifier)});
+            }
+        });
+}
+
+static void sendModifierRelease(GhosttyView* view, unsigned short keyCode) {
+    if (!view || !view.surface) return;
+
+    ghostty_input_key_s key = {};
+    key.action = GHOSTTY_ACTION_RELEASE;
+    key.mods = GHOSTTY_MODS_NONE;
+    key.keycode = keyCode;
+    key.consumed_mods = GHOSTTY_MODS_NONE;
+    key.text = nullptr;
+    key.composing = false;
+    ghostty_surface_key(view.surface, key);
+}
+
+static void resetModifierStateForFocusLoss() {
+    NSEventModifierFlags flags = g_state.lastModifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+    GhosttyView* view = focusedGhosttyView();
+
+    if (flags & NSEventModifierFlagCommand) {
+        sendModifierRelease(view, 54);
+        sendModifierRelease(view, 55);
+    }
+    if (flags & NSEventModifierFlagShift) {
+        sendModifierRelease(view, 56);
+        sendModifierRelease(view, 60);
+    }
+    if (flags & NSEventModifierFlagOption) {
+        sendModifierRelease(view, 58);
+        sendModifierRelease(view, 61);
+    }
+    if (flags & NSEventModifierFlagControl) {
+        sendModifierRelease(view, 59);
+        sendModifierRelease(view, 62);
+    }
+
+    g_state.lastModifierFlags = 0;
+    if (g_state.app) {
+        ghostty_app_keyboard_changed(g_state.app);
+    }
+    emitModifierChanged(nil);
+}
+
 // Intercept Cmd+key combos before Electron's menu system eats them.
 // App-reserved shortcuts are always passed through to Electron.
 // Also checks Ghostty keybindings via ghostty_surface_key_is_binding.
@@ -665,7 +752,10 @@ static NSString* heldModifierName(NSEventModifierFlags flags) {
 - (void)flagsChanged:(NSEvent*)event {
     if (!self.surface) return;
     ghostty_input_key_s key = {};
-    key.action = GHOSTTY_ACTION_PRESS;  // always PRESS for modifier events
+    NSEventModifierFlags changedFlag = modifierFlagForKeyCode(event.keyCode);
+    key.action = (changedFlag != 0 && (event.modifierFlags & changedFlag) == 0)
+        ? GHOSTTY_ACTION_RELEASE
+        : GHOSTTY_ACTION_PRESS;
     key.mods = translateMods(event.modifierFlags);
     key.keycode = (uint32_t)event.keyCode;
     key.consumed_mods = GHOSTTY_MODS_NONE;
@@ -673,18 +763,8 @@ static NSString* heldModifierName(NSEventModifierFlags flags) {
     key.composing = false;
     ghostty_surface_key(self.surface, key);
 
-    if (g_state.modifierChangedCallback) {
-        NSString* modifierName = heldModifierName(event.modifierFlags);
-        std::string modifier = modifierName ? [modifierName UTF8String] : "";
-        g_state.modifierChangedCallback.NonBlockingCall(
-            [modifier](Napi::Env env, Napi::Function fn) {
-                if (modifier.empty()) {
-                    fn.Call({env.Null()});
-                } else {
-                    fn.Call({Napi::String::New(env, modifier)});
-                }
-            });
-    }
+    g_state.lastModifierFlags = event.modifierFlags & NSEventModifierFlagDeviceIndependentFlagsMask;
+    emitModifierChanged(heldModifierName(event.modifierFlags));
 }
 
 // ---- NSTextInputClient (IME) ----
@@ -957,6 +1037,28 @@ static void replaceCallback(Napi::Env env, Napi::ThreadSafeFunction& target,
     target = Napi::ThreadSafeFunction::New(env, callback, resourceName, 0, 1);
 }
 
+static void cleanupClipboardTempFiles() {
+    NSFileManager* fileManager = [NSFileManager defaultManager];
+    for (const std::string& path : g_state.clipboardTempFiles) {
+        NSString* nsPath = [NSString stringWithUTF8String:path.c_str()];
+        if (nsPath.length > 0) {
+            [fileManager removeItemAtPath:nsPath error:nil];
+        }
+    }
+    g_state.clipboardTempFiles.clear();
+}
+
+static void pruneStaleClipboardTempFiles() {
+    NSFileManager* fileManager = [NSFileManager defaultManager];
+    NSString* tempDir = NSTemporaryDirectory();
+    NSArray<NSString*>* entries = [fileManager contentsOfDirectoryAtPath:tempDir error:nil];
+    for (NSString* entry in entries) {
+        if (![entry hasPrefix:@"devspace-paste-"] || ![entry hasSuffix:@".png"]) continue;
+        NSString* path = [tempDir stringByAppendingPathComponent:entry];
+        [fileManager removeItemAtPath:path error:nil];
+    }
+}
+
 static void releaseCallbacks() {
     releaseCallback(g_state.titleChangedCallback);
     releaseCallback(g_state.surfaceClosedCallback);
@@ -993,6 +1095,7 @@ static void shutdownGhosttyState() {
         destroySurfaceView(view);
     }
 
+    cleanupClipboardTempFiles();
     removeObservers();
 
     if (g_state.app) {
@@ -1007,6 +1110,7 @@ static void shutdownGhosttyState() {
     releaseCallbacks();
     g_state.window = nil;
     g_state.reservedShortcuts.clear();
+    g_state.lastModifierFlags = 0;
 }
 
 // Helper: find surface ID for a ghostty surface handle
@@ -1016,15 +1120,6 @@ static std::string findSurfaceId(ghostty_surface_t surface) {
         if (pair.second.surface == surface) return pair.first;
     }
     return "";
-}
-
-// Helper: find the focused GhosttyView (the current first responder if it's one of ours)
-static GhosttyView* findFocusedView() {
-    NSResponder* responder = [g_state.window firstResponder];
-    if ([responder isKindOfClass:[GhosttyView class]]) {
-        return (GhosttyView*)responder;
-    }
-    return nil;
 }
 
 static bool action_cb(ghostty_app_t app, ghostty_target_s target, ghostty_action_s action) {
@@ -1288,10 +1383,13 @@ static bool action_cb(ghostty_app_t app, ghostty_target_s target, ghostty_action
 static bool read_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard, void* context) {
     (void)clipboard;
     std::string surfaceId = surfaceIdFromUserdata(userdata);
+    __block bool handled = false;
 
     runOnMainQueueSync(^{
-        GhosttyView* view = surfaceId.empty() ? findFocusedView() : findSurfaceView(surfaceId);
-        if (!view) view = findFocusedView();
+        if (surfaceId.empty()) return;
+
+        GhosttyView* view = findSurfaceView(surfaceId);
+        if (!view || !view.surface) return;
 
         NSPasteboard* pb = [NSPasteboard generalPasteboard];
         NSString* str = [pb stringForType:NSPasteboardTypeString];
@@ -1319,6 +1417,7 @@ static bool read_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard, voi
                         [[NSUUID UUID] UUIDString]];
                     NSString* tempPath = [tempDir stringByAppendingPathComponent:filename];
                     if ([imageData writeToFile:tempPath atomically:YES]) {
+                        g_state.clipboardTempFiles.push_back(std::string([tempPath UTF8String]));
                         // Shell-escape the path and use it as paste text
                         NSString* escaped = [tempPath stringByReplacingOccurrencesOfString:@"'" withString:@"'\\''"];
                         str = [NSString stringWithFormat:@"'%@'", escaped];
@@ -1330,10 +1429,11 @@ static bool read_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard, voi
         if (view && view.surface) {
             const char* clipboardText = str ? [str UTF8String] : "";
             ghostty_surface_complete_clipboard_request(view.surface, clipboardText, context, false);
+            handled = true;
         }
     });
 
-    return true;
+    return handled;
 }
 
 static void confirm_read_clipboard_cb(void* userdata, const char* data,
@@ -1342,8 +1442,10 @@ static void confirm_read_clipboard_cb(void* userdata, const char* data,
     std::string surfaceId = surfaceIdFromUserdata(userdata);
 
     runOnMainQueueSync(^{
-        GhosttyView* view = surfaceId.empty() ? findFocusedView() : findSurfaceView(surfaceId);
-        if (!view) view = findFocusedView();
+        if (surfaceId.empty()) return;
+
+        GhosttyView* view = findSurfaceView(surfaceId);
+        if (!view || !view.surface) return;
 
         if (view && view.surface) {
             ghostty_surface_complete_clipboard_request(view.surface, data ? data : "", context, true);
@@ -1356,7 +1458,8 @@ static void write_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard,
                                 size_t content_count, bool confirm) {
     (void)userdata;
     (void)clipboard;
-    (void)confirm;
+
+    if (confirm) return;
 
     runOnMainQueueSync(^{
         if (content_count == 0 || !content) return;
@@ -1420,7 +1523,14 @@ static Napi::Value InitGhostty(const Napi::CallbackInfo& info) {
         return env.Undefined();
     }
 
+    auto buf = info[0].As<Napi::Buffer<uint8_t>>();
+    if (buf.Length() < sizeof(NSView*)) {
+        Napi::TypeError::New(env, "Expected native window handle buffer with NSView pointer").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
     shutdownGhosttyState();
+    pruneStaleClipboardTempFiles();
 
     // Ensure TUI apps get colors
     unsetenv("NO_COLOR");
@@ -1459,9 +1569,16 @@ static Napi::Value InitGhostty(const Napi::CallbackInfo& info) {
     ghostty_init(0, nullptr);
 
     // Get NSView* from Electron's getNativeWindowHandle()
-    auto buf = info[0].As<Napi::Buffer<uint8_t>>();
     NSView* electronView = *reinterpret_cast<NSView**>(buf.Data());
+    if (!electronView) {
+        Napi::Error::New(env, "Native window handle did not contain an NSView").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
     g_state.window = [electronView window];
+    if (!g_state.window) {
+        Napi::Error::New(env, "Native window handle was not attached to an NSWindow").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
 
     // Create config
     g_state.config = ghostty_config_new();
@@ -1519,12 +1636,16 @@ static Napi::Value InitGhostty(const Napi::CallbackInfo& info) {
         addObserverForName:NSApplicationDidBecomeActiveNotification
         object:nil queue:[NSOperationQueue mainQueue]
         usingBlock:^(NSNotification* note) {
-            if (g_state.app) ghostty_app_set_focus(g_state.app, true);
+            if (g_state.app) {
+                ghostty_app_set_focus(g_state.app, true);
+                ghostty_app_keyboard_changed(g_state.app);
+            }
         }];
     g_state.appDidResignActiveObserver = [[NSNotificationCenter defaultCenter]
         addObserverForName:NSApplicationDidResignActiveNotification
         object:nil queue:[NSOperationQueue mainQueue]
         usingBlock:^(NSNotification* note) {
+            resetModifierStateForFocusLoss();
             if (g_state.app) ghostty_app_set_focus(g_state.app, false);
         }];
 

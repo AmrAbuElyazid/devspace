@@ -45,6 +45,8 @@ struct GhosttyAppState {
     id appDidBecomeActiveObserver = nil;
     id appDidResignActiveObserver = nil;
     std::vector<id> windowObserverTokens;
+    std::vector<std::string> clipboardTempFiles;
+    NSEventModifierFlags lastModifierFlags = 0;
     std::mutex surfacesMutex;
 };
 

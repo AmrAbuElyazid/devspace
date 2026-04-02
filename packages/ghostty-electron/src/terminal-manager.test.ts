@@ -140,6 +140,26 @@ test("emit isolates listener failures", () => {
   consoleError.mockRestore();
 });
 
+test("createSurface only tracks surfaces after native creation succeeds", () => {
+  const terminal = new GhosttyTerminal();
+
+  terminal.init({
+    windowHandle: Buffer.from("window-handle"),
+    nativeAddonPath: "/tmp/ghostty_bridge.node",
+  });
+
+  (nativeMocks.bridge.createSurface as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+    throw new Error("native create failed");
+  });
+
+  expect(() => terminal.createSurface("surface-1")).toThrow("native create failed");
+
+  terminal.destroy();
+
+  expect(nativeMocks.bridge.destroySurface).not.toHaveBeenCalled();
+  expect(nativeMocks.bridge.shutdown).toHaveBeenCalledTimes(1);
+});
+
 test("sendBindingAction returns false before init and bridge result after init", () => {
   const terminal = new GhosttyTerminal();
 

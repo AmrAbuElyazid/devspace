@@ -145,8 +145,8 @@ export class GhosttyTerminal {
    */
   createSurface(surfaceId: string, options?: CreateSurfaceOptions): void {
     if (!this.bridge) return;
-    this.activeSurfaces.add(surfaceId);
     this.bridge.createSurface(surfaceId, options);
+    this.activeSurfaces.add(surfaceId);
   }
 
   /**

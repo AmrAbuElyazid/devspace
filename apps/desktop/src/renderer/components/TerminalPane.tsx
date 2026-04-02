@@ -1,9 +1,10 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { useNativeView } from "../hooks/useNativeView";
 import { useTerminalStore } from "../store/terminal-store";
 import {
   hasCreatedTerminalSurface,
   markTerminalSurfaceCreated,
+  markTerminalSurfaceDestroyed,
 } from "../lib/terminal-surface-session";
 import TerminalFindBar from "./terminal/TerminalFindBar";
 import type { TerminalConfig } from "../types/workspace";
@@ -25,6 +26,7 @@ export default function TerminalPane({
   const findBarFocusToken = useTerminalStore((s) => s.findBarFocusTokenByPaneId[paneId] ?? 0);
   const searchState = useTerminalStore((s) => s.searchStateByPaneId[paneId]);
   const closeFindBar = useTerminalStore((s) => s.closeFindBar);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   // Create the native surface synchronously during render — before any effects
   // run. This guarantees the `terminal:create` IPC is in the queue before
@@ -38,7 +40,21 @@ export default function TerminalPane({
       surfaceReady.current = true;
     } else {
       markTerminalSurfaceCreated(paneId);
-      void window.api.terminal.create(paneId, config.cwd ? { cwd: config.cwd } : undefined);
+      void window.api.terminal
+        .create(paneId, config.cwd ? { cwd: config.cwd } : undefined)
+        .then((result) => {
+          if ("error" in result) {
+            markTerminalSurfaceDestroyed(paneId);
+            setCreateError(result.error);
+            return;
+          }
+
+          setCreateError(null);
+        })
+        .catch((error: unknown) => {
+          markTerminalSurfaceDestroyed(paneId);
+          setCreateError(error instanceof Error ? error.message : String(error));
+        });
       surfaceReady.current = true;
     }
   }
@@ -50,16 +66,16 @@ export default function TerminalPane({
     id: paneId,
     type: "terminal",
     ref: placeholderRef,
-    enabled: surfaceReady.current,
+    enabled: surfaceReady.current && createError === null,
   });
 
   // Auto-focus when this pane becomes visible AND is the focused pane,
   // but NOT when the find bar is open (keyboard focus belongs to the input).
   useEffect(() => {
-    if (!hasCreatedTerminalSurface(paneId) || !isVisible || !isFocused) return;
+    if (createError || !hasCreatedTerminalSurface(paneId) || !isVisible || !isFocused) return;
     if (isFindBarOpen) return;
     void window.api.terminal.focus(paneId);
-  }, [isVisible, isFocused, paneId, isFindBarOpen]);
+  }, [createError, isVisible, isFocused, paneId, isFindBarOpen]);
 
   // When the find bar opens, blur the native terminal so the DOM input can
   // receive keyboard focus. Without this, the GhosttyView holds macOS first
@@ -78,6 +94,19 @@ export default function TerminalPane({
       void window.api.terminal.focus(paneId);
     }
   }, [closeFindBar, isVisible, paneId]);
+
+  if (createError) {
+    return (
+      <div className="h-full w-full flex items-center justify-center p-6 text-center">
+        <div className="max-w-sm text-sm" style={{ color: "var(--muted-foreground)" }}>
+          <div className="font-medium" style={{ color: "var(--foreground)" }}>
+            Terminal failed to start
+          </div>
+          <div className="mt-2">{createError}</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="terminal-pane-shell w-full h-full">
