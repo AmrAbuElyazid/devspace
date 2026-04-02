@@ -269,8 +269,8 @@ export function buildInitialState(): PersistedState {
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 
-function persistState(state: WorkspaceState): void {
-  const data = {
+function selectPersistedState(state: WorkspaceState): PersistedState {
+  return {
     workspaces: state.workspaces,
     activeWorkspaceId: state.activeWorkspaceId,
     pinnedSidebarNodes: state.pinnedSidebarNodes,
@@ -278,6 +278,20 @@ function persistState(state: WorkspaceState): void {
     panes: state.panes,
     paneGroups: state.paneGroups,
   };
+}
+
+function hasPersistedStateChanged(previous: PersistedState, next: PersistedState): boolean {
+  return (
+    previous.workspaces !== next.workspaces ||
+    previous.activeWorkspaceId !== next.activeWorkspaceId ||
+    previous.pinnedSidebarNodes !== next.pinnedSidebarNodes ||
+    previous.sidebarTree !== next.sidebarTree ||
+    previous.panes !== next.panes ||
+    previous.paneGroups !== next.paneGroups
+  );
+}
+
+function persistState(data: PersistedState): void {
   try {
     localStorage.setItem(PERSIST_KEY, JSON.stringify(data));
   } catch (e) {
@@ -285,24 +299,33 @@ function persistState(state: WorkspaceState): void {
   }
 }
 
-function debouncedPersist(state: WorkspaceState): void {
+function debouncedPersist(data: PersistedState): void {
   if (persistTimer) clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => persistState(state), PERSIST_DEBOUNCE_MS);
+  persistTimer = setTimeout(() => persistState(data), PERSIST_DEBOUNCE_MS);
 }
 
 export function setupPersistence(store: {
   subscribe: (fn: (state: WorkspaceState) => void) => void;
   getState: () => WorkspaceState;
 }): void {
-  // Subscribe to store changes
-  store.subscribe((state) => debouncedPersist(state));
+  let lastPersistedState = selectPersistedState(store.getState());
+
+  store.subscribe((state) => {
+    const nextPersistedState = selectPersistedState(state);
+    if (!hasPersistedStateChanged(lastPersistedState, nextPersistedState)) {
+      return;
+    }
+
+    lastPersistedState = nextPersistedState;
+    debouncedPersist(nextPersistedState);
+  });
 
   // Flush on unload (prevents data loss on window close)
   if (typeof window !== "undefined") {
     window.addEventListener("beforeunload", () => {
       if (persistTimer) {
         clearTimeout(persistTimer);
-        persistState(store.getState());
+        persistState(lastPersistedState);
       }
     });
   }
