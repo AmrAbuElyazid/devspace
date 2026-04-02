@@ -28,13 +28,15 @@ export interface TerminalCreateOptions {
   envVars?: Record<string, string>;
 }
 
+export type TerminalCreateResult = { ok: true } | { error: string };
+
 export interface DevspaceBridge {
   platform: string;
   app: {
     onAction: (callback: (channel: string, ...args: unknown[]) => void) => () => void;
   };
   terminal: {
-    create: (surfaceId: string, options?: TerminalCreateOptions) => Promise<void>;
+    create: (surfaceId: string, options?: TerminalCreateOptions) => Promise<TerminalCreateResult>;
     destroy: (surfaceId: string) => Promise<void>;
     show: (surfaceId: string) => Promise<void>;
     hide: (surfaceId: string) => Promise<void>;

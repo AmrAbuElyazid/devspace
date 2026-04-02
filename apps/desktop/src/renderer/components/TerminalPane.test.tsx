@@ -8,7 +8,7 @@ import TerminalPane from "./TerminalPane";
 const terminalPaneMocks = vi.hoisted(() => ({
   useNativeView: vi.fn(),
   closeFindBar: vi.fn(),
-  terminalCreate: vi.fn(),
+  terminalCreate: vi.fn(() => Promise.resolve({ ok: true } as { ok: true } | { error: string })),
   terminalFocus: vi.fn(),
   terminalBlur: vi.fn(),
   sendBindingAction: vi.fn(() => Promise.resolve(true)),
@@ -46,6 +46,9 @@ vi.mock("../lib/terminal-surface-session", () => ({
   markTerminalSurfaceCreated: (surfaceId: string) => {
     terminalPaneMocks.createdSurfaces.add(surfaceId);
   },
+  markTerminalSurfaceDestroyed: (surfaceId: string) => {
+    terminalPaneMocks.createdSurfaces.delete(surfaceId);
+  },
 }));
 
 vi.mock("./terminal/TerminalFindBar", () => ({
@@ -68,6 +71,9 @@ beforeEach(() => {
   terminalPaneMocks.useNativeView.mockReturnValue({ isVisible: true });
   terminalPaneMocks.closeFindBar.mockReset();
   terminalPaneMocks.terminalCreate.mockReset();
+  terminalPaneMocks.terminalCreate.mockResolvedValue({ ok: true } as
+    | { ok: true }
+    | { error: string });
   terminalPaneMocks.terminalFocus.mockReset();
   terminalPaneMocks.terminalBlur.mockReset();
   terminalPaneMocks.sendBindingAction.mockClear();
@@ -145,4 +151,56 @@ test("blurs when the find bar is open and refocuses on close", async () => {
   expect(terminalPaneMocks.closeFindBar).toHaveBeenCalledWith("pane-1");
   expect(terminalPaneMocks.sendBindingAction).toHaveBeenCalledWith("pane-1", "end_search");
   expect(terminalPaneMocks.terminalFocus).toHaveBeenCalledWith("pane-1");
+});
+
+test("renders a diagnostic when terminal creation fails", async () => {
+  terminalPaneMocks.terminalCreate.mockResolvedValue({
+    error: "Ghostty not initialized",
+  } as { ok: true } | { error: string });
+
+  await act(async () => {
+    root?.render(<TerminalPane paneId="pane-1" config={{}} isFocused={true} />);
+  });
+
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(container.textContent).toContain("Terminal failed to start");
+  expect(container.textContent).toContain("Ghostty not initialized");
+  expect(terminalPaneMocks.createdSurfaces.has("pane-1")).toBe(false);
+});
+
+test("retries terminal creation after an initial failure", async () => {
+  terminalPaneMocks.terminalCreate
+    .mockResolvedValueOnce({ error: "Ghostty not initialized" } as { ok: true } | { error: string })
+    .mockResolvedValueOnce({ ok: true } as { ok: true } | { error: string });
+
+  await act(async () => {
+    root?.render(
+      <TerminalPane paneId="pane-1" config={{ cwd: "/tmp/project" }} isFocused={true} />,
+    );
+  });
+
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  const retryButton = container.querySelector('button[type="button"]');
+  expect(retryButton?.textContent).toBe("Retry");
+
+  await act(async () => {
+    retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledTimes(2);
+  expect(terminalPaneMocks.terminalCreate).toHaveBeenNthCalledWith(2, "pane-1", {
+    cwd: "/tmp/project",
+  });
+  expect(container.textContent).not.toContain("Terminal failed to start");
+  expect(terminalPaneMocks.createdSurfaces.has("pane-1")).toBe(true);
 });

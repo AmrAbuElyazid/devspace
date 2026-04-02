@@ -44,6 +44,22 @@ describe("buildShellIntegrationEnvVars", () => {
     expect(result.ZDOTDIR).toBeUndefined();
   });
 
+  test("bash: single-quotes integration path to avoid shell interpolation", () => {
+    const result = buildShellIntegrationEnvVars(
+      "bash",
+      { ...dirs, ghosttyResourcesDir: "/tmp/gho'stty/$HOME" },
+      {},
+      {},
+    );
+
+    expect(result.PROMPT_COMMAND).toContain(
+      "[ -f '/tmp/gho'\"'\"'stty/$HOME/shell-integration/bash/ghostty.bash' ]",
+    );
+    expect(result.PROMPT_COMMAND).not.toContain(
+      '"/tmp/gho\'stty/$HOME/shell-integration/bash/ghostty.bash"',
+    );
+  });
+
   test("fish: prepends XDG_DATA_DIRS with fish integration path", () => {
     const result = buildShellIntegrationEnvVars("fish", dirs, {}, {});
     expect(result.XDG_DATA_DIRS).toMatch(/^\/tmp\/ghostty-resources\/shell-integration\/fish:/);
