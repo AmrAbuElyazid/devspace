@@ -16,6 +16,13 @@ import type {
 } from "./browser-types";
 import { registerBrowserPaneWebContentsListeners } from "./browser-pane-webcontents-events";
 import {
+  destroyPaneView,
+  hidePaneView,
+  setPaneBounds,
+  showPaneView,
+  syncVisiblePaneViews,
+} from "./browser-pane-view-lifecycle";
+import {
   cloneRuntimeState,
   createInitialRuntimeState,
   withDerivedSecurityState,
@@ -121,7 +128,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    this.hidePane(paneId);
+    hidePaneView(pane, this.deps);
     this.denyPendingPermissionsForPane(paneId);
     this.panes.delete(paneId);
     this.pendingHistoryVisits.delete(paneId);
@@ -130,79 +137,29 @@ export class BrowserPaneManager implements BrowserPaneController {
       this.paneIdByWebContentsId.delete(webContentsId);
     }
 
-    const close = (pane.view.webContents as { close?: () => void }).close;
-    if (typeof close === "function") {
-      close.call(pane.view.webContents);
-      return;
-    }
-
-    const destroyView = (pane.view as { destroy?: () => void }).destroy;
-    if (typeof destroyView === "function") {
-      destroyView.call(pane.view);
-    }
+    destroyPaneView(pane);
   }
 
   showPane(paneId: string): void {
     const pane = this.panes.get(paneId);
-    if (!pane || pane.isVisible) {
+    if (!pane) {
       return;
     }
 
-    this.deps.addChildView(pane.view);
-    if (pane.bounds) {
-      const setBounds = pane.view.setBounds;
-      if (typeof setBounds === "function") {
-        setBounds.call(pane.view, pane.bounds);
-      }
-    }
-    const setZoomFactor = pane.view.webContents?.setZoomFactor;
-    if (typeof setZoomFactor === "function") {
-      void setZoomFactor.call(pane.view.webContents, pane.runtimeState.currentZoom);
-    }
-    pane.isVisible = true;
+    showPaneView(pane, this.deps);
   }
 
   hidePane(paneId: string): void {
     const pane = this.panes.get(paneId);
-    if (!pane || !pane.isVisible) {
+    if (!pane) {
       return;
     }
 
-    this.deps.removeChildView(pane.view);
-    pane.isVisible = false;
+    hidePaneView(pane, this.deps);
   }
 
   setVisiblePanes(paneIds: string[]): void {
-    const desiredVisible = new Set(paneIds);
-
-    // Hide panes that should no longer be visible
-    for (const [paneId, pane] of this.panes) {
-      if (pane.isVisible && !desiredVisible.has(paneId)) {
-        this.deps.removeChildView(pane.view);
-        pane.isVisible = false;
-      }
-    }
-
-    // Show panes that should become visible (bounds-first to prevent flash)
-    for (const paneId of paneIds) {
-      const pane = this.panes.get(paneId);
-      if (!pane || pane.isVisible) {
-        continue;
-      }
-
-      if (pane.bounds) {
-        const setBounds = pane.view.setBounds;
-        if (typeof setBounds === "function") {
-          setBounds.call(pane.view, pane.bounds);
-        }
-      }
-      this.deps.addChildView(pane.view);
-      const setZoomFactor = pane.view.webContents?.setZoomFactor;
-      if (typeof setZoomFactor === "function") {
-        void setZoomFactor.call(pane.view.webContents, pane.runtimeState.currentZoom);
-      }
-      pane.isVisible = true;
-    }
+    syncVisiblePaneViews(this.panes, paneIds, this.deps);
   }
 
   isPaneVisible(paneId: string): boolean {
@@ -215,11 +172,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    pane.bounds = bounds;
-    const setBounds = pane.view.setBounds;
-    if (typeof setBounds === "function") {
-      setBounds.call(pane.view, bounds);
-    }
+    setPaneBounds(pane, bounds);
   }
 
   navigate(paneId: string, url: string): void {
