@@ -67,7 +67,9 @@ export interface DevspaceBridge {
     onOpenEditor: (callback: (folderPath: string) => void) => () => void;
   };
   dialog: {
-    openFile: (defaultPath?: string) => Promise<{ path: string; content: string } | null>;
+    openFile: (
+      defaultPath?: string,
+    ) => Promise<{ path: string; content: string } | { error: string } | null>;
     openFolder: () => Promise<string | null>;
   };
   notes: {
