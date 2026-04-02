@@ -70,10 +70,6 @@ export interface DevspaceBridge {
     openFile: (defaultPath?: string) => Promise<{ path: string; content: string } | null>;
     openFolder: () => Promise<string | null>;
   };
-  fs: {
-    readFile: (filePath: string) => Promise<string>;
-    writeFile: (filePath: string, content: string) => Promise<void>;
-  };
   notes: {
     read: (noteId: string) => Promise<string | null>;
     save: (noteId: string, content: string) => Promise<void | { error: string }>;
