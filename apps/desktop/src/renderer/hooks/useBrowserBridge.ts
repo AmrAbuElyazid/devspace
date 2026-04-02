@@ -34,7 +34,6 @@ function subscribeToBrowserEvents(listeners: BrowserBridgeListeners): BrowserBri
 export function useBrowserBridge(): void {
   const handleRuntimeStateChange = useBrowserStore((s) => s.handleRuntimeStateChange);
   const setPendingPermissionRequest = useBrowserStore((s) => s.setPendingPermissionRequest);
-  const clearPendingPermissionRequest = useBrowserStore((s) => s.clearPendingPermissionRequest);
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig);
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
   const updateBrowserPaneZoom = useWorkspaceStore((s) => s.updateBrowserPaneZoom);
@@ -54,10 +53,7 @@ export function useBrowserBridge(): void {
         });
       },
       onPermissionRequest: (request) => {
-        const replacedRequestToken = setPendingPermissionRequest(request);
-        if (replacedRequestToken) {
-          void window.api.browser.resolvePermission(replacedRequestToken, "deny");
-        }
+        setPendingPermissionRequest(request);
       },
       onOpenInNewTabRequest: (request) => {
         const state = useWorkspaceStore.getState();
@@ -93,7 +89,6 @@ export function useBrowserBridge(): void {
       },
     });
   }, [
-    clearPendingPermissionRequest,
     handleRuntimeStateChange,
     openBrowserInGroup,
     setPendingPermissionRequest,
