@@ -148,6 +148,7 @@ export class BrowserSessionManager {
     console.warn(message, meta);
   };
   private readonly sessionPermissionGrants = new Set<SessionPermissionGrantKey>();
+  private readonly trustedLocalOrigins = new Map<string, number>();
 
   constructor(private readonly sessionModule: BrowserSessionModule = getElectronSession()) {}
 
@@ -169,6 +170,34 @@ export class BrowserSessionManager {
       this.installSessionLevelHandlers(ses);
     }
     return ses;
+  }
+
+  registerTrustedLocalOrigin(rawUrl: string): void {
+    const origin = getTrustedLocalOrigin(rawUrl);
+    if (!origin) {
+      return;
+    }
+
+    this.trustedLocalOrigins.set(origin, (this.trustedLocalOrigins.get(origin) ?? 0) + 1);
+  }
+
+  unregisterTrustedLocalOrigin(rawUrl: string): void {
+    const origin = getTrustedLocalOrigin(rawUrl);
+    if (!origin) {
+      return;
+    }
+
+    const currentCount = this.trustedLocalOrigins.get(origin);
+    if (!currentCount) {
+      return;
+    }
+
+    if (currentCount === 1) {
+      this.trustedLocalOrigins.delete(origin);
+      return;
+    }
+
+    this.trustedLocalOrigins.set(origin, currentCount - 1);
   }
 
   /**
@@ -433,7 +462,7 @@ export class BrowserSessionManager {
   private installCorsOverrides(ses: Session): void {
     ses.webRequest.onHeadersReceived((details, callback) => {
       const origin = getTrustedLocalOrigin(details.referrer);
-      if (!origin) {
+      if (!origin || !this.trustedLocalOrigins.has(origin)) {
         callback({ responseHeaders: details.responseHeaders ?? {} });
         return;
       }

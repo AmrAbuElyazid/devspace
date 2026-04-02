@@ -1,5 +1,6 @@
 import type { BrowserWindow } from "electron";
 import type { BrowserPaneController } from "../browser/browser-types";
+import type { BrowserSessionManager } from "../browser/browser-session-manager";
 import { safeHandle, safeOn } from "./shared";
 import type { T3CodeServerManager } from "../t3code-server";
 import type { TerminalManager } from "../terminal-manager";
@@ -11,6 +12,10 @@ export function registerTerminalAndEditorIpc(
   browserPaneManager: BrowserPaneController,
   vscodeServerManager: VscodeServerManager,
   t3codeServerManager: T3CodeServerManager,
+  browserSessionManager?: Pick<
+    BrowserSessionManager,
+    "registerTrustedLocalOrigin" | "unregisterTrustedLocalOrigin"
+  >,
 ): void {
   safeHandle("terminal:create", (_event, surfaceId: unknown, options: unknown) => {
     if (typeof surfaceId !== "string") return;
@@ -95,7 +100,8 @@ export function registerTerminalAndEditorIpc(
     });
   });
 
-  const editorPaneFolders = new Map<string, string | undefined>();
+  const editorPaneSessions = new Map<string, { folder: string | undefined; url: string }>();
+  const t3codePaneUrls = new Map<string, string>();
 
   safeHandle("editor:isAvailable", () => {
     return vscodeServerManager.isAvailable();
@@ -109,7 +115,14 @@ export function registerTerminalAndEditorIpc(
     const folder = typeof folderPath === "string" ? folderPath : undefined;
     try {
       const { url } = await vscodeServerManager.start(folder);
-      editorPaneFolders.set(paneId, folder);
+      const existingSession = editorPaneSessions.get(paneId);
+      if (existingSession) {
+        browserSessionManager?.unregisterTrustedLocalOrigin(existingSession.url);
+        vscodeServerManager.release(existingSession.folder);
+      }
+
+      editorPaneSessions.set(paneId, { folder, url });
+      browserSessionManager?.registerTrustedLocalOrigin(url);
       browserPaneManager.createPane(paneId, url, "editor");
       return { url };
     } catch (err) {
@@ -120,10 +133,13 @@ export function registerTerminalAndEditorIpc(
 
   safeHandle("editor:stop", (_event, paneId: unknown) => {
     if (typeof paneId !== "string") return;
-    if (editorPaneFolders.has(paneId)) {
-      const folder = editorPaneFolders.get(paneId);
-      editorPaneFolders.delete(paneId);
-      vscodeServerManager.release(folder);
+    if (editorPaneSessions.has(paneId)) {
+      const session = editorPaneSessions.get(paneId);
+      editorPaneSessions.delete(paneId);
+      if (session) {
+        browserSessionManager?.unregisterTrustedLocalOrigin(session.url);
+        vscodeServerManager.release(session.folder);
+      }
     }
     browserPaneManager.destroyPane(paneId);
   });
@@ -144,6 +160,13 @@ export function registerTerminalAndEditorIpc(
 
     try {
       const { url } = await t3codeServerManager.start();
+      const existingUrl = t3codePaneUrls.get(paneId);
+      if (existingUrl) {
+        browserSessionManager?.unregisterTrustedLocalOrigin(existingUrl);
+      }
+
+      t3codePaneUrls.set(paneId, url);
+      browserSessionManager?.registerTrustedLocalOrigin(url);
       browserPaneManager.createPane(paneId, url, "t3code");
       return { url };
     } catch (err) {
@@ -154,6 +177,11 @@ export function registerTerminalAndEditorIpc(
 
   safeHandle("t3code:stop", (_event, paneId: unknown) => {
     if (typeof paneId !== "string") return;
+    const url = t3codePaneUrls.get(paneId);
+    t3codePaneUrls.delete(paneId);
+    if (url) {
+      browserSessionManager?.unregisterTrustedLocalOrigin(url);
+    }
     t3codeServerManager.release();
     browserPaneManager.destroyPane(paneId);
   });

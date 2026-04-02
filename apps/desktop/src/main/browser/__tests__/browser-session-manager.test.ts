@@ -38,7 +38,7 @@ test("getSession uses fromPartition with the shared browser partition", () => {
   expect(session).toBe(fakeSession);
 });
 
-test("CORS overrides only apply to trusted local referrers", () => {
+test("CORS overrides only apply to explicitly registered trusted local referrers", () => {
   let onHeadersReceived:
     | ((
         details: { referrer?: string; responseHeaders?: Record<string, string[]> },
@@ -62,6 +62,7 @@ test("CORS overrides only apply to trusted local referrers", () => {
       }) as never,
   });
 
+  manager.registerTrustedLocalOrigin("http://127.0.0.1:18562/workbench");
   manager.getSession();
 
   let localResponse: { responseHeaders?: Record<string, string[]> } | undefined;
@@ -89,24 +90,97 @@ test("CORS overrides only apply to trusted local referrers", () => {
     },
   });
 
-  let remoteResponse: { responseHeaders?: Record<string, string[]> } | undefined;
+  let untrustedLoopbackResponse: { responseHeaders?: Record<string, string[]> } | undefined;
   onHeadersReceived?.(
     {
-      referrer: "https://example.com/app",
+      referrer: "http://127.0.0.1:3000/app",
       responseHeaders: {
         "Access-Control-Allow-Origin": ["https://example.com"],
         "X-Test": ["ok"],
       },
     },
     (response) => {
-      remoteResponse = response;
+      untrustedLoopbackResponse = response;
     },
   );
 
-  expect(remoteResponse).toEqual({
+  expect(untrustedLoopbackResponse).toEqual({
     responseHeaders: {
       "Access-Control-Allow-Origin": ["https://example.com"],
       "X-Test": ["ok"],
+    },
+  });
+});
+
+test("trusted local origin registration is ref-counted for shared editor origins", () => {
+  let onHeadersReceived:
+    | ((
+        details: { referrer?: string; responseHeaders?: Record<string, string[]> },
+        callback: (response: { responseHeaders?: Record<string, string[]> }) => void,
+      ) => void)
+    | undefined;
+
+  const manager = new BrowserSessionManager({
+    fromPartition: () =>
+      ({
+        webRequest: {
+          onHeadersReceived: (
+            handler: (
+              details: { referrer?: string; responseHeaders?: Record<string, string[]> },
+              callback: (response: { responseHeaders?: Record<string, string[]> }) => void,
+            ) => void,
+          ) => {
+            onHeadersReceived = handler;
+          },
+        },
+      }) as never,
+  });
+
+  manager.registerTrustedLocalOrigin("http://127.0.0.1:18562/?folder=/tmp/a");
+  manager.registerTrustedLocalOrigin("http://127.0.0.1:18562/?folder=/tmp/b");
+  manager.getSession();
+
+  const invokeHeadersReceived = () => {
+    let response: { responseHeaders?: Record<string, string[]> } | undefined;
+    onHeadersReceived?.(
+      {
+        referrer: "http://127.0.0.1:18562/workbench",
+        responseHeaders: {
+          "Access-Control-Allow-Origin": ["https://example.com"],
+        },
+      },
+      (nextResponse) => {
+        response = nextResponse;
+      },
+    );
+    return response;
+  };
+
+  expect(invokeHeadersReceived()).toEqual({
+    responseHeaders: {
+      "Access-Control-Allow-Origin": ["http://127.0.0.1:18562"],
+      "Access-Control-Allow-Methods": ["GET, POST, PUT, DELETE, PATCH, OPTIONS"],
+      "Access-Control-Allow-Headers": ["*"],
+      "Access-Control-Allow-Credentials": ["true"],
+      "Access-Control-Expose-Headers": ["*"],
+    },
+  });
+
+  manager.unregisterTrustedLocalOrigin("http://127.0.0.1:18562/?folder=/tmp/a");
+  expect(invokeHeadersReceived()).toEqual({
+    responseHeaders: {
+      "Access-Control-Allow-Origin": ["http://127.0.0.1:18562"],
+      "Access-Control-Allow-Methods": ["GET, POST, PUT, DELETE, PATCH, OPTIONS"],
+      "Access-Control-Allow-Headers": ["*"],
+      "Access-Control-Allow-Credentials": ["true"],
+      "Access-Control-Expose-Headers": ["*"],
+    },
+  });
+
+  manager.unregisterTrustedLocalOrigin("http://127.0.0.1:18562/?folder=/tmp/b");
+  expect(invokeHeadersReceived()).toEqual({
+    responseHeaders: {
+      "Access-Control-Allow-Origin": ["https://example.com"],
     },
   });
 });

@@ -4,6 +4,7 @@ const handlers = new Map();
 const controllerCalls = [];
 const browserImportCalls = [];
 const mainWindowCalls = [];
+const browserSessionCalls = [];
 
 vi.mock("electron", () => ({
   ipcMain: {
@@ -102,13 +103,17 @@ registerIpcHandlers(
   },
   {
     isAvailable: () => false,
-    start: async () => ({ error: "test" }),
+    start: async (folder) => ({
+      url: folder
+        ? `http://127.0.0.1:18562?folder=${encodeURIComponent(folder)}`
+        : "http://127.0.0.1:18562",
+    }),
     release: () => {},
     stopAll: () => {},
   },
   {
     isAvailable: () => false,
-    start: async () => ({ error: "test" }),
+    start: async () => ({ url: "http://127.0.0.1:31415" }),
     release: () => {},
     stopAll: () => {},
   },
@@ -125,6 +130,14 @@ registerIpcHandlers(
     },
     detectAccess: async () => ({ ok: true }),
     clearBrowsingData: async () => ({ ok: true }),
+  },
+  {
+    registerTrustedLocalOrigin: (url) => {
+      browserSessionCalls.push(["registerTrustedLocalOrigin", url]);
+    },
+    unregisterTrustedLocalOrigin: (url) => {
+      browserSessionCalls.push(["unregisterTrustedLocalOrigin", url]);
+    },
   },
 );
 
@@ -248,5 +261,20 @@ test("window setSidebarOpen IPC updates native traffic light position", async ()
   expect(mainWindowCalls).toEqual([
     ["setWindowButtonPosition", { x: 16, y: 6 }],
     ["setWindowButtonPosition", { x: 16, y: 18 }],
+  ]);
+});
+
+test("editor start and stop track trusted local origins for shared-session CORS", async () => {
+  browserSessionCalls.length = 0;
+
+  const result = await handlers.get("editor:start")({}, "pane-1", "/tmp/project");
+  await handlers.get("editor:stop")({}, "pane-1");
+
+  expect(result).toEqual({
+    url: "http://127.0.0.1:18562?folder=%2Ftmp%2Fproject",
+  });
+  expect(browserSessionCalls).toEqual([
+    ["registerTrustedLocalOrigin", "http://127.0.0.1:18562?folder=%2Ftmp%2Fproject"],
+    ["unregisterTrustedLocalOrigin", "http://127.0.0.1:18562?folder=%2Ftmp%2Fproject"],
   ]);
 });
