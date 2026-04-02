@@ -3,7 +3,10 @@ import type { DragItemData } from "../../../types/dnd";
 import type { SidebarNode } from "../../../types/workspace";
 import type { ResolveContext } from "../types";
 import { sidebarReorderHandler } from "./sidebar-reorder";
+import { tabReorderHandler } from "./tab-reorder";
+import { tabSplitHandler } from "./tab-split";
 import { tabToSidebarHandler } from "./tab-to-sidebar";
+import { tabToWorkspaceHandler } from "./tab-to-workspace";
 import { workspaceToActiveHandler } from "./workspace-to-active";
 
 function createCollision(
@@ -29,22 +32,32 @@ function createStore(overrides: Partial<ReturnType<typeof createStoreState>> = {
 
 function createStoreState(
   overrides: Partial<{
+    paneGroups: Record<string, { tabs: { id: string }[] }>;
     sidebarTree: SidebarNode[];
     pinnedSidebarNodes: SidebarNode[];
     createWorkspaceFromTab: ReturnType<typeof vi.fn>;
     expandFolder: ReturnType<typeof vi.fn>;
     mergeWorkspaceIntoGroup: ReturnType<typeof vi.fn>;
+    moveTabToGroup: ReturnType<typeof vi.fn>;
+    moveTabToWorkspace: ReturnType<typeof vi.fn>;
     moveSidebarNode: ReturnType<typeof vi.fn>;
+    reorderGroupTabs: ReturnType<typeof vi.fn>;
+    splitGroupWithTab: ReturnType<typeof vi.fn>;
     splitGroupWithWorkspace: ReturnType<typeof vi.fn>;
   }> = {},
 ) {
   return {
+    paneGroups: {},
     sidebarTree: [] as SidebarNode[],
     pinnedSidebarNodes: [] as SidebarNode[],
     createWorkspaceFromTab: vi.fn(),
     expandFolder: vi.fn(),
     mergeWorkspaceIntoGroup: vi.fn(),
+    moveTabToGroup: vi.fn(),
+    moveTabToWorkspace: vi.fn(),
     moveSidebarNode: vi.fn(),
+    reorderGroupTabs: vi.fn(),
+    splitGroupWithTab: vi.fn(),
     splitGroupWithWorkspace: vi.fn(),
     ...overrides,
   };
@@ -302,6 +315,261 @@ test("tabToSidebarHandler execute dispatches workspace creation", () => {
     container: "pinned",
     insertIndex: 3,
   });
+});
+
+test("tabToWorkspaceHandler ignores same-workspace drops", () => {
+  const drag: DragItemData = {
+    type: "group-tab",
+    workspaceId: "workspace-1",
+    groupId: "group-1",
+    tabId: "tab-1",
+  };
+
+  const intent = tabToWorkspaceHandler.resolveIntent(
+    createContext(
+      drag,
+      [
+        createCollision(
+          {
+            type: "sidebar-workspace",
+            workspaceId: "workspace-1",
+            container: "main",
+            parentFolderId: null,
+            visible: true,
+          },
+          { left: 0, top: 0, width: 200, height: 100 },
+        ),
+      ],
+      { x: 20, y: 50 },
+    ),
+  );
+
+  expect(intent).toBeNull();
+});
+
+test("tabToWorkspaceHandler only accepts the center zone of a workspace target", () => {
+  const drag: DragItemData = {
+    type: "group-tab",
+    workspaceId: "workspace-1",
+    groupId: "group-1",
+    tabId: "tab-1",
+  };
+
+  const edgeIntent = tabToWorkspaceHandler.resolveIntent(
+    createContext(
+      drag,
+      [
+        createCollision(
+          {
+            type: "sidebar-workspace",
+            workspaceId: "workspace-2",
+            container: "main",
+            parentFolderId: null,
+            visible: true,
+          },
+          { left: 0, top: 0, width: 200, height: 100 },
+        ),
+      ],
+      { x: 20, y: 10 },
+    ),
+  );
+
+  const centerIntent = tabToWorkspaceHandler.resolveIntent(
+    createContext(
+      drag,
+      [
+        createCollision(
+          {
+            type: "sidebar-workspace",
+            workspaceId: "workspace-2",
+            container: "main",
+            parentFolderId: null,
+            visible: true,
+          },
+          { left: 0, top: 0, width: 200, height: 100 },
+        ),
+      ],
+      { x: 20, y: 50 },
+    ),
+  );
+
+  expect(edgeIntent).toBeNull();
+  expect(centerIntent).toEqual({
+    kind: "move-to-workspace",
+    sourceWorkspaceId: "workspace-1",
+    sourceGroupId: "group-1",
+    sourceTabId: "tab-1",
+    targetWorkspaceId: "workspace-2",
+  });
+});
+
+test("tabToWorkspaceHandler execute dispatches workspace moves", () => {
+  const state = createStoreState();
+
+  expect(
+    tabToWorkspaceHandler.execute(
+      {
+        kind: "move-to-workspace",
+        sourceWorkspaceId: "workspace-1",
+        sourceGroupId: "group-1",
+        sourceTabId: "tab-1",
+        targetWorkspaceId: "workspace-2",
+      },
+      { getState: () => state } as never,
+    ),
+  ).toBe(true);
+
+  expect(state.moveTabToWorkspace).toHaveBeenCalledWith(
+    "workspace-1",
+    "group-1",
+    "tab-1",
+    "workspace-2",
+  );
+});
+
+test("tabReorderHandler resolves the first visible group-tab collision", () => {
+  const drag: DragItemData = {
+    type: "group-tab",
+    workspaceId: "workspace-1",
+    groupId: "group-1",
+    tabId: "tab-1",
+  };
+
+  const intent = tabReorderHandler.resolveIntent(
+    createContext(
+      drag,
+      [
+        createCollision({ type: "group-tab", groupId: "group-2", tabId: "tab-5", visible: false }),
+        createCollision({ type: "group-tab", groupId: "group-2", tabId: "tab-2", visible: true }),
+      ],
+      { x: 20, y: 20 },
+    ),
+  );
+
+  expect(intent).toEqual({
+    kind: "reorder-tab",
+    workspaceId: "workspace-1",
+    sourceGroupId: "group-1",
+    sourceTabId: "tab-1",
+    targetGroupId: "group-2",
+    targetTabId: "tab-2",
+  });
+});
+
+test("tabReorderHandler execute reorders within a group using source and target indexes", () => {
+  const state = createStoreState({
+    paneGroups: {
+      "group-1": {
+        tabs: [{ id: "tab-1" }, { id: "tab-2" }, { id: "tab-3" }],
+      },
+    },
+  });
+
+  expect(
+    tabReorderHandler.execute(
+      {
+        kind: "reorder-tab",
+        workspaceId: "workspace-1",
+        sourceGroupId: "group-1",
+        sourceTabId: "tab-1",
+        targetGroupId: "group-1",
+        targetTabId: "tab-3",
+      },
+      { getState: () => state } as never,
+    ),
+  ).toBe(true);
+
+  expect(state.reorderGroupTabs).toHaveBeenCalledWith("workspace-1", "group-1", 0, 2);
+  expect(state.moveTabToGroup).not.toHaveBeenCalled();
+});
+
+test("tabReorderHandler execute moves tabs across groups at the target tab position", () => {
+  const state = createStoreState({
+    paneGroups: {
+      "group-2": {
+        tabs: [{ id: "tab-7" }, { id: "tab-8" }],
+      },
+    },
+  });
+
+  expect(
+    tabReorderHandler.execute(
+      {
+        kind: "reorder-tab",
+        workspaceId: "workspace-1",
+        sourceGroupId: "group-1",
+        sourceTabId: "tab-1",
+        targetGroupId: "group-2",
+        targetTabId: "tab-8",
+      },
+      { getState: () => state } as never,
+    ),
+  ).toBe(true);
+
+  expect(state.moveTabToGroup).toHaveBeenCalledWith(
+    "workspace-1",
+    "group-1",
+    "tab-1",
+    "group-2",
+    1,
+  );
+});
+
+test("tabSplitHandler resolves split direction from pane-drop proximity", () => {
+  const drag: DragItemData = {
+    type: "group-tab",
+    workspaceId: "workspace-1",
+    groupId: "group-1",
+    tabId: "tab-1",
+  };
+
+  const intent = tabSplitHandler.resolveIntent(
+    createContext(
+      drag,
+      [
+        createCollision(
+          { type: "pane-drop", groupId: "group-3", visible: true },
+          { left: 100, top: 100, width: 300, height: 200 },
+        ),
+      ],
+      { x: 120, y: 180 },
+    ),
+  );
+
+  expect(intent).toEqual({
+    kind: "split-group",
+    workspaceId: "workspace-1",
+    sourceGroupId: "group-1",
+    sourceTabId: "tab-1",
+    targetGroupId: "group-3",
+    side: "left",
+  });
+});
+
+test("tabSplitHandler execute dispatches splitGroupWithTab", () => {
+  const state = createStoreState();
+
+  expect(
+    tabSplitHandler.execute(
+      {
+        kind: "split-group",
+        workspaceId: "workspace-1",
+        sourceGroupId: "group-1",
+        sourceTabId: "tab-1",
+        targetGroupId: "group-2",
+        side: "bottom",
+      },
+      { getState: () => state } as never,
+    ),
+  ).toBe(true);
+
+  expect(state.splitGroupWithTab).toHaveBeenCalledWith(
+    "workspace-1",
+    "group-1",
+    "tab-1",
+    "group-2",
+    "bottom",
+  );
 });
 
 test("sidebarReorderHandler resolves workspace drops into folder center using folder children", () => {
