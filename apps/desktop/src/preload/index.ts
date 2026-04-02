@@ -184,11 +184,6 @@ const bridge: DevspaceBridge = {
     openFolder: () => ipcRenderer.invoke("dialog:openFolder"),
   },
 
-  fs: {
-    readFile: (filePath) => ipcRenderer.invoke("fs:readFile", filePath),
-    writeFile: (filePath, content) => ipcRenderer.invoke("fs:writeFile", filePath, content),
-  },
-
   notes: {
     read: (noteId) => ipcRenderer.invoke("notes:read", noteId),
     save: (noteId, content) => ipcRenderer.invoke("notes:save", noteId, content),

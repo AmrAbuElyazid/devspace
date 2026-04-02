@@ -1,5 +1,4 @@
 import type { BrowserWindow } from "electron";
-import { homedir } from "os";
 import type { TerminalManager } from "./terminal-manager";
 import type { VscodeServerManager } from "./vscode-server";
 import type { T3CodeServerManager } from "./t3code-server";
@@ -19,8 +18,6 @@ export function registerIpcHandlers(
   browserImportService?: BrowserImportService,
   browserSessionManager?: BrowserSessionManager,
 ): void {
-  const allowedRoots = [homedir()];
-
   registerTerminalAndEditorIpc(
     mainWindow,
     terminalManager,
@@ -29,6 +26,6 @@ export function registerIpcHandlers(
     t3codeServerManager,
     browserSessionManager,
   );
-  registerSystemIpc(mainWindow, allowedRoots);
+  registerSystemIpc(mainWindow);
   registerBrowserIpc(mainWindow, browserPaneManager, browserImportService);
 }

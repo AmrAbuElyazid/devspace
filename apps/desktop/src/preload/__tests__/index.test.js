@@ -32,6 +32,8 @@ vi.mock("../electron-bridge", () => ({
 test("browser bridge exposes spec-aligned browser IPC methods", async () => {
   await import("../index");
 
+  expect(exposedBridge.fs).toBeUndefined();
+
   await exposedBridge.browser.show("pane-1");
   await exposedBridge.browser.hide("pane-1");
   await exposedBridge.browser.getRuntimeState("pane-1");

@@ -4,7 +4,7 @@ import { existsSync, symlinkSync, unlinkSync } from "fs";
 import { mkdir, readFile, readdir, rename, writeFile } from "fs/promises";
 import { join } from "path";
 import type { BrowserWindow } from "electron";
-import { getSafeExternalUrl, validateFilePath } from "../validation";
+import { getSafeExternalUrl } from "../validation";
 import { getTrafficLightPosition } from "../window-chrome";
 import { safeHandle, safeOn } from "./shared";
 
@@ -13,7 +13,7 @@ function escapeAppleScriptString(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
-export function registerSystemIpc(mainWindow: BrowserWindow, allowedRoots: string[]): void {
+export function registerSystemIpc(mainWindow: BrowserWindow): void {
   safeOn("window:minimize", () => {
     mainWindow.minimize();
   });
@@ -85,37 +85,6 @@ export function registerSystemIpc(mainWindow: BrowserWindow, allowedRoots: strin
     }
 
     return result.filePaths[0];
-  });
-
-  safeHandle("fs:readFile", async (_event, filePath: unknown) => {
-    const validPath = await validateFilePath(filePath, allowedRoots);
-    if (!validPath) {
-      return { error: "File path is not allowed" };
-    }
-
-    try {
-      return await readFile(validPath, "utf-8");
-    } catch (err) {
-      console.warn("[ipc] fs:readFile failed:", err);
-      return { error: `Failed to read file: ${validPath}` };
-    }
-  });
-
-  safeHandle("fs:writeFile", async (_event, filePath: unknown, content: unknown) => {
-    const validPath = await validateFilePath(filePath, allowedRoots);
-    if (!validPath) {
-      return { error: "File path is not allowed" };
-    }
-    if (typeof content !== "string") {
-      return { error: "File content must be a string" };
-    }
-
-    try {
-      await writeFile(validPath, content, "utf-8");
-    } catch (err) {
-      console.warn("[ipc] fs:writeFile failed:", err);
-      return { error: `Failed to write file: ${validPath}` };
-    }
   });
 
   const notesDir = join(app.getPath("userData"), "notes");
