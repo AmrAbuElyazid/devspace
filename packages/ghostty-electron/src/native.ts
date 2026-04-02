@@ -6,6 +6,7 @@ import type { ReservedShortcut } from "./types";
  */
 export interface GhosttyNativeBridge {
   init(windowHandle: Buffer): void;
+  shutdown(): void;
   createSurface(
     surfaceId: string,
     options?: { cwd?: string; envVars?: Record<string, string> },

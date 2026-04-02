@@ -4,6 +4,8 @@
 #import <Carbon/Carbon.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
+#include <cstdlib>
+#include <mutex>
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
@@ -822,6 +824,8 @@ static NSString* heldModifierName(NSEventModifierFlags flags) {
 // Surface layout helpers
 // ---------------------------------------------------------------------------
 
+static std::vector<GhosttyView*> snapshotSurfaceViews();
+
 // Apply DOM-space bounds (top-left origin) to a GhosttyView using the current
 // content view height for Y-flipping.  Also stores the DOM bounds on the
 // view so they can be re-applied when the window resizes.
@@ -844,8 +848,7 @@ static void applyDomBounds(GhosttyView* view, double domX, double domY, double w
 static void refitAllSurfacesForNewContentHeight() {
     NSView* contentView = [g_state.window contentView];
     CGFloat contentHeight = [contentView bounds].size.height;
-    for (auto& pair : g_state.surfaces) {
-        GhosttyView* view = pair.second;
+    for (GhosttyView* view : snapshotSurfaceViews()) {
         if (!view.hasBounds) continue;
         CGFloat nsY = contentHeight - view.lastDomY - view.lastDomH;
         [view setFrame:NSMakeRect(view.lastDomX, nsY, view.lastDomW, view.lastDomH)];
@@ -878,8 +881,137 @@ static void wakeup_cb(void* userdata) {
     });
 }
 
+static void runOnMainQueueSync(dispatch_block_t block) {
+    if ([NSThread isMainThread]) {
+        block();
+        return;
+    }
+    dispatch_sync(dispatch_get_main_queue(), block);
+}
+
+static std::vector<GhosttyView*> snapshotSurfaceViews() {
+    std::lock_guard<std::mutex> lock(g_state.surfacesMutex);
+    std::vector<GhosttyView*> views;
+    views.reserve(g_state.surfaces.size());
+    for (const auto& pair : g_state.surfaces) {
+        views.push_back(pair.second);
+    }
+    return views;
+}
+
+static GhosttyView* findSurfaceView(const std::string& surfaceId) {
+    std::lock_guard<std::mutex> lock(g_state.surfacesMutex);
+    auto it = g_state.surfaces.find(surfaceId);
+    return it != g_state.surfaces.end() ? it->second : nil;
+}
+
+static GhosttyView* takeSurfaceView(const std::string& surfaceId) {
+    std::lock_guard<std::mutex> lock(g_state.surfacesMutex);
+    auto it = g_state.surfaces.find(surfaceId);
+    if (it == g_state.surfaces.end()) return nil;
+
+    GhosttyView* view = it->second;
+    g_state.surfaces.erase(it);
+    return view;
+}
+
+static std::vector<GhosttyView*> takeAllSurfaceViews() {
+    std::lock_guard<std::mutex> lock(g_state.surfacesMutex);
+    std::vector<GhosttyView*> views;
+    views.reserve(g_state.surfaces.size());
+    for (auto& pair : g_state.surfaces) {
+        views.push_back(pair.second);
+    }
+    g_state.surfaces.clear();
+    return views;
+}
+
+static std::string surfaceIdFromUserdata(void* userdata) {
+    const char* surfaceId = static_cast<const char*>(userdata);
+    return surfaceId ? std::string(surfaceId) : "";
+}
+
+static void destroySurfaceView(GhosttyView* view) {
+    if (!view) return;
+
+    if (view.surface) {
+        void* userdata = ghostty_surface_userdata(view.surface);
+        ghostty_surface_free(view.surface);
+        view.surface = nullptr;
+        if (userdata) free(userdata);
+    }
+
+    [view removeFromSuperview];
+}
+
+static void releaseCallback(Napi::ThreadSafeFunction& callback) {
+    if (!callback) return;
+    callback.Abort();
+    callback.Release();
+    callback = Napi::ThreadSafeFunction();
+}
+
+static void replaceCallback(Napi::Env env, Napi::ThreadSafeFunction& target,
+                            Napi::Function callback, const char* resourceName) {
+    releaseCallback(target);
+    target = Napi::ThreadSafeFunction::New(env, callback, resourceName, 0, 1);
+}
+
+static void releaseCallbacks() {
+    releaseCallback(g_state.titleChangedCallback);
+    releaseCallback(g_state.surfaceClosedCallback);
+    releaseCallback(g_state.surfaceFocusedCallback);
+    releaseCallback(g_state.modifierChangedCallback);
+    releaseCallback(g_state.pwdChangedCallback);
+    releaseCallback(g_state.notificationCallback);
+    releaseCallback(g_state.searchStartCallback);
+    releaseCallback(g_state.searchEndCallback);
+    releaseCallback(g_state.searchTotalCallback);
+    releaseCallback(g_state.searchSelectedCallback);
+}
+
+static void removeObservers() {
+    NSNotificationCenter* center = [NSNotificationCenter defaultCenter];
+
+    if (g_state.appDidBecomeActiveObserver) {
+        [center removeObserver:g_state.appDidBecomeActiveObserver];
+        g_state.appDidBecomeActiveObserver = nil;
+    }
+    if (g_state.appDidResignActiveObserver) {
+        [center removeObserver:g_state.appDidResignActiveObserver];
+        g_state.appDidResignActiveObserver = nil;
+    }
+
+    for (id observer : g_state.windowObserverTokens) {
+        [center removeObserver:observer];
+    }
+    g_state.windowObserverTokens.clear();
+}
+
+static void shutdownGhosttyState() {
+    for (GhosttyView* view : takeAllSurfaceViews()) {
+        destroySurfaceView(view);
+    }
+
+    removeObservers();
+
+    if (g_state.app) {
+        ghostty_app_free(g_state.app);
+        g_state.app = nullptr;
+    }
+    if (g_state.config) {
+        ghostty_config_free(g_state.config);
+        g_state.config = nullptr;
+    }
+
+    releaseCallbacks();
+    g_state.window = nil;
+    g_state.reservedShortcuts.clear();
+}
+
 // Helper: find surface ID for a ghostty surface handle
 static std::string findSurfaceId(ghostty_surface_t surface) {
+    std::lock_guard<std::mutex> lock(g_state.surfacesMutex);
     for (auto& pair : g_state.surfaces) {
         if (pair.second.surface == surface) return pair.first;
     }
@@ -964,16 +1096,8 @@ static bool action_cb(ghostty_app_t app, ghostty_target_s target, ghostty_action
         }
 
         case GHOSTTY_ACTION_SHOW_CHILD_EXITED: {
-            if (target.tag != GHOSTTY_TARGET_SURFACE) return false;
-            std::string surfaceId = findSurfaceId(target.target.surface);
-            if (surfaceId.empty()) return false;
-            std::string capturedId = surfaceId;
-            if (g_state.surfaceClosedCallback) {
-                g_state.surfaceClosedCallback.NonBlockingCall(
-                    [capturedId](Napi::Env env, Napi::Function fn) {
-                        fn.Call({Napi::String::New(env, capturedId)});
-                    });
-            }
+            // close_surface_cb is the single source of truth for surface teardown
+            // notifications. Consuming this action prevents Ghostty's default UI.
             return true;
         }
 
@@ -1161,121 +1285,118 @@ static bool action_cb(ghostty_app_t app, ghostty_target_s target, ghostty_action
     }
 }
 
-// Resolve the surface userdata pointer to a GhosttyView.
-// The surface_cfg.userdata is set to (__bridge void*)view during CreateSurface.
-static GhosttyView* viewFromUserdata(void* userdata) {
-    if (!userdata) return nil;
-    return (__bridge GhosttyView*)userdata;
-}
-
-// Find the surface ID for a given GhosttyView.
-static std::string findSurfaceIdForView(GhosttyView* view) {
-    if (!view) return "";
-    for (auto& pair : g_state.surfaces) {
-        if (pair.second == view) return pair.first;
-    }
-    return "";
-}
-
 static bool read_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard, void* context) {
-    // userdata is the per-surface GhosttyView* that initiated the clipboard request
-    GhosttyView* view = viewFromUserdata(userdata);
-    if (!view) view = findFocusedView();  // fallback
+    (void)clipboard;
+    std::string surfaceId = surfaceIdFromUserdata(userdata);
 
-    NSPasteboard* pb = [NSPasteboard generalPasteboard];
-    NSString* str = [pb stringForType:NSPasteboardTypeString];
+    runOnMainQueueSync(^{
+        GhosttyView* view = surfaceId.empty() ? findFocusedView() : findSurfaceView(surfaceId);
+        if (!view) view = findFocusedView();
 
-    // If no text on the clipboard, check for image data.
-    // Save the image to a temp file and paste the file path instead (cmux pattern).
-    if (!str) {
-        NSData* imageData = [pb dataForType:NSPasteboardTypePNG];
-        BOOL needsConversion = NO;
-        if (!imageData) {
-            imageData = [pb dataForType:NSPasteboardTypeTIFF];
-            needsConversion = YES;
-        }
-        if (imageData) {
-            // Convert TIFF → PNG
-            if (needsConversion) {
-                NSBitmapImageRep* rep = [NSBitmapImageRep imageRepWithData:imageData];
-                if (rep) {
-                    imageData = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
-                }
+        NSPasteboard* pb = [NSPasteboard generalPasteboard];
+        NSString* str = [pb stringForType:NSPasteboardTypeString];
+
+        // If no text on the clipboard, check for image data.
+        // Save the image to a temp file and paste the file path instead (cmux pattern).
+        if (!str) {
+            NSData* imageData = [pb dataForType:NSPasteboardTypePNG];
+            BOOL needsConversion = NO;
+            if (!imageData) {
+                imageData = [pb dataForType:NSPasteboardTypeTIFF];
+                needsConversion = YES;
             }
             if (imageData) {
-                NSString* tempDir = NSTemporaryDirectory();
-                NSString* filename = [NSString stringWithFormat:@"devspace-paste-%@.png",
-                    [[NSUUID UUID] UUIDString]];
-                NSString* tempPath = [tempDir stringByAppendingPathComponent:filename];
-                if ([imageData writeToFile:tempPath atomically:YES]) {
-                    // Shell-escape the path and use it as paste text
-                    NSString* escaped = [tempPath stringByReplacingOccurrencesOfString:@"'" withString:@"'\\''"];
-                    str = [NSString stringWithFormat:@"'%@'", escaped];
+                // Convert TIFF → PNG
+                if (needsConversion) {
+                    NSBitmapImageRep* rep = [NSBitmapImageRep imageRepWithData:imageData];
+                    if (rep) {
+                        imageData = [rep representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
+                    }
+                }
+                if (imageData) {
+                    NSString* tempDir = NSTemporaryDirectory();
+                    NSString* filename = [NSString stringWithFormat:@"devspace-paste-%@.png",
+                        [[NSUUID UUID] UUIDString]];
+                    NSString* tempPath = [tempDir stringByAppendingPathComponent:filename];
+                    if ([imageData writeToFile:tempPath atomically:YES]) {
+                        // Shell-escape the path and use it as paste text
+                        NSString* escaped = [tempPath stringByReplacingOccurrencesOfString:@"'" withString:@"'\\''"];
+                        str = [NSString stringWithFormat:@"'%@'", escaped];
+                    }
                 }
             }
         }
-    }
 
-    if (str && view && view.surface) {
-        ghostty_surface_complete_clipboard_request(view.surface, [str UTF8String], context, false);
-    }
+        if (view && view.surface) {
+            const char* clipboardText = str ? [str UTF8String] : "";
+            ghostty_surface_complete_clipboard_request(view.surface, clipboardText, context, false);
+        }
+    });
+
     return true;
 }
 
 static void confirm_read_clipboard_cb(void* userdata, const char* data,
                                        void* context, ghostty_clipboard_request_e req) {
-    // Auto-confirm clipboard reads, routing to the requesting surface
-    GhosttyView* view = viewFromUserdata(userdata);
-    if (!view) view = findFocusedView();
+    (void)req;
+    std::string surfaceId = surfaceIdFromUserdata(userdata);
 
-    if (view && view.surface) {
-        ghostty_surface_complete_clipboard_request(view.surface, data, context, false);
-    }
+    runOnMainQueueSync(^{
+        GhosttyView* view = surfaceId.empty() ? findFocusedView() : findSurfaceView(surfaceId);
+        if (!view) view = findFocusedView();
+
+        if (view && view.surface) {
+            ghostty_surface_complete_clipboard_request(view.surface, data ? data : "", context, true);
+        }
+    });
 }
 
 static void write_clipboard_cb(void* userdata, ghostty_clipboard_e clipboard,
                                 const ghostty_clipboard_content_s* content,
                                 size_t content_count, bool confirm) {
-    if (content_count == 0 || !content) return;
+    (void)userdata;
+    (void)clipboard;
+    (void)confirm;
 
-    // Iterate content entries looking for text/plain MIME type
-    const char* fallback = nullptr;
-    for (size_t i = 0; i < content_count; i++) {
-        const char* data = content[i].data;
-        if (!data) continue;
+    runOnMainQueueSync(^{
+        if (content_count == 0 || !content) return;
 
-        if (content[i].mime) {
-            NSString* mime = [NSString stringWithUTF8String:content[i].mime];
-            if ([mime hasPrefix:@"text/plain"]) {
-                NSString* str = [NSString stringWithUTF8String:data];
-                if (str) {
-                    NSPasteboard* pb = [NSPasteboard generalPasteboard];
-                    [pb clearContents];
-                    [pb setString:str forType:NSPasteboardTypeString];
+        // Iterate content entries looking for text/plain MIME type
+        const char* fallback = nullptr;
+        for (size_t i = 0; i < content_count; i++) {
+            const char* entry = content[i].data;
+            if (!entry) continue;
+
+            if (content[i].mime) {
+                NSString* mime = [NSString stringWithUTF8String:content[i].mime];
+                if ([mime hasPrefix:@"text/plain"]) {
+                    NSString* str = [NSString stringWithUTF8String:entry];
+                    if (str) {
+                        NSPasteboard* pb = [NSPasteboard generalPasteboard];
+                        [pb clearContents];
+                        [pb setString:str forType:NSPasteboardTypeString];
+                    }
+                    return;
                 }
-                return;
+            }
+            if (!fallback) fallback = entry;
+        }
+
+        // Fallback: use first available content
+        if (fallback) {
+            NSString* str = [NSString stringWithUTF8String:fallback];
+            if (str) {
+                NSPasteboard* pb = [NSPasteboard generalPasteboard];
+                [pb clearContents];
+                [pb setString:str forType:NSPasteboardTypeString];
             }
         }
-        if (!fallback) fallback = data;
-    }
-
-    // Fallback: use first available content
-    if (fallback) {
-        NSString* str = [NSString stringWithUTF8String:fallback];
-        if (str) {
-            NSPasteboard* pb = [NSPasteboard generalPasteboard];
-            [pb clearContents];
-            [pb setString:str forType:NSPasteboardTypeString];
-        }
-    }
+    });
 }
 
 static void close_surface_cb(void* userdata, bool process_alive) {
-    // userdata is the per-surface GhosttyView* whose process exited
-    GhosttyView* view = viewFromUserdata(userdata);
-    if (!view) return;
-
-    std::string capturedId = findSurfaceIdForView(view);
+    (void)process_alive;
+    std::string capturedId = surfaceIdFromUserdata(userdata);
     if (capturedId.empty()) return;
 
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -1298,6 +1419,8 @@ static Napi::Value InitGhostty(const Napi::CallbackInfo& info) {
         Napi::TypeError::New(env, "Expected Buffer (native window handle)").ThrowAsJavaScriptException();
         return env.Undefined();
     }
+
+    shutdownGhosttyState();
 
     // Ensure TUI apps get colors
     unsetenv("NO_COLOR");
@@ -1392,13 +1515,13 @@ static Napi::Value InitGhostty(const Napi::CallbackInfo& info) {
     // Track app focus
     ghostty_app_set_focus(g_state.app, [NSApp isActive]);
 
-    [[NSNotificationCenter defaultCenter]
+    g_state.appDidBecomeActiveObserver = [[NSNotificationCenter defaultCenter]
         addObserverForName:NSApplicationDidBecomeActiveNotification
         object:nil queue:[NSOperationQueue mainQueue]
         usingBlock:^(NSNotification* note) {
             if (g_state.app) ghostty_app_set_focus(g_state.app, true);
         }];
-    [[NSNotificationCenter defaultCenter]
+    g_state.appDidResignActiveObserver = [[NSNotificationCenter defaultCenter]
         addObserverForName:NSApplicationDidResignActiveNotification
         object:nil queue:[NSOperationQueue mainQueue]
         usingBlock:^(NSNotification* note) {
@@ -1412,13 +1535,14 @@ static Napi::Value InitGhostty(const Napi::CallbackInfo& info) {
         NSWindowDidResizeNotification,
         NSWindowDidMoveNotification,
     ]) {
-        [[NSNotificationCenter defaultCenter]
+        id observer = [[NSNotificationCenter defaultCenter]
             addObserverForName:name
             object:g_state.window
             queue:[NSOperationQueue mainQueue]
             usingBlock:^(NSNotification* note) {
                 refitAllSurfacesForNewContentHeight();
             }];
+        g_state.windowObserverTokens.push_back(observer);
     }
 
     NSLog(@"ghostty_bridge: app initialized successfully");
@@ -1475,15 +1599,9 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
     // Idempotent: if a surface with this ID already exists, destroy it first.
     // This prevents leaked NSViews when React remounts a TerminalPane component
     // (e.g. during split operations where the parent tree structure changes).
-    auto existing = g_state.surfaces.find(surfaceId);
-    if (existing != g_state.surfaces.end()) {
-        GhosttyView* oldView = existing->second;
-        if (oldView.surface) {
-            ghostty_surface_free(oldView.surface);
-            oldView.surface = nullptr;
-        }
-        [oldView removeFromSuperview];
-        g_state.surfaces.erase(existing);
+    GhosttyView* oldView = takeSurfaceView(surfaceId);
+    if (oldView) {
+        destroySurfaceView(oldView);
         NSLog(@"ghostty_bridge: destroyed existing surface %s before recreating", surfaceId.c_str());
     }
 
@@ -1501,7 +1619,13 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
     ghostty_surface_config_s surface_cfg = ghostty_surface_config_new();
     surface_cfg.platform_tag = GHOSTTY_PLATFORM_MACOS;
     surface_cfg.platform.macos.nsview = (__bridge void*)view;
-    surface_cfg.userdata = (__bridge void*)view;
+    char* surfaceUserdata = strdup(surfaceId.c_str());
+    if (!surfaceUserdata) {
+        [view removeFromSuperview];
+        Napi::Error::New(env, "Failed to allocate surface userdata").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    surface_cfg.userdata = surfaceUserdata;
     surface_cfg.scale_factor = [[g_state.window screen] backingScaleFactor];
     surface_cfg.font_size = 0;
     surface_cfg.context = GHOSTTY_SURFACE_CONTEXT_TAB;
@@ -1517,6 +1641,7 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
 
     ghostty_surface_t surface = ghostty_surface_new(g_state.app, &surface_cfg);
     if (!surface) {
+        free(surfaceUserdata);
         [view removeFromSuperview];
         Napi::Error::New(env, "Failed to create ghostty surface").ThrowAsJavaScriptException();
         return env.Undefined();
@@ -1530,7 +1655,10 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
     }
     ghostty_surface_refresh(surface);
 
-    g_state.surfaces[surfaceId] = view;
+    {
+        std::lock_guard<std::mutex> lock(g_state.surfacesMutex);
+        g_state.surfaces[surfaceId] = view;
+    }
 
     NSLog(@"ghostty_bridge: surface created %s", surfaceId.c_str());
     return env.Undefined();
@@ -1544,15 +1672,9 @@ static Napi::Value DestroySurface(const Napi::CallbackInfo& info) {
     }
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
 
-    auto it = g_state.surfaces.find(surfaceId);
-    if (it != g_state.surfaces.end()) {
-        GhosttyView* view = it->second;
-        if (view.surface) {
-            ghostty_surface_free(view.surface);
-            view.surface = nullptr;
-        }
-        [view removeFromSuperview];
-        g_state.surfaces.erase(it);
+    GhosttyView* view = takeSurfaceView(surfaceId);
+    if (view) {
+        destroySurfaceView(view);
     }
     return env.Undefined();
 }
@@ -1562,13 +1684,13 @@ static Napi::Value FocusSurface(const Napi::CallbackInfo& info) {
     if (info.Length() < 1 || !info[0].IsString()) return env.Undefined();
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
 
-    auto it = g_state.surfaces.find(surfaceId);
-    if (it != g_state.surfaces.end()) {
-        [g_state.window makeFirstResponder:it->second];
-        if (it->second.surface) {
+    GhosttyView* view = findSurfaceView(surfaceId);
+    if (view) {
+        [g_state.window makeFirstResponder:view];
+        if (view.surface) {
             NSNumber* screenNum = [g_state.window.screen deviceDescription][@"NSScreenNumber"];
             if (screenNum) {
-                ghostty_surface_set_display_id(it->second.surface, [screenNum unsignedIntValue]);
+                ghostty_surface_set_display_id(view.surface, [screenNum unsignedIntValue]);
             }
         }
     }
@@ -1577,17 +1699,23 @@ static Napi::Value FocusSurface(const Napi::CallbackInfo& info) {
 
 static Napi::Value ResizeSurface(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
+    if (info.Length() < 5 || !info[0].IsString() || !info[1].IsNumber() ||
+        !info[2].IsNumber() || !info[3].IsNumber() || !info[4].IsNumber()) {
+        Napi::TypeError::New(env, "Expected surfaceId and four numeric bounds").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
     double domX = info[1].As<Napi::Number>().DoubleValue();
     double domY = info[2].As<Napi::Number>().DoubleValue();
     double w = info[3].As<Napi::Number>().DoubleValue();
     double h = info[4].As<Napi::Number>().DoubleValue();
 
-    auto it = g_state.surfaces.find(surfaceId);
-    if (it != g_state.surfaces.end()) {
-        applyDomBounds(it->second, domX, domY, w, h);
+    GhosttyView* view = findSurfaceView(surfaceId);
+    if (view) {
+        applyDomBounds(view, domX, domY, w, h);
         // If the surface was waiting for bounds to show, evaluate now
-        evaluateVisibility(it->second);
+        evaluateVisibility(view);
     }
     return env.Undefined();
 }
@@ -1596,10 +1724,10 @@ static Napi::Value ShowSurface(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (info.Length() < 1 || !info[0].IsString()) return env.Undefined();
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
-    auto it = g_state.surfaces.find(surfaceId);
-    if (it != g_state.surfaces.end()) {
-        it->second.wantVisible = YES;
-        evaluateVisibility(it->second); // only actually shows if hasBounds
+    GhosttyView* view = findSurfaceView(surfaceId);
+    if (view) {
+        view.wantVisible = YES;
+        evaluateVisibility(view); // only actually shows if hasBounds
     }
     return env.Undefined();
 }
@@ -1608,10 +1736,10 @@ static Napi::Value HideSurface(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (info.Length() < 1 || !info[0].IsString()) return env.Undefined();
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
-    auto it = g_state.surfaces.find(surfaceId);
-    if (it != g_state.surfaces.end()) {
-        it->second.wantVisible = NO;
-        evaluateVisibility(it->second); // immediately hides
+    GhosttyView* view = findSurfaceView(surfaceId);
+    if (view) {
+        view.wantVisible = NO;
+        evaluateVisibility(view); // immediately hides
     }
     return env.Undefined();
 }
@@ -1633,7 +1761,16 @@ static Napi::Value SetVisibleSurfaces(const Napi::CallbackInfo& info) {
         }
     }
 
-    for (auto& pair : g_state.surfaces) {
+    std::vector<std::pair<std::string, GhosttyView*>> surfaces;
+    {
+        std::lock_guard<std::mutex> lock(g_state.surfacesMutex);
+        surfaces.reserve(g_state.surfaces.size());
+        for (const auto& pair : g_state.surfaces) {
+            surfaces.push_back(pair);
+        }
+    }
+
+    for (const auto& pair : surfaces) {
         bool want = visibleSet.count(pair.first) > 0;
         pair.second.wantVisible = want ? YES : NO;
         evaluateVisibility(pair.second);
@@ -1644,39 +1781,34 @@ static Napi::Value SetVisibleSurfaces(const Napi::CallbackInfo& info) {
 
 static Napi::Value SetCallback(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
+    if (info.Length() < 2 || !info[0].IsString() || !info[1].IsFunction()) {
+        Napi::TypeError::New(env, "Expected event name and callback").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
     std::string event = info[0].As<Napi::String>().Utf8Value();
     Napi::Function callback = info[1].As<Napi::Function>();
 
     if (event == "title-changed") {
-        g_state.titleChangedCallback = Napi::ThreadSafeFunction::New(
-            env, callback, "titleChanged", 0, 1);
+        replaceCallback(env, g_state.titleChangedCallback, callback, "titleChanged");
     } else if (event == "surface-closed") {
-        g_state.surfaceClosedCallback = Napi::ThreadSafeFunction::New(
-            env, callback, "surfaceClosed", 0, 1);
+        replaceCallback(env, g_state.surfaceClosedCallback, callback, "surfaceClosed");
     } else if (event == "surface-focused") {
-        g_state.surfaceFocusedCallback = Napi::ThreadSafeFunction::New(
-            env, callback, "surfaceFocused", 0, 1);
+        replaceCallback(env, g_state.surfaceFocusedCallback, callback, "surfaceFocused");
     } else if (event == "modifier-changed") {
-        g_state.modifierChangedCallback = Napi::ThreadSafeFunction::New(
-            env, callback, "modifierChanged", 0, 1);
+        replaceCallback(env, g_state.modifierChangedCallback, callback, "modifierChanged");
     } else if (event == "pwd-changed") {
-        g_state.pwdChangedCallback = Napi::ThreadSafeFunction::New(
-            env, callback, "pwdChanged", 0, 1);
+        replaceCallback(env, g_state.pwdChangedCallback, callback, "pwdChanged");
     } else if (event == "notification") {
-        g_state.notificationCallback = Napi::ThreadSafeFunction::New(
-            env, callback, "notification", 0, 1);
+        replaceCallback(env, g_state.notificationCallback, callback, "notification");
     } else if (event == "search-start") {
-        g_state.searchStartCallback = Napi::ThreadSafeFunction::New(
-            env, callback, "searchStart", 0, 1);
+        replaceCallback(env, g_state.searchStartCallback, callback, "searchStart");
     } else if (event == "search-end") {
-        g_state.searchEndCallback = Napi::ThreadSafeFunction::New(
-            env, callback, "searchEnd", 0, 1);
+        replaceCallback(env, g_state.searchEndCallback, callback, "searchEnd");
     } else if (event == "search-total") {
-        g_state.searchTotalCallback = Napi::ThreadSafeFunction::New(
-            env, callback, "searchTotal", 0, 1);
+        replaceCallback(env, g_state.searchTotalCallback, callback, "searchTotal");
     } else if (event == "search-selected") {
-        g_state.searchSelectedCallback = Napi::ThreadSafeFunction::New(
-            env, callback, "searchSelected", 0, 1);
+        replaceCallback(env, g_state.searchSelectedCallback, callback, "searchSelected");
     }
     return env.Undefined();
 }
@@ -1692,13 +1824,13 @@ static Napi::Value SendBindingAction(const Napi::CallbackInfo& info) {
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
     std::string action = info[1].As<Napi::String>().Utf8Value();
 
-    auto it = g_state.surfaces.find(surfaceId);
-    if (it == g_state.surfaces.end() || !it->second.surface) {
+    GhosttyView* view = findSurfaceView(surfaceId);
+    if (!view || !view.surface) {
         return Napi::Boolean::New(env, false);
     }
 
     bool handled = ghostty_surface_binding_action(
-        it->second.surface,
+        view.surface,
         action.c_str(),
         (uintptr_t)action.length()
     );
@@ -1758,8 +1890,14 @@ static Napi::Value BlurSurfaces(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
+static Napi::Value ShutdownGhostty(const Napi::CallbackInfo& info) {
+    shutdownGhosttyState();
+    return info.Env().Undefined();
+}
+
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("init", Napi::Function::New(env, InitGhostty));
+    exports.Set("shutdown", Napi::Function::New(env, ShutdownGhostty));
     exports.Set("createSurface", Napi::Function::New(env, CreateSurface));
     exports.Set("destroySurface", Napi::Function::New(env, DestroySurface));
     exports.Set("focusSurface", Napi::Function::New(env, FocusSurface));

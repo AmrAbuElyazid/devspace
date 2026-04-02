@@ -58,8 +58,11 @@ The Ghostty bridge requires a compiled native addon. After a fresh clone
 or when native code changes:
 
 ```sh
-bun run rebuild-native --filter=@devspace/desktop
+bun run rebuild-native
 ```
+
+The root `rebuild-native` script already delegates to the desktop app and
+does not accept a `--filter` flag.
 
 ## Architecture
 

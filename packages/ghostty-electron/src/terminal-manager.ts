@@ -53,6 +53,7 @@ export class GhosttyTerminal {
 
     this.bridge.setCallback("surface-closed", (surfaceId: unknown) => {
       if (typeof surfaceId === "string") {
+        this.bridge?.destroySurface(surfaceId);
         this.activeSurfaces.delete(surfaceId);
         this.emit("surface-closed", surfaceId);
       }
@@ -128,7 +129,11 @@ export class GhosttyTerminal {
     const set = this.listeners.get(event);
     if (!set) return;
     for (const listener of set) {
-      listener(...args);
+      try {
+        listener(...args);
+      } catch (error) {
+        console.error(`[ghostty-electron] listener for ${event} threw`, error);
+      }
     }
   }
 
@@ -227,6 +232,7 @@ export class GhosttyTerminal {
     }
     this.activeSurfaces.clear();
     this.listeners.clear();
+    this.bridge.shutdown();
     this.bridge = null;
   }
 }
