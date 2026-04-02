@@ -185,6 +185,63 @@ test("trusted local origin registration is ref-counted for shared editor origins
   });
 });
 
+test("secret key interception only applies to registered trusted local origins", async () => {
+  let protocolHandler:
+    | ((request: { url: string; method: string }) => Response | Promise<Response>)
+    | undefined;
+  const fetchCalls: Array<{ url: string; options?: Record<string, unknown> }> = [];
+  const fallbackResponse = new Response("network");
+
+  const manager = new BrowserSessionManager(
+    {
+      fromPartition: () =>
+        ({
+          protocol: {
+            handle: (
+              scheme: string,
+              handler: (request: { url: string; method: string }) => Response | Promise<Response>,
+            ) => {
+              expect(scheme).toBe("http");
+              protocolHandler = handler;
+            },
+          },
+        }) as never,
+    },
+    {
+      fetch: (request, options) => {
+        fetchCalls.push({
+          url: typeof request === "string" ? request : request.url,
+          options: options as Record<string, unknown>,
+        });
+        return Promise.resolve(fallbackResponse as never);
+      },
+    },
+  );
+
+  manager.registerTrustedLocalOrigin("http://127.0.0.1:18562/workbench");
+  manager.getSession();
+
+  const trustedResponse = await protocolHandler?.({
+    url: "http://127.0.0.1:18562/_vscode-cli/mint-key",
+    method: "POST",
+  });
+  expect(fetchCalls).toEqual([]);
+  expect(trustedResponse?.status).toBe(200);
+  expect(trustedResponse?.headers.get("content-type")).toBe("application/octet-stream");
+
+  const untrustedResponse = await protocolHandler?.({
+    url: "http://127.0.0.1:9999/_vscode-cli/mint-key",
+    method: "POST",
+  });
+  expect(untrustedResponse).toBe(fallbackResponse);
+  expect(fetchCalls).toEqual([
+    {
+      url: "http://127.0.0.1:9999/_vscode-cli/mint-key",
+      options: { bypassCustomProtocolHandlers: true },
+    },
+  ]);
+});
+
 test("installHandlers registers a permission check handler on the session", () => {
   let registeredHandler: PermissionCheckHandler | undefined;
   let registeredRequestHandler: PermissionRequestHandler | undefined;

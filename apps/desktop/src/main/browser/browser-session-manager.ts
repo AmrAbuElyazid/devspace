@@ -150,7 +150,10 @@ export class BrowserSessionManager {
   private readonly sessionPermissionGrants = new Set<SessionPermissionGrantKey>();
   private readonly trustedLocalOrigins = new Map<string, number>();
 
-  constructor(private readonly sessionModule: BrowserSessionModule = getElectronSession()) {}
+  constructor(
+    private readonly sessionModule: BrowserSessionModule = getElectronSession(),
+    private readonly netModule: Pick<typeof import("electron").net, "fetch"> = getElectronNet(),
+  ) {}
 
   /**
    * Return the shared browser session, creating it on first access.
@@ -500,8 +503,6 @@ export class BrowserSessionManager {
    * stored in localStorage can be decrypted on subsequent app launches.
    */
   private registerSecretKeyHandler(ses: Session): void {
-    const net = getElectronNet();
-
     // Paths used by VS Code CLI / Cursor CLI for the secret key endpoint.
     const MINT_KEY_PATHS = new Set([
       "/_vscode-cli/mint-key",
@@ -510,7 +511,13 @@ export class BrowserSessionManager {
 
     ses.protocol.handle("http", (request) => {
       const url = new URL(request.url);
-      if (MINT_KEY_PATHS.has(url.pathname) && request.method === "POST") {
+      const trustedOrigin = getTrustedLocalOrigin(request.url);
+      if (
+        MINT_KEY_PATHS.has(url.pathname) &&
+        request.method === "POST" &&
+        trustedOrigin &&
+        this.trustedLocalOrigins.has(trustedOrigin)
+      ) {
         // Defer getSecretKey() to the first actual request instead of calling
         // it eagerly at startup.  The key is cached after the first call, so
         // subsequent requests are instant.  This avoids a concurrent macOS
@@ -529,7 +536,7 @@ export class BrowserSessionManager {
       // Pass all other HTTP requests through to the default network stack.
       // bypassCustomProtocolHandlers is REQUIRED to prevent infinite recursion —
       // without it, net.fetch triggers our own handler again.
-      return net.fetch(request, { bypassCustomProtocolHandlers: true });
+      return this.netModule.fetch(request, { bypassCustomProtocolHandlers: true });
     });
 
     console.log(
