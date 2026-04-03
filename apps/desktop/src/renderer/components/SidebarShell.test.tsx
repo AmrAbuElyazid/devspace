@@ -82,10 +82,6 @@ vi.mock("./Sidebar/SortableFolderItem", () => ({
   ),
 }));
 
-vi.mock("./Sidebar/SidebarFooter", () => ({
-  SidebarFooter: () => <div data-testid="sidebar-footer" />,
-}));
-
 vi.mock("./ui/button", () => ({
   Button: ({ children, onClick, className }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button className={className} onClick={onClick} type="button">

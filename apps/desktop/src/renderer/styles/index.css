@@ -394,7 +394,7 @@
   border-bottom: 1px solid var(--border-faint);
   flex-shrink: 0;
   gap: 1px;
-  overflow-x: auto;
+  overflow: hidden;
   user-select: none;
   position: relative;
 }

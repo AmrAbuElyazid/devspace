@@ -55,15 +55,27 @@ let visibleLayoutObserver: ResizeObserver | null = null;
 let resizeListenerAttached = false;
 let visibleBoundsFrameId: number | null = null;
 
+/**
+ * Native views are inset by this amount (px) on all edges so they don't
+ * overlap Allotment split sashes and DOM hover zones. The gap is filled
+ * by the pane's background color and is barely visible.
+ *
+ * Note: if a pane is smaller than `NATIVE_VIEW_INSET * 2` in any dimension
+ * (e.g. during rapid resize), `measureElementBounds` returns null and the
+ * view retains its previous bounds until the pane grows back. This is
+ * acceptable degradation — such panes are too small to interact with.
+ */
+const NATIVE_VIEW_INSET = 2;
+
 function measureElementBounds(element: HTMLElement): ViewBounds | null {
   const rect = element.getBoundingClientRect();
-  const width = Math.max(0, Math.round(rect.width));
-  const height = Math.max(0, Math.round(rect.height));
+  const width = Math.max(0, Math.round(rect.width) - NATIVE_VIEW_INSET * 2);
+  const height = Math.max(0, Math.round(rect.height) - NATIVE_VIEW_INSET * 2);
   if (width === 0 || height === 0) return null;
 
   return {
-    x: Math.round(rect.left),
-    y: Math.round(rect.top),
+    x: Math.round(rect.left) + NATIVE_VIEW_INSET,
+    y: Math.round(rect.top) + NATIVE_VIEW_INSET,
     width,
     height,
   };

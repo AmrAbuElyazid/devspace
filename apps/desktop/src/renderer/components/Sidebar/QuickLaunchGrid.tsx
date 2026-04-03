@@ -37,7 +37,7 @@ export function QuickLaunchGrid() {
   );
 
   return (
-    <div className="ql-grid">
+    <div className="ql-grid" role="toolbar" aria-label="Quick launch">
       {quickLaunchTypes.map((type) => {
         const Icon = paneTypeIcons[type];
         const label = paneTypeLabels[type];
@@ -47,11 +47,12 @@ export function QuickLaunchGrid() {
             key={type}
             type="button"
             className={`ql-item no-drag${isDefault ? " ql-item-default" : ""}`}
+            aria-label={label}
             title={`${label}${isDefault ? " (default for \u2318T)" : ""}`}
             onClick={() => handleClick(type)}
             onContextMenu={(e) => handleContextMenu(e, type)}
           >
-            <Icon size={15} strokeWidth={1.6} />
+            <Icon size={15} />
             {isDefault && <span className="ql-default-dot" />}
           </button>
         );
