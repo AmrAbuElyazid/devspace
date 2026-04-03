@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import "./sidebar.css";
 import { useDroppable } from "@dnd-kit/core";
-import { Plus, ChevronLeft, FolderClosed, Search, X } from "lucide-react";
+import { Plus, ChevronLeft, FolderClosed, Search, X, Settings } from "lucide-react";
 import { useWorkspaceStore } from "../../store/workspace-store";
 import { useSettingsStore } from "../../store/settings-store";
 import { resolveDisplayString } from "../../../shared/shortcuts";
@@ -13,7 +13,7 @@ import { useDragContext } from "../../hooks/useDndOrchestrator";
 import { findSidebarNode } from "../../lib/sidebar-tree";
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
 import { SidebarProvider, type SidebarContextValue } from "./SidebarContext";
-import { SidebarFooter } from "./SidebarFooter";
+import { QuickLaunchGrid } from "./QuickLaunchGrid";
 import type { ContextMenuItem } from "../../../shared/types";
 import type { SidebarContainer } from "../../types/dnd";
 
@@ -41,6 +41,7 @@ export default function Sidebar() {
   const sidebarWidth = useSettingsStore((s) => s.sidebarWidth);
   const setSidebarWidth = useSettingsStore((s) => s.setSidebarWidth);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
+  const toggleSettings = useSettingsStore((s) => s.toggleSettings);
 
   const { activeDrag } = useDragContext();
 
@@ -270,6 +271,9 @@ export default function Sidebar() {
           </button>
         </div>
 
+        {/* Quick launch grid */}
+        <QuickLaunchGrid />
+
         {/* Search bar */}
         <div className="sidebar-search">
           <Search size={12} className="sidebar-search-icon" />
@@ -383,8 +387,19 @@ export default function Sidebar() {
           variant="destructive"
         />
 
-        {/* Footer — quick-create buttons + settings */}
-        <SidebarFooter />
+        {/* Footer — settings only */}
+        <div className="sidebar-footer">
+          <button
+            type="button"
+            className="sidebar-footer-settings no-drag"
+            onClick={toggleSettings}
+            title={`Settings (${resolveDisplayString("toggle-settings")})`}
+          >
+            <Settings size={13} strokeWidth={1.8} />
+            <span>Settings</span>
+            <kbd className="sidebar-footer-shortcut">{resolveDisplayString("toggle-settings")}</kbd>
+          </button>
+        </div>
 
         {sidebarOpen && <div className="sidebar-resize-handle" onMouseDown={handleResizeStart} />}
       </div>

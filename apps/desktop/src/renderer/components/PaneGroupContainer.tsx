@@ -290,7 +290,10 @@ export default memo(function PaneGroupContainer({
   if (!group) return null;
 
   return (
-    <div className="pane-group" onMouseDown={handleFocus}>
+    <div
+      className={`pane-group${isFocused ? " pane-group-focused" : ""}`}
+      onMouseDown={handleFocus}
+    >
       <GroupTabBar
         group={group}
         groupId={groupId}
