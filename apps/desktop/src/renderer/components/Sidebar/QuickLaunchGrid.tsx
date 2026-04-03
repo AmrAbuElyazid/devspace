@@ -26,15 +26,12 @@ export function QuickLaunchGrid() {
     [addGroupTab, addWorkspace],
   );
 
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent, type: PaneType) => {
-      e.preventDefault();
-      const settings = useSettingsStore.getState();
-      const newDefault: DefaultPaneType = defaultPaneType === type ? "picker" : type;
-      settings.updateSetting("defaultPaneType", newDefault);
-    },
-    [defaultPaneType],
-  );
+  const handleContextMenu = useCallback((e: React.MouseEvent, type: PaneType) => {
+    e.preventDefault();
+    const settings = useSettingsStore.getState();
+    const newDefault: DefaultPaneType = settings.defaultPaneType === type ? "picker" : type;
+    settings.updateSetting("defaultPaneType", newDefault);
+  }, []);
 
   return (
     <div className="ql-grid" role="toolbar" aria-label="Quick launch">
@@ -52,7 +49,7 @@ export function QuickLaunchGrid() {
             onClick={() => handleClick(type)}
             onContextMenu={(e) => handleContextMenu(e, type)}
           >
-            <Icon size={15} />
+            <Icon size={17} />
             {isDefault && <span className="ql-default-dot" />}
           </button>
         );

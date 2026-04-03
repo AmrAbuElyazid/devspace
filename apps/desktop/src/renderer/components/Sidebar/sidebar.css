@@ -25,8 +25,8 @@
   background: linear-gradient(
     to bottom,
     transparent,
-    color-mix(in srgb, var(--foreground) 4%, transparent) 30%,
-    color-mix(in srgb, var(--foreground) 4%, transparent) 70%,
+    color-mix(in srgb, var(--foreground) 7%, transparent) 30%,
+    color-mix(in srgb, var(--foreground) 7%, transparent) 70%,
     transparent
   );
   pointer-events: none;
@@ -121,7 +121,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 8px 4px;
+  margin: 0 8px 2px;
   padding: 5px 10px;
   background: color-mix(in srgb, var(--foreground) 3%, transparent);
   border: 1px solid transparent;
@@ -213,7 +213,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px 4px;
+  padding: 6px 12px 3px;
   flex-shrink: 0;
 }
 
@@ -277,7 +277,7 @@
   margin: 1px 0;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--muted-foreground);
   user-select: none;
   transition:
@@ -382,7 +382,7 @@
   border-radius: 8px;
   border: none;
   background: none;
-  color: var(--foreground-faint);
+  color: var(--foreground-muted);
   cursor: pointer;
   font-size: 12px;
   font-family: inherit;
@@ -394,7 +394,7 @@
 
 .sidebar-footer-settings:hover {
   background: color-mix(in srgb, var(--foreground) 5%, transparent);
-  color: var(--foreground-muted);
+  color: var(--foreground);
 }
 
 .sidebar-footer-shortcut {

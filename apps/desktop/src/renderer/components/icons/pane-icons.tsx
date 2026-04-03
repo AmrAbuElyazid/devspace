@@ -1,6 +1,6 @@
 /**
- * Custom pane-type icons. Each component accepts the same props as Lucide
- * icons (size, className, style, strokeWidth) so they're drop-in replacements.
+ * Custom pane-type icons. Each component accepts size, className, style,
+ * and all standard SVG attributes — drop-in replacements for Lucide icons.
  *
  * Consistent style: 1.4 stroke, rounded caps/joins, 24x24 viewBox for
  * stroke icons — renders crisply from 10px (tab bar) to 15px (quick launch).
@@ -28,7 +28,8 @@ export function VSCodeIcon({ size = 24, className, style, ...rest }: IconProps) 
     >
       <path
         d="M96.46 10.8L75.86 0.87c-2.39-1.15-5.24-0.66-7.11 1.21L29.35 38.04 12.19 25.01c-1.6-1.21-3.83-1.11-5.32 0.24L1.36 30.25c-1.82 1.65-1.82 4.51 0 6.17L16.25 50 1.36 63.58c-1.82 1.65-1.82 4.51 0 6.16l5.51 5.01c1.49 1.35 3.72 1.45 5.32 0.24l17.17-12.03 39.41 35.96c1.87 1.87 4.72 2.36 7.11 1.21l20.59-9.91A8.33 8.33 0 00100 83.59V16.41a8.33 8.33 0 00-3.54-6.81zM75 72.7L45.11 50 75 27.3v45.4z"
-        fill="#007ACC"
+        /* VS Code brand — slightly muted to sit better alongside monochrome siblings */
+        fill="#2a8fc7"
       />
     </svg>
   );
