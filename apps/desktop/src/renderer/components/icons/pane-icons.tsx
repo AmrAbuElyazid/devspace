@@ -1,9 +1,7 @@
 /**
- * Custom pane-type icons. Each component accepts size, className, style,
- * and all standard SVG attributes — drop-in replacements for Lucide icons.
- *
- * Consistent style: 1.4 stroke, rounded caps/joins, 24x24 viewBox for
- * stroke icons — renders crisply from 10px (tab bar) to 15px (quick launch).
+ * Custom pane-type icons. All currentColor with subtle filled backgrounds
+ * and crisp stroke details. Renders cleanly from 10px (tab bar) to 17px
+ * (quick launch grid).
  */
 
 import type { SVGProps } from "react";
@@ -12,14 +10,72 @@ interface IconProps extends SVGProps<SVGSVGElement> {
   size?: number | string;
 }
 
-/** VS Code — official logo, simplified single-path for crisp small rendering. */
+/** Terminal — filled screen with command prompt. */
+export function TerminalIcon({ size = 24, className, style, ...rest }: IconProps) {
+  const s = Number(size);
+  return (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      style={style}
+      {...rest}
+    >
+      <rect x="2" y="3" width="20" height="18" rx="3" fill="currentColor" opacity="0.12" />
+      <rect x="2" y="3" width="20" height="18" rx="3" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="M7 9.5l3 2.5-3 2.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <line
+        x1="13"
+        y1="14.5"
+        x2="17"
+        y2="14.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** Browser — filled globe with meridian arc and equator. */
+export function BrowserIcon({ size = 24, className, style, ...rest }: IconProps) {
+  const s = Number(size);
+  return (
+    <svg
+      width={s}
+      height={s}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      style={style}
+      {...rest}
+    >
+      <circle cx="12" cy="12" r="9.5" fill="currentColor" opacity="0.12" />
+      <circle cx="12" cy="12" r="9.5" stroke="currentColor" strokeWidth="1.4" />
+      <ellipse cx="12" cy="12" rx="3.5" ry="9.5" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="2.5" y1="12" x2="21.5" y2="12" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+/** VS Code — official angular bracket/shield logo, monochrome. */
 export function VSCodeIcon({ size = 24, className, style, ...rest }: IconProps) {
   const s = Number(size);
   return (
     <svg
       width={s}
       height={s}
-      viewBox="0 0 100 100"
+      viewBox="-10 -5 120 110"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={className}
@@ -28,14 +84,14 @@ export function VSCodeIcon({ size = 24, className, style, ...rest }: IconProps) 
     >
       <path
         d="M96.46 10.8L75.86 0.87c-2.39-1.15-5.24-0.66-7.11 1.21L29.35 38.04 12.19 25.01c-1.6-1.21-3.83-1.11-5.32 0.24L1.36 30.25c-1.82 1.65-1.82 4.51 0 6.17L16.25 50 1.36 63.58c-1.82 1.65-1.82 4.51 0 6.16l5.51 5.01c1.49 1.35 3.72 1.45 5.32 0.24l17.17-12.03 39.41 35.96c1.87 1.87 4.72 2.36 7.11 1.21l20.59-9.91A8.33 8.33 0 00100 83.59V16.41a8.33 8.33 0 00-3.54-6.81zM75 72.7L45.11 50 75 27.3v45.4z"
-        /* VS Code brand — slightly muted to sit better alongside monochrome siblings */
-        fill="#2a8fc7"
+        fill="currentColor"
+        opacity="0.75"
       />
     </svg>
   );
 }
 
-/** T3 Code — official T3 logo mark. */
+/** T3 Code — rounded app icon with T3 lettermark. */
 export function T3CodeIcon({ size = 24, className, style, ...rest }: IconProps) {
   const s = Number(size);
   return (
@@ -62,64 +118,6 @@ export function T3CodeIcon({ size = 24, className, style, ...rest }: IconProps) 
   );
 }
 
-/** Terminal — prompt chevron + cursor in a rounded screen. */
-export function TerminalIcon({ size = 24, className, style, ...rest }: IconProps) {
-  const s = Number(size);
-  return (
-    <svg
-      width={s}
-      height={s}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      style={style}
-      {...rest}
-    >
-      <rect x="2" y="3" width="20" height="18" rx="3" stroke="currentColor" strokeWidth="1.4" />
-      <path
-        d="M7 9.5l3 2.5-3 2.5"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <line
-        x1="13"
-        y1="14.5"
-        x2="17"
-        y2="14.5"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-/** Browser — globe with equator and meridians. */
-export function BrowserIcon({ size = 24, className, style, ...rest }: IconProps) {
-  const s = Number(size);
-  return (
-    <svg
-      width={s}
-      height={s}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-      style={style}
-      {...rest}
-    >
-      <circle cx="12" cy="12" r="9.5" stroke="currentColor" strokeWidth="1.4" />
-      <ellipse cx="12" cy="12" rx="4" ry="9.5" stroke="currentColor" strokeWidth="1.4" />
-      <line x1="2.5" y1="12" x2="21.5" y2="12" stroke="currentColor" strokeWidth="1.4" />
-      <path d="M4.5 7.5h15" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-      <path d="M4.5 16.5h15" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 /** Note — spiral-bound notebook with ruled lines. */
 export function NoteIcon({ size = 24, className, style, ...rest }: IconProps) {
   const s = Number(size);
@@ -134,6 +132,7 @@ export function NoteIcon({ size = 24, className, style, ...rest }: IconProps) {
       style={style}
       {...rest}
     >
+      <rect x="5" y="2" width="14" height="20" rx="2" fill="currentColor" opacity="0.12" />
       <rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" strokeWidth="1.4" />
       {/* Spiral rings */}
       <line
