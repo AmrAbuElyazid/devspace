@@ -82,10 +82,6 @@ vi.mock("./Sidebar/SortableFolderItem", () => ({
   ),
 }));
 
-vi.mock("./Sidebar/SidebarFooter", () => ({
-  SidebarFooter: () => <div data-testid="sidebar-footer" />,
-}));
-
 vi.mock("./ui/button", () => ({
   Button: ({ children, onClick, className }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button className={className} onClick={onClick} type="button">
@@ -288,8 +284,10 @@ test("routes the new workspace button through the pane picker when the default p
     root?.render(<Sidebar />);
   });
 
+  // Index 7: collapse(0), ql-terminal(1), ql-browser(2), ql-vscode(3),
+  // ql-t3code(4), ql-note(5), new-folder(6), new-workspace(7)
   const buttons = container.querySelectorAll("button");
-  const newWorkspaceButton = buttons[2];
+  const newWorkspaceButton = buttons[7];
   expect(newWorkspaceButton).toBeTruthy();
 
   await act(async () => {
@@ -308,8 +306,10 @@ test("routes the new workspace button directly to addWorkspace for concrete defa
     root?.render(<Sidebar />);
   });
 
+  // Index 7: collapse(0), ql-terminal(1), ql-browser(2), ql-vscode(3),
+  // ql-t3code(4), ql-note(5), new-folder(6), new-workspace(7)
   const buttons = container.querySelectorAll("button");
-  const newWorkspaceButton = buttons[2];
+  const newWorkspaceButton = buttons[7];
   expect(newWorkspaceButton).toBeTruthy();
 
   await act(async () => {

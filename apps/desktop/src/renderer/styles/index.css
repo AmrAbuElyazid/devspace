@@ -69,6 +69,13 @@
     overscroll-behavior-y: none;
   }
 
+  /* Monospace content */
+  code,
+  pre,
+  .monospace {
+    font-family: ui-monospace, "SF Mono", "Fira Code", monospace;
+  }
+
   /* Drag and drop feedback */
   .drag-overlay-workspace,
   .drag-overlay-tab,
@@ -188,8 +195,8 @@
   color-scheme: light;
   --radius: 0.375rem;
 
-  --background: #fafaf9;
-  --background-deep: #f0f0ee;
+  --background: #ffffff;
+  --background-deep: #f5f5f4;
   --surface: #f0f0ee;
   --surface-hover: rgba(0, 0, 0, 0.04);
   --accent: #facc15;
@@ -198,8 +205,8 @@
   --foreground: rgba(0, 0, 0, 0.87);
   --foreground-muted: rgba(0, 0, 0, 0.45);
   --foreground-faint: rgba(0, 0, 0, 0.2);
-  --border: rgba(0, 0, 0, 0.08);
-  --border-faint: rgba(0, 0, 0, 0.04);
+  --border: rgba(0, 0, 0, 0.06);
+  --border-faint: rgba(0, 0, 0, 0.03);
   --destructive: #ef4444;
   --destructive-foreground: #b91c1c;
   --success: #16a34a;
@@ -207,7 +214,7 @@
   --info: #3b82f6;
   --ring: #ca8a04;
   --input: rgba(0, 0, 0, 0.06);
-  --sidebar-bg: #f0f0ee;
+  --sidebar-bg: #f5f5f4;
   --card: #ffffff;
   --card-foreground: rgba(0, 0, 0, 0.87);
   --popover: #ffffff;
@@ -221,16 +228,16 @@
 
   @variant dark {
     color-scheme: dark;
-    --background: #111113;
-    --background-deep: #09090b;
-    --surface: #18181b;
-    --surface-hover: rgba(255, 255, 255, 0.06);
+    --background: #161619;
+    --background-deep: #111114;
+    --surface: #1c1c20;
+    --surface-hover: rgba(255, 255, 255, 0.05);
     --accent: #facc15;
     --accent-muted: rgba(250, 204, 21, 0.08);
     --accent-border: rgba(250, 204, 21, 0.15);
     --foreground: rgba(255, 255, 255, 0.9);
-    --foreground-muted: rgba(255, 255, 255, 0.4);
-    --foreground-faint: rgba(255, 255, 255, 0.2);
+    --foreground-muted: rgba(255, 255, 255, 0.45);
+    --foreground-faint: rgba(255, 255, 255, 0.22);
     --border: rgba(255, 255, 255, 0.07);
     --border-faint: rgba(255, 255, 255, 0.04);
     --destructive: #ef4444;
@@ -239,18 +246,18 @@
     --warning: #fbbf24;
     --info: #60a5fa;
     --ring: #facc15;
-    --input: rgba(255, 255, 255, 0.06);
-    --sidebar-bg: #18181b;
-    --card: #18181b;
+    --input: rgba(255, 255, 255, 0.07);
+    --sidebar-bg: #18181c;
+    --card: #1c1c20;
     --card-foreground: rgba(255, 255, 255, 0.9);
-    --popover: #18181b;
+    --popover: #1c1c20;
     --popover-foreground: rgba(255, 255, 255, 0.9);
     --primary: #facc15;
     --primary-foreground: #1a1a1a;
-    --secondary: #27272a;
+    --secondary: #222226;
     --secondary-foreground: rgba(255, 255, 255, 0.9);
-    --muted: #27272a;
-    --muted-foreground: rgba(255, 255, 255, 0.4);
+    --muted: #222226;
+    --muted-foreground: rgba(255, 255, 255, 0.45);
   }
 
   --highlight: oklch(0.75 0.1 70);
@@ -321,7 +328,6 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--border);
 }
 
 /* Pane group content: stacked layers using visibility, not display:none,
@@ -332,6 +338,9 @@
   min-height: 0;
   overflow: hidden;
 }
+
+/* Focus indicator: accent-tinted active tab in focused group,
+   neutral gray active tab in unfocused groups. */
 
 .pane-tab-layer {
   position: absolute;
@@ -367,24 +376,19 @@
   height: 28px;
   display: flex;
   align-items: center;
-  padding: 0 4px;
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
+  padding: 2px 2px 0;
+  background: transparent;
+  border-bottom: 1px solid var(--border-faint);
   flex-shrink: 0;
   gap: 1px;
   overflow-x: auto;
+  scrollbar-width: none;
   user-select: none;
   position: relative;
 }
 
-.group-tabbar.group-focused::after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--accent);
+.group-tabbar::-webkit-scrollbar {
+  display: none;
 }
 
 .group-tab {
@@ -398,11 +402,15 @@
   border-radius: 4px;
   cursor: pointer;
   flex-shrink: 0;
-  max-width: 140px;
+  max-width: 180px;
   position: relative;
   transition:
     background-color 100ms ease,
     color 100ms ease;
+}
+
+.group-tab > svg {
+  flex-shrink: 0;
 }
 
 .group-tab:hover {
@@ -411,9 +419,14 @@
 }
 
 .group-tab-active {
-  background: var(--accent-muted);
+  background: var(--surface-hover);
   color: var(--foreground);
   font-weight: 500;
+}
+
+/* Focused group: brighter active tab */
+.pane-group-focused .group-tab-active {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .group-tab-drop-target {
@@ -506,8 +519,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  margin-left: 4px;
+  width: 20px;
+  height: 20px;
   border-radius: 4px;
   border: none;
   background: transparent;
@@ -533,7 +547,7 @@
 }
 
 .group-tabbar:hover .group-tabbar-actions,
-.group-focused .group-tabbar-actions {
+.pane-group-focused .group-tabbar-actions {
   opacity: 1;
 }
 
@@ -541,8 +555,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 4px;
   border: none;
   background: transparent;
@@ -562,6 +576,7 @@
   width: 78px;
   min-width: 78px;
   height: 100%;
+  padding-top: 4px;
   -webkit-app-region: drag;
   flex-shrink: 0;
 }
@@ -578,7 +593,7 @@
 
 .group-tabbar-drag-spacer {
   flex: 1 1 auto;
-  min-width: 20px;
+  min-width: 12px;
   height: 100%;
 }
 
@@ -616,16 +631,16 @@
 }
 ::-webkit-scrollbar-thumb {
   border-radius: 3px;
-  background: rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.1);
 }
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.06);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.18);
 }
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.12);
 }
 ::-webkit-scrollbar-corner {
   background: transparent;
@@ -751,7 +766,7 @@
   background-color: var(--background);
   color: var(--foreground);
   border: 1px solid var(--border);
-  font-family: "SF Mono", "Fira Code", Menlo, Monaco, monospace;
+  font-family: ui-monospace, "SF Mono", "Fira Code", monospace;
   font-size: 11px;
 }
 
@@ -1038,9 +1053,14 @@
 }
 
 /* ─── Allotment (Split Pane Sash) ────────────────────────────────────── */
-/* Override Allotment's blue sash hover color with the app accent. */
+/* Override Allotment's sash hover color and separator border. */
 :root {
   --focus-border: var(--accent);
+  --sash-hover-size: 3px;
+  --separator-border: rgba(0, 0, 0, 0.08);
+}
+.dark {
+  --separator-border: rgba(255, 255, 255, 0.1);
 }
 
 /* ─── Toast Animations ───────────────────────────────────────────────── */

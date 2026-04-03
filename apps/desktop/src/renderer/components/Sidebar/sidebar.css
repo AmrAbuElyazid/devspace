@@ -25,8 +25,8 @@
   background: linear-gradient(
     to bottom,
     transparent,
-    color-mix(in srgb, var(--foreground) 4%, transparent) 30%,
-    color-mix(in srgb, var(--foreground) 4%, transparent) 70%,
+    color-mix(in srgb, var(--foreground) 7%, transparent) 30%,
+    color-mix(in srgb, var(--foreground) 7%, transparent) 70%,
     transparent
   );
   pointer-events: none;
@@ -121,7 +121,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  margin: 0 8px 4px;
+  margin: 0 8px 2px;
   padding: 5px 10px;
   background: color-mix(in srgb, var(--foreground) 3%, transparent);
   border: 1px solid transparent;
@@ -213,7 +213,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 12px 4px;
+  padding: 6px 12px 3px;
   flex-shrink: 0;
 }
 
@@ -364,150 +364,11 @@
 
 .sidebar-footer {
   flex-shrink: 0;
-  padding: 0;
+  padding: 4px 0;
   display: flex;
   flex-direction: column;
   gap: 0;
-  background: color-mix(in srgb, var(--foreground) 2%, var(--sidebar-bg));
   border-top: 1px solid var(--border);
-}
-
-.sidebar-footer-qc-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 8px 4px;
-}
-
-.sidebar-footer-qc-buttons {
-  display: flex;
-  gap: 2px;
-}
-
-.sidebar-qc-btn {
-  width: 30px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  color: var(--foreground-faint);
-  background: none;
-  border: 1px solid transparent;
-  cursor: pointer;
-  position: relative;
-  transition:
-    color 120ms ease,
-    background 120ms ease,
-    border-color 120ms ease,
-    transform 80ms ease;
-}
-
-.sidebar-qc-btn:hover {
-  background: color-mix(in srgb, var(--foreground) 6%, transparent);
-  color: var(--foreground-muted);
-  border-color: var(--border);
-}
-
-.sidebar-qc-btn:active {
-  transform: scale(0.9);
-}
-
-.sidebar-qc-default {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 15%, transparent);
-}
-
-.sidebar-qc-default:hover {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 25%, transparent);
-  color: var(--accent);
-}
-
-.sidebar-qc-default::after {
-  content: "";
-  position: absolute;
-  bottom: 2px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 8px;
-  height: 2px;
-  border-radius: 1px;
-  background: var(--accent);
-  box-shadow: 0 0 4px color-mix(in srgb, var(--accent) 50%, transparent);
-}
-
-/* Help button */
-.sidebar-help-btn {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  color: var(--foreground-faint);
-  background: none;
-  border: none;
-  cursor: pointer;
-  position: relative;
-  transition:
-    color 120ms ease,
-    background-color 120ms ease;
-}
-
-.sidebar-help-btn:hover {
-  color: var(--foreground-muted);
-  background: color-mix(in srgb, var(--foreground) 6%, transparent);
-}
-
-.sidebar-help-tooltip {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  right: -4px;
-  width: 220px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 14px;
-  font-size: 11px;
-  color: var(--foreground-muted);
-  line-height: 1.7;
-  box-shadow:
-    0 12px 32px rgba(0, 0, 0, 0.12),
-    0 4px 12px rgba(0, 0, 0, 0.06);
-  z-index: 100;
-  text-align: left;
-  pointer-events: none;
-  backdrop-filter: blur(12px);
-}
-
-.dark .sidebar-help-tooltip {
-  box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.5),
-    0 4px 12px rgba(0, 0, 0, 0.25);
-}
-
-.sidebar-help-tooltip::after {
-  content: "";
-  position: absolute;
-  bottom: -5px;
-  right: 14px;
-  width: 8px;
-  height: 8px;
-  background: var(--card);
-  border-right: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  transform: rotate(45deg);
-}
-
-.sidebar-help-tooltip strong {
-  color: var(--foreground);
-}
-
-.sidebar-help-divider {
-  border-top: 1px solid var(--border);
-  margin: 6px 0;
 }
 
 /* Settings row */
@@ -515,13 +376,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  width: calc(100% - 16px);
-  margin: 0 8px 6px;
-  padding: 6px 8px;
+  width: calc(100% - 12px);
+  margin: 0 6px;
+  padding: 6px 10px;
   border-radius: 8px;
   border: none;
   background: none;
-  color: var(--foreground-faint);
+  color: var(--foreground-muted);
   cursor: pointer;
   font-size: 12px;
   font-family: inherit;
@@ -533,7 +394,7 @@
 
 .sidebar-footer-settings:hover {
   background: color-mix(in srgb, var(--foreground) 5%, transparent);
-  color: var(--foreground-muted);
+  color: var(--foreground);
 }
 
 .sidebar-footer-shortcut {
@@ -624,4 +485,59 @@
 .folder-add-btn:hover {
   color: var(--foreground-muted);
   background: color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+/* ─── Quick Launch Grid ─────────────────────────────────────────────── */
+
+.ql-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  padding: 2px 10px 6px;
+  flex-shrink: 0;
+}
+
+.ql-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 2px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
+  user-select: none;
+}
+
+.ql-item:hover {
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+  border-color: var(--border);
+}
+
+.ql-item:active {
+  transform: scale(0.95);
+}
+
+.ql-item-default {
+  background: var(--accent-muted);
+  border-color: var(--accent-border);
+}
+
+.ql-item-default:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-color: var(--accent-border);
+}
+
+.ql-default-dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
 }

@@ -1,6 +1,13 @@
 import { collectGroupIds } from "../../store/workspace-store";
 import type { Workspace, Pane, PaneGroup } from "../../types/workspace";
 
+/** Return the last directory name from an absolute path (e.g. "/a/b/c" → "c"). */
+function lastPathSegment(path: string): string {
+  const cleaned = path.endsWith("/") ? path.slice(0, -1) : path;
+  const idx = cleaned.lastIndexOf("/");
+  return idx >= 0 ? cleaned.slice(idx + 1) : cleaned;
+}
+
 function formatRelativeTime(timestamp: number): string {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
   if (seconds < 60) return "now"; // also covers future timestamps (negative seconds)
@@ -29,11 +36,11 @@ export function getWorkspaceMetadata(
       paneCount++;
       if (!primaryDir && pane.type === "terminal") {
         const cwd = pane.config.cwd;
-        if (cwd) primaryDir = cwd.replace(/^\/Users\/[^/]+/, "~");
+        if (cwd) primaryDir = lastPathSegment(cwd);
       }
       if (!primaryDir && pane.type === "editor") {
         const folder = pane.config.folderPath;
-        if (folder) primaryDir = folder.replace(/^\/Users\/[^/]+/, "~");
+        if (folder) primaryDir = lastPathSegment(folder);
       }
     }
   }

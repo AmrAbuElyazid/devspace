@@ -55,15 +55,33 @@ let visibleLayoutObserver: ResizeObserver | null = null;
 let resizeListenerAttached = false;
 let visibleBoundsFrameId: number | null = null;
 
+/**
+ * Native views are inset on left/right/bottom so they don't overlap
+ * Allotment split sashes and DOM hover zones. The top edge has no inset
+ * because the tab bar sits above it (no sash to protect), and an inset
+ * there would create a visible gap between the tabs and the terminal.
+ *
+ * Note: if a pane is smaller than `NATIVE_VIEW_INSET_X * 2` (or Y)
+ * in any dimension (e.g. during rapid resize), `measureElementBounds`
+ * returns null and the view retains its previous bounds until the pane
+ * grows back. This is acceptable degradation.
+ */
+const NATIVE_VIEW_INSET_X = 2;
+const NATIVE_VIEW_INSET_TOP = 0;
+const NATIVE_VIEW_INSET_BOTTOM = 2;
+
 function measureElementBounds(element: HTMLElement): ViewBounds | null {
   const rect = element.getBoundingClientRect();
-  const width = Math.max(0, Math.round(rect.width));
-  const height = Math.max(0, Math.round(rect.height));
+  const width = Math.max(0, Math.round(rect.width) - NATIVE_VIEW_INSET_X * 2);
+  const height = Math.max(
+    0,
+    Math.round(rect.height) - NATIVE_VIEW_INSET_TOP - NATIVE_VIEW_INSET_BOTTOM,
+  );
   if (width === 0 || height === 0) return null;
 
   return {
-    x: Math.round(rect.left),
-    y: Math.round(rect.top),
+    x: Math.round(rect.left) + NATIVE_VIEW_INSET_X,
+    y: Math.round(rect.top) + NATIVE_VIEW_INSET_TOP,
     width,
     height,
   };

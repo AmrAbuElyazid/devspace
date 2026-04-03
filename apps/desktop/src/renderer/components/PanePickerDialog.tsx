@@ -1,16 +1,16 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Terminal, Globe, FileCode, Bot, StickyNote } from "lucide-react";
 
 import { useSettingsStore, type PanePickerContext } from "../store/settings-store";
 import { useWorkspaceStore } from "../store/workspace-store";
+import { paneTypeIcons, paneTypeLabels } from "../lib/pane-type-meta";
 import type { PaneType } from "../types/workspace";
 
-const options: { type: PaneType; label: string; icon: typeof Terminal; shortcut: string }[] = [
-  { type: "terminal", label: "Terminal", icon: Terminal, shortcut: "T" },
-  { type: "browser", label: "Browser", icon: Globe, shortcut: "B" },
-  { type: "editor", label: "VS Code", icon: FileCode, shortcut: "E" },
-  { type: "t3code", label: "T3 Code", icon: Bot, shortcut: "C" },
-  { type: "note", label: "Note", icon: StickyNote, shortcut: "N" },
+const options: { type: PaneType; label: string; shortcut: string }[] = [
+  { type: "terminal", label: paneTypeLabels.terminal, shortcut: "T" },
+  { type: "browser", label: paneTypeLabels.browser, shortcut: "B" },
+  { type: "editor", label: paneTypeLabels.editor, shortcut: "E" },
+  { type: "t3code", label: paneTypeLabels.t3code, shortcut: "C" },
+  { type: "note", label: paneTypeLabels.note, shortcut: "N" },
 ];
 
 const shortcutMap: Record<string, PaneType> = {
@@ -162,7 +162,7 @@ function PanePickerDialogInner({
         }}
       >
         {options.map((opt, i) => {
-          const Icon = opt.icon;
+          const Icon = paneTypeIcons[opt.type];
           const isHighlighted = i === highlighted;
 
           return (

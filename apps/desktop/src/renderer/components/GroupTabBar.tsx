@@ -203,7 +203,7 @@ export default memo(function GroupTabBar({
   const modifierHeld = useModifierHeldContext();
 
   return (
-    <div className={`group-tabbar ${isFocused ? "group-focused" : ""}`}>
+    <div className="group-tabbar">
       {isTopLeftGroup && (
         <>
           <div className="tabbar-traffic-zone drag-region" />
