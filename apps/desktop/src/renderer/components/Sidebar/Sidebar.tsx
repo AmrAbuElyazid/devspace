@@ -42,6 +42,7 @@ export default function Sidebar() {
   const setSidebarWidth = useSettingsStore((s) => s.setSidebarWidth);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
   const toggleSettings = useSettingsStore((s) => s.toggleSettings);
+  const [isFullScreen, setIsFullScreen] = useState(false);
 
   const { activeDrag } = useDragContext();
 
@@ -59,6 +60,26 @@ export default function Sidebar() {
       clearPendingEdit();
     }
   }, [pendingEditId, pendingEditType, clearPendingEdit]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void window.api.window.isFullScreen().then((fullScreen) => {
+      if (!cancelled) {
+        setIsFullScreen(fullScreen);
+      }
+    });
+
+    const unsubscribe = window.api.window.onFullScreenChange((fullScreen) => {
+      setIsFullScreen(fullScreen);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState(false);
   const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
@@ -257,7 +278,10 @@ export default function Sidebar() {
         style={sidebarOpen ? { width: sidebarWidth, minWidth: sidebarWidth } : undefined}
       >
         {/* Header — drag region with traffic light space + branding */}
-        <div className="sidebar-header drag-region">
+        <div
+          className="sidebar-header drag-region"
+          data-fullscreen={isFullScreen ? "true" : undefined}
+        >
           <span className="sidebar-wordmark no-drag">
             <span className="sidebar-wordmark-accent">dev</span>space
           </span>

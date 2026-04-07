@@ -48,6 +48,7 @@ registerIpcHandlers(
     on: () => {},
     minimize: () => {},
     isMaximized: () => false,
+    isFullScreen: () => false,
     unmaximize: () => {},
     maximize: () => {},
     setWindowButtonPosition: (position) => {
@@ -269,6 +270,12 @@ test("window setSidebarOpen IPC updates native traffic light position", async ()
     ["setWindowButtonPosition", { x: 16, y: 6 }],
     ["setWindowButtonPosition", { x: 16, y: 18 }],
   ]);
+});
+
+test("window isFullScreen IPC returns the native fullscreen state", async () => {
+  const result = await handlers.get("window:isFullScreen")({});
+
+  expect(result).toBe(false);
 });
 
 test("editor start and stop track trusted local origins for shared-session CORS", async () => {

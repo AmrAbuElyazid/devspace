@@ -138,6 +138,7 @@ const bridge: DevspaceBridge = {
     focusContent: () => ipcRenderer.send("window:focusContent"),
     setSidebarOpen: (open) => ipcRenderer.send("window:setSidebarOpen", open),
     isMaximized: () => ipcRenderer.invoke("window:isMaximized"),
+    isFullScreen: () => ipcRenderer.invoke("window:isFullScreen"),
     onMaximizeChange: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, maximized: boolean): void => {
         callback(maximized);
@@ -145,6 +146,15 @@ const bridge: DevspaceBridge = {
       ipcRenderer.on("window:maximizeChange", listener);
       return () => {
         ipcRenderer.removeListener("window:maximizeChange", listener);
+      };
+    },
+    onFullScreenChange: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, fullScreen: boolean): void => {
+        callback(fullScreen);
+      };
+      ipcRenderer.on("window:fullScreenChange", listener);
+      return () => {
+        ipcRenderer.removeListener("window:fullScreenChange", listener);
       };
     },
     onFocus: (callback) => {

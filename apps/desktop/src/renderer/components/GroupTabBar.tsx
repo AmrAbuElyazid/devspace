@@ -186,6 +186,7 @@ export default memo(function GroupTabBar({
   isTopLeftGroup,
   dndEnabled,
 }: GroupTabBarProps) {
+  const [isFullScreen, setIsFullScreen] = useState(false);
   const addGroupTab = useWorkspaceStore((s) => s.addGroupTab);
   const removeGroupTab = useWorkspaceStore((s) => s.removeGroupTab);
   const setActiveGroupTab = useWorkspaceStore((s) => s.setActiveGroupTab);
@@ -202,11 +203,37 @@ export default memo(function GroupTabBar({
 
   const modifierHeld = useModifierHeldContext();
 
+  useEffect(() => {
+    if (!isTopLeftGroup) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void window.api.window.isFullScreen().then((fullScreen) => {
+      if (!cancelled) {
+        setIsFullScreen(fullScreen);
+      }
+    });
+
+    const unsubscribe = window.api.window.onFullScreenChange((fullScreen) => {
+      setIsFullScreen(fullScreen);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [isTopLeftGroup]);
+
   return (
     <div className="group-tabbar">
       {isTopLeftGroup && (
         <>
-          <div className="tabbar-traffic-zone drag-region" />
+          <div
+            className="tabbar-traffic-zone drag-region"
+            data-fullscreen={isFullScreen ? "true" : undefined}
+          />
           <div className="tabbar-inline-controls">
             <button
               className="tabbar-ctl-btn no-drag"

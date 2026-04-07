@@ -581,6 +581,12 @@
   flex-shrink: 0;
 }
 
+.tabbar-traffic-zone[data-fullscreen="true"] {
+  width: 0;
+  min-width: 0;
+  padding-top: 0;
+}
+
 .tabbar-inline-controls {
   display: flex;
   align-items: center;

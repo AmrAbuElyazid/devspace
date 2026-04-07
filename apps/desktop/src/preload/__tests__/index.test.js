@@ -34,6 +34,7 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
 
   expect(exposedBridge.fs).toBeUndefined();
 
+  await exposedBridge.window.isFullScreen();
   await exposedBridge.editor.isAvailable("code-insiders");
   await exposedBridge.editor.start("editor-pane", "/tmp/project", "/custom/code");
   await exposedBridge.browser.show("pane-1");
@@ -49,12 +50,14 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   await exposedBridge.browser.importBrowser("chrome", "/tmp/Profile 1", "history");
   await exposedBridge.browser.importBrowser("safari", null, "cookies");
   await exposedBridge.browser.clearBrowsingData("everything");
+  const unsubscribeFullScreen = exposedBridge.window.onFullScreenChange(() => {});
   const unsubscribeNativeModifier = exposedBridge.window.onNativeModifierChanged(() => {});
   const unsubscribeState = exposedBridge.browser.onStateChange(() => {});
   const unsubscribeFocused = exposedBridge.browser.onFocused(() => {});
   const unsubscribePermission = exposedBridge.browser.onPermissionRequest(() => {});
   const unsubscribeContextMenu = exposedBridge.browser.onContextMenuRequest(() => {});
   const unsubscribeOpenInNewTab = exposedBridge.browser.onOpenInNewTabRequest(() => {});
+  unsubscribeFullScreen();
   unsubscribeNativeModifier();
   unsubscribeState();
   unsubscribeFocused();
@@ -63,6 +66,7 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   unsubscribeOpenInNewTab();
 
   expect(invokeCalls).toEqual([
+    ["window:isFullScreen"],
     ["editor:isAvailable", "code-insiders"],
     ["editor:start", "editor-pane", "/tmp/project", "/custom/code"],
     ["browser:show", "pane-1"],
@@ -81,12 +85,14 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   ]);
 
   expect(listenerRegistrations).toEqual([
+    ["on", "window:fullScreenChange"],
     ["on", "window:nativeModifierChanged"],
     ["on", "browser:stateChanged"],
     ["on", "browser:focused"],
     ["on", "browser:permissionRequested"],
     ["on", "browser:contextMenuRequested"],
     ["on", "browser:openInNewTabRequested"],
+    ["removeListener", "window:fullScreenChange"],
     ["removeListener", "window:nativeModifierChanged"],
     ["removeListener", "browser:stateChanged"],
     ["removeListener", "browser:focused"],

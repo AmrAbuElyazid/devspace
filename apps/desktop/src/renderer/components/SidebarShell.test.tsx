@@ -21,6 +21,8 @@ const sidebarShellMocks = vi.hoisted(() => ({
   },
   setDroppableNodeRef: vi.fn(),
   contextMenuShow: vi.fn(),
+  isFullScreen: vi.fn(),
+  onFullScreenChange: vi.fn(),
 }));
 
 vi.mock("../App", () => ({
@@ -118,6 +120,10 @@ beforeEach(() => {
   sidebarShellMocks.setDroppableNodeRef.mockReset();
   sidebarShellMocks.contextMenuShow.mockReset();
   sidebarShellMocks.contextMenuShow.mockResolvedValue(null);
+  sidebarShellMocks.isFullScreen.mockReset();
+  sidebarShellMocks.isFullScreen.mockResolvedValue(false);
+  sidebarShellMocks.onFullScreenChange.mockReset();
+  sidebarShellMocks.onFullScreenChange.mockReturnValue(() => {});
 
   window.api = {
     terminal: {
@@ -125,6 +131,8 @@ beforeEach(() => {
     },
     window: {
       focusContent: vi.fn(),
+      isFullScreen: sidebarShellMocks.isFullScreen,
+      onFullScreenChange: sidebarShellMocks.onFullScreenChange,
     },
     contextMenu: {
       show: sidebarShellMocks.contextMenuShow,
@@ -227,6 +235,20 @@ test("picks up pending workspace edit requests from the store and clears the pen
   expect(clearPendingEdit).toHaveBeenCalledTimes(1);
   expect(container.innerHTML).toContain('data-workspace-id="beta"');
   expect(container.innerHTML).toContain('data-editing="true"');
+});
+
+test("drops the reserved traffic-light gutter when the native window is fullscreen", async () => {
+  sidebarShellMocks.isFullScreen.mockResolvedValue(true);
+
+  await act(async () => {
+    root?.render(<Sidebar />);
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  const header = container.querySelector(".sidebar-header");
+  expect(header?.getAttribute("data-fullscreen")).toBe("true");
 });
 
 test("picks up pending folder edit requests from the store and clears the pending flag", async () => {

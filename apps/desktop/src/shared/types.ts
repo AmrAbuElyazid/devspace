@@ -61,7 +61,9 @@ export interface DevspaceBridge {
     focusContent: () => void;
     setSidebarOpen: (open: boolean) => void;
     isMaximized: () => Promise<boolean>;
+    isFullScreen: () => Promise<boolean>;
     onMaximizeChange: (callback: (maximized: boolean) => void) => () => void;
+    onFullScreenChange: (callback: (fullScreen: boolean) => void) => () => void;
     onFocus: (callback: () => void) => () => void;
     onNativeModifierChanged: (
       callback: (modifier: "command" | "control" | null) => void,

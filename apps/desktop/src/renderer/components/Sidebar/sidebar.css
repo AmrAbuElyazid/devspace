@@ -60,6 +60,11 @@
   flex-shrink: 0;
 }
 
+/* Native fullscreen no longer needs the reserved traffic-light gutter. */
+.sidebar-header[data-fullscreen="true"] {
+  padding-left: 12px;
+}
+
 .sidebar-wordmark {
   font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
   font-size: 12px;

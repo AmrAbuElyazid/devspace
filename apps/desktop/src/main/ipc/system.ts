@@ -43,12 +43,24 @@ export function registerSystemIpc(mainWindow: BrowserWindow): void {
     return mainWindow.isMaximized();
   });
 
+  safeHandle("window:isFullScreen", () => {
+    return mainWindow.isFullScreen();
+  });
+
   mainWindow.on("maximize", () => {
     mainWindow.webContents.send("window:maximizeChange", true);
   });
 
   mainWindow.on("unmaximize", () => {
     mainWindow.webContents.send("window:maximizeChange", false);
+  });
+
+  mainWindow.on("enter-full-screen", () => {
+    mainWindow.webContents.send("window:fullScreenChange", true);
+  });
+
+  mainWindow.on("leave-full-screen", () => {
+    mainWindow.webContents.send("window:fullScreenChange", false);
   });
 
   safeHandle("dialog:openFile", async (_event, defaultPath?: string) => {
