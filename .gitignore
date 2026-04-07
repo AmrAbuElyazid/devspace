@@ -30,3 +30,6 @@ playwright-report/
 
 # Coverage output
 coverage/
+
+# opencode
+.opencode
