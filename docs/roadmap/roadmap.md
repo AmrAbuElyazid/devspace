@@ -17,8 +17,8 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 ### Largely Addressed But Still Worth Follow-Up
 
-- [ ] Finish tightening shared-session CORS rewriting to least privilege. Refs: `apps/desktop/src/main/browser/browser-session-manager.ts`
-- [ ] Finish the browser/editor security audit now that `WebContentsView` preferences are explicit. Refs: `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/src/main/index.ts`
+- [x] Finish tightening shared-session CORS rewriting to least privilege. Refs: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/main/browser/__tests__/browser-session-manager.test.ts`
+- [x] Finish the browser/editor security audit now that `WebContentsView` preferences are explicit. Refs: `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/src/main/index.ts`, `apps/desktop/src/main/browser/__tests__/browser-pane-manager.test.ts`, `apps/desktop/src/main/__tests__/index.test.ts`
 - [ ] Continue breaking up large files where it meaningfully improves maintenance. Initial targets: `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`, `apps/desktop/src/renderer/styles/index.css`
 - [ ] Keep bridge types, tests, and docs aligned with the current preload/IPC surface. Refs: `apps/desktop/src/shared/types.ts`, `apps/desktop/src/preload/index.ts`
 - [x] Finish migrating the last legacy `.js` tests to TypeScript. Refs: `apps/desktop/src/preload/__tests__/index.test.ts`, `apps/desktop/src/main/__tests__/ipc-handlers-browser.test.ts`
@@ -26,14 +26,14 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 ## 1. Core Boundaries And Correctness
 
-- [ ] Replace blanket trusted-origin CORS rewriting with per-need header rewrites so loopback-backed pages get only the relaxation they actually require. Refs: `apps/desktop/src/main/browser/browser-session-manager.ts`
+- [x] Replace blanket trusted-origin CORS rewriting with per-need header rewrites so loopback-backed pages get only the relaxation they actually require. Refs: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/main/browser/__tests__/browser-session-manager.test.ts`
 - [x] Add focused tests for the split preload and IPC modules, especially `apps/desktop/src/main/ipc/terminal-editor.ts`, uncovered `apps/desktop/src/main/ipc/browser.ts` flows, and non-notes `apps/desktop/src/main/ipc/system.ts` paths. Refs: `apps/desktop/src/main/__tests__/ipc-modules.test.ts`, `apps/desktop/src/preload/__tests__/index.test.ts`
 - [x] Add shared test helpers for `window.api`, Electron mocks, and common renderer/main setup to reduce repeated bespoke mocks. Refs: `apps/desktop/src/renderer/test-utils/mock-window-api.ts`, `apps/desktop/src/main/__tests__/test-utils/mock-electron-ipc.ts`
 - [x] Clean up stale docs that no longer match the repo layout or current package state. Initial targets: `AGENTS.md`, `packages/ghostty-electron/README.md`
 
 ## 2. Scale, Profiling, And Persistence
 
-- [ ] Revisit workspace mounting and focus ownership so hidden work scales with visible panes rather than all stacked workspaces. Refs: `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`
+- [ ] Finish the remaining workspace focus-ownership follow-up now that only the active workspace mounts. Refs: `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`
 - [ ] Migrate workspace persistence from renderer `localStorage` to SQLite behind a main/preload storage boundary, using a relational core with JSON-backed flexible structures. Refs: `apps/desktop/src/renderer/store/persistence.ts`
 - [ ] Add a one-time import from the existing `devspace-workspaces` JSON persistence into the new SQLite schema. Refs: `apps/desktop/src/renderer/store/persistence.ts`
 - [ ] Run a mixed-workspace stress pass that covers many terminals, browsers, editor panes, and t3code panes once instrumentation is in place.
@@ -50,7 +50,7 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 ### Phase 1: Boundaries And Correctness
 
-- [ ] Tighten CORS overrides to least privilege.
+- [x] Tighten CORS overrides to least privilege.
 - [x] Add split preload/IPC coverage.
 - [x] Clean stale docs.
 
