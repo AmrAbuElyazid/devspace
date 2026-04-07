@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import SettingsPage from "./SettingsPage";
 import { useSettingsStore } from "../store/settings-store";
+import { installMockWindowApi } from "../test-utils/mock-window-api";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -18,7 +19,7 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
 
-  window.api = {
+  installMockWindowApi({
     window: {
       isFullScreen: vi.fn(async () => false),
       onFullScreenChange: vi.fn(() => () => {}),
@@ -26,23 +27,10 @@ beforeEach(() => {
     editor: {
       getCliStatus: vi.fn(async () => ({
         path: "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
-        source: "bundle",
+        source: "bundle" as const,
       })),
     },
-    browser: {
-      listProfiles: vi.fn(async () => []),
-      detectAccess: vi.fn(async () => ({ ok: true })),
-      importBrowser: vi.fn(async () => ({ ok: true, importedCookies: 0, importedHistory: 0 })),
-      clearBrowsingData: vi.fn(async () => ({ ok: true })),
-    },
-    shortcuts: {
-      getAll: vi.fn(async () => ({})),
-      onChanged: vi.fn(() => () => {}),
-      set: vi.fn(),
-      reset: vi.fn(),
-      resetAll: vi.fn(),
-    },
-  } as unknown as typeof window.api;
+  });
 
   useSettingsStore.setState({
     settingsOpen: true,

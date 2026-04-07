@@ -3,6 +3,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { installMockWindowApi } from "../test-utils/mock-window-api";
 import TerminalPane from "./TerminalPane";
 
 const terminalPaneMocks = vi.hoisted(() => ({
@@ -85,14 +86,14 @@ beforeEach(() => {
     searchStateByPaneId: {},
   };
 
-  window.api = {
+  installMockWindowApi({
     terminal: {
       create: terminalPaneMocks.terminalCreate,
       focus: terminalPaneMocks.terminalFocus,
       blur: terminalPaneMocks.terminalBlur,
       sendBindingAction: terminalPaneMocks.sendBindingAction,
     },
-  } as unknown as typeof window.api;
+  });
 });
 
 afterEach(async () => {

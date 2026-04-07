@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { BrowserContextMenuRequest, BrowserPermissionRequest } from "../../shared/browser";
+import { installMockWindowApi } from "../test-utils/mock-window-api";
 import { useBrowserBridge } from "./useBrowserBridge";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -149,7 +150,7 @@ beforeEach(async () => {
   browserBridgeMocks.findWorkspaceIdForPane.mockReset();
   browserBridgeMocks.findWorkspaceIdForPane.mockReturnValue("workspace-1");
 
-  window.api = {
+  installMockWindowApi({
     browser: {
       onStateChange: browserBridgeMocks.onStateChange,
       onFocused: browserBridgeMocks.onFocused,
@@ -165,7 +166,7 @@ beforeEach(async () => {
     contextMenu: {
       show: browserBridgeMocks.contextMenuShow,
     },
-  } as unknown as typeof window.api;
+  });
 
   await act(async () => {
     root?.render(<HookHarness />);

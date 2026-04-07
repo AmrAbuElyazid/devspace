@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { BrowserContextMenuRequest, BrowserRuntimeState } from "../../shared/browser";
 import BrowserPane from "./BrowserPane";
+import { installMockWindowApi } from "../test-utils/mock-window-api";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -184,7 +185,7 @@ beforeEach(() => {
     findBarFocusTokenByPaneId: {},
   };
 
-  window.api = {
+  installMockWindowApi({
     browser: {
       create: browserPaneMocks.browserCreate,
       getRuntimeState: browserPaneMocks.browserGetRuntimeState,
@@ -206,7 +207,7 @@ beforeEach(() => {
     contextMenu: {
       show: vi.fn(),
     },
-  } as unknown as typeof window.api;
+  });
 });
 
 afterEach(async () => {

@@ -2,6 +2,7 @@
 
 import { beforeEach, expect, test, vi } from "vitest";
 import { useSettingsStore } from "./settings-store";
+import { installMockWindowApi } from "../test-utils/mock-window-api";
 import {
   getNativeViewProfilingSnapshot,
   recordNativeFocusRequest,
@@ -23,7 +24,7 @@ beforeEach(() => {
   });
   globalThis.cancelAnimationFrame = vi.fn();
 
-  window.api = {
+  installMockWindowApi({
     terminal: {
       setBounds: vi.fn(),
       setVisibleSurfaces: vi.fn(),
@@ -33,7 +34,7 @@ beforeEach(() => {
       setBounds: vi.fn(),
       setVisiblePanes: vi.fn(),
     },
-  } as unknown as typeof window.api;
+  });
 
   resetNativeViewProfilingCounters();
   useNativeViewStore.setState({

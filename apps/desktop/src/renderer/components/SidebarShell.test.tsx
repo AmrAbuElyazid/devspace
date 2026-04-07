@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import Sidebar from "./Sidebar";
 import { useSettingsStore } from "../store/settings-store";
+import { installMockWindowApi } from "../test-utils/mock-window-api";
 import { useWorkspaceStore } from "../store/workspace-store";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -125,7 +126,7 @@ beforeEach(() => {
   sidebarShellMocks.onFullScreenChange.mockReset();
   sidebarShellMocks.onFullScreenChange.mockReturnValue(() => {});
 
-  window.api = {
+  installMockWindowApi({
     terminal: {
       blur: vi.fn(),
     },
@@ -137,7 +138,7 @@ beforeEach(() => {
     contextMenu: {
       show: sidebarShellMocks.contextMenuShow,
     },
-  } as unknown as typeof window.api;
+  });
 
   useWorkspaceStore.setState({
     workspaces: [
