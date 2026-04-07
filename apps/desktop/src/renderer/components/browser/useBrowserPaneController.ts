@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 import { getAddressBarSubmitValue, normalizeBrowserInput } from "../../lib/browser-url";
 import {
   hasCreatedBrowserPane,
@@ -18,8 +26,10 @@ interface UseBrowserPaneControllerArgs {
 }
 
 export function useBrowserPaneController({ paneId, config }: UseBrowserPaneControllerArgs) {
-  const paneReady = useRef(false);
+  const [paneReady, setPaneReady] = useState(() => hasCreatedBrowserPane(paneId));
   const placeholderRef = useRef<HTMLDivElement>(null);
+  const createAttemptRef = useRef(0);
+  const unmountedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId]);
   const pendingPermissionRequest = useBrowserStore((s) => s.pendingPermissionRequest);
@@ -39,27 +49,40 @@ export function useBrowserPaneController({ paneId, config }: UseBrowserPaneContr
   const activePermissionRequest =
     pendingPermissionRequest?.paneId === paneId ? pendingPermissionRequest : null;
 
-  // Queue browser creation during render so the create IPC is already in
-  // flight before useNativeView's registration effect can reconcile
-  // visibility. This matches the terminal pane ordering and avoids a race
-  // where setVisiblePanes runs before the main process knows about the pane.
-  if (!paneReady.current) {
-    if (hasCreatedBrowserPane(paneId)) {
-      paneReady.current = true;
-    } else {
-      markBrowserPaneCreated(paneId);
-      void window.api.browser.create(paneId, initialUrl).catch(() => {
-        markBrowserPaneDestroyed(paneId);
-      });
-      paneReady.current = true;
+  useEffect(() => {
+    return () => {
+      unmountedRef.current = true;
+    };
+  }, []);
+
+  // Queue native browser creation during layout so the create IPC is already
+  // in flight before useNativeView's registration effect can reconcile.
+  useLayoutEffect(() => {
+    if (paneReady) {
+      return;
     }
-  }
+
+    if (hasCreatedBrowserPane(paneId)) {
+      setPaneReady(true);
+      return;
+    }
+
+    const attemptId = ++createAttemptRef.current;
+    markBrowserPaneCreated(paneId);
+    setPaneReady(true);
+
+    void window.api.browser.create(paneId, initialUrl).catch(() => {
+      if (!unmountedRef.current && createAttemptRef.current === attemptId) {
+        markBrowserPaneDestroyed(paneId);
+      }
+    });
+  }, [initialUrl, paneId, paneReady]);
 
   const { isVisible } = useNativeView({
     id: paneId,
     type: "browser",
     ref: placeholderRef,
-    enabled: paneReady.current && failure === null,
+    enabled: paneReady && failure === null,
   });
 
   useEffect(() => {

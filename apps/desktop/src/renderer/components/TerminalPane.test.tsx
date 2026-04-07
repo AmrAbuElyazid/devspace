@@ -106,6 +106,12 @@ afterEach(async () => {
   container.remove();
 });
 
+async function flushAsyncEffects() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
 test("creates the terminal surface once and focuses visible focused panes", async () => {
   await act(async () => {
     root?.render(
@@ -162,9 +168,8 @@ test("renders a diagnostic when terminal creation fails", async () => {
     root?.render(<TerminalPane paneId="pane-1" config={{}} isFocused={true} />);
   });
 
-  await act(async () => {
-    await Promise.resolve();
-  });
+  await flushAsyncEffects();
+  await flushAsyncEffects();
 
   expect(container.textContent).toContain("Terminal failed to start");
   expect(container.textContent).toContain("Ghostty not initialized");
@@ -182,9 +187,8 @@ test("retries terminal creation after an initial failure", async () => {
     );
   });
 
-  await act(async () => {
-    await Promise.resolve();
-  });
+  await flushAsyncEffects();
+  await flushAsyncEffects();
 
   const retryButton = container.querySelector('button[type="button"]');
   expect(retryButton?.textContent).toBe("Retry");
@@ -193,9 +197,8 @@ test("retries terminal creation after an initial failure", async () => {
     retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 
-  await act(async () => {
-    await Promise.resolve();
-  });
+  await flushAsyncEffects();
+  await flushAsyncEffects();
 
   expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledTimes(2);
   expect(terminalPaneMocks.terminalCreate).toHaveBeenNthCalledWith(2, "pane-1", {

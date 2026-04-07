@@ -237,9 +237,10 @@ test("creates the browser pane and renders the current security label", async ()
 });
 
 test("focuses the native browser view when it becomes visible", async () => {
-  browserPaneMocks.useNativeView.mockReturnValueOnce({ isVisible: false }).mockReturnValueOnce({
-    isVisible: true,
-  });
+  browserPaneMocks.useNativeView
+    .mockReturnValueOnce({ isVisible: false })
+    .mockReturnValueOnce({ isVisible: false })
+    .mockReturnValueOnce({ isVisible: true });
 
   await act(async () => {
     root?.render(

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, useLayoutEffect } from "react";
 import { useNativeView } from "../hooks/useNativeView";
 import { useTerminalStore } from "../store/terminal-store";
 import {
@@ -22,42 +22,61 @@ export default function TerminalPane({
   isFocused,
 }: TerminalPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
+  const createAttemptRef = useRef(0);
+  const unmountedRef = useRef(false);
   const isFindBarOpen = useTerminalStore((s) => s.findBarOpenByPaneId[paneId] ?? false);
   const findBarFocusToken = useTerminalStore((s) => s.findBarFocusTokenByPaneId[paneId] ?? 0);
   const searchState = useTerminalStore((s) => s.searchStateByPaneId[paneId]);
   const closeFindBar = useTerminalStore((s) => s.closeFindBar);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [surfaceReady, setSurfaceReady] = useState(() => hasCreatedTerminalSurface(paneId));
 
-  // Create the native surface synchronously during render — before any effects
-  // run. This guarantees the `terminal:create` IPC is in the queue before
-  // `useNativeView`'s registration effect calls `reconcile()` →
-  // `setVisibleSurfaces`. The module-level `createdSurfaces` set ensures this
-  // only fires once per surface, surviving StrictMode double-renders and split
-  // remounts.
-  const surfaceReady = useRef(false);
-  if (!surfaceReady.current) {
-    if (hasCreatedTerminalSurface(paneId)) {
-      surfaceReady.current = true;
-    } else {
-      markTerminalSurfaceCreated(paneId);
-      void window.api.terminal
-        .create(paneId, config.cwd ? { cwd: config.cwd } : undefined)
-        .then((result) => {
-          if ("error" in result) {
-            markTerminalSurfaceDestroyed(paneId);
-            setCreateError(result.error);
-            return;
-          }
+  useEffect(() => {
+    return () => {
+      unmountedRef.current = true;
+    };
+  }, []);
 
-          setCreateError(null);
-        })
-        .catch((error: unknown) => {
-          markTerminalSurfaceDestroyed(paneId);
-          setCreateError(error instanceof Error ? error.message : String(error));
-        });
-      surfaceReady.current = true;
+  // Queue native creation during layout so the create IPC is in flight before
+  // useNativeView's registration effect can reconcile visibility.
+  useLayoutEffect(() => {
+    if (surfaceReady) {
+      return;
     }
-  }
+
+    if (hasCreatedTerminalSurface(paneId)) {
+      setSurfaceReady(true);
+      return;
+    }
+
+    const attemptId = ++createAttemptRef.current;
+    markTerminalSurfaceCreated(paneId);
+    setSurfaceReady(true);
+
+    void window.api.terminal
+      .create(paneId, config.cwd ? { cwd: config.cwd } : undefined)
+      .then((result) => {
+        if (unmountedRef.current || createAttemptRef.current !== attemptId) {
+          return;
+        }
+
+        if ("error" in result) {
+          markTerminalSurfaceDestroyed(paneId);
+          setCreateError(result.error);
+          return;
+        }
+
+        setCreateError(null);
+      })
+      .catch((error: unknown) => {
+        if (unmountedRef.current || createAttemptRef.current !== attemptId) {
+          return;
+        }
+
+        markTerminalSurfaceDestroyed(paneId);
+        setCreateError(error instanceof Error ? error.message : String(error));
+      });
+  }, [config.cwd, paneId, surfaceReady]);
 
   // Centralized native view management. Registration is gated on
   // `surfaceReady` so that `reconcile()` → `setVisibleSurfaces` never fires
@@ -66,7 +85,7 @@ export default function TerminalPane({
     id: paneId,
     type: "terminal",
     ref: placeholderRef,
-    enabled: surfaceReady.current && createError === null,
+    enabled: surfaceReady && createError === null,
   });
 
   // Auto-focus when this pane becomes visible AND is the focused pane,
@@ -88,7 +107,7 @@ export default function TerminalPane({
 
   const handleRetryCreate = useCallback(() => {
     markTerminalSurfaceDestroyed(paneId);
-    surfaceReady.current = false;
+    setSurfaceReady(false);
     setCreateError(null);
   }, [paneId]);
 
