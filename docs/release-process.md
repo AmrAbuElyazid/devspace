@@ -82,9 +82,38 @@ Current guidance:
 - prefer one short release summary per tag
 - avoid mixing broad cleanup with release-critical changes right before tagging
 
+## Changelog Discipline
+
+Before creating a release tag:
+
+- update `CHANGELOG.md`
+- add a new version section at the top for the release being cut
+- keep the summary short and focused on user-visible impact and release risk
+- mention rebuild or migration steps when the release depends on them
+
+Use this release-note shape:
+
+```md
+## vX.Y.Z - YYYY-MM-DD
+
+### Summary
+
+- 1-3 bullets or a short paragraph describing the release.
+
+### Highlights
+
+- Main feature, fix, or platform change.
+- Any notable internal change that affects confidence or rollback.
+- Any operator note such as `bun run rebuild-native` if required.
+```
+
+After tagging a release:
+
+- keep `## Unreleased` at the top of `CHANGELOG.md`
+- seed it with any follow-up work that has already landed on `main`
+
 ## Future Improvements
 
 - signed/notarized release flow
-- changelog discipline per release
 - artifact publishing from CI
 - clearer versioning policy for `ghostty-electron`

@@ -44,7 +44,7 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 - [x] Remove `@ts-nocheck` from the current `note-editor` UI files as types are tightened. Refs: `packages/note-editor/src/plate-ui/editor.tsx`, `packages/note-editor/src/plate-ui/turn-into-toolbar-button.tsx`, `packages/note-editor/src/plate-ui/inline-combobox.tsx`, `packages/note-editor/src/plate-ui/toolbar.tsx`, `packages/note-editor/src/plate-ui/dropdown-menu.tsx`, `packages/note-editor/src/plate-ui/slash-node.tsx`
 - [ ] Decide whether `ghostty-electron` is internal-only or truly publishable, then align `README.md`, `package.json`, and release expectations. Refs: `packages/ghostty-electron/README.md`, `packages/ghostty-electron/package.json`
 - [ ] Add stronger teardown confidence for `ghostty-electron`, ideally beyond unit mocks where practical. Refs: `packages/ghostty-electron/native/ghostty_bridge.mm`, `packages/ghostty-electron/src/terminal-manager.ts`
-- [ ] Add changelog/release-note discipline as the release process matures. Refs: `docs/release-process.md`
+- [x] Add changelog/release-note discipline as the release process matures. Refs: `CHANGELOG.md`, `docs/release-process.md`
 
 ## Suggested Order
 

@@ -53,6 +53,9 @@ export class GhosttyTerminal {
 
     this.bridge.setCallback("surface-closed", (surfaceId: unknown) => {
       if (typeof surfaceId === "string") {
+        if (!this.activeSurfaces.has(surfaceId)) {
+          return;
+        }
         this.bridge?.destroySurface(surfaceId);
         this.activeSurfaces.delete(surfaceId);
         this.emit("surface-closed", surfaceId);
