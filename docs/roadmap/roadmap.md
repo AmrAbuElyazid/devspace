@@ -40,8 +40,8 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 ## 3. Testing, Package Maturity, And Release Discipline
 
-- [ ] Expand `packages/note-editor` coverage into plugin composition, toolbar behavior, and editor interactions. Refs: `packages/note-editor/src/plugins/note-editor-kit.tsx`, `packages/note-editor/src/plate-ui/editor.tsx`
-- [ ] Remove `@ts-nocheck` from core `note-editor` UI files as types are tightened. Initial targets: `packages/note-editor/src/plate-ui/editor.tsx`, `packages/note-editor/src/plate-ui/turn-into-toolbar-button.tsx`
+- [ ] Continue expanding `packages/note-editor` coverage into deeper editor interactions now that plugin composition and toolbar wiring have direct tests. Refs: `packages/note-editor/src/plugins/note-editor-kit.tsx`, `packages/note-editor/src/plate-ui/floating-toolbar-buttons.tsx`, `packages/note-editor/src/plate-ui/turn-into-toolbar-button.tsx`
+- [x] Remove `@ts-nocheck` from the initial core `note-editor` UI targets as types are tightened. Refs: `packages/note-editor/src/plate-ui/editor.tsx`, `packages/note-editor/src/plate-ui/turn-into-toolbar-button.tsx`
 - [ ] Decide whether `ghostty-electron` is internal-only or truly publishable, then align `README.md`, `package.json`, and release expectations. Refs: `packages/ghostty-electron/README.md`, `packages/ghostty-electron/package.json`
 - [ ] Add stronger teardown confidence for `ghostty-electron`, ideally beyond unit mocks where practical. Refs: `packages/ghostty-electron/native/ghostty_bridge.mm`, `packages/ghostty-electron/src/terminal-manager.ts`
 - [ ] Add changelog/release-note discipline as the release process matures. Refs: `docs/release-process.md`

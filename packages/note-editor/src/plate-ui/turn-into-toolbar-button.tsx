@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import * as React from "react";
@@ -28,7 +27,7 @@ import {
 import { KEYS } from "platejs";
 import { useEditorRef, useSelectionFragmentProp } from "platejs/react";
 
-import { getBlockType, setBlockType } from "../transforms";
+import { setBlockType } from "../transforms";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -129,17 +128,24 @@ export const turnIntoItems = [
   },
 ];
 
+function getTurnIntoValue(node: TElement): string {
+  return typeof node.type === "string" ? node.type : KEYS.p;
+}
+
+const defaultTurnIntoItem = turnIntoItems[0]!;
+
 export function TurnIntoToolbarButton(props: DropdownMenuProps) {
   const editor = useEditorRef();
   const [open, setOpen] = React.useState(false);
 
   const value = useSelectionFragmentProp({
     defaultValue: KEYS.p,
-    getProp: (node) => getBlockType(node as TElement),
+    getProp: (node) => getTurnIntoValue(node as TElement),
   });
+  const selectedValue = value ?? KEYS.p;
   const selectedItem = React.useMemo(
-    () => turnIntoItems.find((item) => item.value === (value ?? KEYS.p)) ?? turnIntoItems[0],
-    [value],
+    () => turnIntoItems.find((item) => item.value === selectedValue) ?? defaultTurnIntoItem,
+    [selectedValue],
   );
 
   return (
@@ -154,12 +160,12 @@ export function TurnIntoToolbarButton(props: DropdownMenuProps) {
         className="ignore-click-outside/toolbar min-w-0"
         onCloseAutoFocus={(e) => {
           e.preventDefault();
-          editor.tf.focus();
+          editor.tf.focus?.();
         }}
         align="start"
       >
         <ToolbarMenuGroup
-          value={value}
+          value={selectedValue}
           onValueChange={(type) => {
             setBlockType(editor, type);
           }}

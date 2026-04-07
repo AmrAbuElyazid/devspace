@@ -1,10 +1,8 @@
-// @ts-nocheck
 "use client";
 
 import * as React from "react";
 
 import type { VariantProps } from "class-variance-authority";
-import type { PlateContentProps, PlateViewProps } from "platejs/react";
 
 import { cva } from "class-variance-authority";
 import { PlateContainer, PlateContent, PlateView } from "platejs/react";
@@ -40,7 +38,8 @@ export function EditorContainer({
   className,
   variant,
   ...props
-}: React.ComponentProps<"div"> & VariantProps<typeof editorContainerVariants>) {
+}: React.ComponentPropsWithoutRef<typeof PlateContainer> &
+  VariantProps<typeof editorContainerVariants>) {
   return (
     <PlateContainer
       className={cn(
@@ -86,30 +85,28 @@ const editorVariants = cva(
   },
 );
 
-export type EditorProps = PlateContentProps & VariantProps<typeof editorVariants>;
+export type EditorProps = React.ComponentPropsWithoutRef<typeof PlateContent> &
+  VariantProps<typeof editorVariants>;
 
-export const Editor = ({
-  className,
-  disabled,
-  focused,
-  variant,
-  ref,
-  ...props
-}: EditorProps & { ref?: React.RefObject<HTMLDivElement | null> }) => (
-  <PlateContent
-    ref={ref}
-    className={cn(
-      editorVariants({
-        disabled,
-        focused,
-        variant,
-      }),
-      className,
-    )}
-    disabled={disabled}
-    disableDefaultStyles
-    {...props}
-  />
+export const Editor = React.forwardRef<React.ElementRef<typeof PlateContent>, EditorProps>(
+  function Editor({ className, disabled, focused, variant, ...props }, ref) {
+    return (
+      <PlateContent
+        ref={ref}
+        className={cn(
+          editorVariants({
+            disabled,
+            focused,
+            variant,
+          }),
+          className,
+        )}
+        disableDefaultStyles
+        {...(disabled !== undefined ? { disabled } : {})}
+        {...props}
+      />
+    );
+  },
 );
 
 Editor.displayName = "Editor";
@@ -118,7 +115,7 @@ export function EditorView({
   className,
   variant,
   ...props
-}: PlateViewProps & VariantProps<typeof editorVariants>) {
+}: React.ComponentPropsWithoutRef<typeof PlateView> & VariantProps<typeof editorVariants>) {
   return <PlateView {...props} className={cn(editorVariants({ variant }), className)} />;
 }
 
