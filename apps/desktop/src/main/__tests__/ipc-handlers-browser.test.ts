@@ -1,8 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { createElectronIpcMock, createIpcHandlerRegistry } from "./test-utils/mock-electron-ipc";
 
-type IpcHandler = (event: unknown, ...args: unknown[]) => unknown;
-
 const handlers = createIpcHandlerRegistry();
 const controllerCalls: unknown[][] = [];
 const browserImportCalls: unknown[][] = [];

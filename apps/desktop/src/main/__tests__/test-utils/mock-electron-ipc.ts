@@ -1,6 +1,6 @@
 type IpcHandler = (event: unknown, ...args: unknown[]) => unknown;
 
-export type IpcHandlerRegistry = Map<string, IpcHandler>;
+type IpcHandlerRegistry = Map<string, IpcHandler>;
 
 type ElectronIpcMockOverrides = {
   app?: Record<string, unknown>;

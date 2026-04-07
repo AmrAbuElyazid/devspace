@@ -18,11 +18,12 @@ inside workspace windows.
 
 The repository is a **Turborepo monorepo** with Bun workspaces:
 
-| Workspace           | Path                         | Description                                           |
-| ------------------- | ---------------------------- | ----------------------------------------------------- |
-| `@devspace/desktop` | `apps/desktop/`              | Electron desktop app                                  |
-| `ghostty-electron`  | `packages/ghostty-electron/` | Reusable Ghostty terminal bridge (N-API + TypeScript) |
-| `@devspace/scripts` | `scripts/`                   | Monorepo-level utility scripts                        |
+| Workspace               | Path                         | Description                                           |
+| ----------------------- | ---------------------------- | ----------------------------------------------------- |
+| `@devspace/desktop`     | `apps/desktop/`              | Electron desktop app                                  |
+| `ghostty-electron`      | `packages/ghostty-electron/` | Reusable Ghostty terminal bridge (N-API + TypeScript) |
+| `@devspace/note-editor` | `packages/note-editor/`      | Reusable rich-text note editor package                |
+| `@devspace/scripts`     | `scripts/`                   | Monorepo-level utility scripts                        |
 
 **Package manager**: Bun (use `bun` / `bunx`, not `npm` / `npx`).
 
@@ -44,10 +45,11 @@ bun run test             # vitest run across all workspaces
 
 ### Running a single test
 
-Tests live in `apps/desktop/`:
+Tests live co-located with source files across `apps/desktop/` and `packages/`:
 
 ```sh
 bunx vitest run apps/desktop/src/path/to/file.test.ts      # run once
+bunx vitest run packages/ghostty-electron/src/path/to/file.test.ts
 bunx vitest apps/desktop/src/path/to/file.test.ts           # watch mode
 bunx vitest run -t "test name substring"                    # filter by name
 ```
@@ -81,6 +83,8 @@ packages/
     src/                 # GhosttyTerminal class, types, native addon loader
     native/              # Objective-C++ N-API addon (binding.gyp, .mm, .h)
     deps/                # Pre-built libghostty static library + resources
+  note-editor/           # Reusable rich-text editor package
+    src/                 # Editor components, hooks, styles, and tests
 scripts/                 # Monorepo-level scripts (promote, bench, stress)
 ```
 
@@ -99,8 +103,9 @@ can't resolve `.node` file paths after inlining the package.
 
 ```
 ghostty-electron        (standalone, no workspace deps)
-     ↑
-@devspace/desktop       (depends on ghostty-electron via workspace:*)
+@devspace/note-editor   (standalone, no workspace deps)
+     ↑             ↑
+@devspace/desktop       (depends on both via workspace:*)
 ```
 
 ## Testing

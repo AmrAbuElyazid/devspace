@@ -6,7 +6,8 @@ This package wraps Ghostty's libghostty via a native N-API addon and exposes
 a TypeScript API for creating, positioning, and managing terminal surfaces
 within an Electron `BrowserWindow`.
 
-> **Status**: Early / experimental. macOS arm64 only. API will change.
+> **Status**: In active development and used by the Devspace desktop app.
+> macOS arm64 only. API may still change.
 
 ## Requirements
 
@@ -243,8 +244,9 @@ scripts/
 - **No npm publish pipeline** -- The package exports raw TypeScript
   source. A build step (tsdown/tsup) is needed before publishing to npm.
   Works fine within a monorepo via workspace protocol.
-- **No package-level tests** -- `GhosttyTerminal` class has no unit
-  tests. The native bridge can't be easily mocked yet.
+- **Native addon coverage is still limited** -- The TypeScript wrapper and
+  native loader have Vitest coverage, but the Objective-C++ bridge still
+  relies on integration and manual testing.
 - **Native addon path is manual** -- Consumers must provide the absolute
   path to `ghostty_bridge.node`. A `node-gyp-build` or `prebuild-install`
   pattern would improve this.
