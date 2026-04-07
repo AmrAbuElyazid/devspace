@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, memo } from "react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
-import { useShallow } from "zustand/react/shallow";
 import { useWorkspaceStore } from "./store/workspace-store";
 import { useSettingsStore } from "./store/settings-store";
 import { useNativeViewStore, initNativeViewSubscriptions } from "./store/native-view-store";
@@ -58,9 +57,6 @@ const WorkspaceLayer = memo(function WorkspaceLayer({
 export default function App() {
   useTheme();
 
-  // Only re-render App when the list of workspace IDs changes (add/remove),
-  // not on every name/focus/CWD update.
-  const workspaceIds = useWorkspaceStore(useShallow((s) => s.workspaces.map((w) => w.id)));
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const settingsOpen = useSettingsStore((s) => s.settingsOpen);
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
@@ -119,17 +115,17 @@ export default function App() {
             <Sidebar />
             <div className="app-main">
               <div className="app-content">
-                {/* Render ALL workspaces stacked. Only the active workspace is visible.
-                  Using visibility:hidden instead of display:none so native views
-                  (xterm, WebContentsView) keep their canvas dimensions. */}
-                {workspaceIds.map((wsId) => (
+                {/* Only mount the active workspace layer so hidden work scales with
+                  what is visible. Native panes survive workspace switches via the
+                  per-pane session tracking in their own components. */}
+                {activeWorkspaceId ? (
                   <WorkspaceLayer
-                    key={wsId}
-                    workspaceId={wsId}
-                    isActive={wsId === activeWorkspaceId}
+                    key={activeWorkspaceId}
+                    workspaceId={activeWorkspaceId}
+                    isActive
                     sidebarOpen={sidebarOpen}
                   />
-                ))}
+                ) : null}
 
                 {/* Pane picker dialog */}
                 <PanePickerDialog />
