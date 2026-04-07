@@ -1,39 +1,16 @@
 import { expect, test, vi } from "vitest";
+import { createElectronIpcMock, createIpcHandlerRegistry } from "./test-utils/mock-electron-ipc";
 
 type IpcHandler = (event: unknown, ...args: unknown[]) => unknown;
 
-function BrowserWindowMock() {}
-
-const handlers = new Map<string, IpcHandler>();
+const handlers = createIpcHandlerRegistry();
 const controllerCalls: unknown[][] = [];
 const browserImportCalls: unknown[][] = [];
 const editorCalls: unknown[][] = [];
 const mainWindowCalls: unknown[][] = [];
 const browserSessionCalls: unknown[][] = [];
 
-vi.mock("electron", () => ({
-  ipcMain: {
-    handle: (channel: string, handler: IpcHandler) => {
-      handlers.set(channel, handler);
-    },
-    on: (channel: string, handler: IpcHandler) => {
-      handlers.set(channel, handler);
-    },
-  },
-  app: {
-    getPath: () => "/tmp/devspace-test",
-  },
-  dialog: {
-    showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
-  },
-  shell: {
-    openExternal: (_url: string) => {},
-  },
-  Menu: {
-    buildFromTemplate: () => ({ popup: () => {} }),
-  },
-  BrowserWindow: BrowserWindowMock,
-}));
+vi.mock("electron", () => createElectronIpcMock(handlers));
 
 const { registerIpcHandlers } = await import("../ipc-handlers");
 

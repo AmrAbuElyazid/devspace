@@ -28,7 +28,7 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 - [ ] Replace blanket trusted-origin CORS rewriting with per-need header rewrites so loopback-backed pages get only the relaxation they actually require. Refs: `apps/desktop/src/main/browser/browser-session-manager.ts`
 - [ ] Add focused tests for the split preload and IPC modules, especially `apps/desktop/src/main/ipc/terminal-editor.ts`, uncovered `apps/desktop/src/main/ipc/browser.ts` flows, and non-notes `apps/desktop/src/main/ipc/system.ts` paths.
-- [ ] Add shared test helpers for `window.api`, Electron mocks, and common renderer/main setup to reduce repeated bespoke mocks. Refs: `apps/desktop/src/test-setup.ts`
+- [x] Add shared test helpers for `window.api`, Electron mocks, and common renderer/main setup to reduce repeated bespoke mocks. Refs: `apps/desktop/src/renderer/test-utils/mock-window-api.ts`, `apps/desktop/src/main/__tests__/test-utils/mock-electron-ipc.ts`
 - [ ] Clean up stale docs that no longer match the repo layout or current package state. Initial targets: `AGENTS.md`, `packages/ghostty-electron/README.md`
 
 ## 2. Scale, Profiling, And Persistence
@@ -51,7 +51,7 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 ### Phase 1: Boundaries And Correctness
 
 - [ ] Tighten CORS overrides to least privilege.
-- [ ] Add split preload/IPC coverage and shared test helpers.
+- [ ] Add split preload/IPC coverage.
 - [ ] Clean stale docs.
 
 ### Phase 2: Observability And Scale

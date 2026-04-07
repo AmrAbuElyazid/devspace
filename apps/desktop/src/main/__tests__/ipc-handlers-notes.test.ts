@@ -2,36 +2,24 @@ import { expect, vi, test, describe, beforeEach, afterEach } from "vitest";
 import { join } from "path";
 import { readFile, rm, mkdir } from "fs/promises";
 import { existsSync } from "fs";
+import {
+  callRegisteredHandler,
+  createElectronIpcMock,
+  createIpcHandlerRegistry,
+} from "./test-utils/mock-electron-ipc";
 
-const handlers = new Map<string, (...args: unknown[]) => unknown>();
+const handlers = createIpcHandlerRegistry();
 
 const TEST_NOTES_DIR = join("/tmp", `devspace-notes-test-${process.pid}`);
 
-vi.mock("electron", () => ({
-  ipcMain: {
-    handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
-      handlers.set(channel, handler);
+vi.mock("electron", () =>
+  createElectronIpcMock(handlers, {
+    app: {
+      getPath: () => TEST_NOTES_DIR,
+      isPackaged: false,
     },
-    on: (channel: string, handler: (...args: unknown[]) => unknown) => {
-      handlers.set(channel, handler);
-    },
-  },
-  app: {
-    getPath: () => TEST_NOTES_DIR,
-    isPackaged: false,
-  },
-  dialog: {
-    showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
-  },
-  shell: {
-    openExternal: () => {},
-  },
-  Menu: {
-    buildFromTemplate: () => ({ popup: () => {} }),
-  },
-  // oxlint-disable-next-line typescript-eslint/no-extraneous-class -- empty mock
-  BrowserWindow: class {},
-}));
+  }),
+);
 
 const { registerIpcHandlers } = await import("../ipc-handlers");
 
@@ -110,9 +98,7 @@ registerIpcHandlers(
 const notesDir = join(TEST_NOTES_DIR, "notes");
 
 function callHandler(channel: string, ...args: unknown[]) {
-  const handler = handlers.get(channel);
-  if (!handler) throw new Error(`No handler for ${channel}`);
-  return handler({}, ...args);
+  return callRegisteredHandler(handlers, channel, ...args);
 }
 
 beforeEach(async () => {
