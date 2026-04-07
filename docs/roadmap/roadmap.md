@@ -22,14 +22,14 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 - [ ] Continue breaking up large files where it meaningfully improves maintenance. Initial targets: `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`, `apps/desktop/src/renderer/styles/index.css`
 - [ ] Keep bridge types, tests, and docs aligned with the current preload/IPC surface. Refs: `apps/desktop/src/shared/types.ts`, `apps/desktop/src/preload/index.ts`
 - [x] Finish migrating the last legacy `.js` tests to TypeScript. Refs: `apps/desktop/src/preload/__tests__/index.test.ts`, `apps/desktop/src/main/__tests__/ipc-handlers-browser.test.ts`
-- [ ] Finish documenting the real package posture for `ghostty-electron` and clean stale repo docs. Refs: `packages/ghostty-electron/README.md`, `AGENTS.md`
+- [x] Finish documenting the real package posture for `ghostty-electron` and clean stale repo docs. Refs: `packages/ghostty-electron/README.md`, `AGENTS.md`
 
 ## 1. Core Boundaries And Correctness
 
 - [ ] Replace blanket trusted-origin CORS rewriting with per-need header rewrites so loopback-backed pages get only the relaxation they actually require. Refs: `apps/desktop/src/main/browser/browser-session-manager.ts`
-- [ ] Add focused tests for the split preload and IPC modules, especially `apps/desktop/src/main/ipc/terminal-editor.ts`, uncovered `apps/desktop/src/main/ipc/browser.ts` flows, and non-notes `apps/desktop/src/main/ipc/system.ts` paths.
+- [x] Add focused tests for the split preload and IPC modules, especially `apps/desktop/src/main/ipc/terminal-editor.ts`, uncovered `apps/desktop/src/main/ipc/browser.ts` flows, and non-notes `apps/desktop/src/main/ipc/system.ts` paths. Refs: `apps/desktop/src/main/__tests__/ipc-modules.test.ts`, `apps/desktop/src/preload/__tests__/index.test.ts`
 - [x] Add shared test helpers for `window.api`, Electron mocks, and common renderer/main setup to reduce repeated bespoke mocks. Refs: `apps/desktop/src/renderer/test-utils/mock-window-api.ts`, `apps/desktop/src/main/__tests__/test-utils/mock-electron-ipc.ts`
-- [ ] Clean up stale docs that no longer match the repo layout or current package state. Initial targets: `AGENTS.md`, `packages/ghostty-electron/README.md`
+- [x] Clean up stale docs that no longer match the repo layout or current package state. Initial targets: `AGENTS.md`, `packages/ghostty-electron/README.md`
 
 ## 2. Scale, Profiling, And Persistence
 
@@ -51,8 +51,8 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 ### Phase 1: Boundaries And Correctness
 
 - [ ] Tighten CORS overrides to least privilege.
-- [ ] Add split preload/IPC coverage.
-- [ ] Clean stale docs.
+- [x] Add split preload/IPC coverage.
+- [x] Clean stale docs.
 
 ### Phase 2: Observability And Scale
 
