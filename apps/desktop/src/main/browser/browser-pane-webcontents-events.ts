@@ -2,6 +2,7 @@ import type { BrowserContextMenuTarget } from "../../shared/browser";
 import {
   findShortcutBinding,
   resolveNativeModifier,
+  shouldIgnoreMenuShortcuts,
   toStoredShortcut,
 } from "./browser-web-shortcuts";
 import type {
@@ -130,10 +131,7 @@ export function registerBrowserPaneWebContentsListeners({
 
       if (input.type !== "keyDown" || !shortcut) {
         if (typeof setIgnoreMenuShortcuts === "function") {
-          setIgnoreMenuShortcuts.call(
-            webContents,
-            !(input.meta === true || input.control === true),
-          );
+          setIgnoreMenuShortcuts.call(webContents, shouldIgnoreMenuShortcuts(pane.kind, input));
         }
         return;
       }
@@ -141,10 +139,7 @@ export function registerBrowserPaneWebContentsListeners({
       const binding = findShortcutBinding(getAppShortcutBindings?.(), pane.kind, shortcut);
       if (!binding) {
         if (typeof setIgnoreMenuShortcuts === "function") {
-          setIgnoreMenuShortcuts.call(
-            webContents,
-            !(input.meta === true || input.control === true),
-          );
+          setIgnoreMenuShortcuts.call(webContents, shouldIgnoreMenuShortcuts(pane.kind, input));
         }
         return;
       }

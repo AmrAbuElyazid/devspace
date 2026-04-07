@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import {
   findShortcutBinding,
   resolveNativeModifier,
+  shouldIgnoreMenuShortcuts,
   toStoredShortcut,
 } from "../browser-web-shortcuts";
 
@@ -38,6 +39,41 @@ test("findShortcutBinding keeps browser-only shortcuts out of editor panes", () 
 
   expect(findShortcutBinding([browserFind], "browser", browserFind.shortcut)).toEqual(browserFind);
   expect(findShortcutBinding([browserFind], "editor", browserFind.shortcut)).toBeUndefined();
+});
+
+test("findShortcutBinding only keeps close-window app-global for editor panes", () => {
+  const closeWindow = {
+    action: "close-window" as const,
+    channel: "app:close-window" as const,
+    shortcut: {
+      key: "w",
+      command: true,
+      shift: false,
+      option: false,
+      control: true,
+    },
+  };
+  const newTab = {
+    action: "new-tab" as const,
+    channel: "app:new-tab" as const,
+    shortcut: {
+      key: "t",
+      command: true,
+      shift: false,
+      option: false,
+      control: false,
+    },
+  };
+
+  expect(findShortcutBinding([closeWindow], "editor", closeWindow.shortcut)).toEqual(closeWindow);
+  expect(findShortcutBinding([newTab], "editor", newTab.shortcut)).toBeUndefined();
+});
+
+test("shouldIgnoreMenuShortcuts yields command shortcuts to editor panes", () => {
+  expect(shouldIgnoreMenuShortcuts("editor", { meta: true, control: false })).toBe(true);
+  expect(shouldIgnoreMenuShortcuts("editor", { meta: false, control: true })).toBe(true);
+  expect(shouldIgnoreMenuShortcuts("editor", { meta: false, control: false })).toBe(false);
+  expect(shouldIgnoreMenuShortcuts("browser", { meta: true, control: false })).toBe(false);
 });
 
 test("resolveNativeModifier falls back to the held meta/control key when no shortcut matches", () => {

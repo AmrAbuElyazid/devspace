@@ -24,7 +24,7 @@ const SHIFTED_SYMBOL_KEY_MAP: Record<string, string> = {
   "~": "`",
 };
 
-const GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS = new Set<ShortcutAction>([
+const NON_EDITOR_GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS = new Set<ShortcutAction>([
   "toggle-sidebar",
   "toggle-settings",
   "close-window",
@@ -70,6 +70,8 @@ const GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS = new Set<ShortcutAction>([
   "terminal-zoom-reset",
   "open-browser",
 ]);
+
+const EDITOR_GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS = new Set<ShortcutAction>(["close-window"]);
 
 const BROWSER_ONLY_SHORTCUT_ACTIONS = new Set<ShortcutAction>([
   "browser-focus-url",
@@ -158,15 +160,32 @@ export function findShortcutBinding(
   kind: BrowserPaneKind,
   shortcut: StoredShortcut,
 ): BrowserShortcutBinding | undefined {
+  const globallyOwnedActions =
+    kind === "editor"
+      ? EDITOR_GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS
+      : NON_EDITOR_GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS;
+
   return bindings?.find((binding) => {
     if (!shortcutsEqual(binding.shortcut, shortcut)) {
       return false;
     }
 
-    if (GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS.has(binding.action)) {
+    if (globallyOwnedActions.has(binding.action)) {
       return true;
     }
 
     return kind === "browser" && BROWSER_ONLY_SHORTCUT_ACTIONS.has(binding.action);
   });
+}
+
+export function shouldIgnoreMenuShortcuts(
+  kind: BrowserPaneKind,
+  input: Pick<WebContentsInputEvent, "meta" | "control">,
+): boolean {
+  const hasNativeModifier = input.meta === true || input.control === true;
+  if (!hasNativeModifier) {
+    return false;
+  }
+
+  return kind === "editor";
 }

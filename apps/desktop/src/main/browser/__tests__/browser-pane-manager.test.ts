@@ -214,6 +214,7 @@ test("browser-only shortcuts are not intercepted for editor webcontents", () => 
   const listeners = new Map<string, (...args: unknown[]) => void>();
   const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
   const preventDefault = vi.fn();
+  const setIgnoreMenuShortcuts = vi.fn();
   const manager = new BrowserPaneManager({
     createView: () =>
       ({
@@ -222,7 +223,7 @@ test("browser-only shortcuts are not intercepted for editor webcontents", () => 
             listeners.set(event, listener);
           },
           loadURL: () => Promise.resolve(),
-          setIgnoreMenuShortcuts: () => {},
+          setIgnoreMenuShortcuts,
         },
       }) as never,
     addChildView: () => {},
@@ -251,6 +252,50 @@ test("browser-only shortcuts are not intercepted for editor webcontents", () => 
   expect(rendererMessages).toEqual([
     { channel: "window:nativeModifierChanged", payload: "command" },
   ]);
+  expect(setIgnoreMenuShortcuts).toHaveBeenCalledWith(true);
+});
+
+test("editor panes still intercept the explicit close-window shortcut", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const preventDefault = vi.fn();
+  const setIgnoreMenuShortcuts = vi.fn();
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          setIgnoreMenuShortcuts,
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload });
+    },
+    getAppShortcutBindings: () => [
+      {
+        action: "close-window",
+        channel: "app:close-window",
+        shortcut: { key: "w", command: true, shift: false, option: false, control: true },
+      },
+    ],
+  });
+
+  manager.createPane("pane-1", "https://example.com", "editor");
+  rendererMessages.length = 0;
+
+  listeners.get("before-input-event")?.(
+    { preventDefault },
+    { type: "keyDown", key: "w", meta: true, control: true, shift: false, alt: false },
+  );
+
+  expect(preventDefault).toHaveBeenCalledTimes(1);
+  expect(setIgnoreMenuShortcuts).toHaveBeenCalledWith(true);
+  expect(rendererMessages).toContainEqual({ channel: "app:close-window", payload: undefined });
 });
 
 test("shifted symbol shortcuts still match their base shortcut keys", () => {
