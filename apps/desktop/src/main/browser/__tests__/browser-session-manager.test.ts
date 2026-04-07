@@ -71,6 +71,8 @@ test("CORS overrides only apply to explicitly registered trusted local referrers
       referrer: "http://127.0.0.1:18562/workbench",
       responseHeaders: {
         "Access-Control-Allow-Origin": ["https://example.com"],
+        "Access-Control-Allow-Methods": ["GET, POST"],
+        "Access-Control-Expose-Headers": ["ETag"],
         "X-Test": ["ok"],
       },
     },
@@ -82,10 +84,9 @@ test("CORS overrides only apply to explicitly registered trusted local referrers
   expect(localResponse).toEqual({
     responseHeaders: {
       "Access-Control-Allow-Origin": ["http://127.0.0.1:18562"],
-      "Access-Control-Allow-Methods": ["GET, POST, PUT, DELETE, PATCH, OPTIONS"],
-      "Access-Control-Allow-Headers": ["*"],
+      "Access-Control-Allow-Methods": ["GET, POST"],
       "Access-Control-Allow-Credentials": ["true"],
-      "Access-Control-Expose-Headers": ["*"],
+      "Access-Control-Expose-Headers": ["ETag"],
       "X-Test": ["ok"],
     },
   });
@@ -147,6 +148,7 @@ test("trusted local origin registration is ref-counted for shared editor origins
         referrer: "http://127.0.0.1:18562/workbench",
         responseHeaders: {
           "Access-Control-Allow-Origin": ["https://example.com"],
+          "Access-Control-Allow-Methods": ["GET, POST"],
         },
       },
       (nextResponse) => {
@@ -159,10 +161,8 @@ test("trusted local origin registration is ref-counted for shared editor origins
   expect(invokeHeadersReceived()).toEqual({
     responseHeaders: {
       "Access-Control-Allow-Origin": ["http://127.0.0.1:18562"],
-      "Access-Control-Allow-Methods": ["GET, POST, PUT, DELETE, PATCH, OPTIONS"],
-      "Access-Control-Allow-Headers": ["*"],
+      "Access-Control-Allow-Methods": ["GET, POST"],
       "Access-Control-Allow-Credentials": ["true"],
-      "Access-Control-Expose-Headers": ["*"],
     },
   });
 
@@ -170,10 +170,8 @@ test("trusted local origin registration is ref-counted for shared editor origins
   expect(invokeHeadersReceived()).toEqual({
     responseHeaders: {
       "Access-Control-Allow-Origin": ["http://127.0.0.1:18562"],
-      "Access-Control-Allow-Methods": ["GET, POST, PUT, DELETE, PATCH, OPTIONS"],
-      "Access-Control-Allow-Headers": ["*"],
+      "Access-Control-Allow-Methods": ["GET, POST"],
       "Access-Control-Allow-Credentials": ["true"],
-      "Access-Control-Expose-Headers": ["*"],
     },
   });
 
@@ -181,8 +179,61 @@ test("trusted local origin registration is ref-counted for shared editor origins
   expect(invokeHeadersReceived()).toEqual({
     responseHeaders: {
       "Access-Control-Allow-Origin": ["https://example.com"],
+      "Access-Control-Allow-Methods": ["GET, POST"],
     },
   });
+});
+
+test("CORS override replaces origin case-insensitively without injecting wildcard headers", () => {
+  let onHeadersReceived:
+    | ((
+        details: { referrer?: string; responseHeaders?: Record<string, string[]> },
+        callback: (response: { responseHeaders?: Record<string, string[]> }) => void,
+      ) => void)
+    | undefined;
+
+  const manager = new BrowserSessionManager({
+    fromPartition: () =>
+      ({
+        webRequest: {
+          onHeadersReceived: (
+            handler: (
+              details: { referrer?: string; responseHeaders?: Record<string, string[]> },
+              callback: (response: { responseHeaders?: Record<string, string[]> }) => void,
+            ) => void,
+          ) => {
+            onHeadersReceived = handler;
+          },
+        },
+      }) as never,
+  });
+
+  manager.registerTrustedLocalOrigin("http://127.0.0.1:18562/workbench");
+  manager.getSession();
+
+  let response: { responseHeaders?: Record<string, string[]> } | undefined;
+  onHeadersReceived?.(
+    {
+      referrer: "http://127.0.0.1:18562/workbench",
+      responseHeaders: {
+        "access-control-allow-origin": ["https://example.com"],
+        "access-control-allow-headers": ["content-type, authorization"],
+      },
+    },
+    (nextResponse) => {
+      response = nextResponse;
+    },
+  );
+
+  expect(response).toEqual({
+    responseHeaders: {
+      "Access-Control-Allow-Origin": ["http://127.0.0.1:18562"],
+      "access-control-allow-headers": ["content-type, authorization"],
+      "Access-Control-Allow-Credentials": ["true"],
+    },
+  });
+  expect(response?.responseHeaders).not.toHaveProperty("Access-Control-Allow-Headers", ["*"]);
+  expect(response?.responseHeaders).not.toHaveProperty("Access-Control-Expose-Headers", ["*"]);
 });
 
 test("secret key interception only applies to registered trusted local origins", async () => {

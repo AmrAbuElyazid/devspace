@@ -125,6 +125,27 @@ function getTrustedLocalOrigin(rawUrl: string | undefined): string | null {
   }
 }
 
+function findResponseHeaderKey(
+  headers: Record<string, string[]>,
+  targetHeaderName: string,
+): string | undefined {
+  const normalizedTarget = targetHeaderName.toLowerCase();
+  return Object.keys(headers).find((headerName) => headerName.toLowerCase() === normalizedTarget);
+}
+
+function setResponseHeader(
+  headers: Record<string, string[]>,
+  headerName: string,
+  headerValue: string[],
+): void {
+  const existingHeaderName = findResponseHeaderKey(headers, headerName);
+  if (existingHeaderName && existingHeaderName !== headerName) {
+    delete headers[existingHeaderName];
+  }
+
+  headers[headerName] = headerValue;
+}
+
 function decisionAllows(decision: BrowserPermissionDecision): boolean {
   return decision === "allow-once" || decision === "allow-for-session";
 }
@@ -472,19 +493,11 @@ export class BrowserSessionManager {
 
       const headers = { ...details.responseHeaders };
 
-      // Strip any existing CORS headers (case-insensitive) so we don't
-      // end up with duplicates or conflicting values.
-      for (const key of Object.keys(headers)) {
-        if (key.toLowerCase().startsWith("access-control-")) {
-          delete headers[key];
-        }
-      }
-
-      headers["Access-Control-Allow-Origin"] = [origin];
-      headers["Access-Control-Allow-Methods"] = ["GET, POST, PUT, DELETE, PATCH, OPTIONS"];
-      headers["Access-Control-Allow-Headers"] = ["*"];
-      headers["Access-Control-Allow-Credentials"] = ["true"];
-      headers["Access-Control-Expose-Headers"] = ["*"];
+      // Narrow the override to just the loopback origin allowance needed by
+      // our trusted local editor pages. Preserve any upstream allow/expose
+      // headers instead of widening them to wildcards.
+      setResponseHeader(headers, "Access-Control-Allow-Origin", [origin]);
+      setResponseHeader(headers, "Access-Control-Allow-Credentials", ["true"]);
 
       callback({ responseHeaders: headers });
     });
