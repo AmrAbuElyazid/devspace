@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import * as React from "react";
@@ -129,9 +128,10 @@ const InlineCombobox = ({
     ref: inputRef,
     onCancelInput: (cause) => {
       if (cause !== "backspace") {
-        editor.tf.insertText(trigger + value, {
-          at: insertPoint?.current ?? undefined,
-        });
+        editor.tf.insertText(
+          trigger + value,
+          insertPoint.current ? { at: insertPoint.current } : {},
+        );
       }
       if (cause === "arrowLeft" || cause === "arrowRight") {
         editor.tf.move({
@@ -201,6 +201,10 @@ const InlineComboboxInput = ({
   const value = store.useState("value");
 
   const ref = useComposedRef(propRef, contextRef);
+  const normalizedInputProps = inputProps as Partial<
+    React.ComponentPropsWithoutRef<typeof Combobox>
+  >;
+  const normalizedProps = props as Partial<React.ComponentPropsWithoutRef<typeof Combobox>>;
 
   return (
     <>
@@ -216,8 +220,8 @@ const InlineComboboxInput = ({
           className={cn("absolute top-0 left-0 size-full bg-transparent outline-none", className)}
           value={value}
           autoSelect
-          {...inputProps}
-          {...props}
+          {...normalizedInputProps}
+          {...normalizedProps}
         />
       </span>
     </>
@@ -300,7 +304,17 @@ const InlineComboboxItem = ({
   const search = filter && store.useState("value");
 
   const visible = React.useMemo(
-    () => !filter || filter({ group, keywords, label, value }, search as string),
+    () =>
+      !filter ||
+      filter(
+        {
+          value,
+          ...(group !== undefined ? { group } : {}),
+          ...(keywords !== undefined ? { keywords } : {}),
+          ...(label !== undefined ? { label } : {}),
+        },
+        search as string,
+      ),
     [filter, group, keywords, label, value, search],
   );
 

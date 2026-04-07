@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import * as React from "react";
@@ -124,7 +123,11 @@ export const ToolbarButton = withTooltip(function ToolbarButton({
   ...props
 }: ToolbarButtonProps) {
   return typeof pressed === "boolean" ? (
-    <ToolbarToggleGroup disabled={props.disabled} value="single" type="single">
+    <ToolbarToggleGroup
+      value="single"
+      type="single"
+      {...(props.disabled !== undefined ? { disabled: props.disabled } : {})}
+    >
       <ToolbarToggleItem
         className={cn(
           toolbarButtonVariants({ size, variant }),

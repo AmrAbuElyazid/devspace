@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as React from "react";
 
 import type { PlateEditor, PlateElementProps } from "platejs/react";
@@ -176,10 +175,10 @@ export function SlashInputElement(props: PlateElementProps<TComboboxInputElement
                   key={value}
                   value={value}
                   onClick={() => onSelect(editor, value)}
-                  label={label}
-                  focusEditor={focusEditor}
                   group={group}
-                  keywords={keywords}
+                  {...(label !== undefined ? { label } : {})}
+                  {...(focusEditor !== undefined ? { focusEditor } : {})}
+                  {...(keywords !== undefined ? { keywords } : {})}
                 >
                   <div className="mr-2 text-muted-foreground">{icon}</div>
                   {label ?? value}
