@@ -1,7 +1,8 @@
 import { useEffect } from "react";
+import { useSettingsStore } from "../store/settings-store";
 
 /**
- * Sync devspace's own UI dark/light mode with the OS preference.
+ * Sync devspace's own UI dark/light mode with the selected preference.
  *
  * Toggles the `.dark` class on `<html>` which activates the dark-mode
  * CSS custom properties defined via `@variant dark` in index.css.
@@ -10,6 +11,8 @@ import { useEffect } from "react";
  * does not attempt to control it via nativeTheme or any other mechanism.
  */
 export function useTheme(): void {
+  const themeMode = useSettingsStore((s) => s.themeMode);
+
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
 
@@ -17,7 +20,17 @@ export function useTheme(): void {
       document.documentElement.classList.toggle("dark", dark);
     }
 
-    // Apply initial state.
+    if (themeMode === "dark") {
+      apply(true);
+      return;
+    }
+
+    if (themeMode === "light") {
+      apply(false);
+      return;
+    }
+
+    // System mode follows the OS preference.
     apply(mq.matches);
 
     // Listen for OS theme changes.
@@ -27,5 +40,5 @@ export function useTheme(): void {
 
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
-  }, []);
+  }, [themeMode]);
 }

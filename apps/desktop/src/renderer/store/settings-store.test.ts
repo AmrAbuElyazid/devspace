@@ -7,6 +7,7 @@ function resetSettingsStore(): void {
     settingsOpen: false,
     showShortcutHintsOnModifierPress: true,
     fontSize: 13,
+    themeMode: "system",
     vscodeCliPath: "",
     defaultShell: "",
     terminalScrollback: 5000,
@@ -31,6 +32,14 @@ afterEach(() => {
 
 test("showShortcutHintsOnModifierPress defaults to true", () => {
   expect(useSettingsStore.getState().showShortcutHintsOnModifierPress).toBe(true);
+});
+
+test("themeMode defaults to system and can be updated", () => {
+  expect(useSettingsStore.getState().themeMode).toBe("system");
+
+  useSettingsStore.getState().updateSetting("themeMode", "dark");
+
+  expect(useSettingsStore.getState().themeMode).toBe("dark");
 });
 
 test("showShortcutHintsOnModifierPress updates when toggled", () => {

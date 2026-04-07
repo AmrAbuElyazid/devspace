@@ -5,6 +5,7 @@ import type { PaneType, SplitDirection } from "../types/workspace";
 
 /** The default pane type for new tabs, or 'picker' to always show the dialog. */
 export type DefaultPaneType = PaneType | "picker";
+type ThemeMode = "system" | "dark" | "light";
 
 /** Context for the pane picker dialog — describes what action triggered it. */
 export interface PanePickerContext {
@@ -22,6 +23,7 @@ interface SettingsState {
   settingsOpen: boolean;
   showShortcutHintsOnModifierPress: boolean;
   fontSize: number;
+  themeMode: ThemeMode;
   vscodeCliPath: string;
   defaultShell: string;
   terminalScrollback: number;
@@ -58,6 +60,7 @@ export const useSettingsStore = create<SettingsState>()(
       settingsOpen: false,
       showShortcutHintsOnModifierPress: true,
       fontSize: 13,
+      themeMode: "system" as const,
       vscodeCliPath: "",
       defaultShell: "",
       terminalScrollback: 5000,
@@ -136,12 +139,15 @@ export const useSettingsStore = create<SettingsState>()(
         if (typeof s.showShortcutHintsOnModifierPress !== "boolean") {
           s.showShortcutHintsOnModifierPress = true;
         }
+        if (s.themeMode !== "system" && s.themeMode !== "dark" && s.themeMode !== "light") {
+          s.themeMode = "system";
+        }
         if (typeof s.vscodeCliPath !== "string") {
           s.vscodeCliPath = "";
         }
         return s;
       },
-      version: 3,
+      version: 4,
     },
   ),
 );

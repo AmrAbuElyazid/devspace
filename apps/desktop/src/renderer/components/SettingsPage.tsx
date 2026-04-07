@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const {
     showShortcutHintsOnModifierPress,
     fontSize,
+    themeMode,
     vscodeCliPath,
     defaultShell,
     terminalScrollback,
@@ -60,6 +61,17 @@ export default function SettingsPage() {
         {/* Appearance */}
         <section>
           <SectionTitle>Appearance</SectionTitle>
+          <SettingRow label="Theme">
+            <SegmentedControl
+              options={[
+                { label: "System", value: "system" as const },
+                { label: "Dark", value: "dark" as const },
+                { label: "Light", value: "light" as const },
+              ]}
+              value={themeMode}
+              onChange={(v) => updateSetting("themeMode", v as "system" | "dark" | "light")}
+            />
+          </SettingRow>
           <SettingRow label="Font size">
             <NumberInput
               value={fontSize}
