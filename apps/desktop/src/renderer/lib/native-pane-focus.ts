@@ -1,5 +1,6 @@
 import { collectGroupIds, useWorkspaceStore } from "../store/workspace-store";
 import { useBrowserStore } from "../store/browser-store";
+import { recordNativeFocusRequest } from "../store/native-view-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useTerminalStore } from "../store/terminal-store";
 import type { Pane, PaneGroup, Workspace } from "../types/workspace";
@@ -65,14 +66,24 @@ function getFocusedActivePaneContext(): ActivePaneContext | null {
   return { workspace, group, pane };
 }
 
+export function focusTerminalNativePane(paneId: string): void {
+  recordNativeFocusRequest("terminal");
+  void window.api.terminal.focus(paneId);
+}
+
+export function focusBrowserNativePane(paneId: string): void {
+  recordNativeFocusRequest("browser");
+  void window.api.browser.setFocus(paneId);
+}
+
 function focusPane(pane: Pane): void {
   if (pane.type === "terminal") {
-    void window.api.terminal.focus(pane.id);
+    focusTerminalNativePane(pane.id);
     return;
   }
 
   if (pane.type === "browser" || pane.type === "editor" || pane.type === "t3code") {
-    void window.api.browser.setFocus(pane.id);
+    focusBrowserNativePane(pane.id);
   }
 }
 

@@ -17,7 +17,11 @@ import { useNativeView } from "../../hooks/useNativeView";
 import { useBrowserStore } from "../../store/browser-store";
 import type { BrowserConfig } from "../../types/workspace";
 import type { BrowserPermissionDecision } from "../../../shared/browser";
-import { hasEditableRendererFocus, releaseNativeFocus } from "../../lib/native-pane-focus";
+import {
+  focusBrowserNativePane,
+  hasEditableRendererFocus,
+  releaseNativeFocus,
+} from "../../lib/native-pane-focus";
 
 interface UseBrowserPaneControllerArgs {
   paneId: string;
@@ -151,7 +155,7 @@ export function useBrowserPaneController({ paneId, config }: UseBrowserPaneContr
       return;
     }
 
-    void window.api.browser.setFocus(paneId);
+    focusBrowserNativePane(paneId);
   }, [failure, isFindBarOpen, isVisible, paneId]);
 
   const currentUrl = runtimeState?.url ?? initialUrl;
@@ -211,7 +215,7 @@ export function useBrowserPaneController({ paneId, config }: UseBrowserPaneContr
         inputRef.current?.blur();
         if (isVisible && failure === null) {
           requestAnimationFrame(() => {
-            void window.api.browser.setFocus(paneId);
+            focusBrowserNativePane(paneId);
           });
         }
         return;
@@ -222,7 +226,7 @@ export function useBrowserPaneController({ paneId, config }: UseBrowserPaneContr
         inputRef.current?.blur();
         if (isVisible && failure === null) {
           requestAnimationFrame(() => {
-            void window.api.browser.setFocus(paneId);
+            focusBrowserNativePane(paneId);
           });
         }
       }
@@ -234,7 +238,7 @@ export function useBrowserPaneController({ paneId, config }: UseBrowserPaneContr
     closeFindBar(paneId);
     void window.api.browser.stopFindInPage(paneId);
     if (isVisible && failure === null) {
-      void window.api.browser.setFocus(paneId);
+      focusBrowserNativePane(paneId);
     }
   }, [closeFindBar, failure, isVisible, paneId]);
 

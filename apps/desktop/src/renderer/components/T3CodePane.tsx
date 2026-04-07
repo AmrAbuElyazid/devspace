@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { hasEditableRendererFocus } from "../lib/native-pane-focus";
+import { focusBrowserNativePane, hasEditableRendererFocus } from "../lib/native-pane-focus";
 import { useNativeView } from "../hooks/useNativeView";
 import { Button } from "./ui/button";
 import type { ReactElement } from "react";
@@ -51,7 +51,7 @@ export default function T3CodePane({ paneId }: T3CodePaneProps): ReactElement {
       return;
     }
 
-    void window.api.browser.setFocus(paneId);
+    focusBrowserNativePane(paneId);
   }, [isVisible, paneId, state.status]);
 
   // Start the T3 Code server immediately on mount

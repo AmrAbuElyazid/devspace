@@ -12,6 +12,8 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 - [x] Centralize privileged IPC registration through shared safety helpers. Refs: `apps/desktop/src/main/ipc/shared.ts`, `apps/desktop/src/main/ipc-handlers.ts`
 - [x] Remove the old broad renderer filesystem bridge in favor of narrower task-specific APIs. Refs: `apps/desktop/src/preload/index.ts`, `apps/desktop/src/main/ipc/system.ts`
 - [x] Replace `any` in `apps/desktop/src/main/ipc/shared.ts` with typed helper signatures. Refs: `apps/desktop/src/main/ipc/shared.ts`
+- [x] Move native terminal/browser creation side effects out of React render paths and into commit-safe lifecycle handling. Refs: `apps/desktop/src/renderer/components/TerminalPane.tsx`, `apps/desktop/src/renderer/components/browser/useBrowserPaneController.ts`
+- [x] Add lightweight native-view profiling counters plus a debug snapshot/reset surface for visibility, bounds sync, and focus churn. Refs: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/main.tsx`
 
 ### Largely Addressed But Still Worth Follow-Up
 
@@ -24,7 +26,6 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 ## 1. Core Boundaries And Correctness
 
-- [ ] Move native terminal/browser creation side effects out of React render paths and into commit-safe lifecycle handling. Refs: `apps/desktop/src/renderer/components/TerminalPane.tsx`, `apps/desktop/src/renderer/components/browser/useBrowserPaneController.ts`
 - [ ] Replace blanket trusted-origin CORS rewriting with per-need header rewrites so loopback-backed pages get only the relaxation they actually require. Refs: `apps/desktop/src/main/browser/browser-session-manager.ts`
 - [ ] Add focused tests for the split preload and IPC modules, especially `apps/desktop/src/main/ipc/terminal-editor.ts`, uncovered `apps/desktop/src/main/ipc/browser.ts` flows, and non-notes `apps/desktop/src/main/ipc/system.ts` paths.
 - [ ] Add shared test helpers for `window.api`, Electron mocks, and common renderer/main setup to reduce repeated bespoke mocks. Refs: `apps/desktop/src/test-setup.ts`
@@ -32,7 +33,6 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 ## 2. Scale, Profiling, And Persistence
 
-- [ ] Add lightweight production profiling counters for bounds sync, focus churn, visibility reconciliation, and mounted/visible native panes. Refs: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/App.tsx`
 - [ ] Revisit workspace mounting and focus ownership so hidden work scales with visible panes rather than all stacked workspaces. Refs: `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`
 - [ ] Migrate workspace persistence from renderer `localStorage` to SQLite behind a main/preload storage boundary, using a relational core with JSON-backed flexible structures. Refs: `apps/desktop/src/renderer/store/persistence.ts`
 - [ ] Add a one-time import from the existing `devspace-workspaces` JSON persistence into the new SQLite schema. Refs: `apps/desktop/src/renderer/store/persistence.ts`
@@ -50,14 +50,12 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 ### Phase 1: Boundaries And Correctness
 
-- [ ] Move native create side effects out of render paths.
 - [ ] Tighten CORS overrides to least privilege.
 - [ ] Add split preload/IPC coverage and shared test helpers.
 - [ ] Clean stale docs and finish the remaining `.js` to `.ts` test migration.
 
 ### Phase 2: Observability And Scale
 
-- [ ] Add profiling counters.
 - [ ] Revisit workspace mounting and native-view scaling.
 - [ ] Run a mixed-workspace stress pass with instrumentation enabled.
 

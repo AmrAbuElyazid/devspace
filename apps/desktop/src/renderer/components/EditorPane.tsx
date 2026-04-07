@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
-import { hasEditableRendererFocus } from "../lib/native-pane-focus";
+import { focusBrowserNativePane, hasEditableRendererFocus } from "../lib/native-pane-focus";
 import { useNativeView } from "../hooks/useNativeView";
 import { useSettingsStore } from "../store/settings-store";
 import { useWorkspaceStore } from "../store/workspace-store";
@@ -107,7 +107,7 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): ReactEl
       return;
     }
 
-    void window.api.browser.setFocus(paneId);
+    focusBrowserNativePane(paneId);
   }, [isVisible, paneId, stateStatus]);
 
   // Start the VS Code server

@@ -6,14 +6,7 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 
 ## Open
 
-### 1. Devspace Shortcuts Override VS Code Shortcuts Inside Editor
-
-- Status: open
-- Priority: high
-- Type: usability bug
-- Current behavior: when the VS Code editor pane is focused, Devspace-level shortcuts still win, which makes core VS Code keybindings difficult or impossible to use normally.
-- Relevant files: `apps/desktop/src/renderer/hooks/useAppShortcuts.ts`, `apps/desktop/src/renderer/components/EditorPane.tsx`, `apps/desktop/src/renderer/lib/native-pane-focus.ts`
-- Likely next step: scope Devspace shortcuts so they yield when focus is inside the VS Code/editor surface, while still preserving explicit app-global shortcuts where intended.
+- None currently tracked here.
 
 ## Completed
 
@@ -54,3 +47,12 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Resolution: Settings now renders as a whole-app modal overlay, closes on app navigation actions, and no longer traps the user behind a collapsed sidebar or allows navigation to continue behind the overlay.
 - Relevant files: `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/components/SettingsPage.tsx`, `apps/desktop/src/renderer/hooks/useAppShortcuts.ts`
 - Commit: `8351a25` `fix: make settings a modal overlay`
+
+### 5. Devspace Shortcuts Yield To VS Code Inside Editor Panes
+
+- Status: fixed
+- Priority: high
+- Type: usability bug
+- Resolution: editor panes now yield command/control shortcuts back to VS Code by default, while keeping the explicit app-global close-window shortcut owned by Devspace.
+- Relevant files: `apps/desktop/src/main/browser/browser-web-shortcuts.ts`, `apps/desktop/src/main/browser/browser-pane-webcontents-events.ts`
+- Commit: `402f2bf` `fix: yield editor shortcuts to VS Code`

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback, useState, useLayoutEffect } from "react";
 import { useNativeView } from "../hooks/useNativeView";
 import { useTerminalStore } from "../store/terminal-store";
+import { focusTerminalNativePane } from "../lib/native-pane-focus";
 import {
   hasCreatedTerminalSurface,
   markTerminalSurfaceCreated,
@@ -93,7 +94,7 @@ export default function TerminalPane({
   useEffect(() => {
     if (createError || !hasCreatedTerminalSurface(paneId) || !isVisible || !isFocused) return;
     if (isFindBarOpen) return;
-    void window.api.terminal.focus(paneId);
+    focusTerminalNativePane(paneId);
   }, [createError, isVisible, isFocused, paneId, isFindBarOpen]);
 
   // When the find bar opens, blur the native terminal so the DOM input can
@@ -116,7 +117,7 @@ export default function TerminalPane({
     void window.api.terminal.sendBindingAction(paneId, "end_search");
     // Re-focus the terminal after closing the find bar
     if (isVisible && hasCreatedTerminalSurface(paneId)) {
-      void window.api.terminal.focus(paneId);
+      focusTerminalNativePane(paneId);
     }
   }, [closeFindBar, isVisible, paneId]);
 

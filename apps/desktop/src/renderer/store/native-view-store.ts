@@ -9,6 +9,23 @@ import { collectGroupIds } from "../lib/split-tree";
 
 export type NativeViewType = "terminal" | "browser";
 
+interface NativeViewProfilingSnapshot {
+  registered: { total: number; terminals: number; browsers: number };
+  visible: { total: number; terminals: number; browsers: number };
+  hiddenByOverlay: boolean;
+  hiddenByDrag: boolean;
+  counters: {
+    registerCalls: number;
+    unregisterCalls: number;
+    reconcileCalls: number;
+    visibleBoundsSyncPasses: number;
+    boundsSyncCalls: number;
+    focusRequests: number;
+    terminalFocusRequests: number;
+    browserFocusRequests: number;
+  };
+}
+
 interface ViewBounds {
   x: number;
   y: number;
@@ -54,6 +71,71 @@ const observedElements = new Map<string, HTMLElement>();
 let visibleLayoutObserver: ResizeObserver | null = null;
 let resizeListenerAttached = false;
 let visibleBoundsFrameId: number | null = null;
+
+const nativeViewProfilingCounters: NativeViewProfilingSnapshot["counters"] = {
+  registerCalls: 0,
+  unregisterCalls: 0,
+  reconcileCalls: 0,
+  visibleBoundsSyncPasses: 0,
+  boundsSyncCalls: 0,
+  focusRequests: 0,
+  terminalFocusRequests: 0,
+  browserFocusRequests: 0,
+};
+
+function getRegisteredCounts(views: Record<string, NativeViewType>) {
+  let terminals = 0;
+  let browsers = 0;
+  for (const viewType of Object.values(views)) {
+    if (viewType === "terminal") {
+      terminals++;
+    } else {
+      browsers++;
+    }
+  }
+
+  return { terminals, browsers, total: terminals + browsers };
+}
+
+function recordBoundsSync(): void {
+  nativeViewProfilingCounters.boundsSyncCalls++;
+}
+
+export function recordNativeFocusRequest(type: NativeViewType): void {
+  nativeViewProfilingCounters.focusRequests++;
+  if (type === "terminal") {
+    nativeViewProfilingCounters.terminalFocusRequests++;
+    return;
+  }
+
+  nativeViewProfilingCounters.browserFocusRequests++;
+}
+
+export function resetNativeViewProfilingCounters(): void {
+  nativeViewProfilingCounters.registerCalls = 0;
+  nativeViewProfilingCounters.unregisterCalls = 0;
+  nativeViewProfilingCounters.reconcileCalls = 0;
+  nativeViewProfilingCounters.visibleBoundsSyncPasses = 0;
+  nativeViewProfilingCounters.boundsSyncCalls = 0;
+  nativeViewProfilingCounters.focusRequests = 0;
+  nativeViewProfilingCounters.terminalFocusRequests = 0;
+  nativeViewProfilingCounters.browserFocusRequests = 0;
+}
+
+export function getNativeViewProfilingSnapshot(): NativeViewProfilingSnapshot {
+  const state = useNativeViewStore.getState();
+  return {
+    registered: getRegisteredCounts(state.views),
+    visible: {
+      terminals: state.visibleTerminals.length,
+      browsers: state.visibleBrowsers.length,
+      total: state.visibleTerminals.length + state.visibleBrowsers.length,
+    },
+    hiddenByOverlay: useSettingsStore.getState().isOverlayActive(),
+    hiddenByDrag: state.dragHidesViews,
+    counters: { ...nativeViewProfilingCounters },
+  };
+}
 
 /**
  * Native views are inset on left/right/bottom so they don't overlap
@@ -111,6 +193,7 @@ function getVisibleNativeViewIds(
 
 function syncVisibleBoundsNow(): void {
   visibleBoundsFrameId = null;
+  nativeViewProfilingCounters.visibleBoundsSyncPasses++;
   const state = useNativeViewStore.getState();
   for (const id of getVisibleNativeViewIds(state)) {
     const element = elementCache.get(id);
@@ -199,8 +282,10 @@ export function updateNativeViewBounds(id: string, bounds: ViewBounds): void {
   if (viewType === undefined) return;
 
   if (viewType === "terminal" && state.visibleTerminals.includes(id)) {
+    recordBoundsSync();
     void window.api.terminal.setBounds(id, bounds);
   } else if (viewType === "browser" && state.visibleBrowsers.includes(id)) {
+    recordBoundsSync();
     void window.api.browser.setBounds(id, bounds);
   }
 }
@@ -234,6 +319,7 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
   register(id, type) {
     const { views } = get();
     if (views[id] === type) return;
+    nativeViewProfilingCounters.registerCalls++;
     set({ views: { ...views, [id]: type } });
     get().reconcile();
   },
@@ -241,6 +327,7 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
   unregister(id) {
     const { views } = get();
     if (!(id in views)) return;
+    nativeViewProfilingCounters.unregisterCalls++;
     const next = { ...views };
     delete next[id];
     boundsCache.delete(id);
@@ -255,6 +342,7 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
   },
 
   reconcile() {
+    nativeViewProfilingCounters.reconcileCalls++;
     const { views, visibleTerminals, visibleBrowsers, dragHidesViews } = get();
     const wsState = useWorkspaceStore.getState();
     const overlayActive = useSettingsStore.getState().isOverlayActive();
@@ -291,7 +379,10 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
       for (const id of desiredTerminals) {
         if (!visibleTerminals.includes(id)) {
           const b = getLatestBounds(id);
-          if (b) void window.api.terminal.setBounds(id, b);
+          if (b) {
+            recordBoundsSync();
+            void window.api.terminal.setBounds(id, b);
+          }
         }
       }
       void window.api.terminal.setVisibleSurfaces(desiredTerminals);
@@ -301,7 +392,10 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
       for (const id of desiredBrowsers) {
         if (!visibleBrowsers.includes(id)) {
           const b = getLatestBounds(id);
-          if (b) void window.api.browser.setBounds(id, b);
+          if (b) {
+            recordBoundsSync();
+            void window.api.browser.setBounds(id, b);
+          }
         }
       }
       void window.api.browser.setVisiblePanes(desiredBrowsers);
