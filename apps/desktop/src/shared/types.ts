@@ -89,8 +89,12 @@ export interface DevspaceBridge {
     ) => Promise<T | null>;
   };
   editor: {
-    isAvailable: () => Promise<boolean>;
-    start: (paneId: string, folderPath?: string) => Promise<{ url: string } | { error: string }>;
+    isAvailable: (configuredCli?: string) => Promise<boolean>;
+    start: (
+      paneId: string,
+      folderPath?: string,
+      configuredCli?: string,
+    ) => Promise<{ url: string } | { error: string }>;
     stop: (paneId: string) => Promise<void>;
     setKeepServerRunning: (keep: boolean) => void;
   };

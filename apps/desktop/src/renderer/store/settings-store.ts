@@ -22,6 +22,7 @@ interface SettingsState {
   settingsOpen: boolean;
   showShortcutHintsOnModifierPress: boolean;
   fontSize: number;
+  vscodeCliPath: string;
   defaultShell: string;
   terminalScrollback: number;
   terminalCursorStyle: "block" | "underline" | "bar";
@@ -57,6 +58,7 @@ export const useSettingsStore = create<SettingsState>()(
       settingsOpen: false,
       showShortcutHintsOnModifierPress: true,
       fontSize: 13,
+      vscodeCliPath: "",
       defaultShell: "",
       terminalScrollback: 5000,
       terminalCursorStyle: "block" as const,
@@ -134,9 +136,12 @@ export const useSettingsStore = create<SettingsState>()(
         if (typeof s.showShortcutHintsOnModifierPress !== "boolean") {
           s.showShortcutHintsOnModifierPress = true;
         }
+        if (typeof s.vscodeCliPath !== "string") {
+          s.vscodeCliPath = "";
+        }
         return s;
       },
-      version: 2,
+      version: 3,
     },
   ),
 );

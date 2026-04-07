@@ -18,6 +18,7 @@ export default function SettingsPage() {
   const {
     showShortcutHintsOnModifierPress,
     fontSize,
+    vscodeCliPath,
     defaultShell,
     terminalScrollback,
     terminalCursorStyle,
@@ -110,6 +111,19 @@ export default function SettingsPage() {
             <span className="text-xs" style={{ color: "var(--muted-foreground)" }}>
               VS Code (code serve-web)
             </span>
+          </SettingRow>
+          <SettingRow label="VS Code CLI path or command">
+            <div className="flex flex-col items-end gap-1">
+              <TextInput
+                value={vscodeCliPath}
+                onChange={(v) => updateSetting("vscodeCliPath", v)}
+                placeholder="Auto-detect"
+                className="w-80 max-w-[32rem]"
+              />
+              <span className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+                Blank prefers the VS Code app bundle, then <code>code</code> in PATH.
+              </span>
+            </div>
           </SettingRow>
           <SettingRow label="Keep editor server running after quit">
             <Toggle
@@ -385,10 +399,12 @@ function TextInput({
   value,
   onChange,
   placeholder,
+  className,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  className?: string;
 }) {
   return (
     <input
@@ -396,7 +412,7 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-40 h-7 px-2 text-xs rounded outline-none"
+      className={`${className ?? "w-40"} h-7 px-2 text-xs rounded outline-none`}
       style={{
         background: "var(--background)",
         border: "1px solid var(--border)",

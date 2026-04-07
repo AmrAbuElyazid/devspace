@@ -109,33 +109,39 @@ export function registerTerminalAndEditorIpc(
   const editorPaneSessions = new Map<string, { folder: string | undefined; url: string }>();
   const t3codePaneUrls = new Map<string, string>();
 
-  safeHandle("editor:isAvailable", () => {
-    return vscodeServerManager.isAvailable();
+  safeHandle("editor:isAvailable", (_event, configuredCli: unknown) => {
+    return vscodeServerManager.isAvailable(
+      typeof configuredCli === "string" ? configuredCli : undefined,
+    );
   });
 
-  safeHandle("editor:start", async (_event, paneId: unknown, folderPath: unknown) => {
-    if (typeof paneId !== "string") {
-      return { error: "Invalid arguments" };
-    }
-
-    const folder = typeof folderPath === "string" ? folderPath : undefined;
-    try {
-      const { url } = await vscodeServerManager.start(folder);
-      const existingSession = editorPaneSessions.get(paneId);
-      if (existingSession) {
-        browserSessionManager?.unregisterTrustedLocalOrigin(existingSession.url);
-        vscodeServerManager.release(existingSession.folder);
+  safeHandle(
+    "editor:start",
+    async (_event, paneId: unknown, folderPath: unknown, configuredCli: unknown) => {
+      if (typeof paneId !== "string") {
+        return { error: "Invalid arguments" };
       }
 
-      editorPaneSessions.set(paneId, { folder, url });
-      browserSessionManager?.registerTrustedLocalOrigin(url);
-      browserPaneManager.createPane(paneId, url, "editor");
-      return { url };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { error: message };
-    }
-  });
+      const folder = typeof folderPath === "string" ? folderPath : undefined;
+      const preferredCli = typeof configuredCli === "string" ? configuredCli : undefined;
+      try {
+        const { url } = await vscodeServerManager.start(folder, preferredCli);
+        const existingSession = editorPaneSessions.get(paneId);
+        if (existingSession) {
+          browserSessionManager?.unregisterTrustedLocalOrigin(existingSession.url);
+          vscodeServerManager.release(existingSession.folder);
+        }
+
+        editorPaneSessions.set(paneId, { folder, url });
+        browserSessionManager?.registerTrustedLocalOrigin(url);
+        browserPaneManager.createPane(paneId, url, "editor");
+        return { url };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { error: message };
+      }
+    },
+  );
 
   safeHandle("editor:stop", (_event, paneId: unknown) => {
     if (typeof paneId !== "string") return;

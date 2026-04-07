@@ -3,6 +3,7 @@ import { expect, vi, test } from "vitest";
 const handlers = new Map();
 const controllerCalls = [];
 const browserImportCalls = [];
+const editorCalls = [];
 const mainWindowCalls = [];
 const browserSessionCalls = [];
 
@@ -102,12 +103,18 @@ registerIpcHandlers(
     },
   },
   {
-    isAvailable: () => false,
-    start: async (folder) => ({
-      url: folder
-        ? `http://127.0.0.1:18562?folder=${encodeURIComponent(folder)}`
-        : "http://127.0.0.1:18562",
-    }),
+    isAvailable: (configuredCli) => {
+      editorCalls.push(["isAvailable", configuredCli]);
+      return false;
+    },
+    start: async (folder, configuredCli) => {
+      editorCalls.push(["start", folder, configuredCli]);
+      return {
+        url: folder
+          ? `http://127.0.0.1:18562?folder=${encodeURIComponent(folder)}`
+          : "http://127.0.0.1:18562",
+      };
+    },
     release: () => {},
     stopAll: () => {},
   },
@@ -265,14 +272,20 @@ test("window setSidebarOpen IPC updates native traffic light position", async ()
 });
 
 test("editor start and stop track trusted local origins for shared-session CORS", async () => {
+  editorCalls.length = 0;
   browserSessionCalls.length = 0;
 
-  const result = await handlers.get("editor:start")({}, "pane-1", "/tmp/project");
+  await handlers.get("editor:isAvailable")({}, "/custom/code");
+  const result = await handlers.get("editor:start")({}, "pane-1", "/tmp/project", "/custom/code");
   await handlers.get("editor:stop")({}, "pane-1");
 
   expect(result).toEqual({
     url: "http://127.0.0.1:18562?folder=%2Ftmp%2Fproject",
   });
+  expect(editorCalls).toEqual([
+    ["isAvailable", "/custom/code"],
+    ["start", "/tmp/project", "/custom/code"],
+  ]);
   expect(browserSessionCalls).toEqual([
     ["registerTrustedLocalOrigin", "http://127.0.0.1:18562?folder=%2Ftmp%2Fproject"],
     ["unregisterTrustedLocalOrigin", "http://127.0.0.1:18562?folder=%2Ftmp%2Fproject"],

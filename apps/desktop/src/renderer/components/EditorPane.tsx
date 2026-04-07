@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { hasEditableRendererFocus } from "../lib/native-pane-focus";
 import { useNativeView } from "../hooks/useNativeView";
+import { useSettingsStore } from "../store/settings-store";
 import { useWorkspaceStore } from "../store/workspace-store";
 import { Button } from "./ui/button";
 import type { EditorConfig } from "../types/workspace";
@@ -30,8 +31,10 @@ type EditorState =
 export default function EditorPane({ paneId, config }: EditorPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const wasVisibleRef = useRef(false);
+  const previousCliPathRef = useRef<string | null>(null);
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig);
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
+  const vscodeCliPath = useSettingsStore((s) => s.vscodeCliPath);
 
   // Determine initial state based on config
   const [state, setState] = useState<EditorState>(() => {
@@ -59,7 +62,7 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): ReactEl
   useEffect(() => {
     if (state.status !== "checking") return;
     let cancelled = false;
-    void window.api.editor.isAvailable().then((available) => {
+    void window.api.editor.isAvailable(vscodeCliPath).then((available) => {
       if (cancelled) return;
       if (!available) {
         setState({ status: "unavailable" });
@@ -70,12 +73,31 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): ReactEl
     return () => {
       cancelled = true;
     };
-  }, [state.status, config.folderPath]);
+  }, [state.status, config.folderPath, vscodeCliPath]);
 
   // Extract values for effect dependency arrays (avoids depending on
   // the entire `state` object which is a new reference on every setState).
   const stateStatus = state.status;
   const stateFolderPath = "folderPath" in state ? state.folderPath : undefined;
+
+  useEffect(() => {
+    if (previousCliPathRef.current === null) {
+      previousCliPathRef.current = vscodeCliPath;
+      return;
+    }
+
+    if (previousCliPathRef.current === vscodeCliPath || state.status === "running") {
+      previousCliPathRef.current = vscodeCliPath;
+      return;
+    }
+
+    previousCliPathRef.current = vscodeCliPath;
+    setState(
+      config.folderPath
+        ? { status: "starting", folderPath: config.folderPath }
+        : { status: "checking" },
+    );
+  }, [config.folderPath, state.status, vscodeCliPath]);
 
   useEffect(() => {
     const wasVisible = wasVisibleRef.current;
@@ -99,7 +121,7 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): ReactEl
     let cancelled = false;
 
     void (async () => {
-      const result = await window.api.editor.start(paneId, stateFolderPath);
+      const result = await window.api.editor.start(paneId, stateFolderPath, vscodeCliPath);
 
       if (cancelled) return;
 
@@ -122,7 +144,7 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): ReactEl
     return () => {
       cancelled = true;
     };
-  }, [paneId, stateStatus, stateFolderPath, updatePaneConfig, updatePaneTitle]);
+  }, [paneId, stateStatus, stateFolderPath, updatePaneConfig, updatePaneTitle, vscodeCliPath]);
 
   // Retry on error
   const handleRetry = useCallback(() => {
@@ -138,7 +160,8 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): ReactEl
       >
         <AlertCircle size={48} style={{ color: "var(--destructive)", opacity: 0.6 }} />
         <p className="text-sm text-center max-w-xs" style={{ color: "var(--muted-foreground)" }}>
-          VS Code CLI not found. Install <strong>Visual Studio Code</strong> and run{" "}
+          VS Code CLI not found. Install <strong>Visual Studio Code</strong>, configure a direct CLI
+          path in Settings, or run{" "}
           <code className="px-1 py-0.5 rounded text-xs" style={{ background: "var(--surface)" }}>
             Shell Command: Install &apos;code&apos; command in PATH
           </code>{" "}

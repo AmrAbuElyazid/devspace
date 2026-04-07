@@ -29,11 +29,13 @@ vi.mock("../electron-bridge", () => ({
   }),
 }));
 
-test("browser bridge exposes spec-aligned browser IPC methods", async () => {
+test("preload bridge exposes spec-aligned browser and editor IPC methods", async () => {
   await import("../index");
 
   expect(exposedBridge.fs).toBeUndefined();
 
+  await exposedBridge.editor.isAvailable("code-insiders");
+  await exposedBridge.editor.start("editor-pane", "/tmp/project", "/custom/code");
   await exposedBridge.browser.show("pane-1");
   await exposedBridge.browser.hide("pane-1");
   await exposedBridge.browser.getRuntimeState("pane-1");
@@ -61,6 +63,8 @@ test("browser bridge exposes spec-aligned browser IPC methods", async () => {
   unsubscribeOpenInNewTab();
 
   expect(invokeCalls).toEqual([
+    ["editor:isAvailable", "code-insiders"],
+    ["editor:start", "editor-pane", "/tmp/project", "/custom/code"],
     ["browser:show", "pane-1"],
     ["browser:hide", "pane-1"],
     ["browser:getRuntimeState", "pane-1"],

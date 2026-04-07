@@ -1,6 +1,6 @@
-import { spawn, execSync, type ChildProcess } from "child_process";
+import { spawn, execFileSync, execSync, type ChildProcess } from "child_process";
 import { createServer } from "net";
-import { mkdirSync } from "fs";
+import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import { VSCODE_PORT, DATA_DIR_SUFFIX } from "./dev-mode";
@@ -16,14 +16,76 @@ function isPortFree(port: number): Promise<boolean> {
   });
 }
 
-/** Locate the `code` CLI. Returns the path or null. */
-function findCodeCli(): string | null {
-  try {
-    return execSync("which code", { encoding: "utf-8" }).trim() || null;
-  } catch (err) {
-    console.warn("[vscode-server] CLI lookup failed:", err);
+const DEFAULT_VSCODE_CLI_CANDIDATES = [
+  "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+  join(homedir(), "Applications/Visual Studio Code.app/Contents/Resources/app/bin/code"),
+];
+
+function normalizeConfiguredCli(rawCli?: string): string | null {
+  if (typeof rawCli !== "string") {
     return null;
   }
+
+  const trimmed = rawCli.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function looksLikeFilePath(value: string): boolean {
+  return value.includes("/") || value.startsWith(".");
+}
+
+/** Locate a command in PATH. Returns the resolved executable path or null. */
+function findCommandInPath(command: string): string | null {
+  try {
+    return execFileSync("which", [command], { encoding: "utf-8" }).trim() || null;
+  } catch (err) {
+    console.warn(`[vscode-server] CLI lookup failed for ${command}:`, err);
+    return null;
+  }
+}
+
+type VscodeCliResolution =
+  | {
+      path: string;
+      source: "configured-path" | "configured-command" | "bundle" | "path";
+    }
+  | {
+      path: null;
+      reason: "configured-not-found" | "not-found";
+      attempted?: string;
+    };
+
+export function resolveVscodeCli(configuredCli?: string): VscodeCliResolution {
+  const normalizedConfiguredCli = normalizeConfiguredCli(configuredCli);
+  if (normalizedConfiguredCli) {
+    if (looksLikeFilePath(normalizedConfiguredCli)) {
+      return existsSync(normalizedConfiguredCli)
+        ? { path: normalizedConfiguredCli, source: "configured-path" }
+        : {
+            path: null,
+            reason: "configured-not-found",
+            attempted: normalizedConfiguredCli,
+          };
+    }
+
+    const configuredCommandPath = findCommandInPath(normalizedConfiguredCli);
+    return configuredCommandPath
+      ? { path: configuredCommandPath, source: "configured-command" }
+      : {
+          path: null,
+          reason: "configured-not-found",
+          attempted: normalizedConfiguredCli,
+        };
+  }
+
+  for (const candidate of DEFAULT_VSCODE_CLI_CANDIDATES) {
+    if (existsSync(candidate)) {
+      return { path: candidate, source: "bundle" };
+    }
+  }
+
+  const cliFromPath = findCommandInPath("code");
+  return cliFromPath ? { path: cliFromPath, source: "path" } : { path: null, reason: "not-found" };
 }
 
 /**
@@ -59,9 +121,6 @@ export class VscodeServerManager {
   private folders = new Map<string, FolderEntry>();
   /** The single shared server process (null when no server is running). */
   private serverProcess: ChildProcess | null = null;
-
-  private codeCli: string | null = null;
-  private codeCliChecked = false;
   private serverDataDir: string;
 
   /**
@@ -79,18 +138,9 @@ export class VscodeServerManager {
     mkdirSync(this.serverDataDir, { recursive: true });
   }
 
-  /** Resolve the `code` CLI path (cached). */
-  private getCodeCli(): string | null {
-    if (!this.codeCliChecked) {
-      this.codeCli = findCodeCli();
-      this.codeCliChecked = true;
-    }
-    return this.codeCli;
-  }
-
   /** Check if VS Code CLI is available. */
-  isAvailable(): boolean {
-    return this.getCodeCli() !== null;
+  isAvailable(configuredCli?: string): boolean {
+    return resolveVscodeCli(configuredCli).path !== null;
   }
 
   /**
@@ -104,12 +154,12 @@ export class VscodeServerManager {
    * When called without a folder, the server starts (or is reused) and
    * returns the base URL — VS Code shows its Welcome tab.
    */
-  async start(folder?: string): Promise<{ url: string; port: number }> {
+  async start(folder?: string, configuredCli?: string): Promise<{ url: string; port: number }> {
     // Serialize: chain onto the lock so only one caller runs _startImpl at a time.
     const result = new Promise<{ url: string; port: number }>((resolve, reject) => {
       this.startLock = this.startLock.then(
-        () => this._startImpl(folder).then(resolve, reject),
-        () => this._startImpl(folder).then(resolve, reject),
+        () => this._startImpl(folder, configuredCli).then(resolve, reject),
+        () => this._startImpl(folder, configuredCli).then(resolve, reject),
       );
     });
     return result;
@@ -118,7 +168,10 @@ export class VscodeServerManager {
   /** Sentinel key used for no-folder editor sessions. */
   private static NO_FOLDER_KEY = "__no_folder__";
 
-  private async _startImpl(folder?: string): Promise<{ url: string; port: number }> {
+  private async _startImpl(
+    folder?: string,
+    configuredCli?: string,
+  ): Promise<{ url: string; port: number }> {
     const key = folder ?? VscodeServerManager.NO_FOLDER_KEY;
 
     // Fast path: folder already has an entry → just bump refCount.
@@ -128,12 +181,20 @@ export class VscodeServerManager {
       return { url: existing.url, port: VSCODE_PORT };
     }
 
-    const cli = this.getCodeCli();
-    if (!cli) {
+    const resolvedCli = resolveVscodeCli(configuredCli);
+    if (!resolvedCli.path) {
+      if ("reason" in resolvedCli && resolvedCli.reason === "configured-not-found") {
+        throw new Error(
+          `Configured VS Code CLI not found: ${resolvedCli.attempted}. Set a valid executable name or absolute path in Settings.`,
+        );
+      }
+
       throw new Error(
-        'VS Code CLI (code) not found. Install VS Code and ensure the "code" command is in PATH.',
+        "VS Code CLI not found. Install VS Code or configure a VS Code CLI path in Settings.",
       );
     }
+
+    const cli = resolvedCli.path;
 
     // If a server process is already running, reuse it for this folder.
     if (this.serverProcess) {

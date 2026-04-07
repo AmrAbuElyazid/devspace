@@ -7,6 +7,7 @@ function resetSettingsStore(): void {
     settingsOpen: false,
     showShortcutHintsOnModifierPress: true,
     fontSize: 13,
+    vscodeCliPath: "",
     defaultShell: "",
     terminalScrollback: 5000,
     terminalCursorStyle: "block",
@@ -36,4 +37,19 @@ test("showShortcutHintsOnModifierPress updates when toggled", () => {
   useSettingsStore.getState().updateSetting("showShortcutHintsOnModifierPress", false);
 
   expect(useSettingsStore.getState().showShortcutHintsOnModifierPress).toBe(false);
+});
+
+test("vscodeCliPath defaults to empty and can be updated", () => {
+  expect(useSettingsStore.getState().vscodeCliPath).toBe("");
+
+  useSettingsStore
+    .getState()
+    .updateSetting(
+      "vscodeCliPath",
+      "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+    );
+
+  expect(useSettingsStore.getState().vscodeCliPath).toBe(
+    "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+  );
 });

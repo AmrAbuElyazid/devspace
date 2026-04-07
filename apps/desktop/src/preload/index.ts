@@ -199,8 +199,9 @@ const bridge: DevspaceBridge = {
   },
 
   editor: {
-    isAvailable: () => ipcRenderer.invoke("editor:isAvailable"),
-    start: (paneId, folderPath) => ipcRenderer.invoke("editor:start", paneId, folderPath),
+    isAvailable: (configuredCli) => ipcRenderer.invoke("editor:isAvailable", configuredCli),
+    start: (paneId, folderPath, configuredCli) =>
+      ipcRenderer.invoke("editor:start", paneId, folderPath, configuredCli),
     stop: (paneId) => ipcRenderer.invoke("editor:stop", paneId),
     setKeepServerRunning: (keep) => ipcRenderer.send("editor:setKeepServerRunning", keep),
   },
