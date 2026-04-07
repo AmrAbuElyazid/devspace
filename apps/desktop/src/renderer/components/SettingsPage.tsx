@@ -15,6 +15,7 @@ import {
 } from "../../shared/shortcuts";
 
 export default function SettingsPage() {
+  const [isFullScreen, setIsFullScreen] = useState(false);
   const {
     showShortcutHintsOnModifierPress,
     fontSize,
@@ -28,12 +29,40 @@ export default function SettingsPage() {
     setSettingsOpen,
   } = useSettingsStore();
 
+  useEffect(() => {
+    let cancelled = false;
+
+    void window.api.window.isFullScreen().then((fullScreen) => {
+      if (!cancelled) {
+        setIsFullScreen(fullScreen);
+      }
+    });
+
+    const unsubscribe = window.api.window.onFullScreenChange((fullScreen) => {
+      setIsFullScreen(fullScreen);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
   return (
-    <div className="absolute inset-0 z-50 overflow-y-auto" style={{ background: "var(--surface)" }}>
+    <div
+      className="fixed inset-0 z-50 overflow-y-auto"
+      style={{ background: "var(--surface)" }}
+      role="dialog"
+      aria-modal="true"
+    >
       {/* Header */}
       <div
-        className="sticky top-0 z-10 flex items-center justify-between px-6 py-4"
-        style={{ background: "var(--surface)", borderBottom: "1px solid var(--border)" }}
+        className="sticky top-0 z-10 flex items-center justify-between py-4 pr-6"
+        style={{
+          background: "var(--surface)",
+          borderBottom: "1px solid var(--border)",
+          paddingLeft: isFullScreen ? 12 : 88,
+        }}
       >
         <h1 className="text-base font-semibold" style={{ color: "var(--foreground)" }}>
           Settings

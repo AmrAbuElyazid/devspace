@@ -131,13 +131,11 @@ export default function App() {
                   />
                 ))}
 
-                {/* Settings overlay */}
-                {settingsOpen && <SettingsPage />}
-
                 {/* Pane picker dialog */}
                 <PanePickerDialog />
               </div>
             </div>
+            {settingsOpen && <SettingsPage />}
             <ToastViewport />
           </div>
 

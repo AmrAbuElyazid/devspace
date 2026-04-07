@@ -77,6 +77,14 @@ export function useAppShortcuts(): void {
     const disposeIpc = window.api.app.onAction((channel, ...args) => {
       const settings = useSettingsStore.getState();
 
+      if (
+        settings.settingsOpen &&
+        channel !== "app:toggle-settings" &&
+        channel !== "app:close-window"
+      ) {
+        settings.setSettingsOpen(false);
+      }
+
       switch (channel) {
         // ── General ──────────────────────────────────────────────────
         case "app:toggle-sidebar":
