@@ -21,7 +21,7 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 - [ ] Finish the browser/editor security audit now that `WebContentsView` preferences are explicit. Refs: `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/src/main/index.ts`
 - [ ] Continue breaking up large files where it meaningfully improves maintenance. Initial targets: `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`, `apps/desktop/src/renderer/styles/index.css`
 - [ ] Keep bridge types, tests, and docs aligned with the current preload/IPC surface. Refs: `apps/desktop/src/shared/types.ts`, `apps/desktop/src/preload/index.ts`
-- [ ] Finish migrating the last legacy `.js` tests to TypeScript. Refs: `apps/desktop/src/preload/__tests__/index.test.js`, `apps/desktop/src/main/__tests__/ipc-handlers-browser.test.js`
+- [x] Finish migrating the last legacy `.js` tests to TypeScript. Refs: `apps/desktop/src/preload/__tests__/index.test.ts`, `apps/desktop/src/main/__tests__/ipc-handlers-browser.test.ts`
 - [ ] Finish documenting the real package posture for `ghostty-electron` and clean stale repo docs. Refs: `packages/ghostty-electron/README.md`, `AGENTS.md`
 
 ## 1. Core Boundaries And Correctness
@@ -52,7 +52,7 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 - [ ] Tighten CORS overrides to least privilege.
 - [ ] Add split preload/IPC coverage and shared test helpers.
-- [ ] Clean stale docs and finish the remaining `.js` to `.ts` test migration.
+- [ ] Clean stale docs.
 
 ### Phase 2: Observability And Scale
 
