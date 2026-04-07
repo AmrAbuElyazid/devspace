@@ -30,6 +30,17 @@ export interface TerminalCreateOptions {
 
 export type TerminalCreateResult = { ok: true } | { error: string };
 
+export type EditorCliStatus =
+  | {
+      path: string;
+      source: "configured-path" | "configured-command" | "bundle" | "path";
+    }
+  | {
+      path: null;
+      reason: "configured-not-found" | "not-found";
+      attempted?: string;
+    };
+
 export interface DevspaceBridge {
   platform: string;
   app: {
@@ -92,6 +103,7 @@ export interface DevspaceBridge {
   };
   editor: {
     isAvailable: (configuredCli?: string) => Promise<boolean>;
+    getCliStatus: (configuredCli?: string) => Promise<EditorCliStatus>;
     start: (
       paneId: string,
       folderPath?: string,

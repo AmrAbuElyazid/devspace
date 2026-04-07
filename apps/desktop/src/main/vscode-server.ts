@@ -3,6 +3,7 @@ import { createServer } from "net";
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import type { EditorCliStatus } from "../shared/types";
 import { VSCODE_PORT, DATA_DIR_SUFFIX } from "./dev-mode";
 
 /** Check if a port is available by trying to bind to it. */
@@ -44,18 +45,7 @@ function findCommandInPath(command: string): string | null {
   }
 }
 
-type VscodeCliResolution =
-  | {
-      path: string;
-      source: "configured-path" | "configured-command" | "bundle" | "path";
-    }
-  | {
-      path: null;
-      reason: "configured-not-found" | "not-found";
-      attempted?: string;
-    };
-
-export function resolveVscodeCli(configuredCli?: string): VscodeCliResolution {
+export function resolveVscodeCli(configuredCli?: string): EditorCliStatus {
   const normalizedConfiguredCli = normalizeConfiguredCli(configuredCli);
   if (normalizedConfiguredCli) {
     if (looksLikeFilePath(normalizedConfiguredCli)) {
@@ -141,6 +131,10 @@ export class VscodeServerManager {
   /** Check if VS Code CLI is available. */
   isAvailable(configuredCli?: string): boolean {
     return resolveVscodeCli(configuredCli).path !== null;
+  }
+
+  getCliStatus(configuredCli?: string): EditorCliStatus {
+    return resolveVscodeCli(configuredCli);
   }
 
   /**

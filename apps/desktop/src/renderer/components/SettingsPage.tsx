@@ -4,6 +4,7 @@ import { useSettingsStore } from "../store/settings-store";
 import { Button } from "./ui/button";
 import { ShortcutRecorder } from "./ui/shortcut-recorder";
 import BrowserImportPanel from "./browser/BrowserImportPanel";
+import type { EditorCliStatus } from "../../shared/types";
 import {
   SHORTCUT_CATEGORIES,
   getVisibleShortcutsForCategory,
@@ -16,6 +17,7 @@ import {
 
 export default function SettingsPage() {
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [editorCliStatus, setEditorCliStatus] = useState<EditorCliStatus | null>(null);
   const {
     showShortcutHintsOnModifierPress,
     fontSize,
@@ -47,6 +49,20 @@ export default function SettingsPage() {
       unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void window.api.editor.getCliStatus(vscodeCliPath).then((status) => {
+      if (!cancelled) {
+        setEditorCliStatus(status);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [vscodeCliPath]);
 
   return (
     <div
@@ -164,6 +180,7 @@ export default function SettingsPage() {
               <span className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
                 Blank prefers the VS Code app bundle, then <code>code</code> in PATH.
               </span>
+              <EditorCliStatusText status={editorCliStatus} />
             </div>
           </SettingRow>
           <SettingRow label="Keep editor server running after quit">
@@ -185,6 +202,47 @@ export default function SettingsPage() {
       </div>
     </div>
   );
+}
+
+function EditorCliStatusText({ status }: { status: EditorCliStatus | null }) {
+  if (!status) {
+    return null;
+  }
+
+  if (status.path !== null) {
+    return (
+      <span className="text-[11px] break-all" style={{ color: "var(--muted-foreground)" }}>
+        Using {status.path} ({formatCliSource(status.source)})
+      </span>
+    );
+  }
+
+  if (status.reason === "configured-not-found") {
+    return (
+      <span className="text-[11px] break-all" style={{ color: "var(--destructive)" }}>
+        Configured CLI not found: {status.attempted}
+      </span>
+    );
+  }
+
+  return (
+    <span className="text-[11px]" style={{ color: "var(--destructive)" }}>
+      VS Code CLI not found.
+    </span>
+  );
+}
+
+function formatCliSource(source: Extract<EditorCliStatus, { path: string }>["source"]) {
+  switch (source) {
+    case "configured-path":
+      return "configured path";
+    case "configured-command":
+      return "configured command";
+    case "bundle":
+      return "VS Code app bundle";
+    case "path":
+      return "PATH";
+  }
 }
 
 // --- Sub-components (small, tightly coupled to this page) ---

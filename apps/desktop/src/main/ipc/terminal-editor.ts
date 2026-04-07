@@ -115,6 +115,12 @@ export function registerTerminalAndEditorIpc(
     );
   });
 
+  safeHandle("editor:getCliStatus", (_event, configuredCli: unknown) => {
+    return vscodeServerManager.getCliStatus(
+      typeof configuredCli === "string" ? configuredCli : undefined,
+    );
+  });
+
   safeHandle(
     "editor:start",
     async (_event, paneId: unknown, folderPath: unknown, configuredCli: unknown) => {

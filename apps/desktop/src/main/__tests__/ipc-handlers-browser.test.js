@@ -108,6 +108,10 @@ registerIpcHandlers(
       editorCalls.push(["isAvailable", configuredCli]);
       return false;
     },
+    getCliStatus: (configuredCli) => {
+      editorCalls.push(["getCliStatus", configuredCli]);
+      return { path: "/usr/local/bin/code", source: "configured-command" };
+    },
     start: async (folder, configuredCli) => {
       editorCalls.push(["start", folder, configuredCli]);
       return {
@@ -276,6 +280,15 @@ test("window isFullScreen IPC returns the native fullscreen state", async () => 
   const result = await handlers.get("window:isFullScreen")({});
 
   expect(result).toBe(false);
+});
+
+test("editor CLI status IPC returns the resolved CLI status", async () => {
+  editorCalls.length = 0;
+
+  const result = await handlers.get("editor:getCliStatus")({}, "code-insiders");
+
+  expect(result).toEqual({ path: "/usr/local/bin/code", source: "configured-command" });
+  expect(editorCalls).toEqual([["getCliStatus", "code-insiders"]]);
 });
 
 test("editor start and stop track trusted local origins for shared-session CORS", async () => {

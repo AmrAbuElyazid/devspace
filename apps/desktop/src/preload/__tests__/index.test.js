@@ -36,6 +36,7 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
 
   await exposedBridge.window.isFullScreen();
   await exposedBridge.editor.isAvailable("code-insiders");
+  await exposedBridge.editor.getCliStatus("code-insiders");
   await exposedBridge.editor.start("editor-pane", "/tmp/project", "/custom/code");
   await exposedBridge.browser.show("pane-1");
   await exposedBridge.browser.hide("pane-1");
@@ -68,6 +69,7 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   expect(invokeCalls).toEqual([
     ["window:isFullScreen"],
     ["editor:isAvailable", "code-insiders"],
+    ["editor:getCliStatus", "code-insiders"],
     ["editor:start", "editor-pane", "/tmp/project", "/custom/code"],
     ["browser:show", "pane-1"],
     ["browser:hide", "pane-1"],
