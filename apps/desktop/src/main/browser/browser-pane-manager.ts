@@ -19,7 +19,7 @@ import {
   createBrowserPaneHistoryTracker,
   type BrowserPaneHistoryTracker,
 } from "./browser-pane-history-tracker";
-import { registerPaneRecord, unregisterPaneRecord } from "./browser-pane-registry";
+import { createBrowserPaneRegistry } from "./browser-pane-registry";
 import { registerManagedBrowserPaneWebContentsListeners } from "./browser-pane-webcontents-listener-bindings";
 import {
   focusPaneWebContents,
@@ -58,8 +58,7 @@ import {
 } from "./browser-runtime-state";
 
 export class BrowserPaneManager implements BrowserPaneController {
-  private readonly panes = new Map<string, BrowserPaneRecord>();
-  private readonly paneIdByWebContentsId = new Map<number, string>();
+  private readonly panes = createBrowserPaneRegistry();
   private readonly createView: NonNullable<BrowserPaneManagerDeps["createView"]>;
   private readonly historyTracker: BrowserPaneHistoryTracker;
   private readonly permissionTracker: BrowserPanePermissionTracker;
@@ -84,7 +83,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       ...(session ? { session } : {}),
     });
 
-    registerPaneRecord(this.panes, this.paneIdByWebContentsId, paneId, pane);
+    this.panes.register(paneId, pane);
     this.registerWebContentsListeners(pane);
     this.navigate(paneId, initialUrl);
   }
@@ -98,7 +97,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     hidePaneView(pane, this.deps);
     this.permissionTracker.denyPendingForPane(paneId);
     this.historyTracker.deletePane(paneId);
-    unregisterPaneRecord(this.panes, this.paneIdByWebContentsId, paneId, pane);
+    this.panes.unregister(paneId);
 
     destroyPaneView(pane);
   }
@@ -116,11 +115,11 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   setVisiblePanes(paneIds: string[]): void {
-    syncVisiblePaneViews(this.panes, paneIds, this.deps);
+    syncVisiblePaneViews(this.panes.records(), paneIds, this.deps);
   }
 
   isPaneVisible(paneId: string): boolean {
-    return this.panes.get(paneId)?.isVisible ?? false;
+    return this.panes.isVisible(paneId);
   }
 
   setBounds(paneId: string, bounds: BrowserBounds): void {
@@ -248,8 +247,7 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   getRuntimeState(paneId: string): BrowserRuntimeState | undefined {
-    const pane = this.getPane(paneId);
-    return pane ? cloneRuntimeState(pane.runtimeState) : undefined;
+    return this.panes.getRuntimeState(paneId);
   }
 
   applyRuntimePatch(paneId: string, patch: BrowserRuntimePatch): void {
@@ -259,15 +257,11 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   resolvePaneIdForWebContents(webContentsId: number): string | undefined {
-    return this.paneIdByWebContentsId.get(webContentsId);
+    return this.panes.resolvePaneIdForWebContents(webContentsId);
   }
 
   private emitStateChange(pane: BrowserPaneRecord): void {
     this.deps.sendToRenderer("browser:stateChanged", cloneRuntimeState(pane.runtimeState));
-  }
-
-  private getPane(paneId: string): BrowserPaneRecord | undefined {
-    return this.panes.get(paneId);
   }
 
   private registerWebContentsListeners(pane: BrowserPaneRecord): void {
@@ -282,7 +276,7 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   private withPane(paneId: string, callback: (pane: BrowserPaneRecord) => void): void {
-    const pane = this.getPane(paneId);
+    const pane = this.panes.get(paneId);
     if (!pane) {
       return;
     }
