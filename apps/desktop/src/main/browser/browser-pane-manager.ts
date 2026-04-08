@@ -111,21 +111,15 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   showPane(paneId: string): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    showPaneView(pane, this.deps);
+    this.withPane(paneId, (pane) => {
+      showPaneView(pane, this.deps);
+    });
   }
 
   hidePane(paneId: string): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    hidePaneView(pane, this.deps);
+    this.withPane(paneId, (pane) => {
+      hidePaneView(pane, this.deps);
+    });
   }
 
   setVisiblePanes(paneIds: string[]): void {
@@ -137,12 +131,9 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   setBounds(paneId: string, bounds: BrowserBounds): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    setPaneBounds(pane, bounds);
+    this.withPane(paneId, (pane) => {
+      setPaneBounds(pane, bounds);
+    });
   }
 
   navigate(paneId: string, url: string): void {
@@ -158,48 +149,33 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   back(paneId: string): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    goBackInPane(pane);
+    this.withPane(paneId, (pane) => {
+      goBackInPane(pane);
+    });
   }
 
   forward(paneId: string): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    goForwardInPane(pane);
+    this.withPane(paneId, (pane) => {
+      goForwardInPane(pane);
+    });
   }
 
   reload(paneId: string): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    reloadPane(pane);
+    this.withPane(paneId, (pane) => {
+      reloadPane(pane);
+    });
   }
 
   stop(paneId: string): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    stopPane(pane);
+    this.withPane(paneId, (pane) => {
+      stopPane(pane);
+    });
   }
 
   focusPane(paneId: string): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    focusPaneWebContents(pane);
+    this.withPane(paneId, (pane) => {
+      focusPaneWebContents(pane);
+    });
   }
 
   setZoom(paneId: string, zoom: number): void {
@@ -256,12 +232,9 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   toggleDevTools(paneId: string): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    togglePaneDevTools(pane);
+    this.withPane(paneId, (pane) => {
+      togglePaneDevTools(pane);
+    });
   }
 
   showContextMenu(_paneId: string, _position?: { x: number; y: number }): void {
@@ -269,12 +242,9 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   executeScript(paneId: string, script: string): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    executePaneScript(pane, script);
+    this.withPane(paneId, (pane) => {
+      executePaneScript(pane, script);
+    });
   }
 
   requestPermission(
@@ -314,7 +284,7 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   getRuntimeState(paneId: string): BrowserRuntimeState | undefined {
-    const pane = this.panes.get(paneId);
+    const pane = this.getPane(paneId);
     return pane ? cloneRuntimeState(pane.runtimeState) : undefined;
   }
 
@@ -334,6 +304,10 @@ export class BrowserPaneManager implements BrowserPaneController {
 
   private emitStateChange(pane: BrowserPaneRecord): void {
     this.deps.sendToRenderer("browser:stateChanged", cloneRuntimeState(pane.runtimeState));
+  }
+
+  private getPane(paneId: string): BrowserPaneRecord | undefined {
+    return this.panes.get(paneId);
   }
 
   private registerWebContentsListeners(pane: BrowserPaneRecord): void {
@@ -367,5 +341,14 @@ export class BrowserPaneManager implements BrowserPaneController {
         );
       },
     });
+  }
+
+  private withPane(paneId: string, callback: (pane: BrowserPaneRecord) => void): void {
+    const pane = this.getPane(paneId);
+    if (!pane) {
+      return;
+    }
+
+    callback(pane);
   }
 }
