@@ -1,6 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "./styles/index.css";
+import "./styles/workspace-shell.css";
+import "./styles/browser-pane.css";
+import "./styles/ui-primitives.css";
 import {
   initializeWorkspaceStore,
   resetWorkspaceStoreToDefaults,

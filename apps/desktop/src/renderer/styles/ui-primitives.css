@@ -1,0 +1,130 @@
+/* ─── Scrollbar ──────────────────────────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ─── Selection ──────────────────────────────────────────────────────── */
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+/* ─── Allotment (Split Pane Sash) ────────────────────────────────────── */
+/* Override Allotment's sash hover color and separator border. */
+
+:root {
+  --focus-border: var(--accent);
+  --sash-hover-size: 3px;
+  --separator-border: rgba(0, 0, 0, 0.08);
+}
+
+.dark {
+  --separator-border: rgba(255, 255, 255, 0.1);
+}
+
+/* ─── Toast Animations ───────────────────────────────────────────────── */
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 200ms ease-out;
+}
+
+/* ─── Shortcut Recorder ──────────────────────────────────────────────── */
+
+.shortcut-recorder-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  cursor: pointer;
+  transition: all 100ms ease;
+  white-space: nowrap;
+}
+
+.shortcut-recorder-btn:hover {
+  border-color: var(--accent);
+}
+
+.shortcut-recorder-btn.recording {
+  border-color: var(--accent);
+  background: var(--accent-muted);
+  animation: pulse-border 1.5s ease-in-out infinite;
+}
+
+.shortcut-recorder-btn.has-conflict {
+  border-color: hsl(0 72% 51%);
+}
+
+@keyframes pulse-border {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.shortcut-reset-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: all 100ms ease;
+}
+
+.shortcut-reset-btn:hover {
+  color: var(--foreground);
+  background: var(--surface-hover);
+}
