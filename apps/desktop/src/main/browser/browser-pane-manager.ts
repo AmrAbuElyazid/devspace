@@ -15,6 +15,7 @@ import type {
   BrowserRuntimePatch,
 } from "./browser-types";
 import { createBrowserPaneRecord, createElectronView } from "./browser-pane-factory";
+import { registerPaneRecord, unregisterPaneRecord } from "./browser-pane-registry";
 import { registerBrowserPaneWebContentsListeners } from "./browser-pane-webcontents-events";
 import {
   focusPaneWebContents,
@@ -83,11 +84,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       ...(session ? { session } : {}),
     });
 
-    this.panes.set(paneId, pane);
-    const webContentsId = pane.view.webContents?.id;
-    if (typeof webContentsId === "number") {
-      this.paneIdByWebContentsId.set(webContentsId, paneId);
-    }
+    registerPaneRecord(this.panes, this.paneIdByWebContentsId, paneId, pane);
     this.registerWebContentsListeners(pane);
     this.navigate(paneId, initialUrl);
   }
@@ -100,12 +97,13 @@ export class BrowserPaneManager implements BrowserPaneController {
 
     hidePaneView(pane, this.deps);
     denyPendingPermissionsForPane(this.pendingPermissionResolutions, paneId);
-    this.panes.delete(paneId);
-    this.pendingHistoryVisits.delete(paneId);
-    const webContentsId = pane.view.webContents?.id;
-    if (typeof webContentsId === "number") {
-      this.paneIdByWebContentsId.delete(webContentsId);
-    }
+    unregisterPaneRecord(
+      this.panes,
+      this.paneIdByWebContentsId,
+      this.pendingHistoryVisits,
+      paneId,
+      pane,
+    );
 
     destroyPaneView(pane);
   }
