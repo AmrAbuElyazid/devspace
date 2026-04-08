@@ -27,9 +27,14 @@ interface UseBrowserPaneControllerArgs {
   paneId: string;
   workspaceId: string;
   config: BrowserConfig;
+  isFocused: boolean;
 }
 
-export function useBrowserPaneController({ paneId, config }: UseBrowserPaneControllerArgs) {
+export function useBrowserPaneController({
+  paneId,
+  config,
+  isFocused,
+}: UseBrowserPaneControllerArgs) {
   const [paneReady, setPaneReady] = useState(() => hasCreatedBrowserPane(paneId));
   const placeholderRef = useRef<HTMLDivElement>(null);
   const createAttemptRef = useRef(0);
@@ -150,13 +155,14 @@ export function useBrowserPaneController({ paneId, config }: UseBrowserPaneContr
       wasVisible ||
       failure !== null ||
       isFindBarOpen ||
-      hasEditableRendererFocus()
+      hasEditableRendererFocus() ||
+      !isFocused
     ) {
       return;
     }
 
     focusBrowserNativePane(paneId);
-  }, [failure, isFindBarOpen, isVisible, paneId]);
+  }, [failure, isFindBarOpen, isFocused, isVisible, paneId]);
 
   const currentUrl = runtimeState?.url ?? initialUrl;
   const isLoading = runtimeState?.isLoading ?? false;

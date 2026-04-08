@@ -230,6 +230,7 @@ test("creates the browser pane and renders the current security label", async ()
         paneId="pane-1"
         workspaceId="workspace-1"
         config={{ url: "https://example.com/" }}
+        isFocused={true}
       />,
     );
   });
@@ -247,6 +248,7 @@ test("reuses an existing browser pane across unmount and remount", async () => {
         paneId="pane-1"
         workspaceId="workspace-1"
         config={{ url: "https://example.com/" }}
+        isFocused={true}
       />,
     );
   });
@@ -269,6 +271,7 @@ test("reuses an existing browser pane across unmount and remount", async () => {
         paneId="pane-1"
         workspaceId="workspace-1"
         config={{ url: "https://example.com/" }}
+        isFocused={true}
       />,
     );
   });
@@ -290,6 +293,7 @@ test("focuses the native browser view when it becomes visible", async () => {
         paneId="pane-1"
         workspaceId="workspace-1"
         config={{ url: "https://example.com/" }}
+        isFocused={true}
       />,
     );
   });
@@ -302,11 +306,27 @@ test("focuses the native browser view when it becomes visible", async () => {
         paneId="pane-1"
         workspaceId="workspace-1"
         config={{ url: "https://example.com/" }}
+        isFocused={true}
       />,
     );
   });
 
   expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
+});
+
+test("does not focus the native browser view when its group is not focused", async () => {
+  await act(async () => {
+    root?.render(
+      <BrowserPane
+        paneId="pane-1"
+        workspaceId="workspace-1"
+        config={{ url: "https://example.com/" }}
+        isFocused={false}
+      />,
+    );
+  });
+
+  expect(browserPaneMocks.browserSetFocus).not.toHaveBeenCalled();
 });
 
 test("hydrates runtime state for an already-created browser pane", async () => {
@@ -336,6 +356,7 @@ test("hydrates runtime state for an already-created browser pane", async () => {
         paneId="pane-1"
         workspaceId="workspace-1"
         config={{ url: "https://example.com/" }}
+        isFocused={true}
       />,
     );
   });
@@ -367,6 +388,7 @@ test("dismissing or allowing a permission request clears local state and resolve
         paneId="pane-1"
         workspaceId="workspace-1"
         config={{ url: "https://example.com/" }}
+        isFocused={true}
       />,
     );
   });

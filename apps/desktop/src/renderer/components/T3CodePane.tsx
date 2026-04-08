@@ -15,6 +15,7 @@ export function markT3CodeDestroyed(paneId: string): void {
 
 interface T3CodePaneProps {
   paneId: string;
+  isFocused: boolean;
 }
 
 type T3CodeState =
@@ -23,7 +24,7 @@ type T3CodeState =
   | { status: "error"; message: string }
   | { status: "unavailable" };
 
-export default function T3CodePane({ paneId }: T3CodePaneProps): ReactElement {
+export default function T3CodePane({ paneId, isFocused }: T3CodePaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const wasVisibleRef = useRef(false);
 
@@ -47,12 +48,18 @@ export default function T3CodePane({ paneId }: T3CodePaneProps): ReactElement {
     const wasVisible = wasVisibleRef.current;
     wasVisibleRef.current = isVisible;
 
-    if (!isVisible || wasVisible || state.status !== "running" || hasEditableRendererFocus()) {
+    if (
+      !isVisible ||
+      wasVisible ||
+      state.status !== "running" ||
+      hasEditableRendererFocus() ||
+      !isFocused
+    ) {
       return;
     }
 
     focusBrowserNativePane(paneId);
-  }, [isVisible, paneId, state.status]);
+  }, [isFocused, isVisible, paneId, state.status]);
 
   // Start the T3 Code server immediately on mount
   useEffect(() => {

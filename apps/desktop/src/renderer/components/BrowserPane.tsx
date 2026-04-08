@@ -14,12 +14,14 @@ interface BrowserPaneProps {
   paneId: string;
   workspaceId: string;
   config: BrowserConfig;
+  isFocused: boolean;
 }
 
 export default function BrowserPane({
   paneId,
   workspaceId,
   config,
+  isFocused,
 }: BrowserPaneProps): ReactElement {
   const {
     activePermissionRequest,
@@ -44,7 +46,7 @@ export default function BrowserPane({
     placeholderRef,
     securityLabel,
     setInputUrl,
-  } = useBrowserPaneController({ paneId, workspaceId, config });
+  } = useBrowserPaneController({ paneId, workspaceId, config, isFocused });
 
   return (
     <div className="browser-pane-shell">

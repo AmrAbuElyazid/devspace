@@ -209,17 +209,24 @@ const PaneContent = memo(function PaneContent({
         />
       );
     case "editor":
-      return <EditorPane paneId={paneId} config={(paneConfig as EditorConfig) ?? {}} />;
+      return (
+        <EditorPane
+          paneId={paneId}
+          config={(paneConfig as EditorConfig) ?? {}}
+          isFocused={isFocused}
+        />
+      );
     case "browser":
       return (
         <BrowserPane
           paneId={paneId}
           workspaceId={workspaceId}
           config={(paneConfig as BrowserConfig) ?? { url: "https://www.google.com" }}
+          isFocused={isFocused}
         />
       );
     case "t3code":
-      return <T3CodePane paneId={paneId} />;
+      return <T3CodePane paneId={paneId} isFocused={isFocused} />;
     case "note":
       return (
         <NotePaneErrorBoundary>

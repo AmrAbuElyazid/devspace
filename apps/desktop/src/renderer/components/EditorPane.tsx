@@ -19,6 +19,7 @@ export function markEditorDestroyed(paneId: string): void {
 interface EditorPaneProps {
   paneId: string;
   config: EditorConfig;
+  isFocused: boolean;
 }
 
 type EditorState =
@@ -28,7 +29,7 @@ type EditorState =
   | { status: "error"; message: string }
   | { status: "unavailable" };
 
-export default function EditorPane({ paneId, config }: EditorPaneProps): ReactElement {
+export default function EditorPane({ paneId, config, isFocused }: EditorPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const wasVisibleRef = useRef(false);
   const previousCliPathRef = useRef<string | null>(null);
@@ -103,12 +104,18 @@ export default function EditorPane({ paneId, config }: EditorPaneProps): ReactEl
     const wasVisible = wasVisibleRef.current;
     wasVisibleRef.current = isVisible;
 
-    if (!isVisible || wasVisible || stateStatus !== "running" || hasEditableRendererFocus()) {
+    if (
+      !isVisible ||
+      wasVisible ||
+      stateStatus !== "running" ||
+      hasEditableRendererFocus() ||
+      !isFocused
+    ) {
       return;
     }
 
     focusBrowserNativePane(paneId);
-  }, [isVisible, paneId, stateStatus]);
+  }, [isFocused, isVisible, paneId, stateStatus]);
 
   // Start the VS Code server
   useEffect(() => {
