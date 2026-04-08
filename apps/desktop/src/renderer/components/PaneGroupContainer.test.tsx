@@ -69,6 +69,11 @@ const activeTabDragWithoutDropValue = {
   dropIntent: null,
 };
 
+const emptyDragContextValue = {
+  activeDrag: null,
+  dropIntent: null,
+};
+
 let container: HTMLDivElement;
 let root: Root | null;
 
@@ -160,4 +165,80 @@ test("keeps the placeholder hidden when native views remain visible", async () =
 
   expect(container.innerHTML).not.toContain("pane-drag-placeholder");
   expect(container.innerHTML).toContain('data-testid="terminal-pane-1"');
+});
+
+test("mounts only the active tab layer for the focused group", async () => {
+  useWorkspaceStore.setState({
+    panes: {
+      "pane-1": {
+        id: "pane-1",
+        title: "Terminal One",
+        type: "terminal",
+        config: {},
+      },
+      "pane-2": {
+        id: "pane-2",
+        title: "Browser Two",
+        type: "browser",
+        config: { url: "https://example.com" },
+      },
+    },
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [
+          { id: "tab-1", paneId: "pane-1" },
+          { id: "tab-2", paneId: "pane-2" },
+        ],
+      },
+    },
+  });
+
+  await act(async () => {
+    root?.render(
+      <DragContext.Provider value={emptyDragContextValue}>
+        <PaneGroupContainer
+          groupId="group-1"
+          workspaceId="workspace-1"
+          sidebarOpen={false}
+          dndEnabled={true}
+        />
+      </DragContext.Provider>,
+    );
+  });
+
+  expect(container.innerHTML).toContain('data-testid="terminal-pane-1"');
+  expect(container.innerHTML).not.toContain('data-testid="browser-pane-2"');
+
+  await act(async () => {
+    useWorkspaceStore.setState({
+      paneGroups: {
+        "group-1": {
+          id: "group-1",
+          activeTabId: "tab-2",
+          tabs: [
+            { id: "tab-1", paneId: "pane-1" },
+            { id: "tab-2", paneId: "pane-2" },
+          ],
+        },
+      },
+    });
+  });
+
+  await act(async () => {
+    root?.render(
+      <DragContext.Provider value={emptyDragContextValue}>
+        <PaneGroupContainer
+          groupId="group-1"
+          workspaceId="workspace-1"
+          sidebarOpen={false}
+          dndEnabled={true}
+        />
+      </DragContext.Provider>,
+    );
+  });
+
+  expect(container.innerHTML).not.toContain('data-testid="terminal-pane-1"');
+  expect(container.innerHTML).toContain('data-testid="browser-pane-2"');
 });

@@ -318,20 +318,24 @@ export default memo(function PaneGroupContainer({
             previewSide={previewSide}
           />
         )}
-        {group.tabs.map((tab) => {
-          const isActiveTab = tab.id === group.activeTabId;
+        {(() => {
+          const activeTab = group.tabs.find((tab) => tab.id === group.activeTabId);
+          if (!activeTab) {
+            return null;
+          }
+
           return (
             <TabLayer
-              key={tab.paneId}
-              tab={tab}
-              isActiveTab={isActiveTab}
+              key={activeTab.paneId}
+              tab={activeTab}
+              isActiveTab={true}
               workspaceId={workspaceId}
-              isFocused={isFocused && isActiveTab}
+              isFocused={isFocused}
               dragHidesViews={dragHidesViews}
               hasDragOverlay={hasDragOverlay}
             />
           );
-        })}
+        })()}
       </div>
     </div>
   );

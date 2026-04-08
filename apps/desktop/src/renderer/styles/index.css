@@ -330,8 +330,7 @@
   overflow: hidden;
 }
 
-/* Pane group content: stacked layers using visibility, not display:none,
-   so native views (xterm, WebContentsView) keep their canvas dimensions. */
+/* Pane group content: the active tab layer fills the content area. */
 .pane-group-content {
   position: relative;
   flex: 1;
