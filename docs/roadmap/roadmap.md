@@ -34,8 +34,8 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 ## 2. Scale, Profiling, And Persistence
 
 - [ ] Finish the remaining workspace focus-ownership follow-up now that only the active workspace mounts. Remount persistence for terminal and browser panes is now covered, but broader focus ownership and scale behavior still need follow-through. Refs: `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`, `apps/desktop/src/renderer/components/TerminalPane.test.tsx`, `apps/desktop/src/renderer/components/BrowserPane.test.tsx`
-- [ ] Migrate workspace persistence from renderer `localStorage` to SQLite behind a main/preload storage boundary, using a relational core with JSON-backed flexible structures. Refs: `apps/desktop/src/renderer/store/persistence.ts`
-- [ ] Add a one-time import from the existing `devspace-workspaces` JSON persistence into the new SQLite schema. Refs: `apps/desktop/src/renderer/store/persistence.ts`
+- [ ] Migrate workspace persistence from renderer `localStorage` to a fresh SQLite store behind a main/preload storage boundary, using a relational core with JSON-backed flexible structures. Refs: `apps/desktop/src/renderer/store/persistence.ts`
+- [x] Skip backward-compatibility import work for workspace persistence and start fresh when the SQLite store lands.
 - [ ] Run a mixed-workspace stress pass that covers many terminals, browsers, editor panes, and t3code panes once instrumentation is in place.
 
 ## 3. Testing, Package Maturity, And Release Discipline
@@ -62,5 +62,5 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 ### Phase 3: Persistence And Package Maturity
 
 - [ ] Move workspace persistence behind main/preload with SQLite.
-- [ ] Add the one-time `localStorage` to SQLite migration.
+- [x] Start fresh instead of adding a `localStorage` to SQLite migration.
 - [ ] Expand `note-editor` maturity and settle `ghostty-electron` packaging posture.
