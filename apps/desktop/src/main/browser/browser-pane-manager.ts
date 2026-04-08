@@ -48,7 +48,15 @@ import {
   showPaneView,
   syncVisiblePaneViews,
 } from "./browser-pane-view-lifecycle";
-import { cloneRuntimeState, withDerivedSecurityState } from "./browser-runtime-state";
+import {
+  applyRuntimeStateFindResult,
+  applyRuntimeStatePatch,
+  clearRuntimeStateFind,
+  cloneRuntimeState,
+  markRuntimeStateNavigating,
+  setRuntimeStateFindQuery,
+  setRuntimeStateZoom,
+} from "./browser-runtime-state";
 
 export class BrowserPaneManager implements BrowserPaneController {
   private readonly panes = new Map<string, BrowserPaneRecord>();
@@ -143,8 +151,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    pane.runtimeState.isLoading = true;
-    pane.runtimeState.failure = null;
+    markRuntimeStateNavigating(pane.runtimeState);
     this.emitStateChange(pane);
 
     navigatePaneToUrl(pane, url);
@@ -201,7 +208,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    pane.runtimeState.currentZoom = zoom;
+    setRuntimeStateZoom(pane.runtimeState, zoom);
     this.emitStateChange(pane);
 
     setPaneZoomFactor(pane, zoom);
@@ -217,11 +224,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    pane.runtimeState.find = {
-      query,
-      activeMatch: 0,
-      totalMatches: 0,
-    };
+    setRuntimeStateFindQuery(pane.runtimeState, query);
     this.emitStateChange(pane);
 
     startPaneFindInPage(pane, query, options);
@@ -236,11 +239,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    pane.runtimeState.find = {
-      query: result.query,
-      activeMatch: result.activeMatch,
-      totalMatches: result.totalMatches,
-    };
+    applyRuntimeStateFindResult(pane.runtimeState, result);
     this.emitStateChange(pane);
   }
 
@@ -250,7 +249,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    pane.runtimeState.find = null;
+    clearRuntimeStateFind(pane.runtimeState);
     this.emitStateChange(pane);
 
     stopPaneFindInPage(pane, action);
@@ -325,12 +324,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    Object.assign(pane.runtimeState, patch);
-    const hasExplicitSecurityState =
-      patch.isSecure !== undefined || patch.securityLabel !== undefined;
-    if (patch.url !== undefined && !hasExplicitSecurityState) {
-      Object.assign(pane.runtimeState, withDerivedSecurityState(patch.url));
-    }
+    applyRuntimeStatePatch(pane.runtimeState, patch);
     this.emitStateChange(pane);
   }
 
@@ -373,17 +367,5 @@ export class BrowserPaneManager implements BrowserPaneController {
         );
       },
     });
-  }
-
-  private syncNavigationState(pane: BrowserPaneRecord): void {
-    syncPaneNavigationState(pane);
-  }
-
-  private recordCommittedHistoryVisit(pane: BrowserPaneRecord, url: string): void {
-    recordCommittedHistoryVisit(pane, url, this.pendingHistoryVisits, this.deps.historyService);
-  }
-
-  private refreshPendingHistoryTitle(pane: BrowserPaneRecord, title: string): void {
-    refreshPendingHistoryTitle(pane, title, this.pendingHistoryVisits, this.deps.historyService);
   }
 }
