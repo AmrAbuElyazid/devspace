@@ -1,10 +1,11 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import type { BrowserPaneRecord } from "../browser-types";
 import { createBrowserPaneRegistry } from "../browser-pane-registry";
 
 test("registry tracks pane lookup by pane id and webContents id", () => {
-  const registry = createBrowserPaneRegistry();
+  const sendToRenderer = vi.fn();
+  const registry = createBrowserPaneRegistry(sendToRenderer);
   const pane: BrowserPaneRecord = {
     isVisible: false,
     runtimeState: {
@@ -42,7 +43,7 @@ test("registry tracks pane lookup by pane id and webContents id", () => {
 });
 
 test("registry clones runtime state snapshots instead of returning live state", () => {
-  const registry = createBrowserPaneRegistry();
+  const registry = createBrowserPaneRegistry(() => {});
   const pane: BrowserPaneRecord = {
     isVisible: true,
     runtimeState: {
@@ -77,4 +78,41 @@ test("registry clones runtime state snapshots instead of returning live state", 
   expect(snapshot).not.toBe(pane.runtimeState);
   expect(snapshot?.find).not.toBe(pane.runtimeState.find);
   expect(registry.isVisible("pane-1")).toBe(true);
+});
+
+test("registry emits a renderer state change after managed runtime mutations", () => {
+  const sendToRenderer = vi.fn();
+  const registry = createBrowserPaneRegistry(sendToRenderer);
+  const pane: BrowserPaneRecord = {
+    isVisible: false,
+    runtimeState: {
+      paneId: "pane-1",
+      url: "https://example.com",
+      title: "Example",
+      faviconUrl: null,
+      isLoading: false,
+      canGoBack: false,
+      canGoForward: false,
+      isSecure: true,
+      securityLabel: "Secure",
+      currentZoom: 1,
+      find: null,
+      failure: null,
+    },
+    bounds: null,
+    view: {
+      webContents: {},
+    },
+  } as unknown as BrowserPaneRecord;
+
+  registry.register("pane-1", pane);
+
+  registry.withPaneAndStateChange("pane-1", (record) => {
+    record.runtimeState.title = "Updated";
+  });
+
+  expect(sendToRenderer).toHaveBeenCalledWith(
+    "browser:stateChanged",
+    expect.objectContaining({ paneId: "pane-1", title: "Updated" }),
+  );
 });

@@ -11,11 +11,19 @@ interface BrowserPaneRegistry {
   register(paneId: string, pane: BrowserPaneRecord): void;
   resolvePaneIdForWebContents(webContentsId: number): string | undefined;
   unregister(paneId: string): BrowserPaneRecord | undefined;
+  withPane(paneId: string, callback: (pane: BrowserPaneRecord) => void): void;
+  withPaneAndStateChange(paneId: string, callback: (pane: BrowserPaneRecord) => void): void;
 }
 
-export function createBrowserPaneRegistry(): BrowserPaneRegistry {
+export function createBrowserPaneRegistry(
+  sendToRenderer: (channel: string, ...args: unknown[]) => void,
+): BrowserPaneRegistry {
   const panes = new Map<string, BrowserPaneRecord>();
   const paneIdByWebContentsId = new Map<number, string>();
+
+  function emitStateChange(pane: BrowserPaneRecord): void {
+    sendToRenderer("browser:stateChanged", cloneRuntimeState(pane.runtimeState));
+  }
 
   return {
     has(paneId) {
@@ -59,6 +67,23 @@ export function createBrowserPaneRegistry(): BrowserPaneRegistry {
       }
 
       return pane;
+    },
+    withPane(paneId, callback) {
+      const pane = panes.get(paneId);
+      if (!pane) {
+        return;
+      }
+
+      callback(pane);
+    },
+    withPaneAndStateChange(paneId, callback) {
+      const pane = panes.get(paneId);
+      if (!pane) {
+        return;
+      }
+
+      callback(pane);
+      emitStateChange(pane);
     },
   };
 }
