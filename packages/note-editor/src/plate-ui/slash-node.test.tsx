@@ -11,6 +11,7 @@ const slashNodeMocks = vi.hoisted(() => ({
   insertCallout: vi.fn(),
   insertCodeBlock: vi.fn(),
   plateElementProps: [] as Array<Record<string, unknown>>,
+  comboboxItemProps: [] as Array<Record<string, unknown>>,
 }));
 
 vi.mock("platejs", () => ({
@@ -58,14 +59,18 @@ vi.mock("./inline-combobox", () => ({
   InlineComboboxItem: ({
     children,
     onClick,
+    ...props
   }: {
     children?: React.ReactNode;
     onClick?: () => void;
-  }) => (
-    <button type="button" onClick={onClick}>
-      {children}
-    </button>
-  ),
+  } & Record<string, unknown>) => {
+    slashNodeMocks.comboboxItemProps.push(props);
+    return (
+      <button type="button" onClick={onClick}>
+        {children}
+      </button>
+    );
+  },
 }));
 
 let container: HTMLDivElement;
@@ -79,6 +84,7 @@ beforeEach(() => {
   slashNodeMocks.insertCallout.mockReset();
   slashNodeMocks.insertCodeBlock.mockReset();
   slashNodeMocks.plateElementProps.length = 0;
+  slashNodeMocks.comboboxItemProps.length = 0;
 });
 
 afterEach(async () => {
@@ -146,4 +152,78 @@ test("slash menu block actions dispatch through the editor helpers", async () =>
   expect(slashNodeMocks.insertCallout).toHaveBeenCalledWith(editor);
   expect(setNodes).toHaveBeenCalledWith({ type: "hr" });
   expect(insertNodes).toHaveBeenCalledWith({ children: [{ text: "" }], type: "p" });
+});
+
+test("slash menu exposes heading and list metadata and dispatches the remaining actions", async () => {
+  const toggleBlock = vi.fn();
+  const editor = {
+    tf: {
+      toggleBlock,
+      setNodes: vi.fn(),
+      insertNodes: vi.fn(),
+    },
+  };
+
+  const { SlashInputElement } = await import("./slash-node");
+  const SlashInputElementComponent = SlashInputElement as unknown as React.ComponentType<{
+    editor: unknown;
+    element: unknown;
+    attributes: unknown;
+  }>;
+
+  await act(async () => {
+    root?.render(
+      <SlashInputElementComponent
+        editor={editor}
+        element={{ type: "slash_input", children: [] }}
+        attributes={{}}
+      />,
+    );
+  });
+
+  const findItemProps = (value: string) => {
+    const itemProps = slashNodeMocks.comboboxItemProps.find((props) => props.value === value);
+    if (!itemProps) {
+      throw new Error(`Missing combobox item props for value: ${value}`);
+    }
+    return itemProps;
+  };
+
+  expect(findItemProps("h1")).toMatchObject({
+    group: "Basic blocks",
+    label: "Heading 1",
+    keywords: ["title", "h1"],
+  });
+  expect(findItemProps("ol")).toMatchObject({
+    label: "Numbered list",
+    keywords: ["ordered", "ol", "1"],
+  });
+  expect(findItemProps("listTodo")).toMatchObject({
+    label: "To-do list",
+    keywords: ["checklist", "task", "checkbox", "[]"],
+  });
+
+  const clickButton = (label: string) => {
+    const button = Array.from(container.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes(label),
+    );
+
+    if (!button) {
+      throw new Error(`Missing slash action button: ${label}`);
+    }
+
+    button.click();
+  };
+
+  clickButton("Heading 1");
+  clickButton("Heading 2");
+  clickButton("Heading 3");
+  clickButton("Numbered list");
+  clickButton("To-do list");
+
+  expect(toggleBlock).toHaveBeenCalledWith("h1");
+  expect(toggleBlock).toHaveBeenCalledWith("h2");
+  expect(toggleBlock).toHaveBeenCalledWith("h3");
+  expect(slashNodeMocks.toggleList).toHaveBeenCalledWith(editor, { listStyleType: "ol" });
+  expect(slashNodeMocks.toggleList).toHaveBeenCalledWith(editor, { listStyleType: "listTodo" });
 });
