@@ -203,6 +203,30 @@ test("createSurface only tracks surfaces after native creation succeeds", () => 
   expect(nativeMocks.bridge.shutdown).toHaveBeenCalledTimes(1);
 });
 
+test("destroy still shuts down after native surface teardown failures", () => {
+  const terminal = new GhosttyTerminal();
+
+  terminal.init({
+    windowHandle: Buffer.from("window-handle"),
+    nativeAddonPath: "/tmp/ghostty_bridge.node",
+  });
+
+  terminal.createSurface("surface-1");
+  terminal.createSurface("surface-2");
+
+  (nativeMocks.bridge.destroySurface as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+    throw new Error("surface destroy failed");
+  });
+
+  expect(() => terminal.destroy()).toThrow("surface destroy failed");
+  expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledWith("surface-1");
+  expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledWith("surface-2");
+  expect(nativeMocks.bridge.shutdown).toHaveBeenCalledTimes(1);
+
+  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1");
+  expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledTimes(2);
+});
+
 test("sendBindingAction returns false before init and bridge result after init", () => {
   const terminal = new GhosttyTerminal();
 

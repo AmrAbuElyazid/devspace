@@ -230,12 +230,32 @@ export class GhosttyTerminal {
    */
   destroy(): void {
     if (!this.bridge) return;
-    for (const surfaceId of this.activeSurfaces) {
-      this.bridge.destroySurface(surfaceId);
-    }
+
+    const bridge = this.bridge;
+    const activeSurfaceIds = Array.from(this.activeSurfaces);
+
     this.activeSurfaces.clear();
     this.listeners.clear();
-    this.bridge.shutdown();
     this.bridge = null;
+
+    let firstError: unknown = null;
+
+    for (const surfaceId of activeSurfaceIds) {
+      try {
+        bridge.destroySurface(surfaceId);
+      } catch (error) {
+        firstError ??= error;
+      }
+    }
+
+    try {
+      bridge.shutdown();
+    } catch (error) {
+      firstError ??= error;
+    }
+
+    if (firstError) {
+      throw firstError;
+    }
   }
 }
