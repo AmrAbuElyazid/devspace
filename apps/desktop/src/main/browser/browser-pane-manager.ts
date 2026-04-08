@@ -137,15 +137,10 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   navigate(paneId: string, url: string): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    markRuntimeStateNavigating(pane.runtimeState);
-    this.emitStateChange(pane);
-
-    navigatePaneToUrl(pane, url);
+    this.withPaneAndStateChange(paneId, (pane) => {
+      markRuntimeStateNavigating(pane.runtimeState);
+      navigatePaneToUrl(pane, url);
+    });
   }
 
   back(paneId: string): void {
@@ -179,15 +174,10 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   setZoom(paneId: string, zoom: number): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    setRuntimeStateZoom(pane.runtimeState, zoom);
-    this.emitStateChange(pane);
-
-    setPaneZoomFactor(pane, zoom);
+    this.withPaneAndStateChange(paneId, (pane) => {
+      setRuntimeStateZoom(pane.runtimeState, zoom);
+      setPaneZoomFactor(pane, zoom);
+    });
   }
 
   resetZoom(paneId: string): void {
@@ -195,40 +185,26 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   findInPage(paneId: string, query: string, options?: BrowserFindInPageOptions): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    setRuntimeStateFindQuery(pane.runtimeState, query);
-    this.emitStateChange(pane);
-
-    startPaneFindInPage(pane, query, options);
+    this.withPaneAndStateChange(paneId, (pane) => {
+      setRuntimeStateFindQuery(pane.runtimeState, query);
+      startPaneFindInPage(pane, query, options);
+    });
   }
 
   applyFindResult(
     paneId: string,
     result: { query: string; activeMatch: number; totalMatches: number },
   ): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    applyRuntimeStateFindResult(pane.runtimeState, result);
-    this.emitStateChange(pane);
+    this.withPaneAndStateChange(paneId, (pane) => {
+      applyRuntimeStateFindResult(pane.runtimeState, result);
+    });
   }
 
   stopFindInPage(paneId: string, action: BrowserStopFindAction = "clearSelection"): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    clearRuntimeStateFind(pane.runtimeState);
-    this.emitStateChange(pane);
-
-    stopPaneFindInPage(pane, action);
+    this.withPaneAndStateChange(paneId, (pane) => {
+      clearRuntimeStateFind(pane.runtimeState);
+      stopPaneFindInPage(pane, action);
+    });
   }
 
   toggleDevTools(paneId: string): void {
@@ -289,13 +265,9 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   applyRuntimePatch(paneId: string, patch: BrowserRuntimePatch): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
-
-    applyRuntimeStatePatch(pane.runtimeState, patch);
-    this.emitStateChange(pane);
+    this.withPaneAndStateChange(paneId, (pane) => {
+      applyRuntimeStatePatch(pane.runtimeState, patch);
+    });
   }
 
   resolvePaneIdForWebContents(webContentsId: number): string | undefined {
@@ -350,5 +322,15 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     callback(pane);
+  }
+
+  private withPaneAndStateChange(
+    paneId: string,
+    callback: (pane: BrowserPaneRecord) => void,
+  ): void {
+    this.withPane(paneId, (pane) => {
+      callback(pane);
+      this.emitStateChange(pane);
+    });
   }
 }

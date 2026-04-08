@@ -1,0 +1,142 @@
+/* ─── Base Layer ─────────────────────────────────────────────────────── */
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  html,
+  body,
+  #root {
+    overflow-y: hidden;
+    overscroll-behavior-y: none;
+  }
+
+  /* Monospace content */
+  code,
+  pre,
+  .monospace {
+    font-family: ui-monospace, "SF Mono", "Fira Code", monospace;
+  }
+
+  /* Drag and drop feedback */
+  .drag-overlay-workspace,
+  .drag-overlay-tab,
+  .drag-overlay-folder {
+    background: var(--surface-hover);
+    border: 1px solid var(--accent);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    color: var(--foreground);
+    opacity: 0.9;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .drag-overlay-folder {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .sidebar-item-drag-over-folder {
+    background: rgba(250, 204, 21, 0.1) !important;
+    border-radius: 6px;
+  }
+
+  .ws-item-tab-drop {
+    background: rgba(250, 204, 21, 0.1);
+    outline: 1px solid rgba(250, 204, 21, 0.4);
+    border-radius: 4px;
+  }
+
+  /* ── Insertion line indicators ─────────────────────────────────────── */
+
+  /* Sidebar: horizontal line at top or bottom edge of item */
+  .sidebar-insert-before::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .sidebar-insert-after::before {
+    content: "";
+    position: absolute;
+    bottom: -1px;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  .pane-drop-zone-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  .pane-drop-zone-half {
+    position: absolute;
+    background: rgba(250, 204, 21, 0.08);
+    border: 1px solid rgba(250, 204, 21, 0.3);
+    transition: opacity 0.1s ease;
+  }
+
+  .pane-drop-zone-half.left {
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 50%;
+    border-right: 2px solid rgba(250, 204, 21, 0.5);
+  }
+
+  .pane-drop-zone-half.right {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 50%;
+    border-left: 2px solid rgba(250, 204, 21, 0.5);
+  }
+
+  .pane-drop-zone-half.top {
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    border-bottom: 2px solid rgba(250, 204, 21, 0.5);
+  }
+
+  .pane-drop-zone-half.bottom {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    border-top: 2px solid rgba(250, 204, 21, 0.5);
+  }
+
+  [data-dragging="true"] {
+    cursor: grabbing !important;
+  }
+}
