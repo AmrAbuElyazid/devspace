@@ -120,4 +120,10 @@ Stress test (6 phases, ~2 minutes):
 bash scripts/terminal-stress.sh
 ```
 
+Mixed-workspace Electron stress pass (builds the app, then cycles terminal/browser/editor/t3code workspaces while checking native-view profiling counters):
+
+```bash
+bun run --cwd apps/desktop test:e2e:stress
+```
+
 Note: The shell-based benchmarks measure command execution time, not terminal rendering speed. All modern terminals process shell output faster than the shell can produce it, so these scripts show similar results across terminals. Use vtebench for meaningful renderer comparisons.

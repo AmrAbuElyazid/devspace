@@ -4,6 +4,7 @@ import { existsSync, symlinkSync, unlinkSync } from "fs";
 import { mkdir, readFile, readdir, rename, writeFile } from "fs/promises";
 import { join } from "path";
 import type { BrowserWindow } from "electron";
+import { resolveDevelopmentPath } from "../dev-paths";
 import { getSafeExternalUrl } from "../validation";
 import { getTrafficLightPosition } from "../window-chrome";
 import { safeHandle, safeOn } from "./shared";
@@ -196,7 +197,11 @@ export function registerSystemIpc(mainWindow: BrowserWindow): void {
     const symlink = "/usr/local/bin/devspace";
     const scriptPath = app.isPackaged
       ? join(process.resourcesPath, "bin", "devspace")
-      : join(app.getAppPath(), "resources", "bin", "devspace");
+      : resolveDevelopmentPath("apps/desktop/resources/bin/devspace", {
+          appPath: app.getAppPath(),
+          cwd: process.cwd(),
+          moduleDir: __dirname,
+        });
 
     if (!existsSync(scriptPath)) {
       return { ok: false, error: `CLI script not found at ${scriptPath}` };

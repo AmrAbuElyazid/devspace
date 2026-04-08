@@ -84,6 +84,40 @@ export async function getStoreState(page: Page): Promise<{
   });
 }
 
+export async function getNativeViewSnapshot(page: Page): Promise<{
+  registered: { terminals: number; browsers: number; total: number };
+  visible: { terminals: number; browsers: number; total: number };
+  hiddenByOverlay: boolean;
+  hiddenByDrag: boolean;
+  counters: Record<string, number>;
+}> {
+  return page.evaluate(() => {
+    const profiling = (window as unknown as Record<string, unknown>).__DEVSPACE_NATIVE_VIEWS__;
+    if (!profiling) {
+      throw new Error("Native view profiling not available — __DEVSPACE_NATIVE_VIEWS__ missing");
+    }
+
+    return (profiling as { getSnapshot: () => unknown }).getSnapshot() as {
+      registered: { terminals: number; browsers: number; total: number };
+      visible: { terminals: number; browsers: number; total: number };
+      hiddenByOverlay: boolean;
+      hiddenByDrag: boolean;
+      counters: Record<string, number>;
+    };
+  });
+}
+
+export async function resetNativeViewCounters(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const profiling = (window as unknown as Record<string, unknown>).__DEVSPACE_NATIVE_VIEWS__;
+    if (!profiling) {
+      throw new Error("Native view profiling not available — __DEVSPACE_NATIVE_VIEWS__ missing");
+    }
+
+    (profiling as { resetCounters: () => void }).resetCounters();
+  });
+}
+
 /**
  * Send an IPC event from the main process to the renderer.
  * This simulates events that BrowserPaneManager would normally emit.

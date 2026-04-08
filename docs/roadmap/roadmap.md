@@ -36,7 +36,7 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 - [ ] Finish the remaining workspace focus-ownership follow-up now that only the active workspace mounts. Remount persistence for terminal and browser panes is now covered, but broader focus ownership and scale behavior still need follow-through. Refs: `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`, `apps/desktop/src/renderer/components/TerminalPane.test.tsx`, `apps/desktop/src/renderer/components/BrowserPane.test.tsx`
 - [x] Migrate workspace persistence from renderer `localStorage` to a fresh SQLite store behind a main/preload storage boundary, using a relational core with JSON-backed flexible structures. Refs: `apps/desktop/src/main/workspace-persistence-store.ts`, `apps/desktop/src/main/ipc/workspace-state.ts`, `apps/desktop/src/preload/index.ts`, `apps/desktop/src/renderer/store/persistence.ts`
 - [x] Skip backward-compatibility import work for workspace persistence and start fresh when the SQLite store lands.
-- [ ] Run a mixed-workspace stress pass that covers many terminals, browsers, editor panes, and t3code panes once instrumentation is in place.
+- [x] Run a mixed-workspace stress pass that covers terminals, browsers, editor panes, and t3code panes once instrumentation is in place. Refs: `apps/desktop/e2e/mixed-workspace-stress.spec.ts`, `BENCHMARKS.md`
 
 ## 3. Testing, Package Maturity, And Release Discipline
 
@@ -57,7 +57,7 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 ### Phase 2: Observability And Scale
 
 - [ ] Revisit workspace mounting and native-view scaling.
-- [ ] Run a mixed-workspace stress pass with instrumentation enabled.
+- [x] Run a mixed-workspace stress pass with instrumentation enabled.
 
 ### Phase 3: Persistence And Package Maturity
 

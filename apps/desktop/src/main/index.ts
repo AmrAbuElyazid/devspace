@@ -15,6 +15,7 @@ import { BrowserImportService } from "./browser/browser-import-service";
 import { installWindowZoomReset } from "./window-zoom";
 import { getTrafficLightPosition } from "./window-chrome";
 import { IS_DEV, CLI_PORT } from "./dev-mode";
+import { resolveDevelopmentPath } from "./dev-paths";
 import { ShortcutStore } from "./shortcut-store";
 import {
   DEFAULT_SHORTCUTS,
@@ -216,7 +217,11 @@ function createWindow(): void {
   if (!process.env.GHOSTTY_RESOURCES_DIR) {
     const bundledResources = app.isPackaged
       ? join(process.resourcesPath, "ghostty")
-      : join(app.getAppPath(), "../../packages/ghostty-electron/deps/libghostty/share/ghostty");
+      : resolveDevelopmentPath("packages/ghostty-electron/deps/libghostty/share/ghostty", {
+          appPath: app.getAppPath(),
+          cwd: process.cwd(),
+          moduleDir: __dirname,
+        });
     if (existsSync(bundledResources)) {
       process.env.GHOSTTY_RESOURCES_DIR = bundledResources;
     }
@@ -224,7 +229,11 @@ function createWindow(): void {
   if (!process.env.TERMINFO) {
     const terminfoDir = app.isPackaged
       ? join(process.resourcesPath, "terminfo")
-      : join(app.getAppPath(), "../../packages/ghostty-electron/deps/libghostty/share/terminfo");
+      : resolveDevelopmentPath("packages/ghostty-electron/deps/libghostty/share/terminfo", {
+          appPath: app.getAppPath(),
+          cwd: process.cwd(),
+          moduleDir: __dirname,
+        });
     if (existsSync(terminfoDir)) {
       process.env.TERMINFO = terminfoDir;
     }
