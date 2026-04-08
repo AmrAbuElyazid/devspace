@@ -14,6 +14,7 @@ import type {
   BrowserPaneRecord,
   BrowserRuntimePatch,
 } from "./browser-types";
+import { createBrowserPaneRecord, createElectronView } from "./browser-pane-factory";
 import { registerBrowserPaneWebContentsListeners } from "./browser-pane-webcontents-events";
 import {
   focusPaneWebContents,
@@ -35,44 +36,19 @@ import {
   type PendingPermissionRequest,
 } from "./browser-pane-permissions";
 import {
+  executePaneScript,
+  startPaneFindInPage,
+  stopPaneFindInPage,
+  togglePaneDevTools,
+} from "./browser-pane-webcontents-actions";
+import {
   destroyPaneView,
   hidePaneView,
   setPaneBounds,
   showPaneView,
   syncVisiblePaneViews,
 } from "./browser-pane-view-lifecycle";
-import {
-  cloneRuntimeState,
-  createInitialRuntimeState,
-  withDerivedSecurityState,
-} from "./browser-runtime-state";
-
-function createElectronView(
-  options: Electron.WebContentsViewConstructorOptions,
-): Electron.WebContentsView {
-  const { WebContentsView } = require("electron") as typeof import("electron");
-  return new WebContentsView(options);
-}
-
-function createBrowserViewOptions(
-  session?: Electron.Session,
-): Electron.WebContentsViewConstructorOptions {
-  return {
-    webPreferences: {
-      allowRunningInsecureContent: false,
-      contextIsolation: true,
-      navigateOnDragDrop: false,
-      nodeIntegration: false,
-      nodeIntegrationInSubFrames: false,
-      nodeIntegrationInWorker: false,
-      safeDialogs: true,
-      sandbox: true,
-      webSecurity: true,
-      webviewTag: false,
-      ...(session ? { session } : {}),
-    },
-  };
-}
+import { cloneRuntimeState, withDerivedSecurityState } from "./browser-runtime-state";
 
 export class BrowserPaneManager implements BrowserPaneController {
   private readonly panes = new Map<string, BrowserPaneRecord>();
@@ -91,14 +67,13 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     const session = this.deps.getSession?.();
-    const view = this.createView(createBrowserViewOptions(session));
-    const pane: BrowserPaneRecord = {
-      view,
+    const pane = createBrowserPaneRecord({
+      createView: this.createView,
+      initialUrl,
       kind,
-      runtimeState: createInitialRuntimeState(paneId, initialUrl),
-      bounds: null,
-      isVisible: false,
-    };
+      paneId,
+      ...(session ? { session } : {}),
+    });
 
     this.panes.set(paneId, pane);
     const webContentsId = pane.view.webContents?.id;
@@ -249,10 +224,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     };
     this.emitStateChange(pane);
 
-    const findInPage = pane.view.webContents?.findInPage;
-    if (typeof findInPage === "function") {
-      void findInPage.call(pane.view.webContents, query, options);
-    }
+    startPaneFindInPage(pane, query, options);
   }
 
   applyFindResult(
@@ -281,10 +253,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     pane.runtimeState.find = null;
     this.emitStateChange(pane);
 
-    const stopFindInPage = pane.view.webContents?.stopFindInPage;
-    if (typeof stopFindInPage === "function") {
-      stopFindInPage.call(pane.view.webContents, action);
-    }
+    stopPaneFindInPage(pane, action);
   }
 
   toggleDevTools(paneId: string): void {
@@ -293,19 +262,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    const isOpened = pane.view.webContents?.isDevToolsOpened;
-    const openDevTools = pane.view.webContents?.openDevTools;
-    const closeDevTools = pane.view.webContents?.closeDevTools;
-    if (typeof isOpened === "function" && isOpened.call(pane.view.webContents)) {
-      if (typeof closeDevTools === "function") {
-        closeDevTools.call(pane.view.webContents);
-      }
-      return;
-    }
-
-    if (typeof openDevTools === "function") {
-      openDevTools.call(pane.view.webContents);
-    }
+    togglePaneDevTools(pane);
   }
 
   showContextMenu(_paneId: string, _position?: { x: number; y: number }): void {
@@ -318,12 +275,7 @@ export class BrowserPaneManager implements BrowserPaneController {
       return;
     }
 
-    const executeJavaScript = pane.view.webContents?.executeJavaScript;
-    if (typeof executeJavaScript === "function") {
-      void executeJavaScript.call(pane.view.webContents, script).catch((err: unknown) => {
-        console.warn("[browser-pane] executeScript failed:", err);
-      });
-    }
+    executePaneScript(pane, script);
   }
 
   requestPermission(

@@ -19,7 +19,7 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 - [x] Finish tightening shared-session CORS rewriting to least privilege. Refs: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/main/browser/__tests__/browser-session-manager.test.ts`
 - [x] Finish the browser/editor security audit now that `WebContentsView` preferences are explicit. Refs: `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/src/main/index.ts`, `apps/desktop/src/main/browser/__tests__/browser-pane-manager.test.ts`, `apps/desktop/src/main/__tests__/index.test.ts`
-- [ ] Continue breaking up large files where it meaningfully improves maintenance. Initial targets: `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`, `apps/desktop/src/renderer/styles/index.css`
+- [ ] Continue breaking up large files where it meaningfully improves maintenance. `PaneGroupContainer.tsx` plus browser-pane-manager's view creation and raw `webContents` actions have been split into smaller pieces; remaining initial targets: the rest of `apps/desktop/src/main/browser/browser-pane-manager.ts` and `apps/desktop/src/renderer/styles/index.css`
 - [ ] Keep bridge types, tests, and docs aligned with the current preload/IPC surface. Refs: `apps/desktop/src/shared/types.ts`, `apps/desktop/src/preload/index.ts`
 - [x] Finish migrating the last legacy `.js` tests to TypeScript. Refs: `apps/desktop/src/preload/__tests__/index.test.ts`, `apps/desktop/src/main/__tests__/ipc-handlers-browser.test.ts`
 - [x] Finish documenting the real package posture for `ghostty-electron` and clean stale repo docs. Refs: `packages/ghostty-electron/README.md`, `AGENTS.md`
