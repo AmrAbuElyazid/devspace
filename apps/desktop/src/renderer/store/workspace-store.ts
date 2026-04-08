@@ -28,6 +28,23 @@ export {
 const defaultPersistedState = createDefaultPersistedWorkspaceState();
 let persistenceInitialized = false;
 
+function applyWorkspaceSnapshot(
+  snapshot: ReturnType<typeof normalizePersistedWorkspaceState>,
+): void {
+  useWorkspaceStore.setState({
+    ...(snapshot ?? defaultPersistedState),
+    tabHistoryByGroupId: {},
+    recentTabTraversalByGroupId: {},
+    pendingEditId: null,
+    pendingEditType: null,
+  });
+
+  if (!persistenceInitialized) {
+    setupPersistence(useWorkspaceStore);
+    persistenceInitialized = true;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
@@ -46,16 +63,9 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
 export async function initializeWorkspaceStore(): Promise<void> {
   const persistedState = await window.api.workspaceState.load();
   const normalizedState = persistedState ? normalizePersistedWorkspaceState(persistedState) : null;
-  useWorkspaceStore.setState({
-    ...(normalizedState ?? defaultPersistedState),
-    tabHistoryByGroupId: {},
-    recentTabTraversalByGroupId: {},
-    pendingEditId: null,
-    pendingEditType: null,
-  });
+  applyWorkspaceSnapshot(normalizedState);
+}
 
-  if (!persistenceInitialized) {
-    setupPersistence(useWorkspaceStore);
-    persistenceInitialized = true;
-  }
+export function resetWorkspaceStoreToDefaults(): void {
+  applyWorkspaceSnapshot(null);
 }

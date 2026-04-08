@@ -4,6 +4,7 @@ import type { WorkspaceState } from "./workspace-state";
 const PERSIST_DEBOUNCE_MS = 500;
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let beforeUnloadListener: (() => void) | null = null;
 
 function selectPersistedState(state: WorkspaceState): PersistedWorkspaceState {
   return {
@@ -62,11 +63,17 @@ export function setupPersistence(store: {
   });
 
   if (typeof window !== "undefined") {
-    window.addEventListener("beforeunload", () => {
+    if (beforeUnloadListener) {
+      window.removeEventListener("beforeunload", beforeUnloadListener);
+    }
+
+    beforeUnloadListener = () => {
       if (persistTimer) {
         clearTimeout(persistTimer);
-        void persistState(lastPersistedState);
+        window.api.workspaceState.saveSync(lastPersistedState);
       }
-    });
+    };
+
+    window.addEventListener("beforeunload", beforeUnloadListener);
   }
 }

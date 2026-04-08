@@ -126,6 +126,7 @@ export interface DevspaceBridge {
   workspaceState: {
     load: () => Promise<PersistedWorkspaceState | null>;
     save: (snapshot: PersistedWorkspaceState) => Promise<void>;
+    saveSync: (snapshot: PersistedWorkspaceState) => void;
   };
   t3code: {
     isAvailable: () => Promise<boolean>;

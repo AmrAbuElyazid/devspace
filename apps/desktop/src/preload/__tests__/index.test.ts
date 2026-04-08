@@ -2,6 +2,7 @@ import { expect, test, vi } from "vitest";
 import type { DevspaceBridge } from "../../shared/types";
 
 const invokeCalls: unknown[][] = [];
+const syncCalls: unknown[][] = [];
 const listenerRegistrations: Array<["on" | "removeListener", string]> = [];
 const listenerCallbacks = new Map<string, (...args: unknown[]) => void>();
 let exposedBridge: DevspaceBridge | undefined;
@@ -17,6 +18,10 @@ vi.mock("../electron-bridge", () => ({
       invoke: (...args: unknown[]) => {
         invokeCalls.push(args);
         return Promise.resolve(undefined);
+      },
+      sendSync: (...args: unknown[]) => {
+        syncCalls.push(args);
+        return undefined;
       },
       send: (..._args: unknown[]) => {},
       on: (channel: string, listener: (...args: unknown[]) => void) => {
@@ -60,6 +65,14 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   await bridge.browser.clearBrowsingData("everything");
   await bridge.workspaceState.load();
   await bridge.workspaceState.save({
+    activeWorkspaceId: "workspace-1",
+    paneGroups: {},
+    panes: {},
+    pinnedSidebarNodes: [],
+    sidebarTree: [],
+    workspaces: [],
+  });
+  bridge.workspaceState.saveSync({
     activeWorkspaceId: "workspace-1",
     paneGroups: {},
     panes: {},
@@ -129,5 +142,19 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
     ["removeListener", "browser:permissionRequested"],
     ["removeListener", "browser:contextMenuRequested"],
     ["removeListener", "browser:openInNewTabRequested"],
+  ]);
+
+  expect(syncCalls).toEqual([
+    [
+      "workspaceState:saveSync",
+      {
+        activeWorkspaceId: "workspace-1",
+        paneGroups: {},
+        panes: {},
+        pinnedSidebarNodes: [],
+        sidebarTree: [],
+        workspaces: [],
+      },
+    ],
   ]);
 });

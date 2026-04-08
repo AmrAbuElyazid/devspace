@@ -240,6 +240,9 @@ const bridge: DevspaceBridge = {
   workspaceState: {
     load: () => ipcRenderer.invoke("workspaceState:load"),
     save: (snapshot) => ipcRenderer.invoke("workspaceState:save", snapshot),
+    saveSync: (snapshot) => {
+      ipcRenderer.sendSync("workspaceState:saveSync", snapshot);
+    },
   },
 
   t3code: {

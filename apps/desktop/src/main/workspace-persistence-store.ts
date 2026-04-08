@@ -1,5 +1,6 @@
-import { mkdir } from "fs/promises";
+import { mkdirSync } from "fs";
 import { join } from "path";
+import { DatabaseSync } from "node:sqlite";
 import type { PersistedWorkspaceState } from "../shared/workspace-persistence";
 
 type SqliteStatement = {
@@ -18,14 +19,14 @@ const SCHEMA_VERSION = "1";
 
 export class WorkspacePersistenceStore {
   private readonly filePath: string;
-  private dbPromise: Promise<SqliteDatabase> | null = null;
+  private db: SqliteDatabase | null = null;
 
   constructor(userDataPath: string) {
     this.filePath = join(userDataPath, "workspace-state.sqlite");
   }
 
-  async load(): Promise<PersistedWorkspaceState | null> {
-    const db = await this.getDb();
+  load(): PersistedWorkspaceState | null {
+    const db = this.getDb();
     const workspaceRows = db
       .prepare(
         `SELECT id, name, focused_group_id, zoomed_group_id, last_active_at, last_terminal_cwd, root_json
@@ -127,8 +128,8 @@ export class WorkspacePersistenceStore {
     }
   }
 
-  async save(snapshot: PersistedWorkspaceState): Promise<void> {
-    const db = await this.getDb();
+  save(snapshot: PersistedWorkspaceState): void {
+    const db = this.getDb();
     db.exec("BEGIN IMMEDIATE TRANSACTION");
 
     try {
@@ -214,18 +215,17 @@ export class WorkspacePersistenceStore {
     }
   }
 
-  private async getDb(): Promise<SqliteDatabase> {
-    if (!this.dbPromise) {
-      this.dbPromise = this.openDb();
+  private getDb(): SqliteDatabase {
+    if (!this.db) {
+      this.db = this.openDb();
     }
 
-    return this.dbPromise;
+    return this.db;
   }
 
-  private async openDb(): Promise<SqliteDatabase> {
-    await mkdir(this.getDirectoryPath(), { recursive: true });
-    const sqlite = await import("node:sqlite");
-    const db = new sqlite.DatabaseSync(this.filePath) as unknown as SqliteDatabase;
+  private openDb(): SqliteDatabase {
+    mkdirSync(this.getDirectoryPath(), { recursive: true });
+    const db = new DatabaseSync(this.filePath) as unknown as SqliteDatabase;
 
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA foreign_keys = ON");

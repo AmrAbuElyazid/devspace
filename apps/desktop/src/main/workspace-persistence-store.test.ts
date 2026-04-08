@@ -50,5 +50,5 @@ test("workspace persistence store saves and reloads a snapshot", async () => {
 
   await store.save(snapshot);
 
-  await expect(store.load()).resolves.toEqual(snapshot);
+  expect(store.load()).toEqual(snapshot);
 });

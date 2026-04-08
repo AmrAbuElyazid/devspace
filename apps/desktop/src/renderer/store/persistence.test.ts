@@ -117,3 +117,49 @@ test("setupPersistence ignores ui-only changes and persists structural changes a
     }),
   );
 });
+
+test("setupPersistence flushes pending state synchronously on beforeunload", () => {
+  const saveSyncSpy = vi.spyOn(window.api.workspaceState, "saveSync");
+
+  let currentState = createState({
+    workspaces: [{ id: "workspace-1", name: "Workspace 1" }] as WorkspaceState["workspaces"],
+    sidebarTree: [{ type: "workspace", workspaceId: "workspace-1" }],
+  });
+
+  let subscriber: ((state: WorkspaceState) => void) | null = null;
+  const store = {
+    subscribe(fn: (state: WorkspaceState) => void) {
+      subscriber = fn;
+    },
+    getState() {
+      return currentState;
+    },
+  };
+
+  setupPersistence(store);
+  const notify = subscriber as ((state: WorkspaceState) => void) | null;
+  if (!notify) {
+    throw new Error("expected setupPersistence to register a subscriber");
+  }
+
+  currentState = {
+    ...currentState,
+    workspaces: [
+      ...currentState.workspaces,
+      { id: "workspace-2", name: "Workspace 2" },
+    ] as WorkspaceState["workspaces"],
+    sidebarTree: [...currentState.sidebarTree, { type: "workspace", workspaceId: "workspace-2" }],
+  };
+  notify(currentState);
+
+  window.dispatchEvent(new Event("beforeunload"));
+
+  expect(saveSyncSpy).toHaveBeenCalledTimes(1);
+  expect(saveSyncSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      workspaces: expect.arrayContaining([
+        expect.objectContaining({ id: "workspace-2", name: "Workspace 2" }),
+      ]),
+    }),
+  );
+});
