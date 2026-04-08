@@ -101,6 +101,10 @@ function createDefaultWindowApi(): DevspaceBridge {
     cli: {
       install: vi.fn(async () => ({ ok: true })),
     },
+    workspaceState: {
+      load: vi.fn(async () => null),
+      save: vi.fn(async () => {}),
+    },
     t3code: {
       isAvailable: vi.fn(async () => false),
       start: vi.fn(async () => ({ error: "Unavailable" })),

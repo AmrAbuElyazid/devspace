@@ -15,6 +15,7 @@ import type {
   ClearBrowsingDataTarget,
 } from "./browser";
 import type { ShortcutAction, StoredShortcut } from "./shortcuts";
+import type { PersistedWorkspaceState } from "./workspace-persistence";
 
 export interface TerminalBounds {
   x: number;
@@ -121,6 +122,10 @@ export interface DevspaceBridge {
   };
   cli: {
     install: () => Promise<{ ok: boolean; error?: string }>;
+  };
+  workspaceState: {
+    load: () => Promise<PersistedWorkspaceState | null>;
+    save: (snapshot: PersistedWorkspaceState) => Promise<void>;
   };
   t3code: {
     isAvailable: () => Promise<boolean>;

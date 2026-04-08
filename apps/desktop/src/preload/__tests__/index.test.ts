@@ -58,6 +58,15 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   await bridge.browser.importBrowser("chrome", "/tmp/Profile 1", "history");
   await bridge.browser.importBrowser("safari", null, "cookies");
   await bridge.browser.clearBrowsingData("everything");
+  await bridge.workspaceState.load();
+  await bridge.workspaceState.save({
+    activeWorkspaceId: "workspace-1",
+    paneGroups: {},
+    panes: {},
+    pinnedSidebarNodes: [],
+    sidebarTree: [],
+    workspaces: [],
+  });
   const unsubscribeFullScreen = bridge.window.onFullScreenChange(() => {});
   const unsubscribeNativeModifier = bridge.window.onNativeModifierChanged(() => {});
   const unsubscribeState = bridge.browser.onStateChange(() => {});
@@ -91,6 +100,18 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
     ["browser:import", "chrome", "/tmp/Profile 1", "history"],
     ["browser:import", "safari", null, "cookies"],
     ["browser:clearData", "everything"],
+    ["workspaceState:load"],
+    [
+      "workspaceState:save",
+      {
+        activeWorkspaceId: "workspace-1",
+        paneGroups: {},
+        panes: {},
+        pinnedSidebarNodes: [],
+        sidebarTree: [],
+        workspaces: [],
+      },
+    ],
   ]);
 
   expect(listenerRegistrations).toEqual([

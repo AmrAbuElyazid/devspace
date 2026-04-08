@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { WorkspaceState } from "./workspace-state";
 import { setupPersistence } from "./persistence";
+import { installMockWindowApi } from "../test-utils/mock-window-api";
 
 function createState(overrides: Partial<WorkspaceState> = {}): WorkspaceState {
   return {
@@ -52,8 +53,8 @@ function createState(overrides: Partial<WorkspaceState> = {}): WorkspaceState {
 }
 
 beforeEach(() => {
-  localStorage.clear();
   vi.useFakeTimers();
+  installMockWindowApi();
 });
 
 afterEach(() => {
@@ -62,8 +63,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-test("setupPersistence ignores ui-only changes and persists structural changes after debounce", () => {
-  const setItemSpy = vi.spyOn(Storage.prototype, "setItem");
+test("setupPersistence ignores ui-only changes and persists structural changes after debounce", async () => {
+  const saveSpy = vi.spyOn(window.api.workspaceState, "save");
 
   let currentState = createState({
     workspaces: [{ id: "workspace-1", name: "Workspace 1" }] as WorkspaceState["workspaces"],
@@ -90,8 +91,9 @@ test("setupPersistence ignores ui-only changes and persists structural changes a
   currentState = { ...currentState, pendingEditId: "workspace-1", pendingEditType: "workspace" };
   notify(currentState);
   vi.advanceTimersByTime(500);
+  await vi.runAllTimersAsync();
 
-  expect(setItemSpy).not.toHaveBeenCalled();
+  expect(saveSpy).not.toHaveBeenCalled();
 
   currentState = {
     ...currentState,
@@ -103,10 +105,15 @@ test("setupPersistence ignores ui-only changes and persists structural changes a
   };
   notify(currentState);
   vi.advanceTimersByTime(500);
+  await vi.runAllTimersAsync();
 
-  expect(setItemSpy).toHaveBeenCalledTimes(1);
-  expect(setItemSpy).toHaveBeenCalledWith(
-    "devspace-workspaces",
-    expect.stringContaining('"workspace-2"'),
+  expect(saveSpy).toHaveBeenCalledTimes(1);
+  expect(saveSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      activeWorkspaceId: "workspace-1",
+      workspaces: expect.arrayContaining([
+        expect.objectContaining({ id: "workspace-2", name: "Workspace 2" }),
+      ]),
+    }),
   );
 });

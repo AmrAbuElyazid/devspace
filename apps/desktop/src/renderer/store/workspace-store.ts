@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import type { WorkspaceState } from "./workspace-state";
-import { buildInitialState, setupPersistence } from "./persistence";
+import { setupPersistence } from "./persistence";
 import { createUIStateSlice } from "./slices/ui-state";
 import { createSidebarTreeSlice } from "./slices/sidebar-tree";
 import { createPaneManagementSlice } from "./slices/pane-management";
@@ -9,6 +9,10 @@ import { createWorkspaceCrudSlice } from "./slices/workspace-crud";
 import { createSplitTreeSlice } from "./slices/split-tree";
 import { createNavigationSlice } from "./slices/navigation";
 import { defaultPaneCleanup } from "./store-helpers";
+import {
+  createDefaultPersistedWorkspaceState,
+  normalizePersistedWorkspaceState,
+} from "./persistence-model";
 
 // Re-export tree helpers for consumers that import from this module
 export {
@@ -21,12 +25,15 @@ export {
   removeGroupFromTree,
 } from "../lib/split-tree";
 
+const defaultPersistedState = createDefaultPersistedWorkspaceState();
+let persistenceInitialized = false;
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
-  ...buildInitialState(),
+  ...defaultPersistedState,
   ...createUIStateSlice(set),
   ...createSidebarTreeSlice(set, get),
   ...createPaneManagementSlice(set, get, defaultPaneCleanup),
@@ -36,8 +43,19 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   ...createNavigationSlice(set, get),
 }));
 
-// ---------------------------------------------------------------------------
-// Persistence
-// ---------------------------------------------------------------------------
+export async function initializeWorkspaceStore(): Promise<void> {
+  const persistedState = await window.api.workspaceState.load();
+  const normalizedState = persistedState ? normalizePersistedWorkspaceState(persistedState) : null;
+  useWorkspaceStore.setState({
+    ...(normalizedState ?? defaultPersistedState),
+    tabHistoryByGroupId: {},
+    recentTabTraversalByGroupId: {},
+    pendingEditId: null,
+    pendingEditType: null,
+  });
 
-setupPersistence(useWorkspaceStore);
+  if (!persistenceInitialized) {
+    setupPersistence(useWorkspaceStore);
+    persistenceInitialized = true;
+  }
+}

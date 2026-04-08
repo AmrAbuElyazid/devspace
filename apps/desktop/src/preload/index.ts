@@ -237,6 +237,11 @@ const bridge: DevspaceBridge = {
     install: () => ipcRenderer.invoke("cli:install"),
   },
 
+  workspaceState: {
+    load: () => ipcRenderer.invoke("workspaceState:load"),
+    save: (snapshot) => ipcRenderer.invoke("workspaceState:save", snapshot),
+  },
+
   t3code: {
     isAvailable: () => ipcRenderer.invoke("t3code:isAvailable"),
     start: (paneId) => ipcRenderer.invoke("t3code:start", paneId),

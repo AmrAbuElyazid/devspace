@@ -8,6 +8,7 @@ import type { BrowserSessionManager } from "./browser/browser-session-manager";
 import { registerBrowserIpc } from "./ipc/browser";
 import { registerSystemIpc } from "./ipc/system";
 import { registerTerminalAndEditorIpc } from "./ipc/terminal-editor";
+import { registerWorkspaceStateIpc } from "./ipc/workspace-state";
 
 export function registerIpcHandlers(
   mainWindow: BrowserWindow,
@@ -28,4 +29,5 @@ export function registerIpcHandlers(
   );
   registerSystemIpc(mainWindow);
   registerBrowserIpc(mainWindow, browserPaneManager, browserImportService);
+  registerWorkspaceStateIpc();
 }
