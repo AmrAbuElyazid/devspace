@@ -10,6 +10,7 @@ const terminalPaneMocks = vi.hoisted(() => ({
   useNativeView: vi.fn(),
   closeFindBar: vi.fn(),
   terminalCreate: vi.fn(() => Promise.resolve({ ok: true } as { ok: true } | { error: string })),
+  terminalDestroy: vi.fn(async () => {}),
   terminalFocus: vi.fn(),
   terminalBlur: vi.fn(),
   sendBindingAction: vi.fn(() => Promise.resolve(true)),
@@ -75,6 +76,7 @@ beforeEach(() => {
   terminalPaneMocks.terminalCreate.mockResolvedValue({ ok: true } as
     | { ok: true }
     | { error: string });
+  terminalPaneMocks.terminalDestroy.mockReset();
   terminalPaneMocks.terminalFocus.mockReset();
   terminalPaneMocks.terminalBlur.mockReset();
   terminalPaneMocks.sendBindingAction.mockClear();
@@ -89,6 +91,7 @@ beforeEach(() => {
   installMockWindowApi({
     terminal: {
       create: terminalPaneMocks.terminalCreate,
+      destroy: terminalPaneMocks.terminalDestroy,
       focus: terminalPaneMocks.terminalFocus,
       blur: terminalPaneMocks.terminalBlur,
       sendBindingAction: terminalPaneMocks.sendBindingAction,
@@ -131,6 +134,36 @@ test("creates the terminal surface once and focuses visible focused panes", asyn
   });
 
   expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledTimes(1);
+});
+
+test("reuses an existing terminal surface across unmount and remount", async () => {
+  await act(async () => {
+    root?.render(
+      <TerminalPane paneId="pane-1" config={{ cwd: "/tmp/project" }} isFocused={true} />,
+    );
+  });
+
+  expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledTimes(1);
+  expect(terminalPaneMocks.createdSurfaces.has("pane-1")).toBe(true);
+
+  await act(async () => {
+    root?.unmount();
+    root = null;
+  });
+
+  expect(terminalPaneMocks.terminalDestroy).not.toHaveBeenCalled();
+
+  root = createRoot(container);
+
+  await act(async () => {
+    root?.render(
+      <TerminalPane paneId="pane-1" config={{ cwd: "/tmp/project" }} isFocused={true} />,
+    );
+  });
+
+  expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledTimes(1);
+  expect(terminalPaneMocks.terminalFocus).toHaveBeenCalledTimes(2);
+  expect(terminalPaneMocks.createdSurfaces.has("pane-1")).toBe(true);
 });
 
 test("blurs when the find bar is open and refocuses on close", async () => {

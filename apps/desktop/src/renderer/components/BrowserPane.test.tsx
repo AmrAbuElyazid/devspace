@@ -16,6 +16,7 @@ const browserPaneMocks = vi.hoisted(() => ({
   closeFindBar: vi.fn(),
   upsertRuntimeState: vi.fn(),
   browserCreate: vi.fn(() => Promise.resolve()),
+  browserDestroy: vi.fn(async () => {}),
   browserGetRuntimeState: vi.fn<(paneId: string) => Promise<BrowserRuntimeState | undefined>>(() =>
     Promise.resolve(undefined),
   ),
@@ -140,6 +141,7 @@ beforeEach(() => {
   browserPaneMocks.upsertRuntimeState.mockReset();
   browserPaneMocks.browserCreate.mockReset();
   browserPaneMocks.browserCreate.mockReturnValue(Promise.resolve());
+  browserPaneMocks.browserDestroy.mockReset();
   browserPaneMocks.browserGetRuntimeState.mockReset();
   browserPaneMocks.browserGetRuntimeState.mockReturnValue(Promise.resolve(undefined));
   browserPaneMocks.browserSetZoom.mockReset();
@@ -188,6 +190,7 @@ beforeEach(() => {
   installMockWindowApi({
     browser: {
       create: browserPaneMocks.browserCreate,
+      destroy: browserPaneMocks.browserDestroy,
       getRuntimeState: browserPaneMocks.browserGetRuntimeState,
       setZoom: browserPaneMocks.browserSetZoom,
       navigate: browserPaneMocks.browserNavigate,
@@ -235,6 +238,44 @@ test("creates the browser pane and renders the current security label", async ()
   expect(browserPaneMocks.browserGetRuntimeState).not.toHaveBeenCalled();
   expect(container.textContent).toContain("Secure connection");
   expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
+});
+
+test("reuses an existing browser pane across unmount and remount", async () => {
+  await act(async () => {
+    root?.render(
+      <BrowserPane
+        paneId="pane-1"
+        workspaceId="workspace-1"
+        config={{ url: "https://example.com/" }}
+      />,
+    );
+  });
+
+  expect(browserPaneMocks.browserCreate).toHaveBeenCalledTimes(1);
+  expect(browserPaneMocks.createdPanes.has("pane-1")).toBe(true);
+
+  await act(async () => {
+    root?.unmount();
+    root = null;
+  });
+
+  expect(browserPaneMocks.browserDestroy).not.toHaveBeenCalled();
+
+  root = createRoot(container);
+
+  await act(async () => {
+    root?.render(
+      <BrowserPane
+        paneId="pane-1"
+        workspaceId="workspace-1"
+        config={{ url: "https://example.com/" }}
+      />,
+    );
+  });
+
+  expect(browserPaneMocks.browserCreate).toHaveBeenCalledTimes(1);
+  expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledTimes(2);
+  expect(browserPaneMocks.createdPanes.has("pane-1")).toBe(true);
 });
 
 test("focuses the native browser view when it becomes visible", async () => {
