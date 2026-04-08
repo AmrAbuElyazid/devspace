@@ -40,10 +40,10 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 ## 3. Testing, Package Maturity, And Release Discipline
 
-- [ ] Continue expanding `packages/note-editor` coverage into deeper editor interactions now that plugin composition, toolbar wiring, and slash-command actions have direct tests. Refs: `packages/note-editor/src/plugins/note-editor-kit.tsx`, `packages/note-editor/src/plate-ui/floating-toolbar-buttons.tsx`, `packages/note-editor/src/plate-ui/slash-node.tsx`
+- [ ] Continue expanding `packages/note-editor` coverage into deeper editor interactions now that plugin composition, toolbar wiring, slash-command actions, and inline combobox behavior have direct tests. Refs: `packages/note-editor/src/plugins/note-editor-kit.tsx`, `packages/note-editor/src/plate-ui/floating-toolbar-buttons.tsx`, `packages/note-editor/src/plate-ui/slash-node.tsx`, `packages/note-editor/src/plate-ui/inline-combobox.tsx`
 - [x] Remove `@ts-nocheck` from the current `note-editor` UI files as types are tightened. Refs: `packages/note-editor/src/plate-ui/editor.tsx`, `packages/note-editor/src/plate-ui/turn-into-toolbar-button.tsx`, `packages/note-editor/src/plate-ui/inline-combobox.tsx`, `packages/note-editor/src/plate-ui/toolbar.tsx`, `packages/note-editor/src/plate-ui/dropdown-menu.tsx`, `packages/note-editor/src/plate-ui/slash-node.tsx`
-- [ ] Decide whether `ghostty-electron` is internal-only or truly publishable, then align `README.md`, `package.json`, and release expectations. Refs: `packages/ghostty-electron/README.md`, `packages/ghostty-electron/package.json`
-- [ ] Add stronger teardown confidence for `ghostty-electron`, ideally beyond unit mocks where practical. Refs: `packages/ghostty-electron/native/ghostty_bridge.mm`, `packages/ghostty-electron/src/terminal-manager.ts`
+- [ ] Align `ghostty-electron` for a published open source package now that the package posture is decided. Refs: `packages/ghostty-electron/README.md`, `packages/ghostty-electron/package.json`
+- [ ] Add stronger teardown confidence for `ghostty-electron`; unit coverage now handles teardown failures, but ideally extend confidence beyond unit mocks where practical. Refs: `packages/ghostty-electron/native/ghostty_bridge.mm`, `packages/ghostty-electron/src/terminal-manager.ts`
 - [x] Add changelog/release-note discipline as the release process matures. Refs: `CHANGELOG.md`, `docs/release-process.md`
 
 ## Suggested Order
@@ -63,4 +63,4 @@ This doc is for medium- and long-term work. Tactical bug reports and smaller UX 
 
 - [x] Move workspace persistence behind main/preload with SQLite.
 - [x] Start fresh instead of adding a `localStorage` to SQLite migration.
-- [ ] Expand `note-editor` maturity and settle `ghostty-electron` packaging posture.
+- [ ] Expand `note-editor` maturity and align `ghostty-electron` for public packaging.
