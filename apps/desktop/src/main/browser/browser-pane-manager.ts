@@ -15,26 +15,24 @@ import type {
   BrowserRuntimePatch,
 } from "./browser-types";
 import { createBrowserPaneRecord, createElectronView } from "./browser-pane-factory";
+import {
+  createBrowserPaneHistoryTracker,
+  type BrowserPaneHistoryTracker,
+} from "./browser-pane-history-tracker";
 import { registerPaneRecord, unregisterPaneRecord } from "./browser-pane-registry";
-import { registerBrowserPaneWebContentsListeners } from "./browser-pane-webcontents-events";
+import { registerManagedBrowserPaneWebContentsListeners } from "./browser-pane-webcontents-listener-bindings";
 import {
   focusPaneWebContents,
   goBackInPane,
   goForwardInPane,
   navigatePaneToUrl,
-  recordCommittedHistoryVisit,
-  refreshPendingHistoryTitle,
   reloadPane,
   setPaneZoomFactor,
   stopPane,
-  syncPaneNavigationState,
-  type PendingHistoryVisit,
 } from "./browser-pane-navigation";
 import {
-  denyPendingPermissionsForPane,
-  requestBrowserPermission,
-  resolveBrowserPermission,
-  type PendingPermissionRequest,
+  createBrowserPanePermissionTracker,
+  type BrowserPanePermissionTracker,
 } from "./browser-pane-permissions";
 import {
   executePaneScript,
@@ -62,12 +60,14 @@ import {
 export class BrowserPaneManager implements BrowserPaneController {
   private readonly panes = new Map<string, BrowserPaneRecord>();
   private readonly paneIdByWebContentsId = new Map<number, string>();
-  private readonly pendingHistoryVisits = new Map<string, PendingHistoryVisit>();
-  private readonly pendingPermissionResolutions = new Map<string, PendingPermissionRequest>();
   private readonly createView: NonNullable<BrowserPaneManagerDeps["createView"]>;
+  private readonly historyTracker: BrowserPaneHistoryTracker;
+  private readonly permissionTracker: BrowserPanePermissionTracker;
 
   constructor(private readonly deps: BrowserPaneManagerDeps) {
     this.createView = deps.createView ?? createElectronView;
+    this.historyTracker = createBrowserPaneHistoryTracker(deps.historyService);
+    this.permissionTracker = createBrowserPanePermissionTracker(deps.sendToRenderer);
   }
 
   createPane(paneId: string, initialUrl: string, kind: BrowserPaneKind = "browser"): void {
@@ -96,14 +96,9 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     hidePaneView(pane, this.deps);
-    denyPendingPermissionsForPane(this.pendingPermissionResolutions, paneId);
-    unregisterPaneRecord(
-      this.panes,
-      this.paneIdByWebContentsId,
-      this.pendingHistoryVisits,
-      paneId,
-      pane,
-    );
+    this.permissionTracker.denyPendingForPane(paneId);
+    this.historyTracker.deletePane(paneId);
+    unregisterPaneRecord(this.panes, this.paneIdByWebContentsId, paneId, pane);
 
     destroyPaneView(pane);
   }
@@ -225,16 +220,11 @@ export class BrowserPaneManager implements BrowserPaneController {
     request: BrowserPermissionRequest,
     resolve: (decision: BrowserPermissionDecision) => void,
   ): void {
-    requestBrowserPermission(
-      this.pendingPermissionResolutions,
-      request,
-      resolve,
-      this.deps.sendToRenderer,
-    );
+    this.permissionTracker.request(request, resolve);
   }
 
   resolvePermission(requestToken: string, decision: BrowserPermissionDecision): void {
-    resolveBrowserPermission(this.pendingPermissionResolutions, requestToken, decision);
+    this.permissionTracker.resolve(requestToken, decision);
   }
 
   reportFailure(
@@ -281,35 +271,13 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   private registerWebContentsListeners(pane: BrowserPaneRecord): void {
-    registerBrowserPaneWebContentsListeners({
+    registerManagedBrowserPaneWebContentsListeners({
       pane,
       sendToRenderer: this.deps.sendToRenderer,
       getAppShortcutBindings: this.deps.getAppShortcutBindings,
-      applyRuntimePatch: (paneId, patch) => {
-        this.applyRuntimePatch(paneId, patch);
-      },
-      applyFindResult: (paneId, result) => {
-        this.applyFindResult(paneId, result);
-      },
-      syncNavigationState: (nextPane) => {
-        syncPaneNavigationState(nextPane);
-      },
-      recordCommittedHistoryVisit: (nextPane, url) => {
-        recordCommittedHistoryVisit(
-          nextPane,
-          url,
-          this.pendingHistoryVisits,
-          this.deps.historyService,
-        );
-      },
-      refreshPendingHistoryTitle: (nextPane, title) => {
-        refreshPendingHistoryTitle(
-          nextPane,
-          title,
-          this.pendingHistoryVisits,
-          this.deps.historyService,
-        );
-      },
+      applyRuntimePatch: this.applyRuntimePatch.bind(this),
+      applyFindResult: this.applyFindResult.bind(this),
+      historyTracker: this.historyTracker,
     });
   }
 
