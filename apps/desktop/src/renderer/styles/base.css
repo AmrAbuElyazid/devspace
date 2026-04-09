@@ -1,5 +1,8 @@
 /* ─── Base Layer ─────────────────────────────────────────────────────── */
 
+@reference "./index.css";
+@reference "./design-tokens.css";
+
 @layer base {
   * {
     @apply border-border;

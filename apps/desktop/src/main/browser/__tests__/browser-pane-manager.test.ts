@@ -916,6 +916,43 @@ test("committed navigations are recorded in browser history with devspace source
   expect(historyCalls[0]?.source).toBe("devspace");
 });
 
+test("editor pane navigations are excluded from persistent browser history", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const historyCalls: Array<{ url: string; title: string; source: string }> = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          getTitle: () => "VS Code",
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+    historyService: {
+      recordVisit: (entry: { url: string; title: string; source: string }) => {
+        historyCalls.push(entry);
+      },
+    },
+  } as never);
+
+  manager.createPane(
+    "editor-1",
+    "http://127.0.0.1:18562/devspace-vscode?tkn=secret&folder=%2Ftmp",
+    "editor",
+  );
+  listeners.get("did-navigate")?.(
+    {},
+    "http://127.0.0.1:18562/devspace-vscode?tkn=secret&folder=%2Ftmp",
+  );
+
+  expect(historyCalls).toEqual([]);
+});
+
 test("history capture avoids stale titles and refreshes when the real title arrives later", () => {
   const listeners = new Map<string, (...args: unknown[]) => void>();
   const historyCalls: Array<{ url: string; title: string; source: string; visitedAt: number }> = [];

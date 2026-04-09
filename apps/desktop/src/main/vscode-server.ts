@@ -1,10 +1,36 @@
-import { spawn, execFileSync, execSync, type ChildProcess } from "child_process";
+import { randomBytes } from "crypto";
+import { spawn, execFileSync, type ChildProcess } from "child_process";
 import { createServer } from "net";
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 import type { EditorCliStatus } from "../shared/types";
 import { VSCODE_PORT, DATA_DIR_SUFFIX } from "./dev-mode";
+
+const VSCODE_SERVER_BASE_PATH = `/devspace-vscode${DATA_DIR_SUFFIX}`;
+const VSCODE_CONNECTION_TOKEN_FILENAME = "connection-token";
+const VSCODE_PID_FILENAME = "server.pid";
+
+function createConnectionToken(): string {
+  return randomBytes(24).toString("base64url");
+}
+
+function readOrCreateConnectionToken(tokenFilePath: string): string {
+  if (existsSync(tokenFilePath)) {
+    try {
+      const existingToken = readFileSync(tokenFilePath, "utf-8").trim();
+      if (existingToken.length > 0) {
+        return existingToken;
+      }
+    } catch (err) {
+      console.warn("[vscode-server] failed to read connection token, regenerating:", err);
+    }
+  }
+
+  const token = createConnectionToken();
+  writeFileSync(tokenFilePath, `${token}\n`, { encoding: "utf-8", mode: 0o600 });
+  return token;
+}
 
 /** Check if a port is available by trying to bind to it. */
 function isPortFree(port: number): Promise<boolean> {
@@ -41,6 +67,28 @@ function findCommandInPath(command: string): string | null {
     return execFileSync("which", [command], { encoding: "utf-8" }).trim() || null;
   } catch (err) {
     console.warn(`[vscode-server] CLI lookup failed for ${command}:`, err);
+    return null;
+  }
+}
+
+function getListeningPid(port: number): number | null {
+  try {
+    const output = execFileSync("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"], {
+      encoding: "utf-8",
+    })
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    const uniquePids = [
+      ...new Set(output.map((value) => Number.parseInt(value, 10)).filter(Number.isFinite)),
+    ];
+    if (uniquePids.length !== 1) {
+      return null;
+    }
+
+    return uniquePids[0] ?? null;
+  } catch {
     return null;
   }
 }
@@ -109,13 +157,16 @@ interface FolderEntry {
 export class VscodeServerManager {
   /** Per-folder URL entries with reference counting. */
   private folders = new Map<string, FolderEntry>();
-  /** The single shared server process (null when no server is running). */
+  /** The single shared server process when launched by this app process. */
   private serverProcess: ChildProcess | null = null;
   private serverDataDir: string;
+  private connectionTokenFilePath: string;
+  private connectionToken: string;
+  private pidFilePath: string;
 
   /**
-   * Serialization lock for start().  All calls chain through this promise
-   * so only one caller does port acquisition / process spawn at a time.
+   * Serialization lock for start(). All calls chain through this promise so
+   * only one caller does ownership checks / process spawn at a time.
    */
   private startLock: Promise<unknown> = Promise.resolve();
 
@@ -126,6 +177,9 @@ export class VscodeServerManager {
     this.serverDataDir =
       serverDataDir || join(homedir(), ".devspace", `vscode-server-data${DATA_DIR_SUFFIX}`);
     mkdirSync(this.serverDataDir, { recursive: true });
+    this.connectionTokenFilePath = join(this.serverDataDir, VSCODE_CONNECTION_TOKEN_FILENAME);
+    this.connectionToken = readOrCreateConnectionToken(this.connectionTokenFilePath);
+    this.pidFilePath = join(this.serverDataDir, VSCODE_PID_FILENAME);
   }
 
   /** Check if VS Code CLI is available. */
@@ -141,15 +195,10 @@ export class VscodeServerManager {
    * Start (or reuse) a `code serve-web` server for the given folder.
    *
    * All calls are serialized so concurrent requests for different folders
-   * don't race on port acquisition.  A single `code serve-web` process is
-   * shared across all folders — the `?folder=` URL param controls which
-   * workspace the VS Code client opens.
-   *
-   * When called without a folder, the server starts (or is reused) and
-   * returns the base URL — VS Code shows its Welcome tab.
+   * don't race on ownership detection or process spawn. A single
+   * `code serve-web` process is shared across all folders.
    */
   async start(folder?: string, configuredCli?: string): Promise<{ url: string; port: number }> {
-    // Serialize: chain onto the lock so only one caller runs _startImpl at a time.
     const result = new Promise<{ url: string; port: number }>((resolve, reject) => {
       this.startLock = this.startLock.then(
         () => this._startImpl(folder, configuredCli).then(resolve, reject),
@@ -168,12 +217,34 @@ export class VscodeServerManager {
   ): Promise<{ url: string; port: number }> {
     const key = folder ?? VscodeServerManager.NO_FOLDER_KEY;
 
-    // Fast path: folder already has an entry → just bump refCount.
+    // Adopted servers are not child processes, so revalidate cached folder entries
+    // against the current fixed-port owner before reusing them.
+    if (
+      !this.serverProcess &&
+      this.folders.size > 0 &&
+      this.resolveManagedListeningPid() === null
+    ) {
+      console.warn(
+        "[vscode-server] clearing stale adopted server state after ownership check failed",
+      );
+      this.folders.clear();
+    }
+
     const existing = this.folders.get(key);
     if (existing) {
       existing.refCount++;
       return { url: existing.url, port: VSCODE_PORT };
     }
+
+    if (this.serverProcess || this.folders.size > 0) {
+      return this.addFolder(key, folder);
+    }
+
+    if (await this.reuseRunningServer()) {
+      return this.addFolder(key, folder);
+    }
+
+    await this.assertPortIsAvailableForManagedServer();
 
     const resolvedCli = resolveVscodeCli(configuredCli);
     if (!resolvedCli.path) {
@@ -188,31 +259,18 @@ export class VscodeServerManager {
       );
     }
 
-    const cli = resolvedCli.path;
-
-    // If a server process is already running, reuse it for this folder.
-    if (this.serverProcess) {
-      return this.addFolder(key, folder);
-    }
-
-    // Try to reuse a server left running from a previous session.
-    if (await this.reuseRunningServer()) {
-      return this.addFolder(key, folder);
-    }
-
-    // No server running — acquire the port (possibly killing a stale process).
-    await this.acquirePort();
-
-    // Spawn the server.
     const child = spawn(
-      cli,
+      resolvedCli.path,
       [
         "serve-web",
         "--host",
         "127.0.0.1",
         "--port",
         String(VSCODE_PORT),
-        "--without-connection-token",
+        "--server-base-path",
+        VSCODE_SERVER_BASE_PATH,
+        "--connection-token-file",
+        this.connectionTokenFilePath,
         "--accept-server-license-terms",
         "--server-data-dir",
         this.serverDataDir,
@@ -223,7 +281,6 @@ export class VscodeServerManager {
       },
     );
 
-    // Log stderr for debugging
     child.stderr?.on("data", (data: Buffer) => {
       const msg = data.toString().trim();
       if (msg) console.log(`[vscode-server:${VSCODE_PORT}] ${msg}`);
@@ -242,39 +299,58 @@ export class VscodeServerManager {
     this.serverProcess = child;
 
     try {
-      await waitForServer(`http://127.0.0.1:${VSCODE_PORT}`);
+      await waitForServer(this.buildServerUrl());
     } catch (err) {
       child.kill();
       this.serverProcess = null;
+      this.removePidFile();
       throw err;
     }
 
+    this.writePidFile(child.pid);
     console.log(`[vscode-server] started on port ${VSCODE_PORT}`);
     return this.addFolder(key, folder);
   }
 
   /**
-   * Probe port 18562 for a responsive VS Code server left running from
-   * a previous session.  Returns true if found and adopted.
+   * Reuse a fixed-port Devspace-managed server only when the metadata pid
+   * still matches the actual process listening on the port.
    */
   private async reuseRunningServer(): Promise<boolean> {
     if (await isPortFree(VSCODE_PORT)) return false;
 
+    const pid = this.resolveManagedListeningPid();
+    if (pid === null) {
+      return false;
+    }
+
     try {
-      await waitForServer(`http://127.0.0.1:${VSCODE_PORT}`, 3000, 200);
-      console.log(`[vscode-server] reusing existing server on port ${VSCODE_PORT}`);
+      await waitForServer(this.buildServerUrl(), 5000, 200);
+      console.log(
+        `[vscode-server] reusing existing Devspace-managed server (pid ${pid}) on port ${VSCODE_PORT}`,
+      );
       return true;
     } catch (err) {
-      console.warn("[vscode-server] Reuse check for existing server failed:", err);
+      console.warn(
+        "[vscode-server] managed server ownership matched but readiness probe failed:",
+        err,
+      );
       return false;
     }
   }
 
+  private buildServerUrl(folder?: string): string {
+    const url = new URL(`http://127.0.0.1:${VSCODE_PORT}${VSCODE_SERVER_BASE_PATH}`);
+    url.searchParams.set("tkn", this.connectionToken);
+    if (folder) {
+      url.searchParams.set("folder", folder);
+    }
+    return url.toString();
+  }
+
   /** Create a folder entry pointing at the shared server. */
   private addFolder(key: string, folder?: string): { url: string; port: number } {
-    const url = folder
-      ? `http://127.0.0.1:${VSCODE_PORT}?folder=${encodeURIComponent(folder)}`
-      : `http://127.0.0.1:${VSCODE_PORT}`;
+    const url = this.buildServerUrl(folder);
     this.folders.set(key, { url, refCount: 1 });
     console.log(`[vscode-server] serving ${folder ?? "(no folder)"}`);
     return { url, port: VSCODE_PORT };
@@ -284,45 +360,22 @@ export class VscodeServerManager {
   private handleProcessDeath(): void {
     this.serverProcess = null;
     this.folders.clear();
+    this.removePidFile();
   }
 
   /**
-   * Free up the fixed port by killing any stale process occupying it.
-   * Tries graceful SIGTERM first, then SIGKILL as a last resort.
-   * Only called when we know no managed server process is running.
+   * The fixed port is part of the persisted VS Code login/session identity,
+   * so we only reuse a server when its metadata pid still owns that port.
    */
-  private async acquirePort(): Promise<void> {
+  private async assertPortIsAvailableForManagedServer(): Promise<void> {
     if (await isPortFree(VSCODE_PORT)) return;
 
-    console.log(`[vscode-server] port ${VSCODE_PORT} busy, sending SIGTERM to stale process...`);
-    try {
-      execSync(`lsof -ti:${VSCODE_PORT} | xargs kill 2>/dev/null`, { stdio: "ignore" });
-      for (let i = 0; i < 8; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 250));
-        if (await isPortFree(VSCODE_PORT)) return;
-      }
-    } catch (err) {
-      console.warn("[vscode-server] SIGTERM to stale process failed:", err);
-    }
-
-    if (await isPortFree(VSCODE_PORT)) return;
-
-    console.log(`[vscode-server] port ${VSCODE_PORT} still busy after SIGTERM, sending SIGKILL...`);
-    try {
-      execSync(`lsof -ti:${VSCODE_PORT} | xargs kill -9 2>/dev/null`, { stdio: "ignore" });
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    } catch (err) {
-      console.warn("[vscode-server] SIGKILL to stale process failed:", err);
-    }
-
-    if (!(await isPortFree(VSCODE_PORT))) {
-      throw new Error(
-        `Port ${VSCODE_PORT} is occupied and could not be freed. Check: lsof -i:${VSCODE_PORT}`,
-      );
-    }
+    throw new Error(
+      `Port ${VSCODE_PORT} is already in use. Devspace will only reuse an existing VS Code server at ${VSCODE_SERVER_BASE_PATH} when its recorded pid still owns the fixed port. Close the other process or free the port and try again.`,
+    );
   }
 
-  /** Decrement ref count for a folder; stop server when no consumers remain. */
+  /** Decrement ref count for a folder; stop a spawned server when no consumers remain. */
   release(folder?: string): void {
     const key = folder ?? VscodeServerManager.NO_FOLDER_KEY;
     const entry = this.folders.get(key);
@@ -333,11 +386,11 @@ export class VscodeServerManager {
       this.folders.delete(key);
     }
 
-    // If no folders remain, kill the server.
     if (this.folders.size === 0 && this.serverProcess) {
       console.log(`[vscode-server] no remaining consumers, stopping server`);
       this.serverProcess.kill();
       this.serverProcess = null;
+      this.removePidFile();
     }
   }
 
@@ -357,20 +410,105 @@ export class VscodeServerManager {
       return;
     }
 
-    // Kill the child process we spawned (if any).
     if (child) {
       console.log(`[vscode-server] stopping server (SIGTERM)`);
       await this.gracefulKill(child, timeoutMs);
+      this.removePidFile();
+      return;
     }
 
-    // Kill anything still listening on the port — covers both orphaned
-    // code-tunn children and servers we reused but never spawned ourselves.
-    try {
-      execSync(`lsof -ti:${VSCODE_PORT} | xargs kill -9 2>/dev/null`, { stdio: "ignore" });
-      console.log(`[vscode-server] killed remaining processes on port ${VSCODE_PORT}`);
-    } catch (err) {
-      console.warn("[vscode-server] Killing remaining processes on port failed:", err);
+    const adoptedPid = this.resolveManagedListeningPid();
+    if (adoptedPid !== null) {
+      console.log(`[vscode-server] stopping adopted server (pid ${adoptedPid})`);
+      await this.gracefulKillPid(adoptedPid, timeoutMs);
+      this.removePidFile();
     }
+  }
+
+  private writePidFile(pid: number | undefined): void {
+    if (pid === undefined) return;
+    try {
+      writeFileSync(this.pidFilePath, `${pid}\n`, { encoding: "utf-8", mode: 0o600 });
+    } catch (err) {
+      console.warn("[vscode-server] failed to write pid file:", err);
+    }
+  }
+
+  private readPidFile(): number | null {
+    try {
+      if (!existsSync(this.pidFilePath)) return null;
+      const raw = readFileSync(this.pidFilePath, "utf-8").trim();
+      const pid = Number.parseInt(raw, 10);
+      return Number.isFinite(pid) && pid > 0 ? pid : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private resolveManagedListeningPid(): number | null {
+    const recordedPid = this.readPidFile();
+    if (recordedPid === null || !this.isProcessAlive(recordedPid)) {
+      this.removePidFile();
+      return null;
+    }
+
+    const listeningPid = getListeningPid(VSCODE_PORT);
+    if (listeningPid !== recordedPid) {
+      this.removePidFile();
+      return null;
+    }
+
+    return recordedPid;
+  }
+
+  private removePidFile(): void {
+    try {
+      unlinkSync(this.pidFilePath);
+    } catch {
+      // Already gone or never existed.
+    }
+  }
+
+  private isProcessAlive(pid: number): boolean {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  private gracefulKillPid(pid: number, timeoutMs: number): Promise<void> {
+    return new Promise((resolve) => {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        resolve();
+        return;
+      }
+
+      const deadline = Date.now() + timeoutMs;
+      const check = (): void => {
+        if (!this.isProcessAlive(pid)) {
+          resolve();
+          return;
+        }
+
+        if (Date.now() >= deadline) {
+          try {
+            process.kill(pid, "SIGKILL");
+          } catch {
+            // Already gone.
+          }
+          resolve();
+          return;
+        }
+
+        setTimeout(check, 100);
+      };
+
+      check();
+    });
   }
 
   private gracefulKill(child: ChildProcess, timeoutMs: number): Promise<void> {
@@ -388,7 +526,7 @@ export class VscodeServerManager {
       setTimeout(() => {
         if (resolved) return;
         try {
-          child.kill(0); // throws if already dead
+          child.kill(0);
           console.log(
             `[vscode-server] process ${child.pid} still alive after ${timeoutMs}ms, sending SIGKILL`,
           );

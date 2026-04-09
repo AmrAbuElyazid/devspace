@@ -98,6 +98,11 @@ export function recordCommittedHistoryVisit(
   pendingHistoryVisits: Map<string, PendingHistoryVisit>,
   historyService: BrowserPaneManagerDeps["historyService"],
 ): void {
+  // Editor panes carry connection tokens in their URLs; never persist them to browser history.
+  if (pane.kind === "editor") {
+    return;
+  }
+
   const pendingVisit = {
     url,
     visitedAt: Date.now(),

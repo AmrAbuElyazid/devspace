@@ -8,6 +8,14 @@ describe("extractEditorFolderFromUrl", () => {
     );
   });
 
+  it("extracts folder from a tokenized VS Code URL with a base path", () => {
+    expect(
+      extractEditorFolderFromUrl(
+        "http://127.0.0.1:18562/devspace-vscode?tkn=stable-token&folder=/Users/me/project",
+      ),
+    ).toBe("/Users/me/project");
+  });
+
   it("extracts folder from dev VS Code URL", () => {
     expect(extractEditorFolderFromUrl("http://127.0.0.1:18662?folder=/Users/me/project")).toBe(
       "/Users/me/project",

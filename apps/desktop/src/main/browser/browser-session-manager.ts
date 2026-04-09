@@ -125,6 +125,10 @@ function getTrustedLocalOrigin(rawUrl: string | undefined): string | null {
   }
 }
 
+function isVscodeMintKeyPath(pathname: string): boolean {
+  return pathname === SECRET_KEY_ENDPOINT || pathname.endsWith("/_vscode-cli/mint-key");
+}
+
 function findResponseHeaderKey(
   headers: Record<string, string[]>,
   targetHeaderName: string,
@@ -516,17 +520,11 @@ export class BrowserSessionManager {
    * stored in localStorage can be decrypted on subsequent app launches.
    */
   private registerSecretKeyHandler(ses: Session): void {
-    // Paths used by VS Code CLI / Cursor CLI for the secret key endpoint.
-    const MINT_KEY_PATHS = new Set([
-      "/_vscode-cli/mint-key",
-      SECRET_KEY_ENDPOINT, // our own fallback: /devspace-secret-key
-    ]);
-
     ses.protocol.handle("http", (request) => {
       const url = new URL(request.url);
       const trustedOrigin = getTrustedLocalOrigin(request.url);
       if (
-        MINT_KEY_PATHS.has(url.pathname) &&
+        isVscodeMintKeyPath(url.pathname) &&
         request.method === "POST" &&
         trustedOrigin &&
         this.trustedLocalOrigins.has(trustedOrigin)
@@ -555,33 +553,6 @@ export class BrowserSessionManager {
     console.log(
       "[browser-session] registered VS Code secret key handler (intercepting /_vscode-cli/mint-key)",
     );
-  }
-
-  /**
-   * Set the `vscode-secret-key-path` cookie for a VS Code server origin.
-   *
-   * When this cookie is present, the VS Code web workbench creates a
-   * `LocalStorageSecretStorageProvider` instead of falling back to volatile
-   * in-memory storage.  The cookie value is the relative endpoint path that
-   * the client POSTs to in order to retrieve the server key half.
-   */
-  async setSecretKeyCookie(serverUrl: string): Promise<void> {
-    const ses = this.getSession();
-    const parsed = new URL(serverUrl);
-
-    await ses.cookies.set({
-      url: parsed.origin,
-      name: "vscode-secret-key-path",
-      value: SECRET_KEY_ENDPOINT,
-      path: "/",
-      httpOnly: false,
-      secure: false,
-      sameSite: "lax",
-      // 1 year expiry
-      expirationDate: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
-    });
-
-    console.log(`[browser-session] set vscode-secret-key-path cookie for ${parsed.origin}`);
   }
 
   private toSessionPermissionGrantKey(

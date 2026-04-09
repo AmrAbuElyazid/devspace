@@ -273,7 +273,7 @@ test("secret key interception only applies to registered trusted local origins",
   manager.getSession();
 
   const trustedResponse = await protocolHandler?.({
-    url: "http://127.0.0.1:18562/_vscode-cli/mint-key",
+    url: "http://127.0.0.1:18562/devspace-vscode/_vscode-cli/mint-key?tkn=stable-token",
     method: "POST",
   });
   expect(fetchCalls).toEqual([]);
