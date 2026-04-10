@@ -78,45 +78,42 @@
   --muted: #e8e8e5;
   --muted-foreground: rgba(0, 0, 0, 0.45);
 
-  @variant dark {
-    color-scheme: dark;
-    --background: #161619;
-    --background-deep: #111114;
-    --surface: #1c1c20;
-    --surface-hover: rgba(255, 255, 255, 0.05);
-    --accent: #facc15;
-    --accent-muted: rgba(250, 204, 21, 0.08);
-    --accent-border: rgba(250, 204, 21, 0.15);
-    --foreground: rgba(255, 255, 255, 0.9);
-    --foreground-muted: rgba(255, 255, 255, 0.45);
-    --foreground-faint: rgba(255, 255, 255, 0.22);
-    --border: rgba(255, 255, 255, 0.07);
-    --border-faint: rgba(255, 255, 255, 0.04);
-    --destructive: #ef4444;
-    --destructive-foreground: #f87171;
-    --success: #4ade80;
-    --warning: #fbbf24;
-    --info: #60a5fa;
-    --ring: #facc15;
-    --input: rgba(255, 255, 255, 0.07);
-    --sidebar-bg: #18181c;
-    --card: #1c1c20;
-    --card-foreground: rgba(255, 255, 255, 0.9);
-    --popover: #1c1c20;
-    --popover-foreground: rgba(255, 255, 255, 0.9);
-    --primary: #facc15;
-    --primary-foreground: #1a1a1a;
-    --secondary: #222226;
-    --secondary-foreground: rgba(255, 255, 255, 0.9);
-    --muted: #222226;
-    --muted-foreground: rgba(255, 255, 255, 0.45);
-  }
-
   --highlight: oklch(0.75 0.1 70);
   --brand: oklch(0.623 0.214 259.815);
+}
 
-  @variant dark {
-    --highlight: oklch(0.45 0.08 70);
-    --brand: oklch(0.707 0.165 254.624);
-  }
+:root.dark {
+  color-scheme: dark;
+  --background: #161619;
+  --background-deep: #111114;
+  --surface: #1c1c20;
+  --surface-hover: rgba(255, 255, 255, 0.05);
+  --accent: #facc15;
+  --accent-muted: rgba(250, 204, 21, 0.08);
+  --accent-border: rgba(250, 204, 21, 0.15);
+  --foreground: rgba(255, 255, 255, 0.9);
+  --foreground-muted: rgba(255, 255, 255, 0.45);
+  --foreground-faint: rgba(255, 255, 255, 0.22);
+  --border: rgba(255, 255, 255, 0.07);
+  --border-faint: rgba(255, 255, 255, 0.04);
+  --destructive: #ef4444;
+  --destructive-foreground: #f87171;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --info: #60a5fa;
+  --ring: #facc15;
+  --input: rgba(255, 255, 255, 0.07);
+  --sidebar-bg: #18181c;
+  --card: #1c1c20;
+  --card-foreground: rgba(255, 255, 255, 0.9);
+  --popover: #1c1c20;
+  --popover-foreground: rgba(255, 255, 255, 0.9);
+  --primary: #facc15;
+  --primary-foreground: #1a1a1a;
+  --secondary: #222226;
+  --secondary-foreground: rgba(255, 255, 255, 0.9);
+  --muted: #222226;
+  --muted-foreground: rgba(255, 255, 255, 0.45);
+  --highlight: oklch(0.45 0.08 70);
+  --brand: oklch(0.707 0.165 254.624);
 }
