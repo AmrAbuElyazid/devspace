@@ -5,6 +5,7 @@ import { type PlateEditor, Plate, usePlateEditor } from "platejs/react";
 
 import { createNoteEditorPlugins } from "./plugins/note-editor-kit";
 import { Editor, EditorContainer } from "./plate-ui/editor";
+import { TooltipProvider } from "./plate-ui/tooltip";
 
 export interface NoteEditorChangeContext {
   editor: PlateEditor | null;
@@ -51,10 +52,12 @@ export function NoteEditor({ initialValue, onChange }: NoteEditorProps) {
   );
 
   return (
-    <Plate editor={editor} onChange={handleChange}>
-      <EditorContainer>
-        <Editor placeholder="Start writing..." />
-      </EditorContainer>
-    </Plate>
+    <TooltipProvider>
+      <Plate editor={editor} onChange={handleChange}>
+        <EditorContainer>
+          <Editor placeholder="Start writing..." />
+        </EditorContainer>
+      </Plate>
+    </TooltipProvider>
   );
 }

@@ -20,6 +20,7 @@ const noteEditorMocks = vi.hoisted(() => {
     plateProps,
     usePlateEditor: vi.fn(),
     createNoteEditorPlugins: vi.fn(() => ["plugin-a", "plugin-b"]),
+    tooltipProviderCalls: 0,
   };
 });
 
@@ -30,6 +31,13 @@ vi.mock("./plugins/note-editor-kit", () => ({
 vi.mock("./plate-ui/editor", () => ({
   EditorContainer: ({ children }: { children: unknown }) => children,
   Editor: () => null,
+}));
+
+vi.mock("./plate-ui/tooltip", () => ({
+  TooltipProvider: ({ children }: { children: unknown }) => {
+    noteEditorMocks.tooltipProviderCalls += 1;
+    return children;
+  },
 }));
 
 vi.mock("platejs/react", () => ({
@@ -62,6 +70,7 @@ beforeEach(() => {
   root = createRoot(container);
   noteEditorMocks.usePlateEditor.mockReset();
   noteEditorMocks.createNoteEditorPlugins.mockClear();
+  noteEditorMocks.tooltipProviderCalls = 0;
   noteEditorMocks.plateProps.editor = undefined;
   noteEditorMocks.plateProps.onChange = undefined;
 });
@@ -98,6 +107,7 @@ test("deserializes markdown initial values through the markdown plugin", async (
   expect(noteEditorMocks.usePlateEditor).toHaveBeenCalledWith(
     expect.objectContaining({ plugins: ["plugin-a", "plugin-b"] }),
   );
+  expect(noteEditorMocks.tooltipProviderCalls).toBe(1);
 });
 
 test("forwards serialized markdown on editor changes", async () => {
