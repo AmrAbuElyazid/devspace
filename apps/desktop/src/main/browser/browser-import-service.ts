@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { BrowserName, Cookie as SweetCookie, GetCookiesOptions } from "@steipete/sweet-cookie";
+import type { Cookie as SweetCookie, GetCookiesOptions } from "@steipete/sweet-cookie";
 import type {
   BrowserAccessResult,
   BrowserImportMode,
@@ -19,7 +19,7 @@ import type {
   BrowserImportSource,
   BrowserProfileDescriptor,
 } from "../../shared/browser";
-import type { BrowserHistoryEntryInput, BrowserHistoryRecorder } from "./browser-history-service";
+import type { BrowserHistoryRecorder } from "./browser-history-service";
 import type { BrowserSessionManager } from "./browser-session-manager";
 import {
   rollbackImportedCookies,
@@ -30,6 +30,15 @@ import {
   collectChromiumCookies,
   decryptChromiumCookieValue,
 } from "./browser-import-chromium-cookies";
+import { collectFirefoxCookies } from "./browser-import-firefox-cookies";
+import {
+  chromeTimeToUnixMs,
+  dedupeHistoryEntries,
+  firefoxTimeToUnixMs,
+  mapHistoryRows,
+  safariTimeToUnixMs,
+  type ImportedHistoryEntry,
+} from "./browser-import-history";
 import {
   hasChromiumImportableData,
   hasZenImportableData,
@@ -37,6 +46,7 @@ import {
   readChromiumProfileMetadata,
   resolveChromeCookiesDbPath,
 } from "./browser-import-profiles";
+import { decodeSafariBinaryCookies } from "./browser-import-safari-cookies";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -109,12 +119,6 @@ const IMPORT_SOURCE_TO_CHROMIUM: Partial<Record<BrowserImportSource, ChromiumBro
 // ---------------------------------------------------------------------------
 
 const ZEN_ROOT = join(homedir(), "Library", "Application Support", "zen");
-
-// ---------------------------------------------------------------------------
-// Internal types
-// ---------------------------------------------------------------------------
-
-type ImportedHistoryEntry = Omit<BrowserHistoryEntryInput, "id">;
 
 type CookieWriter = {
   cookies: BrowserCookieStore;
@@ -221,29 +225,6 @@ export class BrowserImportServiceError extends Error {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Exported utility functions
-// ---------------------------------------------------------------------------
-
-export function dedupeHistoryEntries(entries: ImportedHistoryEntry[]): ImportedHistoryEntry[] {
-  const seen = new Set<string>();
-  const deduped: ImportedHistoryEntry[] = [];
-
-  for (const entry of entries) {
-    const key = [entry.source, entry.browserProfile ?? "", entry.url, String(entry.visitedAt)].join(
-      "::",
-    );
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    deduped.push(entry);
-  }
-
-  return deduped.toSorted((left, right) => right.visitedAt - left.visitedAt);
-}
-
 export function toElectronCookieInput(cookie: ImportedBrowserCookie): ImportedCookieInput {
   const rawHost = cookie.domain ?? cookie.host ?? "";
   const normalizedDomain = rawHost.replace(/^\./, "");
@@ -277,6 +258,9 @@ export function toElectronCookieInput(cookie: ImportedBrowserCookie): ImportedCo
 
 export { parseProfilesIni };
 export { collectChromiumCookies };
+export { collectFirefoxCookies };
+export { decodeSafariBinaryCookies };
+export { dedupeHistoryEntries };
 
 // ---------------------------------------------------------------------------
 // BrowserImportService
@@ -916,35 +900,6 @@ function copyOptionalSidecar(sourceDbPath: string, tempDbPath: string, suffix: s
   }
 }
 
-function mapHistoryRows(
-  rows: Array<Record<string, unknown>>,
-  options: {
-    source: string;
-    browserProfile?: string;
-    toVisitedAt: (value: unknown) => number;
-  },
-): ImportedHistoryEntry[] {
-  const entries: ImportedHistoryEntry[] = [];
-
-  for (const row of rows) {
-    const url = asString(row.url);
-    const visitedAt = options.toVisitedAt(row.visited_at);
-    if (!url || !Number.isFinite(visitedAt)) {
-      continue;
-    }
-
-    entries.push({
-      url,
-      title: asString(row.title) ?? url,
-      visitedAt,
-      source: options.source,
-      ...(options.browserProfile ? { browserProfile: options.browserProfile } : {}),
-    });
-  }
-
-  return entries;
-}
-
 async function queryHistoryDb(
   dbPath: string,
   sql: string,
@@ -964,66 +919,8 @@ async function queryHistoryDb(
 }
 
 // ---------------------------------------------------------------------------
-// Timestamp conversion
-// ---------------------------------------------------------------------------
-
-function chromeTimeToUnixMs(value: unknown): number {
-  const numeric = asNumber(value);
-  if (numeric === null || numeric <= 0) {
-    return 0;
-  }
-
-  return Math.round(numeric / 1000 - 11_644_473_600_000);
-}
-
-function safariTimeToUnixMs(value: unknown): number {
-  const numeric = asNumber(value);
-  if (numeric === null) {
-    return 0;
-  }
-
-  return Math.round((numeric + 978_307_200) * 1000);
-}
-
-/**
- * Firefox/Zen stores visit_date as microseconds since Unix epoch.
- */
-function firefoxTimeToUnixMs(value: unknown): number {
-  const numeric = asNumber(value);
-  if (numeric === null || numeric <= 0) {
-    return 0;
-  }
-
-  return Math.round(numeric / 1000);
-}
-
-/**
- * Normalize Firefox/Zen cookie expiry to seconds since Unix epoch.
- * Zen may store expiry in milliseconds (values > 10^12), while standard
- * Firefox uses seconds.
- */
-function normalizeFirefoxExpiryToSeconds(value: unknown): number | undefined {
-  const numeric = asNumber(value);
-  if (numeric === null || numeric <= 0) {
-    return undefined;
-  }
-
-  // Milliseconds (13+ digits) -> convert to seconds
-  if (numeric > 1_000_000_000_000) {
-    return Math.round(numeric / 1000);
-  }
-
-  // Already in seconds
-  return Math.round(numeric);
-}
-
-// ---------------------------------------------------------------------------
 // Value helpers
 // ---------------------------------------------------------------------------
-
-function asString(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
 
 function asNumber(value: unknown): number | null {
   if (typeof value === "number") {
@@ -1191,215 +1088,6 @@ async function queryCookieDb(dbPath: string): Promise<Array<Record<string, unkno
   } finally {
     db.close();
   }
-}
-
-// ---------------------------------------------------------------------------
-// Firefox / Zen cookie collector
-// ---------------------------------------------------------------------------
-
-export function collectFirefoxCookies(
-  rows: Array<Record<string, unknown>>,
-  profile: string,
-): ImportedBrowserCookie[] {
-  const cookies: ImportedBrowserCookie[] = [];
-  const seen = new Set<string>();
-  const now = Math.floor(Date.now() / 1000);
-
-  for (const row of rows) {
-    const name = asString(row.name);
-    const host = asString(row.host);
-    if (!name || !host) {
-      continue;
-    }
-
-    const value = typeof row.value === "string" ? row.value : "";
-    const expires = normalizeFirefoxExpiryToSeconds(row.expiry);
-    if (expires && expires < now) {
-      continue;
-    }
-
-    const domain = host.replace(/^\./, "");
-    const hostOnly = !host.startsWith(".");
-    const path = asString(row.path) ?? "/";
-    const key = `${name}|${domain}|${path}|${hostOnly ? "host" : "domain"}`;
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    const sameSite = normalizeFirefoxSameSite(row.sameSite);
-    cookies.push({
-      name,
-      value,
-      ...(domain ? { domain } : {}),
-      path,
-      ...(hostOnly ? { hostOnly: true, host: domain } : {}),
-      secure: isTruthyDbFlag(row.isSecure),
-      httpOnly: isTruthyDbFlag(row.isHttpOnly),
-      ...(expires ? { expires } : {}),
-      ...(sameSite ? { sameSite } : {}),
-      source: { browser: "firefox" as BrowserName, profile },
-    });
-  }
-
-  return cookies;
-}
-
-function normalizeFirefoxSameSite(value: unknown): SweetCookie["sameSite"] | undefined {
-  const numeric = asNumber(value);
-  if (numeric === 0) {
-    return "None";
-  }
-  if (numeric === 1) {
-    return "Lax";
-  }
-  if (numeric === 2) {
-    return "Strict";
-  }
-
-  return undefined;
-}
-
-function isTruthyDbFlag(value: unknown): boolean {
-  return value === 1 || value === 1n || value === "1" || value === true;
-}
-
-// ---------------------------------------------------------------------------
-// Safari binary cookie parser
-// ---------------------------------------------------------------------------
-
-function decodeSafariBinaryCookies(buffer: Buffer): ImportedBrowserCookie[] {
-  if (buffer.length < 8 || buffer.subarray(0, 4).toString("utf8") !== "cook") {
-    return [];
-  }
-
-  const pageCount = buffer.readUInt32BE(4);
-  let cursor = 8;
-  const pageSizes: number[] = [];
-  for (let index = 0; index < pageCount; index += 1) {
-    pageSizes.push(buffer.readUInt32BE(cursor));
-    cursor += 4;
-  }
-
-  const cookies: ImportedBrowserCookie[] = [];
-  for (const pageSize of pageSizes) {
-    const page = buffer.subarray(cursor, cursor + pageSize);
-    cursor += pageSize;
-    cookies.push(...decodeSafariCookiePage(page));
-  }
-
-  return dedupeCookies(cookies);
-}
-
-export { decodeSafariBinaryCookies };
-
-function decodeSafariCookiePage(page: Buffer): ImportedBrowserCookie[] {
-  if (page.length < 16 || page.readUInt32BE(0) !== 0x00000100) {
-    return [];
-  }
-
-  const cookieCount = page.readUInt32LE(4);
-  const offsets: number[] = [];
-  let cursor = 8;
-  for (let index = 0; index < cookieCount; index += 1) {
-    offsets.push(page.readUInt32LE(cursor));
-    cursor += 4;
-  }
-
-  return offsets
-    .map((offset) => decodeSafariCookie(page.subarray(offset)))
-    .filter((cookie): cookie is ImportedBrowserCookie => Boolean(cookie));
-}
-
-function decodeSafariCookie(cookieBuffer: Buffer): ImportedBrowserCookie | null {
-  if (cookieBuffer.length < 48) {
-    return null;
-  }
-
-  const size = cookieBuffer.readUInt32LE(0);
-  if (size < 48 || size > cookieBuffer.length) {
-    return null;
-  }
-
-  const flagsValue = cookieBuffer.readUInt32LE(8);
-  const rawUrl = readCString(cookieBuffer, cookieBuffer.readUInt32LE(16), size);
-  const name = readCString(cookieBuffer, cookieBuffer.readUInt32LE(20), size);
-  const cookiePath = readCString(cookieBuffer, cookieBuffer.readUInt32LE(24), size) ?? "/";
-  const value = readCString(cookieBuffer, cookieBuffer.readUInt32LE(28), size) ?? "";
-  if (!name) {
-    return null;
-  }
-
-  const rawHost = rawUrl ? safeHostnameFromUrl(rawUrl) : undefined;
-  const domain = rawHost?.replace(/^\./, "");
-  const hostOnly = Boolean(domain) && !String(rawUrl).trim().startsWith(".");
-  const expiration = readDoubleLE(cookieBuffer, 40);
-  const expires = expiration && expiration > 0 ? Math.round(expiration + 978_307_200) : undefined;
-
-  return {
-    name,
-    value,
-    path: cookiePath,
-    secure: (flagsValue & 1) !== 0,
-    httpOnly: (flagsValue & 4) !== 0,
-    ...(domain ? (hostOnly ? { host: domain, hostOnly: true } : { domain }) : {}),
-    ...(expires ? { expires } : {}),
-    source: { browser: "safari" },
-  };
-}
-
-function readDoubleLE(buffer: Buffer, offset: number): number {
-  if (offset + 8 > buffer.length) {
-    return 0;
-  }
-
-  return buffer.subarray(offset, offset + 8).readDoubleLE(0);
-}
-
-function readCString(buffer: Buffer, offset: number, end: number): string | null {
-  if (offset <= 0 || offset >= end) {
-    return null;
-  }
-
-  let cursor = offset;
-  while (cursor < end && buffer[cursor] !== 0) {
-    cursor += 1;
-  }
-
-  if (cursor >= end) {
-    return null;
-  }
-
-  return buffer.toString("utf8", offset, cursor);
-}
-
-function safeHostnameFromUrl(raw: string): string | undefined {
-  try {
-    const url = raw.includes("://") ? raw : `https://${raw}`;
-    const parsed = new URL(url);
-    return parsed.hostname.startsWith(".") ? parsed.hostname.slice(1) : parsed.hostname;
-  } catch {
-    // Expected: malformed URL, fall back to raw string cleanup
-    const cleaned = raw.trim();
-    if (!cleaned) {
-      return undefined;
-    }
-
-    return cleaned.startsWith(".") ? cleaned.slice(1) : cleaned;
-  }
-}
-
-function dedupeCookies(cookies: ImportedBrowserCookie[]): ImportedBrowserCookie[] {
-  const merged = new Map<string, ImportedBrowserCookie>();
-  for (const cookie of cookies) {
-    const variant = cookie.hostOnly ? "host" : "domain";
-    const key = `${cookie.name}|${cookie.domain ?? cookie.host ?? ""}|${cookie.path ?? ""}|${variant}`;
-    if (!merged.has(key)) {
-      merged.set(key, cookie);
-    }
-  }
-
-  return Array.from(merged.values());
 }
 
 function toElectronSameSite(value: SweetCookie["sameSite"]): ElectronCookieSameSite {
