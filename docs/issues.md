@@ -6,11 +6,60 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 
 ## Open
 
-- None currently tracked here.
+### 1. Browser Pane Passkeys / WebAuthn
+
+- Status: open
+- Priority: high
+- Type: capability bug
+- Detail: passkeys do not currently work inside browser panes. The current browser permission mapping only handles camera, microphone, geolocation, and notifications, so WebAuthn-specific support may be missing in either Electron configuration or Devspace's permission/session plumbing.
+- Relevant files: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/shared/browser.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.tsx`, `apps/desktop/src/main/browser/browser-pane-manager.ts`
+
+### 2. Localhost Hot Reload Steals Focus
+
+- Status: open
+- Priority: high
+- Type: usability bug
+- Detail: when a localhost app is open in a browser pane and its dev server hot reloads, Devspace can steal focus and surface the browser pane even while work is happening elsewhere. Focus currently propagates from native `webContents` events back into renderer workspace focus state and likely needs tighter gating around reload-driven focus churn.
+- Relevant files: `apps/desktop/src/main/browser/browser-pane-webcontents-events.ts`, `apps/desktop/src/renderer/hooks/useBrowserBridge.ts`, `apps/desktop/src/renderer/components/BrowserPane.tsx`, `apps/desktop/src/renderer/hooks/useNativeView.ts`
+
+### 3. Note Editor Tooltip Provider Crash
+
+- Status: open
+- Priority: high
+- Type: editor bug
+- Detail: selecting text in the note editor can trigger `Note editor failed to load` with ``Tooltip` must be used within `TooltipProvider``. The note-editor package appears to render tooltip primitives without a guaranteed provider boundary.
+- Relevant files: `packages/note-editor/src/NoteEditor.tsx`, `packages/note-editor/src/plate-ui/tooltip.tsx`, `packages/note-editor/src/plate-ui/toolbar.tsx`
+
+### 4. Tab Dragging Does Not Reorder Reliably
+
+- Status: open
+- Priority: medium
+- Type: interaction bug
+- Detail: dragging tabs should reorder them predictably within and across groups, but the current drag intent and execute flow likely needs alignment between DnD hit targets, tab-bar behavior, and workspace store mutations.
+- Relevant files: `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/lib/dnd/handlers/tab-reorder.ts`, `apps/desktop/src/renderer/store/slices/group-tabs.ts`
+
+### 5. Sidebar Drag Bounds And Pinned Section Behavior
+
+- Status: open
+- Priority: medium
+- Type: interaction polish bug
+- Detail: dragging workspaces/folders in the sidebar has awkward folder bounds, and the pinned section should disappear during active drag. Current sidebar drop resolution uses simple vertical zones and keeps the pinned root visible as a drop region.
+- Relevant files: `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/Sidebar/SidebarTreeLevel.tsx`, `apps/desktop/src/renderer/lib/sidebar-drop-resolution.ts`, `apps/desktop/src/renderer/store/slices/sidebar-tree.ts`
 
 ## Completed
 
-### 1. VS Code Launch No Longer Depends Only On `code` In PATH
+### 1. Embedded VS Code Auth / Session Mismatch
+
+- Status: fixed
+- Priority: high
+- Type: editor integration bug
+- Resolution: Devspace now manages the actual `code serve-web` listener instead of the wrapper process, isolates dev/build `userData` and editor Chromium sessions, removes the broken mint-key override, re-navigates existing editor panes when fresh URLs are issued, and defaults the background editor server to off.
+- Relevant files: `apps/desktop/src/main/vscode-server.ts`, `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/src/main/index.ts`, `apps/desktop/src/main/dev-mode.ts`
+- Commits:
+  - `cab731b` `fix: harden VS Code server reuse`
+  - `c82bddd` `fix: isolate embedded VS Code sessions`
+
+### 2. VS Code Launch No Longer Depends Only On `code` In PATH
 
 - Status: fixed
 - Priority: high
@@ -19,7 +68,7 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Relevant files: `apps/desktop/src/main/vscode-server.ts`, `apps/desktop/src/renderer/components/SettingsPage.tsx`, `apps/desktop/src/renderer/components/EditorPane.tsx`
 - Commit: `41ad6aa` `fix: support configurable VS Code CLI detection`
 
-### 2. Theme Switching
+### 3. Theme Switching
 
 - Status: fixed
 - Priority: medium
@@ -28,7 +77,7 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Relevant files: `apps/desktop/src/renderer/hooks/useTheme.ts`, `apps/desktop/src/renderer/store/settings-store.ts`, `apps/desktop/src/renderer/components/SettingsPage.tsx`
 - Commit: `678819a` `feat: add manual theme mode selection`
 
-### 3. Fullscreen Traffic-Light Spacing
+### 4. Fullscreen Traffic-Light Spacing
 
 - Status: fixed
 - Priority: medium
@@ -39,7 +88,7 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
   - `258b5ff` `fix: adjust fullscreen header spacing`
   - `8351a25` `fix: make settings a modal overlay`
 
-### 4. Settings Page Should Behave Like A Real App Modal
+### 5. Settings Page Should Behave Like A Real App Modal
 
 - Status: fixed
 - Priority: medium
@@ -48,7 +97,7 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Relevant files: `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/components/SettingsPage.tsx`, `apps/desktop/src/renderer/hooks/useAppShortcuts.ts`
 - Commit: `8351a25` `fix: make settings a modal overlay`
 
-### 5. Devspace Shortcuts Yield To VS Code Inside Editor Panes
+### 6. Devspace Shortcuts Yield To VS Code Inside Editor Panes
 
 - Status: fixed
 - Priority: high
