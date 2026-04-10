@@ -9,6 +9,18 @@ import type {
   Workspace,
 } from "../types/workspace";
 import { removeGroupRecentState, type RecentTabTraversalState } from "./tab-history";
+import type { WorkspaceState } from "./workspace-state";
+
+type WorkspaceTransferStateSlice = Pick<
+  WorkspaceState,
+  | "workspaces"
+  | "activeWorkspaceId"
+  | "sidebarTree"
+  | "pinnedSidebarNodes"
+  | "paneGroups"
+  | "tabHistoryByGroupId"
+  | "recentTabTraversalByGroupId"
+>;
 
 export function collectWorkspaceTabsForTransfer(
   workspaceRoot: SplitNode,
@@ -77,4 +89,41 @@ export function removeWorkspaceGroupState(
 
 export function removeWorkspaceRecord(workspaces: Workspace[], workspaceId: string): Workspace[] {
   return workspaces.filter((workspace) => workspace.id !== workspaceId);
+}
+
+export function removeTransferredWorkspaceSourceState({
+  state,
+  sourceWorkspaceId,
+  sourceGroupIds,
+  fallbackActiveWorkspaceId,
+}: {
+  state: WorkspaceTransferStateSlice;
+  sourceWorkspaceId: string;
+  sourceGroupIds: string[];
+  fallbackActiveWorkspaceId: string;
+}): WorkspaceTransferStateSlice {
+  const nextGroupState = removeWorkspaceGroupState(
+    state.paneGroups,
+    state.tabHistoryByGroupId,
+    state.recentTabTraversalByGroupId,
+    sourceGroupIds,
+  );
+  const nextSidebarState = removeWorkspaceFromSidebarState(
+    state.sidebarTree,
+    state.pinnedSidebarNodes,
+    sourceWorkspaceId,
+  );
+
+  return {
+    workspaces: removeWorkspaceRecord(state.workspaces, sourceWorkspaceId),
+    activeWorkspaceId:
+      state.activeWorkspaceId === sourceWorkspaceId
+        ? fallbackActiveWorkspaceId
+        : state.activeWorkspaceId,
+    paneGroups: nextGroupState.paneGroups,
+    tabHistoryByGroupId: nextGroupState.tabHistoryByGroupId,
+    recentTabTraversalByGroupId: nextGroupState.recentTabTraversalByGroupId,
+    sidebarTree: nextSidebarState.sidebarTree,
+    pinnedSidebarNodes: nextSidebarState.pinnedSidebarNodes,
+  };
 }

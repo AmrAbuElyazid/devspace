@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { findNearestTerminalCwd } from "./pane-factory";
+import { createPaneWithInheritedConfig, findNearestTerminalCwd } from "./pane-factory";
 import type { Pane, PaneGroup, Workspace } from "../types/workspace";
 
 // ---------------------------------------------------------------------------
@@ -163,5 +163,33 @@ describe("findNearestTerminalCwd", () => {
     };
     const ws = makeWorkspace();
     expect(findNearestTerminalCwd(panes, paneGroups, "g-1", ws)).toBeUndefined();
+  });
+});
+
+describe("createPaneWithInheritedConfig", () => {
+  test("inherits terminal cwd from workspace context", () => {
+    const panes: Record<string, Pane> = {
+      "p-1": makeTerminalPane("/projects/a"),
+    };
+    const paneGroups: Record<string, PaneGroup> = {
+      "g-1": makeGroup("g-1", [{ id: "t-1", paneId: "p-1" }], "t-1"),
+    };
+    const workspace = makeWorkspace({ focusedGroupId: "g-1" });
+
+    const pane = createPaneWithInheritedConfig("terminal", panes, paneGroups, "g-1", workspace);
+
+    expect(pane.type).toBe("terminal");
+    expect(pane.config).toEqual({ cwd: "/projects/a" });
+  });
+
+  test("creates note panes with a generated note id", () => {
+    const pane = createPaneWithInheritedConfig("note", {}, {}, undefined, undefined);
+
+    expect(pane.type).toBe("note");
+    if (pane.type !== "note") {
+      throw new Error("expected note pane");
+    }
+    expect(typeof pane.config.noteId).toBe("string");
+    expect(pane.config.noteId).toBeTruthy();
   });
 });

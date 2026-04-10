@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   collectWorkspaceTabsForTransfer,
+  removeTransferredWorkspaceSourceState,
   removeWorkspaceFromSidebarState,
   removeWorkspaceGroupState,
   removeWorkspaceRecord,
@@ -101,4 +102,58 @@ test("removeWorkspaceRecord removes only the targeted workspace", () => {
   expect(removeWorkspaceRecord(workspaces, "ws-1").map((workspace) => workspace.id)).toEqual([
     "ws-2",
   ]);
+});
+
+test("removeTransferredWorkspaceSourceState removes source workspace records and switches focus when needed", () => {
+  const result = removeTransferredWorkspaceSourceState({
+    state: {
+      workspaces: [
+        {
+          id: "ws-1",
+          name: "One",
+          root: { type: "leaf", groupId: "group-1" },
+          focusedGroupId: "group-1",
+          zoomedGroupId: null,
+          lastActiveAt: 1,
+        },
+        {
+          id: "ws-2",
+          name: "Two",
+          root: { type: "leaf", groupId: "group-3" },
+          focusedGroupId: "group-3",
+          zoomedGroupId: null,
+          lastActiveAt: 2,
+        },
+      ],
+      activeWorkspaceId: "ws-1",
+      sidebarTree: [{ type: "workspace", workspaceId: "ws-1" }],
+      pinnedSidebarNodes: [{ type: "workspace", workspaceId: "ws-1" }],
+      paneGroups: {
+        "group-1": { id: "group-1", tabs: [], activeTabId: "" },
+        "group-2": { id: "group-2", tabs: [], activeTabId: "" },
+        "group-3": { id: "group-3", tabs: [], activeTabId: "" },
+      },
+      tabHistoryByGroupId: {
+        "group-1": ["tab-1"],
+        "group-2": ["tab-2"],
+        "group-3": ["tab-3"],
+      },
+      recentTabTraversalByGroupId: {
+        "group-1": { order: ["tab-1"], index: 0, updatedAt: 1 },
+      },
+    },
+    sourceWorkspaceId: "ws-1",
+    sourceGroupIds: ["group-1", "group-2"],
+    fallbackActiveWorkspaceId: "ws-2",
+  });
+
+  expect(result.workspaces.map((workspace) => workspace.id)).toEqual(["ws-2"]);
+  expect(result.activeWorkspaceId).toBe("ws-2");
+  expect(result.sidebarTree).toEqual([]);
+  expect(result.pinnedSidebarNodes).toEqual([]);
+  expect(result.paneGroups).toEqual({
+    "group-3": { id: "group-3", tabs: [], activeTabId: "" },
+  });
+  expect(result.tabHistoryByGroupId).toEqual({ "group-3": ["tab-3"] });
+  expect(result.recentTabTraversalByGroupId).toEqual({});
 });

@@ -4,21 +4,19 @@ import { removeSidebarNode, insertSidebarNode } from "../../lib/sidebar-tree";
 import { collectGroupIds, treeHasGroup, replaceLeafInTree } from "../../lib/split-tree";
 import {
   createPane,
+  createPaneWithInheritedConfig,
   createPaneGroup,
   nextWorkspaceName,
   createDefaultWorkspace,
-  findNearestTerminalCwd,
 } from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
+import { buildDestinationGroupState } from "../group-tab-destination-state";
 import { getSidebarNodesForContainer } from "../store-helpers";
-import { buildRecentTabOrder, clearRecentTabTraversal } from "../tab-history";
 import type { PaneCleanup } from "../store-helpers";
 import { applySourceGroupTabRemovalResolution } from "../source-group-state";
 import {
   collectWorkspaceTabsForTransfer,
-  removeWorkspaceFromSidebarState,
-  removeWorkspaceGroupState,
-  removeWorkspaceRecord,
+  removeTransferredWorkspaceSourceState,
 } from "../workspace-transfer-state";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
@@ -42,22 +40,15 @@ export function createWorkspaceCrudSlice(
   return {
     addWorkspace: (name, parentFolderId = null, container = "main", defaultType) => {
       const paneType = defaultType ?? "terminal";
-      // Inherit CWD from the currently focused terminal in the active workspace
       const currentState = get();
       const activeWs = currentState.workspaces.find((w) => w.id === currentState.activeWorkspaceId);
-      let inheritedConfig: Partial<import("../../types/workspace").PaneConfig> | undefined;
-      if (paneType === "terminal") {
-        const cwd = findNearestTerminalCwd(
-          currentState.panes,
-          currentState.paneGroups,
-          activeWs?.focusedGroupId ?? undefined,
-          activeWs,
-        );
-        if (cwd) inheritedConfig = { cwd };
-      } else if (paneType === "note") {
-        inheritedConfig = { noteId: nanoid() };
-      }
-      const pane = createPane(paneType, inheritedConfig);
+      const pane = createPaneWithInheritedConfig(
+        paneType,
+        currentState.panes,
+        currentState.paneGroups,
+        activeWs?.focusedGroupId ?? undefined,
+        activeWs,
+      );
       const group = createPaneGroup(pane);
       const wsName = name ?? nextWorkspaceName(get().workspaces);
       const ws = createDefaultWorkspace(wsName, group);
@@ -209,48 +200,32 @@ export function createWorkspaceCrudSlice(
       // Append new tabs to target group, set last as active
       const lastNewTab = allSourceTabs[allSourceTabs.length - 1];
       const mergedTabs = [...targetGroup.tabs, ...allSourceTabs];
-      const {
-        paneGroups: nextPaneGroups,
-        tabHistoryByGroupId,
-        recentTabTraversalByGroupId,
-      } = removeWorkspaceGroupState(
-        {
-          ...state.paneGroups,
-          [targetGroupId]: {
-            ...targetGroup,
-            tabs: mergedTabs,
-            activeTabId: lastNewTab?.id ?? targetGroup.activeTabId,
-          },
+      const destinationState = buildDestinationGroupState({
+        state,
+        group: targetGroup,
+        tabs: mergedTabs,
+        activeTabId: lastNewTab?.id ?? targetGroup.activeTabId,
+      });
+      const nextTransferState = removeTransferredWorkspaceSourceState({
+        state: {
+          ...state,
+          paneGroups: destinationState.paneGroups,
+          tabHistoryByGroupId: destinationState.tabHistoryByGroupId,
+          recentTabTraversalByGroupId: destinationState.recentTabTraversalByGroupId,
         },
-        {
-          ...state.tabHistoryByGroupId,
-          [targetGroupId]: buildRecentTabOrder(
-            state.tabHistoryByGroupId[targetGroupId],
-            mergedTabs,
-            lastNewTab?.id ?? targetGroup.activeTabId,
-          ),
-        },
-        clearRecentTabTraversal(state.recentTabTraversalByGroupId, targetGroupId),
-        sourceGroupIds,
-      );
-      const nextSidebarState = removeWorkspaceFromSidebarState(
-        state.sidebarTree,
-        state.pinnedSidebarNodes,
         sourceWorkspaceId,
-      );
-
-      // If source was active, switch to target workspace
-      const newActiveId =
-        state.activeWorkspaceId === sourceWorkspaceId ? targetWs.id : state.activeWorkspaceId;
+        sourceGroupIds,
+        fallbackActiveWorkspaceId: targetWs.id,
+      });
 
       set({
-        workspaces: removeWorkspaceRecord(state.workspaces, sourceWorkspaceId),
-        activeWorkspaceId: newActiveId,
-        paneGroups: nextPaneGroups,
-        sidebarTree: nextSidebarState.sidebarTree,
-        pinnedSidebarNodes: nextSidebarState.pinnedSidebarNodes,
-        tabHistoryByGroupId,
-        recentTabTraversalByGroupId,
+        workspaces: nextTransferState.workspaces,
+        activeWorkspaceId: nextTransferState.activeWorkspaceId,
+        paneGroups: nextTransferState.paneGroups,
+        sidebarTree: nextTransferState.sidebarTree,
+        pinnedSidebarNodes: nextTransferState.pinnedSidebarNodes,
+        tabHistoryByGroupId: nextTransferState.tabHistoryByGroupId,
+        recentTabTraversalByGroupId: nextTransferState.recentTabTraversalByGroupId,
       });
     },
 
@@ -298,40 +273,35 @@ export function createWorkspaceCrudSlice(
       };
 
       const newRoot = replaceLeafInTree(targetWs.root, targetGroupId, replacement);
+      const destinationState = buildDestinationGroupState({
+        state,
+        group: newGroup,
+        tabs: newGroup.tabs,
+        activeTabId: newGroup.activeTabId,
+      });
 
-      const {
-        paneGroups: nextPaneGroups,
-        tabHistoryByGroupId,
-        recentTabTraversalByGroupId,
-      } = removeWorkspaceGroupState(
-        { ...state.paneGroups, [newGroup.id]: newGroup },
-        {
-          ...state.tabHistoryByGroupId,
-          [newGroup.id]: buildRecentTabOrder([], newGroup.tabs, newGroup.activeTabId),
+      const nextTransferState = removeTransferredWorkspaceSourceState({
+        state: {
+          ...state,
+          paneGroups: destinationState.paneGroups,
+          tabHistoryByGroupId: destinationState.tabHistoryByGroupId,
+          recentTabTraversalByGroupId: destinationState.recentTabTraversalByGroupId,
         },
-        clearRecentTabTraversal(state.recentTabTraversalByGroupId, newGroup.id),
-        sourceGroupIds,
-      );
-      const nextSidebarState = removeWorkspaceFromSidebarState(
-        state.sidebarTree,
-        state.pinnedSidebarNodes,
         sourceWorkspaceId,
-      );
-
-      // Update target workspace root and focus
-      const newActiveId =
-        state.activeWorkspaceId === sourceWorkspaceId ? targetWs.id : state.activeWorkspaceId;
+        sourceGroupIds,
+        fallbackActiveWorkspaceId: targetWs.id,
+      });
 
       set({
-        workspaces: removeWorkspaceRecord(state.workspaces, sourceWorkspaceId).map((w) =>
+        workspaces: nextTransferState.workspaces.map((w) =>
           w.id === targetWs.id ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
         ),
-        activeWorkspaceId: newActiveId,
-        paneGroups: nextPaneGroups,
-        sidebarTree: nextSidebarState.sidebarTree,
-        pinnedSidebarNodes: nextSidebarState.pinnedSidebarNodes,
-        tabHistoryByGroupId,
-        recentTabTraversalByGroupId,
+        activeWorkspaceId: nextTransferState.activeWorkspaceId,
+        paneGroups: nextTransferState.paneGroups,
+        sidebarTree: nextTransferState.sidebarTree,
+        pinnedSidebarNodes: nextTransferState.pinnedSidebarNodes,
+        tabHistoryByGroupId: nextTransferState.tabHistoryByGroupId,
+        recentTabTraversalByGroupId: nextTransferState.recentTabTraversalByGroupId,
       });
     },
 
@@ -386,6 +356,12 @@ export function createWorkspaceCrudSlice(
         parentFolderId,
         insertIndex,
       );
+      const destinationState = buildDestinationGroupState({
+        state,
+        group: newGroup,
+        tabs: newGroup.tabs,
+        activeTabId: newGroup.activeTabId,
+      });
 
       const nextState = applySourceGroupTabRemovalResolution({
         state,
@@ -394,15 +370,9 @@ export function createWorkspaceCrudSlice(
         removedTabId: tabId,
         resolution,
         nextWorkspaces: [...state.workspaces, newWs],
-        nextPaneGroups: { ...state.paneGroups, [newGroup.id]: newGroup },
-        nextTabHistoryByGroupId: {
-          ...state.tabHistoryByGroupId,
-          [newGroup.id]: [newTabId],
-        },
-        nextRecentTabTraversalByGroupId: clearRecentTabTraversal(
-          state.recentTabTraversalByGroupId,
-          newGroup.id,
-        ),
+        nextPaneGroups: destinationState.paneGroups,
+        nextTabHistoryByGroupId: destinationState.tabHistoryByGroupId,
+        nextRecentTabTraversalByGroupId: destinationState.recentTabTraversalByGroupId,
       });
 
       set({

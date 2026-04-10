@@ -29,6 +29,27 @@ export function createPane(type: PaneType, configOverride?: Partial<PaneConfig>)
   } as Pane;
 }
 
+export function createPaneWithInheritedConfig(
+  type: PaneType,
+  panes: Record<string, Pane>,
+  paneGroups: Record<string, PaneGroup>,
+  groupId: string | undefined,
+  workspace: Workspace | undefined,
+): Pane {
+  let inheritedConfig: Partial<PaneConfig> | undefined;
+
+  if (type === "terminal") {
+    const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, workspace);
+    if (cwd) {
+      inheritedConfig = { cwd };
+    }
+  } else if (type === "note") {
+    inheritedConfig = { noteId: nanoid() };
+  }
+
+  return createPane(type, inheritedConfig);
+}
+
 export function createPaneGroup(pane: Pane): PaneGroup {
   const tabId = nanoid();
   return {

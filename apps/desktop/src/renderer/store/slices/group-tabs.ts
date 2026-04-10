@@ -7,15 +7,16 @@ import type {
   SplitNode,
 } from "../../types/workspace";
 import {
-  collectGroupIds,
   treeHasGroup,
+  collectGroupIds,
   findFirstGroupId,
   replaceLeafInTree,
   removeGroupFromTree,
   simplifyTree,
 } from "../../lib/split-tree";
-import { createPane, findNearestTerminalCwd } from "../../lib/pane-factory";
+import { createPane, createPaneWithInheritedConfig } from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
+import { appendPaneToGroupState } from "../group-tab-append-state";
 import { buildDestinationGroupState } from "../group-tab-destination-state";
 import type { PaneCleanup } from "../store-helpers";
 import { applySourceGroupTabRemovalResolution } from "../source-group-state";
@@ -49,29 +50,16 @@ export function createGroupTabsSlice(
       if (!group) return;
 
       const paneType = defaultType ?? "terminal";
-      // Inherit CWD from the nearest terminal (same group → focused group → workspace.lastTerminalCwd → $HOME)
-      let inheritedConfig: Partial<import("../../types/workspace").PaneConfig> | undefined;
-      if (paneType === "terminal") {
-        const cwd = findNearestTerminalCwd(panes, paneGroups, groupId, workspace);
-        if (cwd) inheritedConfig = { cwd };
-      } else if (paneType === "note") {
-        inheritedConfig = { noteId: nanoid() };
-      }
-      const pane = createPane(paneType, inheritedConfig);
-      const newTab: PaneGroupTab = { id: nanoid(), paneId: pane.id };
-
-      set({
-        panes: { ...panes, [pane.id]: pane },
-        paneGroups: {
-          ...paneGroups,
-          [groupId]: {
-            ...group,
-            tabs: [...group.tabs, newTab],
-            activeTabId: newTab.id,
-          },
-        },
+      const pane = createPaneWithInheritedConfig(paneType, panes, paneGroups, groupId, workspace);
+      const appendedState = appendPaneToGroupState({
+        state: { panes, paneGroups },
+        group,
+        pane,
+        tabId: nanoid(),
       });
-      get().recordTabActivation(groupId, newTab.id);
+
+      set({ panes: appendedState.panes, paneGroups: appendedState.paneGroups });
+      get().recordTabActivation(groupId, appendedState.newTab.id);
     },
 
     removeGroupTab(workspaceId, groupId, tabId) {
@@ -308,25 +296,24 @@ export function createGroupTabsSlice(
 
     openBrowserInGroup(workspaceId, groupId, url) {
       const pane = createPane("browser", { url });
-      const newTab: PaneGroupTab = { id: nanoid(), paneId: pane.id };
+      const tabId = nanoid();
       set((state) => {
         const workspace = state.workspaces.find((w) => w.id === workspaceId);
         if (!workspace || !treeHasGroup(workspace.root, groupId)) return state;
         const group = state.paneGroups[groupId];
         if (!group) return state;
+        const appendedState = appendPaneToGroupState({
+          state,
+          group,
+          pane,
+          tabId,
+        });
         return {
-          panes: { ...state.panes, [pane.id]: pane },
-          paneGroups: {
-            ...state.paneGroups,
-            [groupId]: {
-              ...group,
-              tabs: [...group.tabs, newTab],
-              activeTabId: newTab.id,
-            },
-          },
+          panes: appendedState.panes,
+          paneGroups: appendedState.paneGroups,
         };
       });
-      get().recordTabActivation(groupId, newTab.id);
+      get().recordTabActivation(groupId, tabId);
     },
 
     openEditorTab(folderPath) {
@@ -346,23 +333,21 @@ export function createGroupTabsSlice(
         title: `VS Code: ${folderName}`,
         config: { folderPath },
       };
-      const newTab: PaneGroupTab = { id: nanoid(), paneId: pane.id };
+      const appendedState = appendPaneToGroupState({
+        state,
+        group,
+        pane,
+        tabId: nanoid(),
+      });
 
       set({
-        panes: { ...state.panes, [pane.id]: pane },
-        paneGroups: {
-          ...state.paneGroups,
-          [groupId]: {
-            ...group,
-            tabs: [...group.tabs, newTab],
-            activeTabId: newTab.id,
-          },
-        },
+        panes: appendedState.panes,
+        paneGroups: appendedState.paneGroups,
         workspaces: state.workspaces.map((w) =>
           w.id === state.activeWorkspaceId ? { ...w, lastActiveAt: Date.now() } : w,
         ),
       });
-      get().recordTabActivation(groupId, newTab.id);
+      get().recordTabActivation(groupId, appendedState.newTab.id);
     },
   };
 }
