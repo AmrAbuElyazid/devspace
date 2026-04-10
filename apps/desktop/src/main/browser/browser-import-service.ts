@@ -1,5 +1,3 @@
-import { execFileSync } from "node:child_process";
-import { pbkdf2Sync } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -22,6 +20,14 @@ import {
   collectChromiumCookies,
   decryptChromiumCookieValue,
 } from "./browser-import-chromium-cookies";
+import {
+  CHROME_SAFE_STORAGE_TIMEOUT_MS,
+  CHROMIUM_KEYCHAINS,
+  IMPORT_SOURCE_TO_CHROMIUM,
+  readChromeSafeStorageKey,
+  type ChromiumBrowserTarget,
+} from "./browser-import-chromium-keychain";
+import { toElectronCookieInput, type ImportedCookieInput } from "./browser-import-electron-cookies";
 import { collectFirefoxCookies } from "./browser-import-firefox-cookies";
 import {
   BrowserImportServiceError,
@@ -65,8 +71,6 @@ const HISTORY_SOURCES: Record<BrowserImportSource, string> = {
   zen: "zen-import",
 };
 
-export const CHROME_SAFE_STORAGE_TIMEOUT_MS = 15_000;
-
 const SAFARI_COOKIE_CANDIDATES = [
   join(homedir(), "Library", "Cookies", "Cookies.binarycookies"),
   join(
@@ -83,44 +87,6 @@ const SAFARI_COOKIE_CANDIDATES = [
 const SAFARI_HISTORY_DB = join(homedir(), "Library", "Safari", "History.db");
 
 // ---------------------------------------------------------------------------
-// Chromium browser registry (Chrome, Arc, Brave, Chromium)
-// ---------------------------------------------------------------------------
-
-type ChromiumBrowserTarget = keyof typeof CHROMIUM_KEYCHAINS;
-
-const CHROMIUM_KEYCHAINS = {
-  chrome: {
-    root: join(homedir(), "Library", "Application Support", "Google", "Chrome"),
-    account: "Chrome",
-    service: "Chrome Safe Storage",
-    label: "Chrome Safe Storage",
-  },
-  brave: {
-    root: join(homedir(), "Library", "Application Support", "BraveSoftware", "Brave-Browser"),
-    account: "Brave",
-    service: "Brave Safe Storage",
-    label: "Brave Safe Storage",
-  },
-  arc: {
-    root: join(homedir(), "Library", "Application Support", "Arc", "User Data"),
-    account: "Arc",
-    service: "Arc Safe Storage",
-    label: "Arc Safe Storage",
-  },
-  chromium: {
-    root: join(homedir(), "Library", "Application Support", "Chromium"),
-    account: "Chromium",
-    service: "Chromium Safe Storage",
-    label: "Chromium Safe Storage",
-  },
-} as const;
-
-const IMPORT_SOURCE_TO_CHROMIUM: Partial<Record<BrowserImportSource, ChromiumBrowserTarget>> = {
-  chrome: "chrome",
-  arc: "arc",
-};
-
-// ---------------------------------------------------------------------------
 // Zen / Firefox paths
 // ---------------------------------------------------------------------------
 
@@ -130,7 +96,6 @@ type CookieWriter = {
   cookies: BrowserCookieStore;
 };
 
-type ElectronCookieSameSite = Electron.CookiesSetDetails["sameSite"];
 type GetCookiesResult = {
   cookies: SweetCookie[];
   warnings: string[];
@@ -141,9 +106,6 @@ type ImportedBrowserCookie = SweetCookie & {
   host?: string;
   hostOnly?: boolean;
   expiresAt?: number | null;
-};
-type ImportedCookieInput = Electron.CookiesSetDetails & {
-  hostOnly?: boolean;
 };
 
 type BrowserImportServiceDeps = {
@@ -175,43 +137,18 @@ type BrowserImportServiceDeps = {
   statPathImpl?: (path: string) => { isFile: () => boolean; isDirectory: () => boolean };
 };
 
-export function toElectronCookieInput(cookie: ImportedBrowserCookie): ImportedCookieInput {
-  const rawHost = cookie.domain ?? cookie.host ?? "";
-  const normalizedDomain = rawHost.replace(/^\./, "");
-  const isDomainCookie = cookie.hostOnly
-    ? false
-    : typeof cookie.domain === "string" || rawHost.startsWith(".");
-  const isHostOnlyCookie = Boolean(normalizedDomain) && !isDomainCookie;
-  const normalizedPath = cookie.path && cookie.path.startsWith("/") ? cookie.path : "/";
-  const protocol = cookie.secure ? "https" : "http";
-  const url = `${protocol}://${normalizedDomain || "localhost"}${normalizedPath}`;
-  const expirationDate = cookie.expires ?? cookie.expiresAt ?? undefined;
-  const sameSite = cookie.sameSite ? toElectronSameSite(cookie.sameSite) : undefined;
-
-  return {
-    url,
-    name: cookie.name,
-    value: cookie.value,
-    path: normalizedPath,
-    secure: cookie.secure ?? false,
-    httpOnly: cookie.httpOnly ?? false,
-    ...(isDomainCookie && normalizedDomain ? { domain: normalizedDomain } : {}),
-    ...(typeof expirationDate === "number" ? { expirationDate } : {}),
-    ...(sameSite ? { sameSite } : {}),
-    ...(isHostOnlyCookie ? { hostOnly: true } : {}),
-  };
-}
-
 // ---------------------------------------------------------------------------
 // profiles.ini parser (Zen / Firefox)
 // ---------------------------------------------------------------------------
 
 export { parseProfilesIni };
 export { collectChromiumCookies };
+export { toElectronCookieInput };
 export { collectFirefoxCookies };
 export { decodeSafariBinaryCookies };
 export { dedupeHistoryEntries };
 export { BrowserImportServiceError };
+export { CHROME_SAFE_STORAGE_TIMEOUT_MS };
 
 // ---------------------------------------------------------------------------
 // BrowserImportService
@@ -849,38 +786,4 @@ async function loadSafariCookiesFromSnapshot(
   } finally {
     snapshot.cleanup();
   }
-}
-
-function readChromeSafeStorageKey(target: ChromiumBrowserTarget): Buffer {
-  const keychain = CHROMIUM_KEYCHAINS[target];
-  const args = ["find-generic-password", "-w", "-a", keychain.account, "-s", keychain.service];
-
-  try {
-    const password = execFileSync("security", args, {
-      encoding: "utf8",
-      timeout: CHROME_SAFE_STORAGE_TIMEOUT_MS,
-    }).trim();
-    if (!password) {
-      throw new Error(`Failed to read macOS Keychain (${keychain.label}): empty password.`);
-    }
-
-    return pbkdf2Sync(password, "saltysalt", 1003, 16, "sha1");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to read macOS Keychain (${keychain.label}): ${message}`, {
-      cause: error,
-    });
-  }
-}
-
-function toElectronSameSite(value: SweetCookie["sameSite"]): ElectronCookieSameSite {
-  if (value === "Strict") {
-    return "strict";
-  }
-
-  if (value === "Lax") {
-    return "lax";
-  }
-
-  return "no_restriction";
 }
