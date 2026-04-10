@@ -64,6 +64,20 @@ test("persists visits and reloads stored history on startup", () => {
   }
 });
 
+test("missing history files are treated as empty state without warnings", () => {
+  const appDataPath = mkdtempSync(join(tmpdir(), "devspace-history-"));
+
+  try {
+    const warnSpy = vi.spyOn(console, "warn");
+    const service = new BrowserHistoryService({ appDataPath });
+
+    expect(service.getEntries()).toEqual([]);
+    expect(warnSpy).not.toHaveBeenCalled();
+  } finally {
+    rmSync(appDataPath, { recursive: true, force: true });
+  }
+});
+
 test("keeps last good history when storage is interrupted or corrupted on startup", () => {
   const appDataPath = mkdtempSync(join(tmpdir(), "devspace-history-"));
 

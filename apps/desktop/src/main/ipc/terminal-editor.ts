@@ -12,6 +12,10 @@ export function registerTerminalAndEditorIpc(
   browserPaneManager: BrowserPaneController,
   vscodeServerManager: VscodeServerManager,
   t3codeServerManager: T3CodeServerManager,
+  editorSessionManager?: Pick<
+    BrowserSessionManager,
+    "registerTrustedLocalOrigin" | "unregisterTrustedLocalOrigin"
+  >,
   browserSessionManager?: Pick<
     BrowserSessionManager,
     "registerTrustedLocalOrigin" | "unregisterTrustedLocalOrigin"
@@ -134,12 +138,12 @@ export function registerTerminalAndEditorIpc(
         const { url } = await vscodeServerManager.start(folder, preferredCli);
         const existingSession = editorPaneSessions.get(paneId);
         if (existingSession) {
-          browserSessionManager?.unregisterTrustedLocalOrigin(existingSession.url);
+          editorSessionManager?.unregisterTrustedLocalOrigin(existingSession.url);
           vscodeServerManager.release(existingSession.folder);
         }
 
         editorPaneSessions.set(paneId, { folder, url });
-        browserSessionManager?.registerTrustedLocalOrigin(url);
+        editorSessionManager?.registerTrustedLocalOrigin(url);
         browserPaneManager.createPane(paneId, url, "editor");
         return { url };
       } catch (err) {
@@ -155,7 +159,7 @@ export function registerTerminalAndEditorIpc(
       const session = editorPaneSessions.get(paneId);
       editorPaneSessions.delete(paneId);
       if (session) {
-        browserSessionManager?.unregisterTrustedLocalOrigin(session.url);
+        editorSessionManager?.unregisterTrustedLocalOrigin(session.url);
         vscodeServerManager.release(session.folder);
       }
     }

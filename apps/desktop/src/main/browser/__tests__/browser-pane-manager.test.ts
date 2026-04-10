@@ -362,6 +362,28 @@ test("navigate keeps persisted runtime url unchanged until navigation commits", 
   expect(manager.getRuntimeState("pane-1")?.url).toBe("https://example.com");
 });
 
+test("createPane re-navigates an existing pane when the requested URL changes", () => {
+  const loadCalls: string[] = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          loadURL: (url: string) => {
+            loadCalls.push(url);
+          },
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  manager.createPane("pane-1", "https://next.example.com");
+
+  expect(loadCalls).toEqual(["https://example.com", "https://next.example.com"]);
+});
+
 test("failed navigation does not replace the committed runtime url", () => {
   const listeners = new Map<string, (...args: unknown[]) => void>();
   const manager = new BrowserPaneManager({

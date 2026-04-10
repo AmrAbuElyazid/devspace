@@ -17,6 +17,7 @@ export function registerIpcHandlers(
   vscodeServerManager: VscodeServerManager,
   t3codeServerManager: T3CodeServerManager,
   browserImportService?: BrowserImportService,
+  editorSessionManager?: BrowserSessionManager,
   browserSessionManager?: BrowserSessionManager,
 ): void {
   registerTerminalAndEditorIpc(
@@ -25,6 +26,7 @@ export function registerIpcHandlers(
     browserPaneManager,
     vscodeServerManager,
     t3codeServerManager,
+    editorSessionManager,
     browserSessionManager,
   );
   registerSystemIpc(mainWindow);

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const childProcessMocks = vi.hoisted(() => ({
   execFileSync: vi.fn(),
@@ -85,7 +85,15 @@ function createMockChildProcess() {
   return child;
 }
 
-const fetchMock = vi.fn();
+function managedListenerCommand(
+  port: number,
+  basePath: string,
+  tokenFilePath: string,
+  serverDataDir: string,
+): string {
+  return `/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code-tunnel serve-web --host 127.0.0.1 --port ${port} --server-base-path ${basePath} --connection-token-file ${tokenFilePath} --accept-server-license-terms --server-data-dir ${serverDataDir}`;
+}
+
 const processKillSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
 
 describe("resolveVscodeCli", () => {
@@ -99,13 +107,7 @@ describe("resolveVscodeCli", () => {
     fsMocks.unlinkSync.mockReset();
     netMocks.createServer.mockClear();
     netMocks.portFreeResults.length = 0;
-    fetchMock.mockReset();
     processKillSpy.mockReset().mockImplementation(() => true);
-    vi.stubGlobal("fetch", fetchMock);
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
   });
 
   test("uses an explicit configured file path when it exists", () => {
@@ -156,9 +158,10 @@ describe("resolveVscodeCli", () => {
     });
   });
 
-  test("starts serve-web with a stable token file, base path, and pid file", async () => {
+  test("starts serve-web with a stable token file, base path, and listener pid file", async () => {
     const child = createMockChildProcess();
-    const tokenFilePath = "/tmp/devspace-vscode/connection-token";
+    const serverDataDir = "/tmp/devspace-vscode";
+    const tokenFilePath = `${serverDataDir}/connection-token`;
 
     fsMocks.existsSync.mockImplementation(
       (filePath: string) => filePath === "/custom/bin/code" || filePath === tokenFilePath,
@@ -169,11 +172,19 @@ describe("resolveVscodeCli", () => {
       }
       throw new Error(`Unexpected read for ${filePath}`);
     });
+    childProcessMocks.execFileSync.mockImplementation((command: string, args: string[]) => {
+      if (command === "lsof" && args[1] === "-iTCP:18562") {
+        return "5678\n";
+      }
+      if (command === "ps" && args[1] === "5678") {
+        return `${managedListenerCommand(18562, "/devspace-vscode", tokenFilePath, serverDataDir)}\n`;
+      }
+      throw new Error(`Unexpected execFileSync call: ${command} ${args.join(" ")}`);
+    });
     childProcessMocks.spawn.mockReturnValue(child);
-    fetchMock.mockResolvedValue({ ok: true, status: 200 });
     netMocks.portFreeResults.push(true, true);
 
-    const manager = new VscodeServerManager("/tmp/devspace-vscode");
+    const manager = new VscodeServerManager(serverDataDir);
     const result = await manager.start("/tmp/project", "/custom/bin/code");
 
     expect(childProcessMocks.spawn).toHaveBeenCalledWith(
@@ -190,21 +201,18 @@ describe("resolveVscodeCli", () => {
         tokenFilePath,
         "--accept-server-license-terms",
         "--server-data-dir",
-        "/tmp/devspace-vscode",
+        serverDataDir,
       ],
       {
         stdio: ["ignore", "pipe", "pipe"],
         detached: false,
       },
     );
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:18562/devspace-vscode?tkn=stable-token",
-    );
 
     const pidWriteCall = fsMocks.writeFileSync.mock.calls.find(
-      (call: unknown[]) => call[0] === "/tmp/devspace-vscode/server.pid",
+      (call: unknown[]) => call[0] === `${serverDataDir}/server.pid`,
     );
-    expect(pidWriteCall?.[1]).toBe("1234\n");
+    expect(pidWriteCall?.[1]).toBe("5678\n");
 
     const parsed = new URL(result.url);
     expect(parsed.pathname).toBe("/devspace-vscode");
@@ -212,19 +220,14 @@ describe("resolveVscodeCli", () => {
     expect(parsed.searchParams.get("folder")).toBe("/tmp/project");
   });
 
-  test("reuses an existing server only when the recorded pid owns the fixed port", async () => {
-    const tokenFilePath = "/tmp/devspace-vscode/connection-token";
-    const pidFilePath = "/tmp/devspace-vscode/server.pid";
+  test("adopts a matching legacy listener even without a pid file", async () => {
+    const serverDataDir = "/tmp/devspace-vscode";
+    const tokenFilePath = `${serverDataDir}/connection-token`;
 
-    fsMocks.existsSync.mockImplementation(
-      (filePath: string) => filePath === tokenFilePath || filePath === pidFilePath,
-    );
+    fsMocks.existsSync.mockImplementation((filePath: string) => filePath === tokenFilePath);
     fsMocks.readFileSync.mockImplementation((filePath: string) => {
       if (filePath === tokenFilePath) {
         return "stable-token\n";
-      }
-      if (filePath === pidFilePath) {
-        return "9999\n";
       }
       throw new Error(`Unexpected read for ${filePath}`);
     });
@@ -232,158 +235,158 @@ describe("resolveVscodeCli", () => {
       if (command === "lsof" && args[1] === "-iTCP:18562") {
         return "9999\n";
       }
-      throw new Error("unexpected lsof call");
-    });
-    processKillSpy.mockImplementation((pid: number, signal?: string | number) => {
-      if (pid === 9999 && signal === 0) {
-        return true;
+      if (command === "ps" && args[1] === "9999") {
+        return `${managedListenerCommand(18562, "/devspace-vscode", tokenFilePath, serverDataDir)}\n`;
       }
-      throw new Error("unexpected kill call");
+      throw new Error(`Unexpected execFileSync call: ${command} ${args.join(" ")}`);
     });
-    fetchMock.mockResolvedValue({ ok: true, status: 200 });
     netMocks.portFreeResults.push(false);
 
-    const manager = new VscodeServerManager("/tmp/devspace-vscode");
+    const manager = new VscodeServerManager(serverDataDir);
     const result = await manager.start("/tmp/project", "/missing/code");
 
     expect(childProcessMocks.spawn).not.toHaveBeenCalled();
+    expect(fsMocks.writeFileSync).toHaveBeenCalledWith(`${serverDataDir}/server.pid`, "9999\n", {
+      encoding: "utf-8",
+      mode: 0o600,
+    });
     expect(result).toEqual({
       port: 18562,
       url: "http://127.0.0.1:18562/devspace-vscode?tkn=stable-token&folder=%2Ftmp%2Fproject",
     });
   });
 
-  test("fails closed when the fixed port is occupied but no pid file exists", async () => {
-    const tokenFilePath = "/tmp/devspace-vscode/connection-token";
+  test("fails closed when the fixed port is occupied by a non-managed listener", async () => {
+    const serverDataDir = "/tmp/devspace-vscode";
+    const tokenFilePath = `${serverDataDir}/connection-token`;
 
-    fsMocks.existsSync.mockImplementation((filePath: string) => {
-      if (filePath === "/custom/bin/code") return true;
-      if (filePath === tokenFilePath) return true;
-      return false;
-    });
+    fsMocks.existsSync.mockImplementation(
+      (filePath: string) => filePath === "/custom/bin/code" || filePath === tokenFilePath,
+    );
     fsMocks.readFileSync.mockImplementation((filePath: string) => {
       if (filePath === tokenFilePath) {
         return "stable-token\n";
       }
-      throw new Error(`Unexpected read for ${filePath}`);
-    });
-    netMocks.portFreeResults.push(false, false);
-
-    const manager = new VscodeServerManager("/tmp/devspace-vscode");
-
-    await expect(manager.start("/tmp/project", "/custom/bin/code")).rejects.toThrow(
-      "Port 18562 is already in use",
-    );
-    expect(childProcessMocks.spawn).not.toHaveBeenCalled();
-  });
-
-  test("fails closed when the recorded pid is alive but does not own the fixed port", async () => {
-    const tokenFilePath = "/tmp/devspace-vscode/connection-token";
-    const pidFilePath = "/tmp/devspace-vscode/server.pid";
-
-    fsMocks.existsSync.mockImplementation(
-      (filePath: string) =>
-        filePath === "/custom/bin/code" || filePath === tokenFilePath || filePath === pidFilePath,
-    );
-    fsMocks.readFileSync.mockImplementation((filePath: string) => {
-      if (filePath === tokenFilePath) return "stable-token\n";
-      if (filePath === pidFilePath) return "9999\n";
       throw new Error(`Unexpected read for ${filePath}`);
     });
     childProcessMocks.execFileSync.mockImplementation((command: string, args: string[]) => {
       if (command === "lsof" && args[1] === "-iTCP:18562") {
         return "8888\n";
       }
-      throw new Error("unexpected lsof call");
-    });
-    processKillSpy.mockImplementation((pid: number, signal?: string | number) => {
-      if (pid === 9999 && signal === 0) {
-        return true;
+      if (command === "ps" && args[1] === "8888") {
+        return "/usr/bin/python3 -m http.server 18562\n";
       }
-      throw new Error("unexpected kill call");
+      throw new Error(`Unexpected execFileSync call: ${command} ${args.join(" ")}`);
     });
     netMocks.portFreeResults.push(false, false);
 
-    const manager = new VscodeServerManager("/tmp/devspace-vscode");
+    const manager = new VscodeServerManager(serverDataDir);
 
     await expect(manager.start("/tmp/project", "/custom/bin/code")).rejects.toThrow(
       "Port 18562 is already in use",
     );
-    expect(fsMocks.unlinkSync).toHaveBeenCalledWith(pidFilePath);
+    expect(childProcessMocks.spawn).not.toHaveBeenCalled();
   });
 
   test("reopening a folder clears stale adopted state and spawns a fresh server", async () => {
-    const adoptedTokenFilePath = "/tmp/devspace-vscode/connection-token";
-    const adoptedPidFilePath = "/tmp/devspace-vscode/server.pid";
+    const serverDataDir = "/tmp/devspace-vscode";
+    const tokenFilePath = `${serverDataDir}/connection-token`;
     const child = createMockChildProcess();
-    const alivePids = new Set([9999]);
+    const state = { listenerPid: 9999 };
 
-    fsMocks.existsSync.mockImplementation((filePath: string) => {
-      if (filePath === adoptedTokenFilePath) return true;
-      if (filePath === adoptedPidFilePath && alivePids.has(9999)) return true;
-      if (filePath === "/custom/bin/code") return true;
-      return false;
-    });
+    fsMocks.existsSync.mockImplementation(
+      (filePath: string) => filePath === tokenFilePath || filePath === "/custom/bin/code",
+    );
     fsMocks.readFileSync.mockImplementation((filePath: string) => {
-      if (filePath === adoptedTokenFilePath) return "stable-token\n";
-      if (filePath === adoptedPidFilePath) return "9999\n";
+      if (filePath === tokenFilePath) return "stable-token\n";
       throw new Error(`Unexpected read for ${filePath}`);
     });
     childProcessMocks.execFileSync.mockImplementation((command: string, args: string[]) => {
       if (command === "lsof" && args[1] === "-iTCP:18562") {
-        return alivePids.has(9999) ? "9999\n" : "";
+        return state.listenerPid === 0 ? "" : `${state.listenerPid}\n`;
       }
-      throw new Error("unexpected lsof call");
+      if (command === "ps" && args[1] === "9999") {
+        return `${managedListenerCommand(18562, "/devspace-vscode", tokenFilePath, serverDataDir)}\n`;
+      }
+      if (command === "ps" && args[1] === "5678") {
+        return `${managedListenerCommand(18562, "/devspace-vscode", tokenFilePath, serverDataDir)}\n`;
+      }
+      throw new Error(`Unexpected execFileSync call: ${command} ${args.join(" ")}`);
     });
-    processKillSpy.mockImplementation((pid: number, signal?: string | number) => {
-      if (pid !== 9999) {
-        throw new Error("unexpected kill call");
-      }
-      if (signal === 0) {
-        if (alivePids.has(pid)) {
-          return true;
-        }
-        throw new Error("ESRCH");
-      }
-      return true;
+    childProcessMocks.spawn.mockImplementation(() => {
+      state.listenerPid = 5678;
+      return child;
     });
-    childProcessMocks.spawn.mockReturnValue(child);
-    fetchMock.mockResolvedValue({ ok: true, status: 200 });
     netMocks.portFreeResults.push(false, true, true);
 
-    const manager = new VscodeServerManager("/tmp/devspace-vscode");
+    const manager = new VscodeServerManager(serverDataDir);
     await manager.start("/tmp/project", "/missing/code");
 
-    alivePids.delete(9999);
+    state.listenerPid = 0;
 
     const result = await manager.start("/tmp/project", "/custom/bin/code");
 
     expect(childProcessMocks.spawn).toHaveBeenCalledTimes(1);
-    expect(fsMocks.unlinkSync).toHaveBeenCalledWith(adoptedPidFilePath);
     expect(result).toEqual({
       port: 18562,
       url: "http://127.0.0.1:18562/devspace-vscode?tkn=stable-token&folder=%2Ftmp%2Fproject",
     });
   });
 
-  test("stopAll can still stop an adopted server after all folders were released", async () => {
-    const tokenFilePath = "/tmp/devspace-vscode/connection-token";
-    const pidFilePath = "/tmp/devspace-vscode/server.pid";
-    const alivePids = new Set([9999]);
+  test("wrapper exit keeps state when the managed listener is still alive", async () => {
+    const serverDataDir = "/tmp/devspace-vscode";
+    const tokenFilePath = `${serverDataDir}/connection-token`;
+    const child = createMockChildProcess();
 
     fsMocks.existsSync.mockImplementation(
-      (filePath: string) => filePath === tokenFilePath || filePath === pidFilePath,
+      (filePath: string) => filePath === tokenFilePath || filePath === "/custom/bin/code",
     );
     fsMocks.readFileSync.mockImplementation((filePath: string) => {
       if (filePath === tokenFilePath) return "stable-token\n";
-      if (filePath === pidFilePath) return "9999\n";
+      throw new Error(`Unexpected read for ${filePath}`);
+    });
+    childProcessMocks.execFileSync.mockImplementation((command: string, args: string[]) => {
+      if (command === "lsof" && args[1] === "-iTCP:18562") {
+        return "5678\n";
+      }
+      if (command === "ps" && args[1] === "5678") {
+        return `${managedListenerCommand(18562, "/devspace-vscode", tokenFilePath, serverDataDir)}\n`;
+      }
+      throw new Error(`Unexpected execFileSync call: ${command} ${args.join(" ")}`);
+    });
+    childProcessMocks.spawn.mockReturnValue(child);
+    netMocks.portFreeResults.push(true, true);
+
+    const manager = new VscodeServerManager(serverDataDir);
+    const first = await manager.start("/tmp/project", "/custom/bin/code");
+    child.emit("exit", 0);
+    const second = await manager.start("/tmp/project-2", "/missing/code");
+
+    expect(first.port).toBe(18562);
+    expect(childProcessMocks.spawn).toHaveBeenCalledTimes(1);
+    expect(second.url).toBe(
+      "http://127.0.0.1:18562/devspace-vscode?tkn=stable-token&folder=%2Ftmp%2Fproject-2",
+    );
+  });
+
+  test("stopAll stops the managed listener when keepRunning is false", async () => {
+    const serverDataDir = "/tmp/devspace-vscode";
+    const tokenFilePath = `${serverDataDir}/connection-token`;
+    const alivePids = new Set([9999]);
+
+    fsMocks.existsSync.mockImplementation((filePath: string) => filePath === tokenFilePath);
+    fsMocks.readFileSync.mockImplementation((filePath: string) => {
+      if (filePath === tokenFilePath) return "stable-token\n";
       throw new Error(`Unexpected read for ${filePath}`);
     });
     childProcessMocks.execFileSync.mockImplementation((command: string, args: string[]) => {
       if (command === "lsof" && args[1] === "-iTCP:18562") {
         return alivePids.has(9999) ? "9999\n" : "";
       }
-      throw new Error("unexpected lsof call");
+      if (command === "ps" && args[1] === "9999") {
+        return `${managedListenerCommand(18562, "/devspace-vscode", tokenFilePath, serverDataDir)}\n`;
+      }
+      throw new Error(`Unexpected execFileSync call: ${command} ${args.join(" ")}`);
     });
     processKillSpy.mockImplementation((pid: number, signal?: string | number) => {
       if (pid !== 9999) {
@@ -401,10 +404,9 @@ describe("resolveVscodeCli", () => {
       }
       return true;
     });
-    fetchMock.mockResolvedValue({ ok: true, status: 200 });
     netMocks.portFreeResults.push(false);
 
-    const manager = new VscodeServerManager("/tmp/devspace-vscode");
+    const manager = new VscodeServerManager(serverDataDir);
     await manager.start("/tmp/project", "/missing/code");
     manager.release("/tmp/project");
 
@@ -412,6 +414,6 @@ describe("resolveVscodeCli", () => {
     await manager.stopAll();
 
     expect(processKillSpy).toHaveBeenCalledWith(9999, "SIGTERM");
-    expect(fsMocks.unlinkSync).toHaveBeenCalledWith(pidFilePath);
+    expect(fsMocks.unlinkSync).toHaveBeenCalledWith(`${serverDataDir}/server.pid`);
   });
 });

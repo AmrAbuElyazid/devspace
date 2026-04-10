@@ -93,6 +93,17 @@ function getListeningPid(port: number): number | null {
   }
 }
 
+function getProcessCommand(pid: number): string | null {
+  try {
+    const output = execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+      encoding: "utf-8",
+    }).trim();
+    return output.length > 0 ? output : null;
+  } catch {
+    return null;
+  }
+}
+
 export function resolveVscodeCli(configuredCli?: string): EditorCliStatus {
   const normalizedConfiguredCli = normalizeConfiguredCli(configuredCli);
   if (normalizedConfiguredCli) {
@@ -126,24 +137,27 @@ export function resolveVscodeCli(configuredCli?: string): EditorCliStatus {
   return cliFromPath ? { path: cliFromPath, source: "path" } : { path: null, reason: "not-found" };
 }
 
-/**
- * Wait for an HTTP server to respond at the given URL.
- * Polls every `intervalMs` up to `timeoutMs`.
- */
-function waitForServer(url: string, timeoutMs = 15_000, intervalMs = 300): Promise<void> {
+/** Wait for a listener PID to appear on the fixed port. */
+function waitForPid(
+  getPid: () => number | null,
+  timeoutMs = 30_000,
+  intervalMs = 200,
+): Promise<number> {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + timeoutMs;
     const check = (): void => {
       if (Date.now() > deadline) {
-        reject(new Error(`VS Code server did not start within ${timeoutMs}ms`));
+        reject(new Error(`VS Code server listener did not appear within ${timeoutMs}ms`));
         return;
       }
-      fetch(url)
-        .then((res) => {
-          if (res.ok || res.status === 302 || res.status === 401) resolve();
-          else setTimeout(check, intervalMs);
-        })
-        .catch(() => setTimeout(check, intervalMs));
+
+      const pid = getPid();
+      if (pid !== null) {
+        resolve(pid);
+        return;
+      }
+
+      setTimeout(check, intervalMs);
     };
     check();
   });
@@ -170,8 +184,8 @@ export class VscodeServerManager {
    */
   private startLock: Promise<unknown> = Promise.resolve();
 
-  /** Whether to leave the server running after app quit (default: true). */
-  keepRunning = true;
+  /** Whether to leave the server running after app quit (default: false). */
+  keepRunning = false;
 
   constructor(serverDataDir?: string) {
     this.serverDataDir =
@@ -288,33 +302,31 @@ export class VscodeServerManager {
 
     child.on("error", (err) => {
       console.error(`[vscode-server:${VSCODE_PORT}] process error:`, err);
-      this.handleProcessDeath();
+      this.handleProcessExitOrError();
     });
 
     child.on("exit", (code) => {
       console.log(`[vscode-server:${VSCODE_PORT}] exited with code ${code}`);
-      this.handleProcessDeath();
+      this.handleProcessExitOrError();
     });
 
     this.serverProcess = child;
 
     try {
-      await waitForServer(this.buildServerUrl());
+      const listenerPid = await waitForPid(() => this.resolveManagedListeningPid());
+      this.writePidFile(listenerPid);
     } catch (err) {
-      child.kill();
-      this.serverProcess = null;
-      this.removePidFile();
+      await this.stopManagedServer();
       throw err;
     }
 
-    this.writePidFile(child.pid);
     console.log(`[vscode-server] started on port ${VSCODE_PORT}`);
     return this.addFolder(key, folder);
   }
 
   /**
-   * Reuse a fixed-port Devspace-managed server only when the metadata pid
-   * still matches the actual process listening on the port.
+   * Reuse a fixed-port Devspace-managed server only when the current listener
+   * matches Devspace's expected serve-web command line.
    */
   private async reuseRunningServer(): Promise<boolean> {
     if (await isPortFree(VSCODE_PORT)) return false;
@@ -324,19 +336,11 @@ export class VscodeServerManager {
       return false;
     }
 
-    try {
-      await waitForServer(this.buildServerUrl(), 5000, 200);
-      console.log(
-        `[vscode-server] reusing existing Devspace-managed server (pid ${pid}) on port ${VSCODE_PORT}`,
-      );
-      return true;
-    } catch (err) {
-      console.warn(
-        "[vscode-server] managed server ownership matched but readiness probe failed:",
-        err,
-      );
-      return false;
-    }
+    this.writePidFile(pid);
+    console.log(
+      `[vscode-server] reusing existing Devspace-managed server (pid ${pid}) on port ${VSCODE_PORT}`,
+    );
+    return true;
   }
 
   private buildServerUrl(folder?: string): string {
@@ -356,22 +360,33 @@ export class VscodeServerManager {
     return { url, port: VSCODE_PORT };
   }
 
-  /** Clean up state when the server process dies unexpectedly. */
-  private handleProcessDeath(): void {
+  /** Reconcile wrapper exit without tearing down a live listener. */
+  private handleProcessExitOrError(): void {
     this.serverProcess = null;
+
+    const listenerPid = this.resolveManagedListeningPid();
+    if (listenerPid !== null) {
+      this.writePidFile(listenerPid);
+      console.log(
+        `[vscode-server] wrapper exited but managed listener ${listenerPid} is still active`,
+      );
+      return;
+    }
+
     this.folders.clear();
     this.removePidFile();
   }
 
   /**
    * The fixed port is part of the persisted VS Code login/session identity,
-   * so we only reuse a server when its metadata pid still owns that port.
+   * so we only reuse a server when the current listener matches Devspace's
+   * expected serve-web command line.
    */
   private async assertPortIsAvailableForManagedServer(): Promise<void> {
     if (await isPortFree(VSCODE_PORT)) return;
 
     throw new Error(
-      `Port ${VSCODE_PORT} is already in use. Devspace will only reuse an existing VS Code server at ${VSCODE_SERVER_BASE_PATH} when its recorded pid still owns the fixed port. Close the other process or free the port and try again.`,
+      `Port ${VSCODE_PORT} is already in use. Devspace will only reuse an existing VS Code server at ${VSCODE_SERVER_BASE_PATH} when the current listener matches its managed serve-web process. Close the other process or free the port and try again.`,
     );
   }
 
@@ -386,11 +401,12 @@ export class VscodeServerManager {
       this.folders.delete(key);
     }
 
-    if (this.folders.size === 0 && this.serverProcess) {
+    if (this.folders.size === 0) {
       console.log(`[vscode-server] no remaining consumers, stopping server`);
-      this.serverProcess.kill();
-      this.serverProcess = null;
-      this.removePidFile();
+      this.startLock = this.startLock.then(
+        () => this.stopManagedServer(),
+        () => this.stopManagedServer(),
+      );
     }
   }
 
@@ -401,8 +417,6 @@ export class VscodeServerManager {
    * then sends SIGKILL if it's still alive.
    */
   async stopAll(timeoutMs = 2000): Promise<void> {
-    const child = this.serverProcess;
-    this.serverProcess = null;
     this.folders.clear();
 
     if (this.keepRunning) {
@@ -410,19 +424,7 @@ export class VscodeServerManager {
       return;
     }
 
-    if (child) {
-      console.log(`[vscode-server] stopping server (SIGTERM)`);
-      await this.gracefulKill(child, timeoutMs);
-      this.removePidFile();
-      return;
-    }
-
-    const adoptedPid = this.resolveManagedListeningPid();
-    if (adoptedPid !== null) {
-      console.log(`[vscode-server] stopping adopted server (pid ${adoptedPid})`);
-      await this.gracefulKillPid(adoptedPid, timeoutMs);
-      this.removePidFile();
-    }
+    await this.stopManagedServer(timeoutMs);
   }
 
   private writePidFile(pid: number | undefined): void {
@@ -434,31 +436,33 @@ export class VscodeServerManager {
     }
   }
 
-  private readPidFile(): number | null {
-    try {
-      if (!existsSync(this.pidFilePath)) return null;
-      const raw = readFileSync(this.pidFilePath, "utf-8").trim();
-      const pid = Number.parseInt(raw, 10);
-      return Number.isFinite(pid) && pid > 0 ? pid : null;
-    } catch {
+  private resolveManagedListeningPid(): number | null {
+    const listeningPid = getListeningPid(VSCODE_PORT);
+    if (listeningPid === null) {
       return null;
     }
+
+    if (!this.isExpectedManagedServerProcess(listeningPid)) {
+      return null;
+    }
+
+    return listeningPid;
   }
 
-  private resolveManagedListeningPid(): number | null {
-    const recordedPid = this.readPidFile();
-    if (recordedPid === null || !this.isProcessAlive(recordedPid)) {
-      this.removePidFile();
-      return null;
+  private isExpectedManagedServerProcess(pid: number): boolean {
+    const command = getProcessCommand(pid);
+    if (!command) {
+      return false;
     }
 
-    const listeningPid = getListeningPid(VSCODE_PORT);
-    if (listeningPid !== recordedPid) {
-      this.removePidFile();
-      return null;
-    }
-
-    return recordedPid;
+    return (
+      command.includes("code-tunnel serve-web") &&
+      command.includes("--host 127.0.0.1") &&
+      command.includes(`--port ${VSCODE_PORT}`) &&
+      command.includes(`--server-base-path ${VSCODE_SERVER_BASE_PATH}`) &&
+      command.includes(`--connection-token-file ${this.connectionTokenFilePath}`) &&
+      command.includes(`--server-data-dir ${this.serverDataDir}`)
+    );
   }
 
   private removePidFile(): void {
@@ -509,6 +513,24 @@ export class VscodeServerManager {
 
       check();
     });
+  }
+
+  private async stopManagedServer(timeoutMs = 2000): Promise<void> {
+    const child = this.serverProcess;
+    this.serverProcess = null;
+    const listenerPid = this.resolveManagedListeningPid();
+
+    if (child) {
+      console.log(`[vscode-server] stopping wrapper process (SIGTERM)`);
+      await this.gracefulKill(child, timeoutMs);
+    }
+
+    if (listenerPid !== null && listenerPid !== child?.pid) {
+      console.log(`[vscode-server] stopping managed listener (pid ${listenerPid})`);
+      await this.gracefulKillPid(listenerPid, timeoutMs);
+    }
+
+    this.removePidFile();
   }
 
   private gracefulKill(child: ChildProcess, timeoutMs: number): Promise<void> {

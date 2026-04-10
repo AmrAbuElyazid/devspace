@@ -41,7 +41,7 @@ beforeEach(() => {
     defaultShell: "",
     terminalScrollback: 5000,
     terminalCursorStyle: "block",
-    keepVscodeServerRunning: true,
+    keepVscodeServerRunning: false,
   });
 });
 

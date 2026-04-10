@@ -143,6 +143,7 @@ registerIpcHandlers(
   t3codeServerManagerMock as never,
   browserImportServiceMock as never,
   browserSessionManagerMock as never,
+  browserSessionManagerMock as never,
 );
 
 test("browser resolvePermission IPC accepts spec permission choices", async () => {

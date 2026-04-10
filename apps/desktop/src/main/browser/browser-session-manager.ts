@@ -5,7 +5,6 @@ import type {
   BrowserPermissionRequest,
   BrowserPermissionType,
 } from "../../shared/browser";
-import { getSecretKey, SECRET_KEY_ENDPOINT } from "../vscode-secret-key";
 import { BROWSER_PARTITION } from "../dev-mode";
 
 export { BROWSER_PARTITION };
@@ -13,10 +12,6 @@ export { BROWSER_PARTITION };
 /** 30 days from now, in seconds since epoch. */
 function thirtyDays(): number {
   return Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
-}
-
-function getElectronNet(): typeof import("electron").net {
-  return (require("electron") as typeof import("electron")).net;
 }
 
 interface BrowserSessionModule {
@@ -44,6 +39,10 @@ interface BrowserSessionManagerDeps {
     ) => unknown;
   };
   log?: (message: string, meta?: Record<string, unknown>) => void;
+}
+
+interface BrowserSessionManagerOptions {
+  persistSessionCookies?: boolean;
 }
 
 type CertificateVerifyRequest = {
@@ -125,10 +124,6 @@ function getTrustedLocalOrigin(rawUrl: string | undefined): string | null {
   }
 }
 
-function isVscodeMintKeyPath(pathname: string): boolean {
-  return pathname === SECRET_KEY_ENDPOINT || pathname.endsWith("/_vscode-cli/mint-key");
-}
-
 function findResponseHeaderKey(
   headers: Record<string, string[]>,
   targetHeaderName: string,
@@ -177,7 +172,8 @@ export class BrowserSessionManager {
 
   constructor(
     private readonly sessionModule: BrowserSessionModule = getElectronSession(),
-    private readonly netModule: Pick<typeof import("electron").net, "fetch"> = getElectronNet(),
+    private readonly partition: string = BROWSER_PARTITION,
+    private readonly options: BrowserSessionManagerOptions = {},
   ) {}
 
   /**
@@ -192,7 +188,7 @@ export class BrowserSessionManager {
    * key protocol handler) are installed once on the first call.
    */
   getSession(): Session {
-    const ses = this.sessionModule.fromPartition(BROWSER_PARTITION);
+    const ses = this.sessionModule.fromPartition(this.partition);
     if (!this.sessionLevelHandlersInstalled) {
       this.sessionLevelHandlersInstalled = true;
       this.installSessionLevelHandlers(ses);
@@ -239,16 +235,13 @@ export class BrowserSessionManager {
     // Cast once — the guards below check for existence before calling.
     const sessionAny = ses as unknown as Record<string, unknown>;
 
-    if (sessionAny.cookies) {
+    if (this.options.persistSessionCookies !== false && sessionAny.cookies) {
       this.persistSessionCookies(ses);
     }
     if (
       typeof (sessionAny.webRequest as Record<string, unknown>)?.onHeadersReceived === "function"
     ) {
       this.installCorsOverrides(ses);
-    }
-    if (typeof (sessionAny.protocol as Record<string, unknown>)?.handle === "function") {
-      this.registerSecretKeyHandler(ses);
     }
   }
 
@@ -507,52 +500,6 @@ export class BrowserSessionManager {
     });
 
     console.log("[browser-session] installed CORS overrides for browser session");
-  }
-
-  /**
-   * Register an HTTP protocol handler on the browser session that intercepts
-   * POST requests to the VS Code secret key endpoint.
-   *
-   * The `code serve-web` server sets a `vscode-secret-key-path` cookie
-   * pointing to its own `/_vscode-cli/mint-key` endpoint, which returns an
-   * *ephemeral* key that changes on every server restart.  We intercept that
-   * POST and return our own *stable* key instead, so secrets encrypted and
-   * stored in localStorage can be decrypted on subsequent app launches.
-   */
-  private registerSecretKeyHandler(ses: Session): void {
-    ses.protocol.handle("http", (request) => {
-      const url = new URL(request.url);
-      const trustedOrigin = getTrustedLocalOrigin(request.url);
-      if (
-        isVscodeMintKeyPath(url.pathname) &&
-        request.method === "POST" &&
-        trustedOrigin &&
-        this.trustedLocalOrigins.has(trustedOrigin)
-      ) {
-        // Defer getSecretKey() to the first actual request instead of calling
-        // it eagerly at startup.  The key is cached after the first call, so
-        // subsequent requests are instant.  This avoids a concurrent macOS
-        // Keychain access (safeStorage) racing with Chromium's session cookie
-        // encryption init, which caused two "devspace Safe Storage" prompts
-        // on every launch.
-        const keyBuffer = getSecretKey();
-        console.log(
-          `[browser-session] intercepted ${url.pathname} — serving stable secret key (${keyBuffer.length} bytes) for ${url.origin}`,
-        );
-        return new globalThis.Response(new Uint8Array(keyBuffer), {
-          status: 200,
-          headers: { "Content-Type": "application/octet-stream" },
-        }) as Response;
-      }
-      // Pass all other HTTP requests through to the default network stack.
-      // bypassCustomProtocolHandlers is REQUIRED to prevent infinite recursion —
-      // without it, net.fetch triggers our own handler again.
-      return this.netModule.fetch(request, { bypassCustomProtocolHandlers: true });
-    });
-
-    console.log(
-      "[browser-session] registered VS Code secret key handler (intercepting /_vscode-cli/mint-key)",
-    );
   }
 
   private toSessionPermissionGrantKey(

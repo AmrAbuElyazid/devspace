@@ -14,7 +14,7 @@ import { BrowserHistoryService } from "./browser/browser-history-service";
 import { BrowserImportService } from "./browser/browser-import-service";
 import { installWindowZoomReset } from "./window-zoom";
 import { getTrafficLightPosition } from "./window-chrome";
-import { IS_DEV, CLI_PORT } from "./dev-mode";
+import { IS_DEV, CLI_PORT, EDITOR_PARTITION } from "./dev-mode";
 import { resolveDevelopmentPath } from "./dev-paths";
 import { ShortcutStore } from "./shortcut-store";
 import {
@@ -28,6 +28,12 @@ import {
 // Without this, Electron derives the path from package.json "name" (@devspace/desktop)
 // which would lose existing user data (shortcuts, browser history, etc.).
 app.setName("devspace");
+
+if (IS_DEV) {
+  const devUserDataPath = join(app.getPath("appData"), "devspace-dev");
+  app.setPath("userData", devUserDataPath);
+  app.setPath("sessionData", join(devUserDataPath, "session-data"));
+}
 
 // Sync shell environment before app is ready (macOS GUI apps don't inherit login shell env)
 syncShellEnvironment();
@@ -114,6 +120,9 @@ let vscodeServerManager: VscodeServerManager;
 let t3codeServerManager: T3CodeServerManager;
 let shortcutStore: ShortcutStore | null = null;
 const browserSessionManager = new BrowserSessionManager();
+const editorSessionManager = new BrowserSessionManager(undefined, EDITOR_PARTITION, {
+  persistSessionCookies: false,
+});
 
 // Global error handlers
 process.on("uncaughtException", (error) => {
@@ -182,7 +191,8 @@ function createWindow(): void {
             },
       );
     },
-    getSession: () => browserSessionManager.getSession(),
+    getSession: (kind) =>
+      kind === "editor" ? editorSessionManager.getSession() : browserSessionManager.getSession(),
     historyService: browserHistoryService,
   });
 
@@ -247,6 +257,7 @@ function createWindow(): void {
     vscodeServerManager,
     t3codeServerManager,
     browserImportService,
+    editorSessionManager,
     browserSessionManager,
   );
   installWindowZoomReset(window.webContents);

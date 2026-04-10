@@ -21,6 +21,11 @@ export const BROWSER_PARTITION = IS_DEV
   ? "persist:devspace-dev-browser"
   : "persist:devspace-global-browser";
 
+/** Electron session partition for embedded editor panes. */
+export const EDITOR_PARTITION = IS_DEV
+  ? "persist:devspace-dev-editor"
+  : "persist:devspace-global-editor";
+
 /** Suffix for data directories that need isolation. */
 export const DATA_DIR_SUFFIX = IS_DEV ? "-dev" : "";
 

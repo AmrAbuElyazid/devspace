@@ -26,7 +26,7 @@ export type BrowserPaneManagerDeps = {
   removeChildView: (view: View) => void;
   sendToRenderer: (channel: string, ...args: unknown[]) => void;
   getAppShortcutBindings?: () => BrowserShortcutBinding[];
-  getSession?: () => Session;
+  getSession?: (kind?: BrowserPaneKind) => Session;
   historyService?: BrowserHistoryRecorder;
 };
 

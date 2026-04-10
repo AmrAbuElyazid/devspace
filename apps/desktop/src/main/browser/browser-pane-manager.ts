@@ -71,10 +71,14 @@ export class BrowserPaneManager implements BrowserPaneController {
 
   createPane(paneId: string, initialUrl: string, kind: BrowserPaneKind = "browser"): void {
     if (this.panes.has(paneId)) {
+      const existingRuntime = this.getRuntimeState(paneId);
+      if (existingRuntime?.url !== initialUrl) {
+        this.navigate(paneId, initialUrl);
+      }
       return;
     }
 
-    const session = this.deps.getSession?.();
+    const session = this.deps.getSession?.(kind);
     const pane = createBrowserPaneRecord({
       createView: this.createView,
       initialUrl,

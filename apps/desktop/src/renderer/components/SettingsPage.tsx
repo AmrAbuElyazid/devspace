@@ -183,11 +183,17 @@ export default function SettingsPage() {
               <EditorCliStatusText status={editorCliStatus} />
             </div>
           </SettingRow>
-          <SettingRow label="Keep editor server running after quit">
-            <Toggle
-              checked={keepVscodeServerRunning}
-              onChange={(v) => updateSetting("keepVscodeServerRunning", v)}
-            />
+          <SettingRow label="Keep editor server running after quit (advanced)">
+            <div className="flex flex-col items-end gap-1">
+              <Toggle
+                checked={keepVscodeServerRunning}
+                onChange={(v) => updateSetting("keepVscodeServerRunning", v)}
+              />
+              <span className="text-[11px] text-right" style={{ color: "var(--muted-foreground)" }}>
+                Leaves a local VS Code server running in the background for faster reopen, but it
+                can keep the port occupied across app restarts.
+              </span>
+            </div>
           </SettingRow>
         </section>
 

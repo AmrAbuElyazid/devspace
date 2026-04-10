@@ -27,6 +27,10 @@ type BrowserHistoryServiceOptions = {
   appDataPath?: string;
 };
 
+function isMissingFileError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
 function toDedupeKey(
   entry: Pick<BrowserHistoryEntryInput, "source" | "browserProfile" | "url" | "visitedAt">,
 ): string {
@@ -139,7 +143,9 @@ export class BrowserHistoryService implements BrowserHistoryRecorder {
 
       return dedupeEntries(parsed.map(normalizeEntry));
     } catch (err) {
-      console.warn("[browser-history] Reading history entries failed:", err);
+      if (!isMissingFileError(err)) {
+        console.warn("[browser-history] Reading history entries failed:", err);
+      }
       return null;
     }
   }

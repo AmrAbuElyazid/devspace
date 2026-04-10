@@ -12,7 +12,7 @@ function resetSettingsStore(): void {
     defaultShell: "",
     terminalScrollback: 5000,
     terminalCursorStyle: "block",
-    keepVscodeServerRunning: true,
+    keepVscodeServerRunning: false,
     sidebarWidth: 220,
     defaultPaneType: "terminal",
     panePickerContext: null,
@@ -32,6 +32,10 @@ afterEach(() => {
 
 test("showShortcutHintsOnModifierPress defaults to true", () => {
   expect(useSettingsStore.getState().showShortcutHintsOnModifierPress).toBe(true);
+});
+
+test("keepVscodeServerRunning defaults to false", () => {
+  expect(useSettingsStore.getState().keepVscodeServerRunning).toBe(false);
 });
 
 test("themeMode defaults to system and can be updated", () => {

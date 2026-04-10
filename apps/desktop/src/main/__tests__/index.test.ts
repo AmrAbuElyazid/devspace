@@ -167,7 +167,11 @@ async function loadIndexModule(options: LoadIndexOptions = {}) {
     name: "Devspace",
     isPackaged: false,
     setName: vi.fn(),
-    getPath: vi.fn(() => "/tmp/devspace"),
+    setPath: vi.fn(),
+    getPath: vi.fn((name: string) => {
+      if (name === "appData") return "/tmp/app-data";
+      return "/tmp/devspace";
+    }),
     getAppPath: vi.fn(() => "/Applications/Devspace.app/Contents/Resources/app"),
     whenReady: vi.fn(() => Promise.resolve()),
     requestSingleInstanceLock: vi.fn(() => true),
@@ -243,6 +247,7 @@ async function loadIndexModule(options: LoadIndexOptions = {}) {
   vi.doMock("../dev-mode", () => ({
     IS_DEV: options.isDev ?? false,
     CLI_PORT: 21549,
+    EDITOR_PARTITION: "persist:test-editor",
   }));
   vi.doMock("../shortcut-store", () => ({
     ShortcutStore: ShortcutStoreMock,

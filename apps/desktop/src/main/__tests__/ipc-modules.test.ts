@@ -321,6 +321,7 @@ registerTerminalAndEditorIpc(
   vscodeServerManagerMock as never,
   t3codeServerManagerMock as never,
   browserSessionManagerMock as never,
+  browserSessionManagerMock as never,
 );
 registerBrowserIpc(
   mainWindowMock as never,

@@ -65,7 +65,7 @@ export const useSettingsStore = create<SettingsState>()(
       defaultShell: "",
       terminalScrollback: 5000,
       terminalCursorStyle: "block" as const,
-      keepVscodeServerRunning: true,
+      keepVscodeServerRunning: false,
       sidebarWidth: 220,
       defaultPaneType: "terminal" as const,
       panePickerContext: null,
