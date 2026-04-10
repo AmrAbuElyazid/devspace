@@ -269,7 +269,12 @@
 .ws-list {
   flex: 1;
   overflow-y: auto;
+}
+
+.sidebar-tree-content {
+  min-height: 100%;
   padding: 2px 6px 8px;
+  position: relative;
 }
 
 /* ── Workspace Items ─────────────────────────────────────────────────── */
@@ -340,6 +345,7 @@
 
 .sidebar-pinned-list {
   padding: 0 6px 2px;
+  position: relative;
 }
 
 .ws-item-content {

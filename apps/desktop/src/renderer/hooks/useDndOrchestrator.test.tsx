@@ -131,6 +131,28 @@ test("group-tab collision detection prioritizes tab targets over split and sideb
   expect(dndMocks.closestCenter).not.toHaveBeenCalled();
 });
 
+test("group-tab collision detection keeps sidebar root targets when empty-space drops are the only match", async () => {
+  dndMocks.handlers.push({
+    id: "test-handler",
+    canHandle: () => true,
+    isValidTarget: () => true,
+    resolveIntent: () => null,
+    execute: () => false,
+  });
+
+  await act(async () => {
+    latestHook?.onDragStart({
+      active: { data: { current: createGroupTabDrag() } },
+    } as never);
+  });
+
+  dndMocks.pointerWithin.mockReturnValue([createCollision("sidebar-root")]);
+
+  const collisions = latestHook?.collisionDetection({} as never);
+
+  expect(collisions).toEqual([expect.objectContaining(createCollision("sidebar-root"))]);
+});
+
 test("sidebar-workspace closest-center fallback prefers group tabs over sidebar targets", async () => {
   dndMocks.handlers.push({
     id: "test-handler",

@@ -16,19 +16,30 @@ export const tabReorderHandler: DndHandler = {
   resolveIntent(ctx: ResolveContext): DropIntent | null {
     if (ctx.drag.type !== "group-tab") return null;
 
+    const state = ctx.store.getState();
+
     for (const collision of ctx.collisions) {
       const data = collision.data?.droppableContainer?.data?.current as
         | Record<string, unknown>
         | undefined;
-      if (!data || data.type !== "group-tab" || data.visible === false) continue;
+      const rect = collision.data?.droppableContainer?.rect?.current;
+      if (!data || data.type !== "group-tab" || data.visible === false || !rect) continue;
+
+      const targetGroupId = data.groupId as string;
+      const targetTabId = data.tabId as string;
+      const targetGroup = state.paneGroups[targetGroupId];
+      const targetIndex = targetGroup?.tabs.findIndex((tab) => tab.id === targetTabId) ?? -1;
+      if (targetIndex === -1) continue;
+
+      const insertAfter = (ctx.pointer.x - rect.left) / rect.width > 0.5;
 
       return {
         kind: "reorder-tab",
         workspaceId: ctx.drag.workspaceId,
         sourceGroupId: ctx.drag.groupId,
         sourceTabId: ctx.drag.tabId,
-        targetGroupId: data.groupId as string,
-        targetTabId: data.tabId as string,
+        targetGroupId,
+        targetIndex: targetIndex + (insertAfter ? 1 : 0),
       };
     }
 
@@ -38,7 +49,7 @@ export const tabReorderHandler: DndHandler = {
   execute(intent: DropIntent, store: typeof useWorkspaceStore): boolean {
     if (intent.kind !== "reorder-tab") return false;
 
-    const { workspaceId, sourceGroupId, sourceTabId, targetGroupId, targetTabId } = intent;
+    const { workspaceId, sourceGroupId, sourceTabId, targetGroupId, targetIndex } = intent;
     const state = store.getState();
 
     if (sourceGroupId === targetGroupId) {
@@ -46,20 +57,23 @@ export const tabReorderHandler: DndHandler = {
       const group = state.paneGroups[sourceGroupId];
       if (!group) return true;
       const fromIndex = group.tabs.findIndex((t) => t.id === sourceTabId);
-      const toIndex = group.tabs.findIndex((t) => t.id === targetTabId);
-      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) return true;
-      state.reorderGroupTabs(workspaceId, sourceGroupId, fromIndex, toIndex);
+      if (fromIndex === -1) return true;
+
+      const adjustedTargetIndex = fromIndex < targetIndex ? targetIndex - 1 : targetIndex;
+      if (adjustedTargetIndex < 0 || adjustedTargetIndex >= group.tabs.length) return true;
+      if (fromIndex === adjustedTargetIndex) return true;
+
+      state.reorderGroupTabs(workspaceId, sourceGroupId, fromIndex, adjustedTargetIndex);
     } else {
-      // Cross-group move — insert at position of target tab
+      // Cross-group move — insert at the resolved insertion index in the target group
       const destGroup = state.paneGroups[targetGroupId];
       if (!destGroup) return true;
-      const insertIndex = destGroup.tabs.findIndex((t) => t.id === targetTabId);
       state.moveTabToGroup(
         workspaceId,
         sourceGroupId,
         sourceTabId,
         targetGroupId,
-        insertIndex !== -1 ? insertIndex : undefined,
+        Math.min(targetIndex, destGroup.tabs.length),
       );
     }
     return true;

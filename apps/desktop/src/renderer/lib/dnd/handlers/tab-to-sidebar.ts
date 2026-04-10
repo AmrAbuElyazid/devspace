@@ -31,12 +31,28 @@ export const tabToSidebarHandler: DndHandler = {
     if (ctx.drag.type !== "group-tab") return null;
     const drag = ctx.drag;
 
-    for (const collision of ctx.collisions) {
+    const sidebarCollisions = ctx.collisions.filter((collision) => {
+      const data = collision.data?.droppableContainer?.data?.current as
+        | Record<string, unknown>
+        | undefined;
+      return data && SIDEBAR_TARGET_TYPES.has(data.type as string) && data.visible !== false;
+    });
+
+    for (const collision of [
+      ...sidebarCollisions.filter((candidate) => {
+        const data = candidate.data?.droppableContainer?.data?.current as Record<string, unknown>;
+        return data.type !== "sidebar-root";
+      }),
+      ...sidebarCollisions.filter((candidate) => {
+        const data = candidate.data?.droppableContainer?.data?.current as Record<string, unknown>;
+        return data.type === "sidebar-root";
+      }),
+    ]) {
       const data = collision.data?.droppableContainer?.data?.current as
         | Record<string, unknown>
         | undefined;
       const rect = collision.data?.droppableContainer?.rect?.current;
-      if (!data || data.visible === false) continue;
+      if (!data) continue;
 
       if (data.type === "sidebar-root") {
         const container = (data.container as SidebarContainer) ?? "main";

@@ -281,7 +281,7 @@ test("picks up pending folder edit requests from the store and clears the pendin
   expect(container.innerHTML).toContain('data-editing="true"');
 });
 
-test("shows the pinned section during relevant drags even when nothing is pinned", async () => {
+test("does not show the pinned section during drag when nothing is pinned", async () => {
   sidebarShellMocks.activeDrag = {
     type: "group-tab",
     workspaceId: "alpha",
@@ -293,7 +293,7 @@ test("shows the pinned section during relevant drags even when nothing is pinned
     root?.render(<Sidebar />);
   });
 
-  expect(container.textContent).toContain("Pinned");
+  expect(container.textContent).not.toContain("Pinned");
 });
 
 test("routes the new workspace button through the pane picker when the default pane type is picker", async () => {

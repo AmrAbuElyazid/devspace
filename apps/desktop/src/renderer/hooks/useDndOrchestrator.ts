@@ -66,8 +66,14 @@ function filterCollisions(
     const paneTargets = filtered.filter((c) => droppableType(c) === "pane-drop");
     if (paneTargets.length > 0) return paneTargets;
 
-    const workspaceTargets = filtered.filter((c) => droppableType(c) === "sidebar-workspace");
-    if (workspaceTargets.length > 0) return workspaceTargets;
+    const sidebarItemTargets = filtered.filter((c) => {
+      const type = droppableType(c);
+      return type === "sidebar-workspace" || type === "sidebar-folder";
+    });
+    if (sidebarItemTargets.length > 0) return sidebarItemTargets;
+
+    const sidebarRootTargets = filtered.filter((c) => droppableType(c) === "sidebar-root");
+    if (sidebarRootTargets.length > 0) return sidebarRootTargets;
 
     return [];
   }
@@ -83,6 +89,17 @@ function filterCollisions(
       return t === "group-tab" || t === "pane-drop";
     });
     if (wsAreaTargets.length > 0) return wsAreaTargets;
+  }
+
+  if (drag.type === "sidebar-workspace" || drag.type === "sidebar-folder") {
+    const sidebarItemTargets = filtered.filter((c) => {
+      const type = droppableType(c);
+      return type === "sidebar-workspace" || type === "sidebar-folder";
+    });
+    if (sidebarItemTargets.length > 0) return sidebarItemTargets;
+
+    const sidebarRootTargets = filtered.filter((c) => droppableType(c) === "sidebar-root");
+    if (sidebarRootTargets.length > 0) return sidebarRootTargets;
   }
 
   return filtered;

@@ -440,9 +440,13 @@ test("tabReorderHandler resolves the first visible group-tab collision", () => {
       drag,
       [
         createCollision({ type: "group-tab", groupId: "group-2", tabId: "tab-5", visible: false }),
-        createCollision({ type: "group-tab", groupId: "group-2", tabId: "tab-2", visible: true }),
+        createCollision(
+          { type: "group-tab", groupId: "group-2", tabId: "tab-2", visible: true },
+          { left: 0, top: 0, width: 200, height: 40 },
+        ),
       ],
       { x: 20, y: 20 },
+      createStore({ paneGroups: { "group-2": { tabs: [{ id: "tab-2" }, { id: "tab-3" }] } } }),
     ),
   );
 
@@ -452,7 +456,7 @@ test("tabReorderHandler resolves the first visible group-tab collision", () => {
     sourceGroupId: "group-1",
     sourceTabId: "tab-1",
     targetGroupId: "group-2",
-    targetTabId: "tab-2",
+    targetIndex: 0,
   });
 });
 
@@ -473,7 +477,7 @@ test("tabReorderHandler execute reorders within a group using source and target 
         sourceGroupId: "group-1",
         sourceTabId: "tab-1",
         targetGroupId: "group-1",
-        targetTabId: "tab-3",
+        targetIndex: 3,
       },
       { getState: () => state } as never,
     ),
@@ -500,7 +504,7 @@ test("tabReorderHandler execute moves tabs across groups at the target tab posit
         sourceGroupId: "group-1",
         sourceTabId: "tab-1",
         targetGroupId: "group-2",
-        targetTabId: "tab-8",
+        targetIndex: 1,
       },
       { getState: () => state } as never,
     ),
@@ -513,6 +517,60 @@ test("tabReorderHandler execute moves tabs across groups at the target tab posit
     "group-2",
     1,
   );
+});
+
+test("sidebarReorderHandler prefers concrete folder targets over sidebar root collisions", () => {
+  const drag: DragItemData = {
+    type: "sidebar-workspace",
+    workspaceId: "workspace-1",
+    container: "main",
+    parentFolderId: null,
+  };
+
+  const store = createStore({
+    sidebarTree: [
+      {
+        type: "folder",
+        id: "folder-1",
+        name: "Folder One",
+        collapsed: false,
+        children: [],
+      },
+    ],
+  });
+
+  const intent = sidebarReorderHandler.resolveIntent(
+    createContext(
+      drag,
+      [
+        createCollision(
+          { type: "sidebar-root", container: "main" },
+          { left: 0, top: 0, width: 200, height: 300 },
+        ),
+        createCollision(
+          {
+            type: "sidebar-folder",
+            folderId: "folder-1",
+            container: "main",
+            parentFolderId: null,
+          },
+          { left: 0, top: 0, width: 200, height: 80 },
+        ),
+      ],
+      { x: 20, y: 40 },
+      store,
+    ),
+  );
+
+  expect(intent).toEqual({
+    kind: "reorder-sidebar",
+    nodeId: "workspace-1",
+    nodeType: "workspace",
+    sourceContainer: "main",
+    targetContainer: "main",
+    targetParentId: "folder-1",
+    targetIndex: 0,
+  });
 });
 
 test("tabSplitHandler resolves split direction from pane-drop proximity", () => {

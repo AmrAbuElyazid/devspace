@@ -44,7 +44,7 @@ export default function Sidebar() {
   const toggleSettings = useSettingsStore((s) => s.toggleSettings);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
-  const { activeDrag } = useDragContext();
+  const { activeDrag, dropIntent } = useDragContext();
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -115,6 +115,42 @@ export default function Sidebar() {
     id: "sidebar-root-main",
     data: { type: "sidebar-root" as const, container: "main", visible: true },
   });
+
+  const getRootInsertClass = useCallback(
+    (container: SidebarContainer, nodeCount: number): string => {
+      if (
+        dropIntent?.kind === "reorder-sidebar" &&
+        dropIntent.targetContainer === container &&
+        dropIntent.targetParentId === null
+      ) {
+        if (nodeCount === 0 && dropIntent.targetIndex === 0) {
+          return "sidebar-insert-before";
+        }
+        if (dropIntent.targetIndex === nodeCount) {
+          return "sidebar-insert-after";
+        }
+      }
+
+      if (
+        dropIntent?.kind === "create-workspace-from-tab" &&
+        dropIntent.targetContainer === container &&
+        dropIntent.targetParentFolderId === null
+      ) {
+        if (nodeCount === 0 && dropIntent.targetIndex === 0) {
+          return "sidebar-insert-before";
+        }
+        if (dropIntent.targetIndex === nodeCount) {
+          return "sidebar-insert-after";
+        }
+      }
+
+      return "";
+    },
+    [dropIntent],
+  );
+
+  const pinnedRootInsertClass = getRootInsertClass("pinned", pinnedSidebarNodes.length);
+  const mainRootInsertClass = getRootInsertClass("main", sidebarTree.length);
 
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
@@ -326,7 +362,7 @@ export default function Sidebar() {
         </div>
 
         {/* Pinned section */}
-        {(pinnedSidebarNodes.length > 0 || isRelevantDrag) && (
+        {pinnedSidebarNodes.length > 0 && (
           <>
             <div className="sidebar-section-divider" />
             <div className="sidebar-section-header">
@@ -334,7 +370,7 @@ export default function Sidebar() {
             </div>
             <div
               ref={setPinnedRootRef}
-              className={`sidebar-pinned-list ${isRelevantDrag && isPinnedRootOver ? "sidebar-item-drag-over-folder" : ""}`}
+              className={`sidebar-pinned-list ${isRelevantDrag && isPinnedRootOver ? "sidebar-item-drag-over-folder" : ""} ${pinnedRootInsertClass}`}
             >
               <SidebarTreeLevel
                 nodes={pinnedSidebarNodes}
@@ -383,17 +419,19 @@ export default function Sidebar() {
         </div>
 
         {/* Sidebar tree with DnD */}
-        <div
-          ref={setMainRootRef}
-          className={`sidebar-tree-root ${isRelevantDrag && isMainRootOver ? "sidebar-item-drag-over-folder" : ""}`}
-        >
+        <div className="sidebar-tree-root">
           <ScrollArea className="ws-list">
-            <SidebarTreeLevel
-              nodes={sidebarTree}
-              container="main"
-              parentFolderId={null}
-              depth={0}
-            />
+            <div
+              ref={setMainRootRef}
+              className={`sidebar-tree-content ${isRelevantDrag && isMainRootOver ? "sidebar-item-drag-over-folder" : ""} ${mainRootInsertClass}`}
+            >
+              <SidebarTreeLevel
+                nodes={sidebarTree}
+                container="main"
+                parentFolderId={null}
+                depth={0}
+              />
+            </div>
           </ScrollArea>
         </div>
 

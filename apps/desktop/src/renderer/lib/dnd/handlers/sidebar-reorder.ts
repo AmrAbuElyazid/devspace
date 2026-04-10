@@ -28,11 +28,15 @@ export const sidebarReorderHandler: DndHandler = {
   resolveIntent(ctx: ResolveContext): DropIntent | null {
     const { drag, collisions, pointer, store } = ctx;
 
-    // Find the first visible sidebar collision target
-    const overCollision = collisions.find((c) => {
+    const sidebarCollisions = collisions.filter((c) => {
       const data = c.data?.droppableContainer?.data?.current as Record<string, unknown> | undefined;
       return data && SIDEBAR_DROP_TYPES.has(data.type as string);
     });
+    const overCollision =
+      sidebarCollisions.find((c) => {
+        const data = c.data?.droppableContainer?.data?.current as Record<string, unknown>;
+        return data.type !== "sidebar-root";
+      }) ?? sidebarCollisions[0];
     if (!overCollision) return null;
 
     const overData = overCollision.data?.droppableContainer?.data?.current as Record<

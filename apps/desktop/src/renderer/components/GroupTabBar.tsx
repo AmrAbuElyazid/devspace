@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { Plus, Columns2, Rows2, X, Menu } from "lucide-react";
 import { SortableContext, useSortable, horizontalListSortingStrategy } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { useWorkspaceStore } from "../store/workspace-store";
 import { collectGroupIds } from "../lib/split-tree";
 import { useDragContext } from "../hooks/useDndOrchestrator";
@@ -39,6 +38,8 @@ const SortableGroupTab = memo(function SortableGroupTab({
   isActive,
   dndEnabled,
   shortcutHint,
+  showInsertBefore,
+  showInsertAfter,
   onSelect,
   onClose,
 }: {
@@ -49,6 +50,8 @@ const SortableGroupTab = memo(function SortableGroupTab({
   isActive: boolean;
   dndEnabled: boolean;
   shortcutHint: string | null;
+  showInsertBefore: boolean;
+  showInsertAfter: boolean;
   onSelect: () => void;
   onClose: () => void;
 }) {
@@ -58,12 +61,11 @@ const SortableGroupTab = memo(function SortableGroupTab({
   const pendingEditType = useWorkspaceStore((s) => s.pendingEditType);
   const clearPendingEdit = useWorkspaceStore((s) => s.clearPendingEdit);
   const { activeDrag } = useDragContext();
-  const { attributes, listeners, setNodeRef, isDragging, isOver, transform, transition } =
-    useSortable({
-      id: `gtab-${tabId}`,
-      disabled: !dndEnabled,
-      data: { type: "group-tab", workspaceId, groupId, tabId } satisfies DragItemData,
-    });
+  const { attributes, listeners, setNodeRef, isDragging, isOver } = useSortable({
+    id: `gtab-${tabId}`,
+    disabled: !dndEnabled,
+    data: { type: "group-tab", workspaceId, groupId, tabId } satisfies DragItemData,
+  });
 
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
@@ -101,17 +103,11 @@ const SortableGroupTab = memo(function SortableGroupTab({
     setIsEditing(false);
   }, []);
 
-  const baseTransition = "background-color 100ms ease, color 100ms ease";
   const style = {
-    transform: CSS.Transform.toString(transform),
-    transition: transition ? `${transition}, ${baseTransition}` : undefined,
     opacity: isDragging ? 0.4 : undefined,
   };
 
-  const isDropTarget =
-    isOver &&
-    !isDragging &&
-    (activeDrag?.type === "group-tab" || activeDrag?.type === "sidebar-workspace");
+  const isDropTarget = isOver && !isDragging && activeDrag?.type === "sidebar-workspace";
 
   const Icon = pane ? paneTypeIcons[pane.type] : paneTypeIcons.terminal;
 
@@ -119,7 +115,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
     <div
       ref={setNodeRef}
       data-sortable-id={`gtab-${tabId}`}
-      className={`group-tab ${isActive ? "group-tab-active" : ""} ${isDropTarget ? "group-tab-drop-target" : ""}`}
+      className={`group-tab ${isActive ? "group-tab-active" : ""} ${isDropTarget ? "group-tab-drop-target" : ""} ${showInsertBefore ? "group-tab-insert-before" : ""} ${showInsertAfter ? "group-tab-insert-after" : ""}`}
       style={style}
       onClick={onSelect}
       onDoubleClick={(e) => {
@@ -202,6 +198,7 @@ export default memo(function GroupTabBar({
   });
 
   const modifierHeld = useModifierHeldContext();
+  const { dropIntent } = useDragContext();
 
   useEffect(() => {
     if (!isTopLeftGroup) {
@@ -269,6 +266,11 @@ export default memo(function GroupTabBar({
           const hintDigit = tabIndex + 1;
           const hint =
             modifierHeld === "control" && isFocused && hintDigit <= 9 ? `⌃${hintDigit}` : null;
+          const tabInsertIndex =
+            dropIntent?.kind === "reorder-tab" && dropIntent.targetGroupId === groupId
+              ? dropIntent.targetIndex
+              : null;
+
           return (
             <SortableGroupTab
               key={tab.id}
@@ -279,6 +281,10 @@ export default memo(function GroupTabBar({
               isActive={tab.id === group.activeTabId}
               dndEnabled={dndEnabled}
               shortcutHint={hint}
+              showInsertBefore={tabInsertIndex === tabIndex}
+              showInsertAfter={
+                tabInsertIndex === group.tabs.length && tabIndex === group.tabs.length - 1
+              }
               onSelect={() => setActiveGroupTab(workspaceId, groupId, tab.id)}
               onClose={() => removeGroupTab(workspaceId, groupId, tab.id)}
             />

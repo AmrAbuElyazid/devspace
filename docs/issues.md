@@ -15,22 +15,6 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Relevant files: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/shared/browser.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.tsx`, `apps/desktop/src/main/browser/browser-pane-manager.ts`, `docs/issues.md`
 - Upstream reference: `electron/electron#24573`
 
-### 2. Tab Dragging Does Not Reorder Reliably
-
-- Status: open
-- Priority: medium
-- Type: interaction bug
-- Detail: dragging tabs should reorder them predictably within and across groups, but the current drag intent and execute flow likely needs alignment between DnD hit targets, tab-bar behavior, and workspace store mutations.
-- Relevant files: `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/lib/dnd/handlers/tab-reorder.ts`, `apps/desktop/src/renderer/store/slices/group-tabs.ts`
-
-### 3. Sidebar Drag Bounds And Pinned Section Behavior
-
-- Status: open
-- Priority: medium
-- Type: interaction polish bug
-- Detail: dragging workspaces/folders in the sidebar has awkward folder bounds, and the pinned section should disappear during active drag. Current sidebar drop resolution uses simple vertical zones and keeps the pinned root visible as a drop region.
-- Relevant files: `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/Sidebar/SidebarTreeLevel.tsx`, `apps/desktop/src/renderer/lib/sidebar-drop-resolution.ts`, `apps/desktop/src/renderer/store/slices/sidebar-tree.ts`
-
 ## Completed
 
 ### 1. Embedded VS Code Auth / Session Mismatch
@@ -123,3 +107,19 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Type: logging bug
 - Resolution: browser history persistence no longer warns on the initial backup copy when the primary history file has not been created yet.
 - Relevant files: `apps/desktop/src/main/browser/browser-history-service.ts`, `apps/desktop/src/main/browser/__tests__/browser-history-service.test.ts`
+
+### 11. Tab Dragging Reordered Unreliably And Felt Like It Was Swimming
+
+- Status: fixed
+- Priority: medium
+- Type: interaction bug
+- Resolution: tab drags now resolve to explicit insertion indexes and render stable insertion markers instead of visually shifting the whole strip around during reorder. The tab bar keeps the dragged overlay separate from the destination indicator so the interaction feels anchored.
+- Relevant files: `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/styles/workspace-shell.css`, `apps/desktop/src/renderer/lib/dnd/handlers/tab-reorder.ts`, `apps/desktop/src/renderer/lib/dnd/types.ts`, `apps/desktop/src/renderer/store/slices/group-tabs.ts`
+
+### 12. Sidebar Empty-Space Drops, Folder Boundaries, And Empty Pinned Drag Shifts
+
+- Status: fixed
+- Priority: medium
+- Type: interaction polish bug
+- Resolution: sidebar drag filtering now preserves real root targets for empty-space drops, prefers concrete folder/workspace targets over root collisions when both are present, and keeps the main scrollable content itself droppable so blank space can accept drops. The empty pinned section no longer appears during active drag, so dragging does not shift because a temporary section was inserted.
+- Relevant files: `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`, `apps/desktop/src/renderer/lib/dnd/handlers/sidebar-reorder.ts`, `apps/desktop/src/renderer/lib/dnd/handlers/tab-to-sidebar.ts`, `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/Sidebar/sidebar.css`, `apps/desktop/src/renderer/components/SidebarShell.test.tsx`

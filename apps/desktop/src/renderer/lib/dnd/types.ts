@@ -27,7 +27,7 @@ export type DropIntent =
       sourceGroupId: string;
       sourceTabId: string;
       targetGroupId: string;
-      targetTabId: string;
+      targetIndex: number;
     }
   // Handler 3: Tab split pane
   | {
