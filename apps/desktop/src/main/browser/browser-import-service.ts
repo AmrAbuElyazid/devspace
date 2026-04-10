@@ -22,6 +22,11 @@ import type {
 import type { BrowserHistoryEntryInput, BrowserHistoryRecorder } from "./browser-history-service";
 import type { BrowserSessionManager } from "./browser-session-manager";
 import {
+  rollbackImportedCookies,
+  snapshotExistingCookies,
+  type BrowserCookieStore,
+} from "./browser-import-cookie-store";
+import {
   hasChromiumImportableData,
   hasZenImportableData,
   parseProfilesIni,
@@ -108,12 +113,7 @@ const ZEN_ROOT = join(homedir(), "Library", "Application Support", "zen");
 type ImportedHistoryEntry = Omit<BrowserHistoryEntryInput, "id">;
 
 type CookieWriter = {
-  cookies: {
-    get?: (filter: Electron.CookiesGetFilter) => Promise<Electron.Cookie[]>;
-    set: (details: Electron.CookiesSetDetails) => Promise<void>;
-    remove?: (url: string, name: string) => Promise<void>;
-    flushStore: () => Promise<void>;
-  };
+  cookies: BrowserCookieStore;
 };
 
 type ElectronCookieSameSite = Electron.CookiesSetDetails["sameSite"];
@@ -128,10 +128,6 @@ type ImportedBrowserCookie = SweetCookie & {
   hostOnly?: boolean;
   expiresAt?: number | null;
 };
-type ImportedCookieSnapshot = Electron.CookiesSetDetails & {
-  hostOnly?: boolean;
-};
-
 type ImportedCookieInput = Electron.CookiesSetDetails & {
   hostOnly?: boolean;
 };
@@ -836,8 +832,8 @@ export class BrowserImportService {
       (cookie) => toElectronCookieInput(cookie) as ImportedCookieInput,
     );
     const session = this.deps.sessionManager.getSession() as CookieWriter;
-    const appliedCookies: Electron.CookiesSetDetails[] = [];
-    const previousCookies = await snapshotExistingCookies(session, electronCookies);
+    const appliedCookies: ImportedCookieInput[] = [];
+    const previousCookies = await snapshotExistingCookies(session.cookies, electronCookies);
 
     try {
       for (const cookie of electronCookies) {
@@ -851,7 +847,7 @@ export class BrowserImportService {
 
       return electronCookies.length;
     } catch (error) {
-      await rollbackImportedCookies(session, appliedCookies, previousCookies);
+      await rollbackImportedCookies(session.cookies, appliedCookies, previousCookies);
       throw new BrowserImportServiceError(
         "COOKIE_WRITE_FAILED",
         error instanceof Error ? error.message : String(error),
@@ -1087,122 +1083,6 @@ async function importBunSqlite(): Promise<{
       close: () => void;
     };
   }>;
-}
-
-// ---------------------------------------------------------------------------
-// Cookie snapshot & rollback
-// ---------------------------------------------------------------------------
-
-async function snapshotExistingCookies(
-  session: CookieWriter,
-  cookies: ImportedCookieInput[],
-): Promise<Map<string, ImportedCookieSnapshot>> {
-  const getCookies = session.cookies.get;
-  if (typeof getCookies !== "function") {
-    return new Map();
-  }
-
-  const snapshots = new Map<string, ImportedCookieSnapshot>();
-
-  for (const cookie of cookies) {
-    const key = toCookieSnapshotKey(cookie);
-    if (snapshots.has(key) || !cookie.url || !cookie.name) {
-      continue;
-    }
-
-    try {
-      const existing = await getCookies({ url: cookie.url, name: cookie.name });
-      const expectedHostOnly = !("domain" in cookie);
-      const matching = existing.find((candidate) => {
-        const samePath = (candidate.path ?? "/") === (cookie.path ?? "/");
-        const sameHostOnly = Boolean(candidate.hostOnly) === expectedHostOnly;
-        const candidateSnapshot = fromElectronCookie(candidate);
-        const sameUrl = candidateSnapshot.url === cookie.url;
-        return samePath && sameHostOnly && sameUrl;
-      });
-      if (matching) {
-        snapshots.set(key, fromElectronCookie(matching));
-      }
-    } catch (err) {
-      console.warn("[browser-import] Cookie snapshot lookup failed:", err);
-    }
-  }
-
-  return snapshots;
-}
-
-async function rollbackImportedCookies(
-  session: CookieWriter,
-  cookies: ImportedCookieInput[],
-  previousCookies: Map<string, ImportedCookieSnapshot>,
-): Promise<void> {
-  const removeCookie = session.cookies.remove;
-  const removedFamilies = new Set<string>();
-
-  for (const cookie of cookies.toReversed()) {
-    if (!cookie.url || !cookie.name) {
-      continue;
-    }
-
-    const familyKey = `${cookie.name}|${cookie.url}`;
-    if (typeof removeCookie === "function" && !removedFamilies.has(familyKey)) {
-      removedFamilies.add(familyKey);
-      try {
-        await removeCookie(cookie.url, cookie.name);
-      } catch (err) {
-        console.warn("[browser-import] Cookie rollback removal failed:", err);
-      }
-    }
-
-    const previous = previousCookies.get(toCookieSnapshotKey(cookie));
-    if (!previous) {
-      continue;
-    }
-
-    try {
-      await session.cookies.set(previous);
-    } catch (err) {
-      console.warn("[browser-import] Cookie rollback restore failed:", err);
-    }
-  }
-
-  if (cookies.length > 0) {
-    try {
-      await session.cookies.flushStore();
-    } catch (err) {
-      console.warn("[browser-import] Cookie store flush during rollback failed:", err);
-    }
-  }
-}
-
-function toCookieSnapshotKey(
-  cookie: Pick<Electron.CookiesSetDetails, "url" | "name" | "path"> & { hostOnly?: boolean },
-): string {
-  return `${cookie.name}|${cookie.url ?? ""}|${cookie.path ?? "/"}|${cookie.hostOnly ? "host" : "domain"}`;
-}
-
-function fromElectronCookie(cookie: Electron.Cookie): ImportedCookieSnapshot {
-  const normalizedDomain = (cookie.domain ?? "").replace(/^\./, "");
-  const protocol = cookie.secure ? "https" : "http";
-  const path = cookie.path && cookie.path.startsWith("/") ? cookie.path : "/";
-  const sameSite = cookie.sameSite
-    ? (cookie.sameSite as Electron.CookiesSetDetails["sameSite"])
-    : undefined;
-
-  return {
-    url: `${protocol}://${normalizedDomain || "localhost"}${path}`,
-    name: cookie.name,
-    value: cookie.value,
-    path,
-    secure: cookie.secure ?? false,
-    httpOnly: cookie.httpOnly ?? false,
-    ...(!cookie.hostOnly && normalizedDomain ? { domain: normalizedDomain } : {}),
-    ...(!cookie.session && typeof cookie.expirationDate === "number"
-      ? { expirationDate: cookie.expirationDate }
-      : {}),
-    ...(sameSite ? { sameSite } : {}),
-    ...(cookie.hostOnly ? { hostOnly: true } : {}),
-  };
 }
 
 // ---------------------------------------------------------------------------
