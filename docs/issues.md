@@ -28,6 +28,7 @@ No currently open tactical issues are tracked here.
 - Type: editor bug
 - Resolution: the note editor now guarantees a `TooltipProvider` at the editor root, so floating toolbar and selection-driven tooltip consumers no longer crash when text selection mounts them.
 - Relevant files: `packages/note-editor/src/NoteEditor.tsx`, `packages/note-editor/src/NoteEditor.test.tsx`, `packages/note-editor/src/plate-ui/tooltip.tsx`, `packages/note-editor/src/plate-ui/toolbar.tsx`
+- Commit: `48e169e` `fix: provide note editor tooltip context`
 
 ### 3. VS Code Launch No Longer Depends Only On `code` In PATH
 
@@ -47,6 +48,7 @@ No currently open tactical issues are tracked here.
 - Relevant files: `apps/desktop/src/renderer/hooks/useTheme.ts`, `apps/desktop/src/renderer/store/settings-store.ts`, `apps/desktop/src/renderer/components/SettingsPage.tsx`, `apps/desktop/src/renderer/styles/design-tokens.css`
 - Commits:
   - `678819a` `feat: add manual theme mode selection`
+  - `72c2c67` `fix: restore theme token switching`
 
 ### 5. Fullscreen Traffic-Light Spacing
 
@@ -84,6 +86,7 @@ No currently open tactical issues are tracked here.
 - Type: browser capability bug
 - Resolution: browser session permission handling now forwards broader Electron permission types like `storage-access` to the renderer prompt instead of hard-denying everything outside the original camera/microphone/geolocation/notifications set, and the prompt UI now renders readable labels for those requests.
 - Relevant files: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/shared/browser.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.tsx`, `apps/desktop/src/main/browser/__tests__/browser-session-manager.test.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.test.tsx`
+- Commit: `bb0a82a` `fix: broaden browser permission handling`
 
 ### 9. Localhost Hot Reload Steals Focus
 
@@ -92,6 +95,7 @@ No currently open tactical issues are tracked here.
 - Type: usability bug
 - Resolution: browser pane focus events now only propagate back into renderer workspace focus state when they follow an actual pointer interaction inside the native web contents, which prevents localhost reload churn from surfacing a browser pane and stealing focus on its own.
 - Relevant files: `apps/desktop/src/main/browser/browser-pane-webcontents-events.ts`, `apps/desktop/src/main/browser/__tests__/browser-pane-manager.test.ts`
+- Commit: `3e44dac` `fix: improve browser pane auth fallback`
 
 ### 10. Browser History Backup Warns On First Persist
 
@@ -100,6 +104,7 @@ No currently open tactical issues are tracked here.
 - Type: logging bug
 - Resolution: browser history persistence no longer warns on the initial backup copy when the primary history file has not been created yet.
 - Relevant files: `apps/desktop/src/main/browser/browser-history-service.ts`, `apps/desktop/src/main/browser/__tests__/browser-history-service.test.ts`
+- Commit: `3e44dac` `fix: improve browser pane auth fallback`
 
 ### 11. Tab Dragging Reordered Unreliably And Felt Like It Was Swimming
 
@@ -108,6 +113,7 @@ No currently open tactical issues are tracked here.
 - Type: interaction bug
 - Resolution: tab drags now resolve to explicit insertion indexes and render stable insertion markers instead of visually shifting the whole strip around during reorder. The tab bar keeps the dragged overlay separate from the destination indicator so the interaction feels anchored.
 - Relevant files: `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/styles/workspace-shell.css`, `apps/desktop/src/renderer/lib/dnd/handlers/tab-reorder.ts`, `apps/desktop/src/renderer/lib/dnd/types.ts`, `apps/desktop/src/renderer/store/slices/group-tabs.ts`
+- Commit: `341b245` `fix: stabilize drag interactions`
 
 ### 12. Sidebar Empty-Space Drops, Folder Boundaries, And Empty Pinned Drag Shifts
 
@@ -116,6 +122,7 @@ No currently open tactical issues are tracked here.
 - Type: interaction polish bug
 - Resolution: sidebar drag filtering now preserves real root targets for empty-space drops, prefers concrete folder/workspace targets over root collisions when both are present, and keeps the main scrollable content itself droppable so blank space can accept drops. The empty pinned section no longer appears during active drag, so dragging does not shift because a temporary section was inserted.
 - Relevant files: `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`, `apps/desktop/src/renderer/lib/dnd/handlers/sidebar-reorder.ts`, `apps/desktop/src/renderer/lib/dnd/handlers/tab-to-sidebar.ts`, `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/Sidebar/sidebar.css`, `apps/desktop/src/renderer/components/SidebarShell.test.tsx`
+- Commit: `341b245` `fix: stabilize drag interactions`
 
 ### 13. Browser Pane Passkeys / WebAuthn
 
@@ -124,4 +131,7 @@ No currently open tactical issues are tracked here.
 - Type: capability bug
 - Resolution: full in-pane passkey support on macOS appears limited by upstream Electron WebAuthn behavior, so Devspace now treats the explicit `Open in External Browser` action as the product fallback for those auth flows instead of continuing to chase a pane-local fix.
 - Relevant files: `apps/desktop/src/renderer/components/BrowserPane.tsx`, `apps/desktop/src/renderer/lib/browser-context-menu.ts`, `apps/desktop/src/renderer/hooks/useBrowserBridge.ts`, `docs/issues.md`
+- Commits:
+  - `3e44dac` `fix: improve browser pane auth fallback`
+  - `ce0fbb8` `docs: clarify browser and editor trust posture`
 - Upstream reference: `electron/electron#24573`

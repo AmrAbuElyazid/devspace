@@ -13,6 +13,7 @@ Devspace has a much stronger engineering baseline than earlier drafts of this ro
 - native pane lifecycle, focus ownership, and active-tab mounting were tightened
 - browser-session handling is more deliberate and better covered than before
 - embedded VS Code now uses fixed-port listener ownership checks, isolated dev/build data, isolated editor Chromium sessions, and a default-off background server lifecycle
+- recent maintainability work materially reduced change risk in `browser-import-service.ts`, `useAppShortcuts.ts`, and much of main-process startup wiring in `index.ts`
 - unit/integration coverage is broad, and Playwright Electron coverage exists locally
 
 The main remaining work is no longer broad repo cleanup. It is concentrated in localhost/browser capability gaps, privacy/storage clarity, package and release maturity, and a handful of scaling/maintainability hotspots.
@@ -31,7 +32,7 @@ Tactical bugs and smaller polish requests should live in `docs/issues.md`. This 
 
 ## Important Next
 
-- [ ] Keep breaking up maintainability hotspots in core files that still carry too much change risk. `apps/desktop/src/main/browser/browser-import-service.ts` and `apps/desktop/src/renderer/hooks/useAppShortcuts.ts` are in much better shape now; current top targets are `apps/desktop/src/main/index.ts`, `apps/desktop/src/renderer/store/slices/group-tabs.ts`, and `apps/desktop/src/renderer/store/slices/workspace-crud.ts`
+- [ ] Keep breaking up maintainability hotspots in core files that still carry too much change risk. `apps/desktop/src/main/browser/browser-import-service.ts`, `apps/desktop/src/renderer/hooks/useAppShortcuts.ts`, and much of `apps/desktop/src/main/index.ts` are in much better shape now; current top code targets are `apps/desktop/src/renderer/store/slices/group-tabs.ts` and `apps/desktop/src/renderer/store/slices/workspace-crud.ts`, with remaining main-process cleanup mostly concentrated in the window/bootstrap wiring still left in `apps/desktop/src/main/index.ts`
 - [ ] Reduce preload contract drift risk as the bridge grows. The current preload surface is much safer than before, but it is still broad and manually mirrored across preload/shared/main registration points. Refs: `apps/desktop/src/preload/index.ts`, `apps/desktop/src/shared/types.ts`, `apps/desktop/src/main/ipc-handlers.ts`
 - [ ] Add a macOS native smoke lane to CI for Electron/Playwright coverage so browser/editor/native-pane regressions are exercised automatically, not only locally. Refs: `.github/workflows/ci.yml`, `apps/desktop/e2e/playwright.config.ts`, `apps/desktop/package.json`
 - [ ] Revisit workspace persistence write amplification when profiling says it matters. The current full-snapshot rewrite approach is simple and correct, but it will become a scaling hotspot as workspace size and churn grow. Refs: `apps/desktop/src/renderer/store/persistence.ts`, `apps/desktop/src/main/workspace-persistence-store.ts`
