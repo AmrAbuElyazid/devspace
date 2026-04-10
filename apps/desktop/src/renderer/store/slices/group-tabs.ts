@@ -16,9 +16,9 @@ import {
 } from "../../lib/split-tree";
 import { createPane, findNearestTerminalCwd } from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
+import { buildDestinationGroupState } from "../group-tab-destination-state";
 import type { PaneCleanup } from "../store-helpers";
 import { applySourceGroupTabRemovalResolution } from "../source-group-state";
-import { buildRecentTabOrder, clearRecentTabTraversal } from "../tab-history";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type GroupTabsSlice = Pick<
@@ -165,15 +165,12 @@ export function createGroupTabsSlice(
         insertIndex !== undefined ? Math.min(insertIndex, destTabs.length) : destTabs.length;
       destTabs.splice(idx, 0, tab);
 
-      // Update destination group
-      const nextPaneGroups = {
-        ...state.paneGroups,
-      };
-      nextPaneGroups[destGroupId] = {
-        ...destGroup,
+      const destinationState = buildDestinationGroupState({
+        state,
+        group: destGroup,
         tabs: destTabs,
         activeTabId: tab.id,
-      };
+      });
 
       const resolution = resolveSourceGroupAfterTabRemoval(
         ws,
@@ -188,19 +185,9 @@ export function createGroupTabsSlice(
         sourceGroupId: srcGroupId,
         removedTabId: tabId,
         resolution,
-        nextPaneGroups,
-        nextTabHistoryByGroupId: {
-          ...state.tabHistoryByGroupId,
-          [destGroupId]: buildRecentTabOrder(
-            state.tabHistoryByGroupId[destGroupId],
-            destTabs,
-            tab.id,
-          ),
-        },
-        nextRecentTabTraversalByGroupId: clearRecentTabTraversal(
-          state.recentTabTraversalByGroupId,
-          destGroupId,
-        ),
+        nextPaneGroups: destinationState.paneGroups,
+        nextTabHistoryByGroupId: destinationState.tabHistoryByGroupId,
+        nextRecentTabTraversalByGroupId: destinationState.recentTabTraversalByGroupId,
       });
 
       set(nextState);
@@ -242,7 +229,12 @@ export function createGroupTabsSlice(
       };
 
       let newRoot = replaceLeafInTree(ws.root, targetGroupId, replacement);
-      const nextPaneGroups = { ...state.paneGroups, [newGroup.id]: newGroup };
+      const destinationState = buildDestinationGroupState({
+        state,
+        group: newGroup,
+        tabs: newGroup.tabs,
+        activeTabId: newGroup.activeTabId,
+      });
       const resolution = resolveSourceGroupAfterTabRemoval(ws, srcGroupId, srcGroup, tabId);
       if (resolution.kind === "group-removed") {
         const cleaned = removeGroupFromTree(newRoot, srcGroupId);
@@ -258,15 +250,9 @@ export function createGroupTabsSlice(
         nextWorkspaces: state.workspaces.map((w) =>
           w.id === workspaceId ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
         ),
-        nextPaneGroups,
-        nextTabHistoryByGroupId: {
-          ...state.tabHistoryByGroupId,
-          [newGroup.id]: [newTabId],
-        },
-        nextRecentTabTraversalByGroupId: clearRecentTabTraversal(
-          state.recentTabTraversalByGroupId,
-          newGroup.id,
-        ),
+        nextPaneGroups: destinationState.paneGroups,
+        nextTabHistoryByGroupId: destinationState.tabHistoryByGroupId,
+        nextRecentTabTraversalByGroupId: destinationState.recentTabTraversalByGroupId,
       });
 
       set(nextState);
@@ -298,10 +284,12 @@ export function createGroupTabsSlice(
       const newTab: PaneGroupTab = { id: nanoid(), paneId: tab.paneId };
       const destTabs = [...destGroup.tabs, newTab];
 
-      const nextPaneGroups = {
-        ...state.paneGroups,
-        [destGroupId]: { ...destGroup, tabs: destTabs, activeTabId: newTab.id },
-      };
+      const destinationState = buildDestinationGroupState({
+        state,
+        group: destGroup,
+        tabs: destTabs,
+        activeTabId: newTab.id,
+      });
 
       const resolution = resolveSourceGroupAfterTabRemoval(srcWs, srcGroupId, srcGroup, tabId);
       const nextState = applySourceGroupTabRemovalResolution({
@@ -310,19 +298,9 @@ export function createGroupTabsSlice(
         sourceGroupId: srcGroupId,
         removedTabId: tabId,
         resolution,
-        nextPaneGroups,
-        nextTabHistoryByGroupId: {
-          ...state.tabHistoryByGroupId,
-          [destGroupId]: buildRecentTabOrder(
-            state.tabHistoryByGroupId[destGroupId],
-            destTabs,
-            newTab.id,
-          ),
-        },
-        nextRecentTabTraversalByGroupId: clearRecentTabTraversal(
-          state.recentTabTraversalByGroupId,
-          destGroupId,
-        ),
+        nextPaneGroups: destinationState.paneGroups,
+        nextTabHistoryByGroupId: destinationState.tabHistoryByGroupId,
+        nextRecentTabTraversalByGroupId: destinationState.recentTabTraversalByGroupId,
       });
 
       set(nextState);
