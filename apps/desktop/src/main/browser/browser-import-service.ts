@@ -480,45 +480,24 @@ export class BrowserImportService {
     profilePath: string,
     mode: BrowserImportMode,
   ): Promise<BrowserImportResult> {
-    let importedHistory = 0;
     const errorPrefix = source.toUpperCase();
+    let importedHistory = 0;
 
     try {
-      if (mode !== "cookies") {
-        const historyEntries = dedupeHistoryEntries(
-          await this.loadChromiumHistoryImpl(profilePath, target),
-        );
-        importedHistory = this.importHistory(historyEntries);
-      }
+      const result = await this.runImportMode(mode, {
+        loadHistory: () => this.loadChromiumHistoryImpl(profilePath, target),
+        loadCookies: () => this.loadChromiumCookiesImpl(profilePath, target),
+        onHistoryImported: (count) => {
+          importedHistory = count;
+        },
+      });
 
-      let importedCookies = 0;
-      if (mode !== "history") {
-        const cookies = await this.loadChromiumCookiesImpl(profilePath, target);
-        importedCookies = await this.importCookies(cookies);
-      }
-
-      return { ok: true, importedCookies, importedHistory };
+      return { ok: true, ...result };
     } catch (error) {
-      if (error instanceof BrowserImportServiceError) {
-        const code =
-          error.code === "COOKIE_WRITE_FAILED" ? `${errorPrefix}_COOKIE_IMPORT_FAILED` : error.code;
-        return {
-          ok: false,
-          code,
-          importedCookies: 0,
-          importedHistory,
-          ...(error.retryable ? { retryable: true } : {}),
-          message: error.message,
-        };
-      }
-
-      return {
-        ok: false,
-        code: `${errorPrefix}_IMPORT_FAILED`,
-        importedCookies: 0,
+      return this.toImportFailureResult(error, `${errorPrefix}_IMPORT_FAILED`, {
+        cookieWriteCode: `${errorPrefix}_COOKIE_IMPORT_FAILED`,
         importedHistory,
-        message: error instanceof Error ? error.message : String(error),
-      };
+      });
     }
   }
 
@@ -634,39 +613,20 @@ export class BrowserImportService {
     let importedHistory = 0;
 
     try {
-      if (mode !== "cookies") {
-        const historyEntries = dedupeHistoryEntries(await this.loadSafariHistoryImpl());
-        importedHistory = this.importHistory(historyEntries);
-      }
+      const result = await this.runImportMode(mode, {
+        loadHistory: () => this.loadSafariHistoryImpl(),
+        loadCookies: () => this.loadSafariCookiesImpl(),
+        onHistoryImported: (count) => {
+          importedHistory = count;
+        },
+      });
 
-      let importedCookies = 0;
-      if (mode !== "history") {
-        const cookies = await this.loadSafariCookiesImpl();
-        importedCookies = await this.importCookies(cookies);
-      }
-
-      return { ok: true, importedCookies, importedHistory };
+      return { ok: true, ...result };
     } catch (error) {
-      if (error instanceof BrowserImportServiceError) {
-        const code =
-          error.code === "COOKIE_WRITE_FAILED" ? "SAFARI_COOKIE_IMPORT_FAILED" : error.code;
-        return {
-          ok: false,
-          code,
-          importedCookies: 0,
-          importedHistory,
-          ...(error.retryable ? { retryable: true } : {}),
-          message: error.message,
-        };
-      }
-
-      return {
-        ok: false,
-        code: "SAFARI_IMPORT_FAILED",
-        importedCookies: 0,
+      return this.toImportFailureResult(error, "SAFARI_IMPORT_FAILED", {
+        cookieWriteCode: "SAFARI_COOKIE_IMPORT_FAILED",
         importedHistory,
-        message: error instanceof Error ? error.message : String(error),
-      };
+      });
     }
   }
 
@@ -807,38 +767,20 @@ export class BrowserImportService {
     let importedHistory = 0;
 
     try {
-      if (mode !== "cookies") {
-        const historyEntries = dedupeHistoryEntries(await this.loadZenHistoryImpl(profilePath));
-        importedHistory = this.importHistory(historyEntries);
-      }
+      const result = await this.runImportMode(mode, {
+        loadHistory: () => this.loadZenHistoryImpl(profilePath),
+        loadCookies: () => this.loadZenCookiesImpl(profilePath),
+        onHistoryImported: (count) => {
+          importedHistory = count;
+        },
+      });
 
-      let importedCookies = 0;
-      if (mode !== "history") {
-        const cookies = await this.loadZenCookiesImpl(profilePath);
-        importedCookies = await this.importCookies(cookies);
-      }
-
-      return { ok: true, importedCookies, importedHistory };
+      return { ok: true, ...result };
     } catch (error) {
-      if (error instanceof BrowserImportServiceError) {
-        const code = error.code === "COOKIE_WRITE_FAILED" ? "ZEN_COOKIE_IMPORT_FAILED" : error.code;
-        return {
-          ok: false,
-          code,
-          importedCookies: 0,
-          importedHistory,
-          ...(error.retryable ? { retryable: true } : {}),
-          message: error.message,
-        };
-      }
-
-      return {
-        ok: false,
-        code: "ZEN_IMPORT_FAILED",
-        importedCookies: 0,
+      return this.toImportFailureResult(error, "ZEN_IMPORT_FAILED", {
+        cookieWriteCode: "ZEN_COOKIE_IMPORT_FAILED",
         importedHistory,
-        message: error instanceof Error ? error.message : String(error),
-      };
+      });
     }
   }
 
@@ -911,6 +853,62 @@ export class BrowserImportService {
   // -----------------------------------------------------------------------
   // Shared import helpers
   // -----------------------------------------------------------------------
+
+  private async runImportMode(
+    mode: BrowserImportMode,
+    loaders: {
+      loadHistory: () => Promise<ImportedHistoryEntry[]>;
+      loadCookies: () => Promise<ImportedBrowserCookie[]>;
+      onHistoryImported?: (count: number) => void;
+    },
+  ): Promise<{ importedCookies: number; importedHistory: number }> {
+    let importedHistory = 0;
+
+    if (mode !== "cookies") {
+      const historyEntries = dedupeHistoryEntries(await loaders.loadHistory());
+      importedHistory = this.importHistory(historyEntries);
+      loaders.onHistoryImported?.(importedHistory);
+    }
+
+    let importedCookies = 0;
+    if (mode !== "history") {
+      const cookies = await loaders.loadCookies();
+      importedCookies = await this.importCookies(cookies);
+    }
+
+    return { importedCookies, importedHistory };
+  }
+
+  private toImportFailureResult(
+    error: unknown,
+    fallbackCode: string,
+    options: {
+      cookieWriteCode: string;
+      importedHistory?: number;
+    },
+  ): BrowserImportResult {
+    const importedHistory = options.importedHistory ?? 0;
+
+    if (error instanceof BrowserImportServiceError) {
+      const code = error.code === "COOKIE_WRITE_FAILED" ? options.cookieWriteCode : error.code;
+      return {
+        ok: false,
+        code,
+        importedCookies: 0,
+        importedHistory,
+        ...(error.retryable ? { retryable: true } : {}),
+        message: error.message,
+      };
+    }
+
+    return {
+      ok: false,
+      code: fallbackCode,
+      importedCookies: 0,
+      importedHistory,
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
 
   private async importCookies(cookies: ImportedBrowserCookie[]): Promise<number> {
     const electronCookies = cookies.map(

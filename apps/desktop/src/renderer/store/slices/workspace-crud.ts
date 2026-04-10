@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import type { PaneGroup, PaneGroupTab, SplitDirection, SplitNode } from "../../types/workspace";
+import type { PaneGroup, SplitDirection, SplitNode } from "../../types/workspace";
 import { removeSidebarNode, insertSidebarNode } from "../../lib/sidebar-tree";
 import { collectGroupIds, treeHasGroup, replaceLeafInTree } from "../../lib/split-tree";
 import {
@@ -11,13 +11,15 @@ import {
 } from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
 import { getSidebarNodesForContainer } from "../store-helpers";
-import {
-  buildRecentTabOrder,
-  clearRecentTabTraversal,
-  removeGroupRecentState,
-} from "../tab-history";
+import { buildRecentTabOrder, clearRecentTabTraversal } from "../tab-history";
 import type { PaneCleanup } from "../store-helpers";
 import { applySourceGroupTabRemovalResolution } from "../source-group-state";
+import {
+  collectWorkspaceTabsForTransfer,
+  removeWorkspaceFromSidebarState,
+  removeWorkspaceGroupState,
+  removeWorkspaceRecord,
+} from "../workspace-transfer-state";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type WorkspaceCrudSlice = Pick<
@@ -199,78 +201,56 @@ export function createWorkspaceCrudSlice(
       // Guard: source must not be the same workspace as target
       if (sourceWs.id === targetWs.id) return;
 
-      // Collect all tabs from all groups in source workspace
-      const sourceGroupIds = collectGroupIds(sourceWs.root);
-      const allSourceTabs: PaneGroupTab[] = [];
-      for (const gid of sourceGroupIds) {
-        const group = state.paneGroups[gid];
-        if (group) {
-          for (const tab of group.tabs) {
-            allSourceTabs.push({ id: nanoid(), paneId: tab.paneId });
-          }
-        }
-      }
+      const { sourceGroupIds, tabs: allSourceTabs } = collectWorkspaceTabsForTransfer(
+        sourceWs.root,
+        state.paneGroups,
+      );
 
       // Append new tabs to target group, set last as active
       const lastNewTab = allSourceTabs[allSourceTabs.length - 1];
-      const newPaneGroups = {
-        ...state.paneGroups,
-        [targetGroupId]: {
-          ...targetGroup,
-          tabs: [...targetGroup.tabs, ...allSourceTabs],
-          activeTabId: lastNewTab?.id ?? targetGroup.activeTabId,
+      const mergedTabs = [...targetGroup.tabs, ...allSourceTabs];
+      const {
+        paneGroups: nextPaneGroups,
+        tabHistoryByGroupId,
+        recentTabTraversalByGroupId,
+      } = removeWorkspaceGroupState(
+        {
+          ...state.paneGroups,
+          [targetGroupId]: {
+            ...targetGroup,
+            tabs: mergedTabs,
+            activeTabId: lastNewTab?.id ?? targetGroup.activeTabId,
+          },
         },
-      };
-
-      // Clean up source workspace groups (don't cleanup pane resources — panes are moved)
-      for (const gid of sourceGroupIds) {
-        delete newPaneGroups[gid];
-      }
-
-      // Remove source workspace from workspaces array
-      const remaining = state.workspaces.filter((w) => w.id !== sourceWorkspaceId);
-
-      // Remove from sidebar trees
-      const [newTree] = removeSidebarNode(state.sidebarTree, sourceWorkspaceId, "workspace");
-      const [newPinnedTree] = removeSidebarNode(
+        {
+          ...state.tabHistoryByGroupId,
+          [targetGroupId]: buildRecentTabOrder(
+            state.tabHistoryByGroupId[targetGroupId],
+            mergedTabs,
+            lastNewTab?.id ?? targetGroup.activeTabId,
+          ),
+        },
+        clearRecentTabTraversal(state.recentTabTraversalByGroupId, targetGroupId),
+        sourceGroupIds,
+      );
+      const nextSidebarState = removeWorkspaceFromSidebarState(
+        state.sidebarTree,
         state.pinnedSidebarNodes,
         sourceWorkspaceId,
-        "workspace",
       );
 
       // If source was active, switch to target workspace
       const newActiveId =
         state.activeWorkspaceId === sourceWorkspaceId ? targetWs.id : state.activeWorkspaceId;
 
-      const mergedTabs = [...targetGroup.tabs, ...allSourceTabs];
-      const nextTabHistoryByGroupId = {
-        ...state.tabHistoryByGroupId,
-        [targetGroupId]: buildRecentTabOrder(
-          state.tabHistoryByGroupId[targetGroupId],
-          mergedTabs,
-          lastNewTab?.id ?? targetGroup.activeTabId,
-        ),
-      };
-      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
-        state.recentTabTraversalByGroupId,
-        targetGroupId,
-      );
-      for (const gid of sourceGroupIds) {
-        delete nextTabHistoryByGroupId[gid];
-        nextRecentTabTraversalByGroupId = removeGroupRecentState(
-          nextRecentTabTraversalByGroupId,
-          gid,
-        );
-      }
-
       set({
-        workspaces: remaining,
+        workspaces: removeWorkspaceRecord(state.workspaces, sourceWorkspaceId),
         activeWorkspaceId: newActiveId,
-        paneGroups: newPaneGroups,
-        sidebarTree: newTree,
-        pinnedSidebarNodes: newPinnedTree,
-        tabHistoryByGroupId: nextTabHistoryByGroupId,
-        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
+        paneGroups: nextPaneGroups,
+        sidebarTree: nextSidebarState.sidebarTree,
+        pinnedSidebarNodes: nextSidebarState.pinnedSidebarNodes,
+        tabHistoryByGroupId,
+        recentTabTraversalByGroupId,
       });
     },
 
@@ -289,17 +269,10 @@ export function createWorkspaceCrudSlice(
       // Guard: source must not be the same workspace as target
       if (sourceWs.id === targetWs.id) return;
 
-      // Collect all tabs from all groups in source workspace (flatten with fresh tab IDs)
-      const sourceGroupIds = collectGroupIds(sourceWs.root);
-      const allSourceTabs: PaneGroupTab[] = [];
-      for (const gid of sourceGroupIds) {
-        const group = state.paneGroups[gid];
-        if (group) {
-          for (const tab of group.tabs) {
-            allSourceTabs.push({ id: nanoid(), paneId: tab.paneId });
-          }
-        }
-      }
+      const { sourceGroupIds, tabs: allSourceTabs } = collectWorkspaceTabsForTransfer(
+        sourceWs.root,
+        state.paneGroups,
+      );
 
       // Create a new PaneGroup with all collected tabs
       const lastTab = allSourceTabs[allSourceTabs.length - 1];
@@ -326,53 +299,39 @@ export function createWorkspaceCrudSlice(
 
       const newRoot = replaceLeafInTree(targetWs.root, targetGroupId, replacement);
 
-      // Clean up source workspace groups (don't cleanup pane resources)
-      const newPaneGroups = { ...state.paneGroups, [newGroup.id]: newGroup };
-      for (const gid of sourceGroupIds) {
-        delete newPaneGroups[gid];
-      }
-
-      // Remove source workspace
-      const remaining = state.workspaces.filter((w) => w.id !== sourceWorkspaceId);
-
-      // Remove from sidebar trees
-      const [newTree] = removeSidebarNode(state.sidebarTree, sourceWorkspaceId, "workspace");
-      const [newPinnedTree] = removeSidebarNode(
+      const {
+        paneGroups: nextPaneGroups,
+        tabHistoryByGroupId,
+        recentTabTraversalByGroupId,
+      } = removeWorkspaceGroupState(
+        { ...state.paneGroups, [newGroup.id]: newGroup },
+        {
+          ...state.tabHistoryByGroupId,
+          [newGroup.id]: buildRecentTabOrder([], newGroup.tabs, newGroup.activeTabId),
+        },
+        clearRecentTabTraversal(state.recentTabTraversalByGroupId, newGroup.id),
+        sourceGroupIds,
+      );
+      const nextSidebarState = removeWorkspaceFromSidebarState(
+        state.sidebarTree,
         state.pinnedSidebarNodes,
         sourceWorkspaceId,
-        "workspace",
       );
 
       // Update target workspace root and focus
       const newActiveId =
         state.activeWorkspaceId === sourceWorkspaceId ? targetWs.id : state.activeWorkspaceId;
 
-      const nextTabHistoryByGroupId = {
-        ...state.tabHistoryByGroupId,
-        [newGroup.id]: buildRecentTabOrder([], newGroup.tabs, newGroup.activeTabId),
-      };
-      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
-        state.recentTabTraversalByGroupId,
-        newGroup.id,
-      );
-      for (const gid of sourceGroupIds) {
-        delete nextTabHistoryByGroupId[gid];
-        nextRecentTabTraversalByGroupId = removeGroupRecentState(
-          nextRecentTabTraversalByGroupId,
-          gid,
-        );
-      }
-
       set({
-        workspaces: remaining.map((w) =>
+        workspaces: removeWorkspaceRecord(state.workspaces, sourceWorkspaceId).map((w) =>
           w.id === targetWs.id ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
         ),
         activeWorkspaceId: newActiveId,
-        paneGroups: newPaneGroups,
-        sidebarTree: newTree,
-        pinnedSidebarNodes: newPinnedTree,
-        tabHistoryByGroupId: nextTabHistoryByGroupId,
-        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
+        paneGroups: nextPaneGroups,
+        sidebarTree: nextSidebarState.sidebarTree,
+        pinnedSidebarNodes: nextSidebarState.pinnedSidebarNodes,
+        tabHistoryByGroupId,
+        recentTabTraversalByGroupId,
       });
     },
 
