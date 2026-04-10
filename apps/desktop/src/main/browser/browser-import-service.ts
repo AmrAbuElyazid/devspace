@@ -1,15 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { pbkdf2Sync } from "node:crypto";
-import {
-  copyFileSync,
-  existsSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-} from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { Cookie as SweetCookie, GetCookiesOptions } from "@steipete/sweet-cookie";
 import type {
@@ -32,6 +24,13 @@ import {
 } from "./browser-import-chromium-cookies";
 import { collectFirefoxCookies } from "./browser-import-firefox-cookies";
 import {
+  BrowserImportServiceError,
+  throwChromiumCookieImportError,
+  throwChromiumProviderWarnings,
+  throwCookieImportError,
+  throwProviderWarning,
+} from "./browser-import-errors";
+import {
   chromeTimeToUnixMs,
   dedupeHistoryEntries,
   firefoxTimeToUnixMs,
@@ -47,6 +46,13 @@ import {
   resolveChromeCookiesDbPath,
 } from "./browser-import-profiles";
 import { decodeSafariBinaryCookies } from "./browser-import-safari-cookies";
+import {
+  copyDatabaseToTemp,
+  copyFileToTemp,
+  queryCookieDb,
+  queryDatabaseRows,
+  readChromiumMetaVersion,
+} from "./browser-import-storage";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -169,62 +175,6 @@ type BrowserImportServiceDeps = {
   statPathImpl?: (path: string) => { isFile: () => boolean; isDirectory: () => boolean };
 };
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
-function findKeychainWarning(warnings: string[]): string | undefined {
-  return warnings.find((warning) => /keychain/i.test(warning));
-}
-
-function throwProviderWarning(code: string, warnings: string[]): void {
-  const providerWarning = warnings[0];
-  if (providerWarning) {
-    throw new BrowserImportServiceError(code, providerWarning);
-  }
-}
-
-function throwChromiumProviderWarnings(errorPrefix: string, warnings: string[]): void {
-  const keychainWarning = findKeychainWarning(warnings);
-  if (keychainWarning) {
-    throw new BrowserImportServiceError(
-      `${errorPrefix}_KEYCHAIN_ACCESS_REQUIRED`,
-      keychainWarning,
-      true,
-    );
-  }
-
-  throwProviderWarning(`${errorPrefix}_COOKIE_IMPORT_FAILED`, warnings);
-}
-
-function throwCookieImportError(code: string, error: unknown): never {
-  throw new BrowserImportServiceError(code, errorMessage(error));
-}
-
-function throwChromiumCookieImportError(errorPrefix: string, error: unknown): never {
-  const message = errorMessage(error);
-  if (/keychain/i.test(message)) {
-    throw new BrowserImportServiceError(`${errorPrefix}_KEYCHAIN_ACCESS_REQUIRED`, message, true);
-  }
-
-  throw new BrowserImportServiceError(`${errorPrefix}_COOKIE_IMPORT_FAILED`, message);
-}
-
-// ---------------------------------------------------------------------------
-// Custom error
-// ---------------------------------------------------------------------------
-
-export class BrowserImportServiceError extends Error {
-  constructor(
-    public readonly code: string,
-    message: string,
-    public readonly retryable = false,
-  ) {
-    super(message);
-    this.name = "BrowserImportServiceError";
-  }
-}
-
 export function toElectronCookieInput(cookie: ImportedBrowserCookie): ImportedCookieInput {
   const rawHost = cookie.domain ?? cookie.host ?? "";
   const normalizedDomain = rawHost.replace(/^\./, "");
@@ -261,6 +211,7 @@ export { collectChromiumCookies };
 export { collectFirefoxCookies };
 export { decodeSafariBinaryCookies };
 export { dedupeHistoryEntries };
+export { BrowserImportServiceError };
 
 // ---------------------------------------------------------------------------
 // BrowserImportService
@@ -518,7 +469,7 @@ export class BrowserImportService {
       return [];
     }
 
-    const rows = await queryHistoryDb(
+    const rows = await queryDatabaseRows(
       historyDbPath,
       `
       SELECT urls.url AS url, urls.title AS title, CAST(visits.visit_time AS TEXT) AS visited_at
@@ -610,7 +561,7 @@ export class BrowserImportService {
       return [];
     }
 
-    const rows = await queryHistoryDb(
+    const rows = await queryDatabaseRows(
       historyDbPath,
       `
       SELECT history_items.url AS url, history_visits.title AS title, CAST(history_visits.visit_time AS TEXT) AS visited_at
@@ -711,25 +662,17 @@ export class BrowserImportService {
       return [];
     }
 
-    const snapshot = copyDatabaseToTemp(dbPath);
-
     try {
-      const db = await openReadonlyDatabase(snapshot.dbPath);
-      try {
-        const rows = db.query(
-          "SELECT name, value, host, path, CAST(expiry AS TEXT) AS expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies",
-        );
-        return collectFirefoxCookies(rows, basename(profilePath));
-      } finally {
-        db.close();
-      }
+      const rows = await queryDatabaseRows(
+        dbPath,
+        "SELECT name, value, host, path, CAST(expiry AS TEXT) AS expiry, isSecure, isHttpOnly, sameSite FROM moz_cookies",
+      );
+      return collectFirefoxCookies(rows, basename(profilePath));
     } catch (error) {
       throw new BrowserImportServiceError(
         "ZEN_COOKIE_IMPORT_FAILED",
         error instanceof Error ? error.message : String(error),
       );
-    } finally {
-      snapshot.cleanup();
     }
   }
 
@@ -739,7 +682,7 @@ export class BrowserImportService {
       return [];
     }
 
-    const rows = await queryHistoryDb(
+    const rows = await queryDatabaseRows(
       dbPath,
       `
       SELECT moz_places.url AS url, moz_places.title AS title, CAST(moz_historyvisits.visit_date AS TEXT) AS visited_at
@@ -855,139 +798,6 @@ export class BrowserImportService {
 }
 
 // ---------------------------------------------------------------------------
-// File / database helpers
-// ---------------------------------------------------------------------------
-
-function copyDatabaseToTemp(dbPath: string): { dbPath: string; cleanup: () => void } {
-  const tempDir = mkdtempSync(join(tmpdir(), "devspace-browser-import-"));
-  const tempDbPath = join(tempDir, basename(dbPath));
-
-  copyFileSync(dbPath, tempDbPath);
-  copyOptionalSidecar(dbPath, tempDbPath, "-wal");
-  copyOptionalSidecar(dbPath, tempDbPath, "-shm");
-
-  return {
-    dbPath: tempDbPath,
-    cleanup: () => {
-      rmSync(tempDir, { recursive: true, force: true });
-    },
-  };
-}
-
-function copyFileToTemp(filePath: string): { filePath: string; cleanup: () => void } {
-  const tempDir = mkdtempSync(join(tmpdir(), "devspace-browser-import-"));
-  const tempFilePath = join(tempDir, basename(filePath));
-  copyFileSync(filePath, tempFilePath);
-
-  return {
-    filePath: tempFilePath,
-    cleanup: () => {
-      rmSync(tempDir, { recursive: true, force: true });
-    },
-  };
-}
-
-function copyOptionalSidecar(sourceDbPath: string, tempDbPath: string, suffix: string): void {
-  const sidecarPath = `${sourceDbPath}${suffix}`;
-  if (!existsSync(sidecarPath)) {
-    return;
-  }
-
-  try {
-    copyFileSync(sidecarPath, `${tempDbPath}${suffix}`);
-  } catch (err) {
-    console.warn(`[browser-import] Sidecar copy (${suffix}) failed:`, err);
-  }
-}
-
-async function queryHistoryDb(
-  dbPath: string,
-  sql: string,
-): Promise<Array<Record<string, unknown>>> {
-  const snapshot = copyDatabaseToTemp(dbPath);
-
-  try {
-    const db = await openReadonlyDatabase(snapshot.dbPath);
-    try {
-      return db.query(sql);
-    } finally {
-      db.close();
-    }
-  } finally {
-    snapshot.cleanup();
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Value helpers
-// ---------------------------------------------------------------------------
-
-function asNumber(value: unknown): number | null {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : null;
-  }
-
-  if (typeof value === "bigint") {
-    const result = Number(value);
-    return Number.isFinite(result) ? result : null;
-  }
-
-  if (typeof value === "string") {
-    const result = Number(value);
-    return Number.isFinite(result) ? result : null;
-  }
-
-  return null;
-}
-
-// ---------------------------------------------------------------------------
-// SQLite abstraction
-// ---------------------------------------------------------------------------
-
-type ReadonlyDatabase = {
-  query: (sql: string) => Array<Record<string, unknown>>;
-  close: () => void;
-};
-
-async function openReadonlyDatabase(dbPath: string): Promise<ReadonlyDatabase> {
-  if ("Bun" in globalThis) {
-    const bunSqlite = await importBunSqlite();
-    const db = new bunSqlite.Database(dbPath, { readonly: true });
-    return {
-      query: (sql) => db.query(sql).all() as Array<Record<string, unknown>>,
-      close: () => db.close(),
-    };
-  }
-
-  const nodeSqlite = await import("node:sqlite");
-  const db = new nodeSqlite.DatabaseSync(dbPath, { readOnly: true, readBigInts: true });
-  return {
-    query: (sql) => db.prepare(sql).all() as Array<Record<string, unknown>>,
-    close: () => db.close(),
-  };
-}
-
-async function importBunSqlite(): Promise<{
-  Database: new (
-    path: string,
-    options: { readonly: boolean },
-  ) => {
-    query: (sql: string) => { all: () => Array<Record<string, unknown>> };
-    close: () => void;
-  };
-}> {
-  return (0, eval)("import('bun:sqlite')") as Promise<{
-    Database: new (
-      path: string,
-      options: { readonly: boolean },
-    ) => {
-      query: (sql: string) => { all: () => Array<Record<string, unknown>> };
-      close: () => void;
-    };
-  }>;
-}
-
-// ---------------------------------------------------------------------------
 // Chromium cookie SQLite (direct decryption fallback)
 // ---------------------------------------------------------------------------
 
@@ -1060,33 +870,6 @@ function readChromeSafeStorageKey(target: ChromiumBrowserTarget): Buffer {
     throw new Error(`Failed to read macOS Keychain (${keychain.label}): ${message}`, {
       cause: error,
     });
-  }
-}
-
-async function readChromiumMetaVersion(dbPath: string): Promise<number> {
-  const db = await openReadonlyDatabase(dbPath);
-
-  try {
-    const rows = db.query(`SELECT value FROM meta WHERE key = 'version' LIMIT 1`);
-    const value = rows[0]?.value;
-    return asNumber(value) ?? 0;
-  } catch (err) {
-    console.warn("[browser-import] Chromium meta version query failed:", err);
-    return 0;
-  } finally {
-    db.close();
-  }
-}
-
-async function queryCookieDb(dbPath: string): Promise<Array<Record<string, unknown>>> {
-  const db = await openReadonlyDatabase(dbPath);
-
-  try {
-    return db.query(
-      "SELECT name, value, host_key, path, CAST(expires_utc AS TEXT) AS expires_utc, samesite, encrypted_value, is_secure, is_httponly FROM cookies ORDER BY expires_utc DESC",
-    );
-  } finally {
-    db.close();
   }
 }
 
