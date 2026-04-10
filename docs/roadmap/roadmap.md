@@ -17,6 +17,8 @@ Devspace has a much stronger engineering baseline than earlier drafts of this ro
 
 The main remaining work is no longer broad repo cleanup. It is concentrated in localhost/browser capability gaps, privacy/storage clarity, package and release maturity, and a handful of scaling/maintainability hotspots.
 
+One notable browser capability gap now looks upstream-constrained rather than app-local: passkeys/WebAuthn inside browser panes on macOS currently appear limited by Electron's embedded-browser support, even after broadening Devspace's own permission plumbing.
+
 Tactical bugs and smaller polish requests should live in `docs/issues.md`. This roadmap should stay focused on broader, still-strategic work.
 
 ## Security And Product Posture
@@ -29,6 +31,7 @@ Tactical bugs and smaller polish requests should live in `docs/issues.md`. This 
 
 ## Important Next
 
+- [ ] Decide the product posture for browser-pane passkeys on macOS while Electron support remains incomplete. The near-term answer may be explicit external-browser fallback and clearer user-facing messaging rather than continued pane-local debugging. Refs: `docs/issues.md`, `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.tsx`
 - [ ] Keep breaking up maintainability hotspots in core files that still carry too much change risk. Current top targets: `apps/desktop/src/main/browser/browser-import-service.ts`, `apps/desktop/src/main/index.ts`, `apps/desktop/src/renderer/hooks/useAppShortcuts.ts`, `apps/desktop/src/renderer/store/slices/group-tabs.ts`, `apps/desktop/src/renderer/store/slices/workspace-crud.ts`
 - [ ] Reduce preload contract drift risk as the bridge grows. The current preload surface is much safer than before, but it is still broad and manually mirrored across preload/shared/main registration points. Refs: `apps/desktop/src/preload/index.ts`, `apps/desktop/src/shared/types.ts`, `apps/desktop/src/main/ipc-handlers.ts`
 - [ ] Add a macOS native smoke lane to CI for Electron/Playwright coverage so browser/editor/native-pane regressions are exercised automatically, not only locally. Refs: `.github/workflows/ci.yml`, `apps/desktop/e2e/playwright.config.ts`, `apps/desktop/package.json`

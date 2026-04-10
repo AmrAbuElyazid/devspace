@@ -1,4 +1,28 @@
-export type BrowserPermissionType = "camera" | "microphone" | "geolocation" | "notifications";
+const KNOWN_BROWSER_PERMISSION_TYPES = [
+  "camera",
+  "microphone",
+  "media",
+  "geolocation",
+  "notifications",
+  "clipboard-read",
+  "clipboard-sanitized-write",
+  "fullscreen",
+  "hid",
+  "idle-detection",
+  "mediaKeySystem",
+  "midi",
+  "midiSysex",
+  "openExternal",
+  "pointerLock",
+  "serial",
+  "storage-access",
+  "top-level-storage-access",
+  "usb",
+  "deprecated-sync-clipboard-read",
+  "fileSystem",
+] as const;
+
+export type BrowserPermissionType = (typeof KNOWN_BROWSER_PERMISSION_TYPES)[number] | (string & {});
 
 export interface BrowserBounds {
   x: number;

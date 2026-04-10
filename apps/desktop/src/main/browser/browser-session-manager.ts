@@ -74,9 +74,11 @@ function mapPermissionType(
     if (details.mediaType === "audio") {
       return "microphone";
     }
+
+    return "media";
   }
 
-  return null;
+  return permission;
 }
 
 function toRequestOrigin(

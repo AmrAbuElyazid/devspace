@@ -326,6 +326,63 @@ test("permission request handler emits a mapped browser permission request", () 
   expect(typeof requested[0]?.requestToken).toBe("string");
 });
 
+test("permission request handler forwards non-media Electron permissions to the renderer", () => {
+  let registeredRequestHandler: PermissionRequestHandler | undefined;
+  const requested: Array<{
+    paneId: string;
+    origin: string;
+    permissionType: string;
+    requestToken: string;
+  }> = [];
+
+  const manager = new BrowserSessionManager({
+    fromPartition: () =>
+      ({
+        setPermissionCheckHandler: () => {},
+        setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
+          registeredRequestHandler = handler;
+        },
+        setCertificateVerifyProc: () => {},
+      }) as never,
+  });
+
+  manager.installHandlers({
+    resolvePaneIdForWebContents: (webContentsId) => (webContentsId === 12 ? "pane-12" : undefined),
+    reportCertificateError: () => {},
+    requestBrowserPermission: (request, resolve) => {
+      requested.push(request);
+      resolve("allow-once");
+    },
+    appModule: { on: () => undefined },
+    log: () => {},
+  });
+
+  let allowed: boolean | undefined;
+  registeredRequestHandler?.(
+    {
+      id: 12,
+      getURL: () => "https://auth.example/path",
+    } as never,
+    "storage-access",
+    (nextAllowed) => {
+      allowed = nextAllowed;
+    },
+    {
+      requestingUrl: "https://auth.example/path",
+    } as never,
+  );
+
+  expect(allowed).toBe(true);
+  expect(requested).toEqual([
+    {
+      paneId: "pane-12",
+      origin: "https://auth.example",
+      permissionType: "storage-access",
+      requestToken: expect.any(String),
+    },
+  ]);
+});
+
 test("allow-for-session is remembered by permission check handler for the same origin and permission type", () => {
   let registeredHandler: PermissionCheckHandler | undefined;
   let registeredRequestHandler: PermissionRequestHandler | undefined;

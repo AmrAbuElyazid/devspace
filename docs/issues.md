@@ -11,8 +11,9 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Status: open
 - Priority: high
 - Type: capability bug
-- Detail: passkeys do not currently work inside browser panes. The current browser permission mapping only handles camera, microphone, geolocation, and notifications, so WebAuthn-specific support may be missing in either Electron configuration or Devspace's permission/session plumbing.
-- Relevant files: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/shared/browser.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.tsx`, `apps/desktop/src/main/browser/browser-pane-manager.ts`
+- Detail: passkeys do not currently work reliably inside browser panes on macOS. Devspace now forwards broader Electron permission types to the renderer instead of silently denying unknown ones, but a real GitHub login test still reports only partial passkey support. The current evidence points more strongly to an upstream Electron/macOS WebAuthn limitation than to a remaining Devspace permission bug, so the likely product follow-up is external-browser fallback and clearer user-facing messaging.
+- Relevant files: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/shared/browser.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.tsx`, `apps/desktop/src/main/browser/browser-pane-manager.ts`, `docs/issues.md`
+- Upstream reference: `electron/electron#24573`
 
 ### 2. Localhost Hot Reload Steals Focus
 
@@ -106,3 +107,11 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Resolution: editor panes now yield command/control shortcuts back to VS Code by default, while keeping the explicit app-global close-window shortcut owned by Devspace.
 - Relevant files: `apps/desktop/src/main/browser/browser-web-shortcuts.ts`, `apps/desktop/src/main/browser/browser-pane-webcontents-events.ts`
 - Commit: `402f2bf` `fix: yield editor shortcuts to VS Code`
+
+### 8. Browser Permission Prompts Silently Denied Unknown Electron Permissions
+
+- Status: fixed
+- Priority: medium
+- Type: browser capability bug
+- Resolution: browser session permission handling now forwards broader Electron permission types like `storage-access` to the renderer prompt instead of hard-denying everything outside the original camera/microphone/geolocation/notifications set, and the prompt UI now renders readable labels for those requests.
+- Relevant files: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/shared/browser.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.tsx`, `apps/desktop/src/main/browser/__tests__/browser-session-manager.test.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.test.tsx`
