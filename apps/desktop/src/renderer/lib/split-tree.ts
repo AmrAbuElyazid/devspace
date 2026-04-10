@@ -1,3 +1,4 @@
+import type { DropSide } from "../types/dnd";
 import type { SplitNode } from "../types/workspace";
 
 // ---------------------------------------------------------------------------
@@ -61,6 +62,25 @@ export function findSiblingGroupId(root: SplitNode, groupId: string): string | n
     return sibling.type === "leaf" ? sibling.groupId : findFirstGroupId(sibling);
   }
   return null;
+}
+
+export function buildSplitReplacement(
+  targetGroupId: string,
+  newGroupId: string,
+  side: DropSide,
+): SplitNode {
+  const direction = side === "left" || side === "right" ? "horizontal" : "vertical";
+  const newLeaf: SplitNode = { type: "leaf", groupId: newGroupId };
+  const targetLeaf: SplitNode = { type: "leaf", groupId: targetGroupId };
+  const children: SplitNode[] =
+    side === "left" || side === "top" ? [newLeaf, targetLeaf] : [targetLeaf, newLeaf];
+
+  return {
+    type: "branch",
+    direction,
+    children,
+    sizes: [50, 50],
+  };
 }
 
 // ---------------------------------------------------------------------------

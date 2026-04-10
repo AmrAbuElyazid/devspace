@@ -1,12 +1,7 @@
 import { nanoid } from "nanoid";
-import type {
-  Pane,
-  PaneGroup,
-  PaneGroupTab,
-  SplitDirection,
-  SplitNode,
-} from "../../types/workspace";
+import type { Pane, PaneGroupTab } from "../../types/workspace";
 import {
+  buildSplitReplacement,
   treeHasGroup,
   collectGroupIds,
   findFirstGroupId,
@@ -14,7 +9,11 @@ import {
   removeGroupFromTree,
   simplifyTree,
 } from "../../lib/split-tree";
-import { createPane, createPaneWithInheritedConfig } from "../../lib/pane-factory";
+import {
+  createPane,
+  createPaneGroupFromTabs,
+  createPaneWithInheritedConfig,
+} from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
 import { appendPaneToGroupState } from "../group-tab-append-state";
 import { buildDestinationGroupState } from "../group-tab-destination-state";
@@ -194,27 +193,8 @@ export function createGroupTabsSlice(
       if (!tab) return;
 
       // Create new group containing only the moved tab
-      const newTabId = nanoid();
-      const newGroup: PaneGroup = {
-        id: nanoid(),
-        tabs: [{ id: newTabId, paneId: tab.paneId }],
-        activeTabId: newTabId,
-      };
-
-      // Build the split: direction from side, child order from side
-      const direction: SplitDirection =
-        side === "left" || side === "right" ? "horizontal" : "vertical";
-      const newLeaf: SplitNode = { type: "leaf", groupId: newGroup.id };
-      const targetLeaf: SplitNode = { type: "leaf", groupId: targetGroupId };
-      const children: SplitNode[] =
-        side === "left" || side === "top" ? [newLeaf, targetLeaf] : [targetLeaf, newLeaf];
-
-      const replacement: SplitNode = {
-        type: "branch",
-        direction,
-        children,
-        sizes: [50, 50],
-      };
+      const newGroup = createPaneGroupFromTabs([{ id: nanoid(), paneId: tab.paneId }]);
+      const replacement = buildSplitReplacement(targetGroupId, newGroup.id, side);
 
       let newRoot = replaceLeafInTree(ws.root, targetGroupId, replacement);
       const destinationState = buildDestinationGroupState({

@@ -9,7 +9,7 @@ import {
   updateFolderInTree,
   removeFolderPromoteChildren,
 } from "../../lib/sidebar-tree";
-import { getSidebarNodesForContainer } from "../store-helpers";
+import { getSidebarNodesForContainer, insertNodeIntoSidebarContainer } from "../store-helpers";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type SidebarTreeSlice = Pick<
@@ -155,12 +155,17 @@ export function createSidebarTreeSlice(set: StoreSet, get: StoreGet): SidebarTre
         children: [],
       };
       set((state) => {
-        const targetNodes = getSidebarNodesForContainer(state, container);
-        const insertedNodes = insertSidebarNode(targetNodes, folderNode, parentId, 0);
+        const nextSidebarState = insertNodeIntoSidebarContainer(
+          state,
+          container,
+          folderNode,
+          parentId,
+          0,
+        );
 
         return {
-          sidebarTree: container === "main" ? insertedNodes : state.sidebarTree,
-          pinnedSidebarNodes: container === "pinned" ? insertedNodes : state.pinnedSidebarNodes,
+          sidebarTree: nextSidebarState.sidebarTree,
+          pinnedSidebarNodes: nextSidebarState.pinnedSidebarNodes,
           pendingEditId: id,
           pendingEditType: "folder" as const,
         };

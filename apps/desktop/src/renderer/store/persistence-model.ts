@@ -1,9 +1,9 @@
 import type { PersistedWorkspaceState } from "../../shared/workspace-persistence";
-import type { Pane, Workspace } from "../types/workspace";
+import type { Pane } from "../types/workspace";
 import { validateWorkspaceGraph } from "../lib/workspace-graph";
 import { normalizeSidebarPersistence } from "../lib/sidebar-organization";
 import { collectGroupIds, findFirstGroupId, repairTree } from "../lib/split-tree";
-import { createDefaultWorkspace, createPane, createPaneGroup } from "../lib/pane-factory";
+import { createDefaultWorkspaceBundle, createPane, createPaneGroup } from "../lib/pane-factory";
 
 export function normalizePersistedWorkspaceState(
   persisted: PersistedWorkspaceState,
@@ -94,9 +94,7 @@ export function normalizePersistedWorkspaceState(
 }
 
 export function createDefaultPersistedWorkspaceState(): PersistedWorkspaceState {
-  const pane = createPane("terminal");
-  const group = createPaneGroup(pane);
-  const workspace: Workspace = createDefaultWorkspace("Workspace 1", group);
+  const { pane, group, workspace } = createDefaultWorkspaceBundle("Workspace 1");
 
   return {
     workspaces: [workspace],

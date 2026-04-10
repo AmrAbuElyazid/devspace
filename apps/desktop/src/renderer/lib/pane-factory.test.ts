@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { createPaneWithInheritedConfig, findNearestTerminalCwd } from "./pane-factory";
+import {
+  createDefaultWorkspaceBundle,
+  createPaneGroupFromTabs,
+  createPaneWithInheritedConfig,
+  findNearestTerminalCwd,
+} from "./pane-factory";
 import type { Pane, PaneGroup, Workspace } from "../types/workspace";
 
 // ---------------------------------------------------------------------------
@@ -191,5 +196,33 @@ describe("createPaneWithInheritedConfig", () => {
     }
     expect(typeof pane.config.noteId).toBe("string");
     expect(pane.config.noteId).toBeTruthy();
+  });
+});
+
+describe("createPaneGroupFromTabs", () => {
+  test("creates a new group and activates the last provided tab", () => {
+    const tabs = [
+      { id: "t-1", paneId: "p-1" },
+      { id: "t-2", paneId: "p-2" },
+    ];
+
+    const group = createPaneGroupFromTabs(tabs);
+
+    expect(group.id).toBeTruthy();
+    expect(group.tabs).toEqual(tabs);
+    expect(group.tabs).not.toBe(tabs);
+    expect(group.activeTabId).toBe("t-2");
+  });
+});
+
+describe("createDefaultWorkspaceBundle", () => {
+  test("creates a matching terminal pane, group, and workspace", () => {
+    const bundle = createDefaultWorkspaceBundle("Workspace 1");
+
+    expect(bundle.pane.type).toBe("terminal");
+    expect(bundle.group.tabs).toEqual([{ id: bundle.group.activeTabId, paneId: bundle.pane.id }]);
+    expect(bundle.workspace.name).toBe("Workspace 1");
+    expect(bundle.workspace.root).toEqual({ type: "leaf", groupId: bundle.group.id });
+    expect(bundle.workspace.focusedGroupId).toBe(bundle.group.id);
   });
 });

@@ -1,5 +1,12 @@
 import { nanoid } from "nanoid";
-import type { Pane, PaneType, PaneConfig, PaneGroup, Workspace } from "../types/workspace";
+import type {
+  Pane,
+  PaneType,
+  PaneConfig,
+  PaneGroup,
+  PaneGroupTab,
+  Workspace,
+} from "../types/workspace";
 import { collectGroupIds } from "./split-tree";
 
 // ---------------------------------------------------------------------------
@@ -51,11 +58,14 @@ export function createPaneWithInheritedConfig(
 }
 
 export function createPaneGroup(pane: Pane): PaneGroup {
-  const tabId = nanoid();
+  return createPaneGroupFromTabs([{ id: nanoid(), paneId: pane.id }]);
+}
+
+export function createPaneGroupFromTabs(tabs: PaneGroupTab[]): PaneGroup {
   return {
     id: nanoid(),
-    tabs: [{ id: tabId, paneId: pane.id }],
-    activeTabId: tabId,
+    tabs: tabs.map((tab) => ({ ...tab })),
+    activeTabId: tabs[tabs.length - 1]?.id ?? "",
   };
 }
 
@@ -81,6 +91,21 @@ export function createDefaultWorkspace(name: string, group: PaneGroup): Workspac
     focusedGroupId: group.id,
     zoomedGroupId: null,
     lastActiveAt: Date.now(),
+  };
+}
+
+export function createDefaultWorkspaceBundle(name: string): {
+  pane: Pane;
+  group: PaneGroup;
+  workspace: Workspace;
+} {
+  const pane = createPane("terminal");
+  const group = createPaneGroup(pane);
+
+  return {
+    pane,
+    group,
+    workspace: createDefaultWorkspace(name, group),
   };
 }
 

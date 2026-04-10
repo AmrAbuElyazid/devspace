@@ -635,6 +635,55 @@ test("addWorkspace with a parent folder inserts into that folder in its owning c
   });
 });
 
+test("createWorkspaceFromTab inserts the new workspace into the requested sidebar container", () => {
+  const sourceWorkspaceId = setupWorkspace("Source");
+  const sourceWorkspace = getWorkspace(sourceWorkspaceId)!;
+  const sourceGroupId = sourceWorkspace.focusedGroupId!;
+  const sourceTabId = useWorkspaceStore.getState().paneGroups[sourceGroupId]!.tabs[0]!.id;
+  const pinnedFolderId = useWorkspaceStore.getState().addFolder("Pinned Folder", null, "pinned");
+
+  useWorkspaceStore
+    .getState()
+    .createWorkspaceFromTab(sourceTabId, sourceGroupId, sourceWorkspaceId, {
+      container: "pinned",
+      parentFolderId: pinnedFolderId,
+    });
+
+  const state = useWorkspaceStore.getState();
+  const newWorkspaceId = state.activeWorkspaceId;
+  const pinnedFolder = findFolder(state.pinnedSidebarNodes, pinnedFolderId);
+
+  expect(state.workspaces).toHaveLength(2);
+  expect(state.sidebarTree).toEqual([{ type: "workspace", workspaceId: sourceWorkspaceId }]);
+  expect(pinnedFolder).toBeTruthy();
+  expect(pinnedFolder!.children).toEqual([{ type: "workspace", workspaceId: newWorkspaceId }]);
+});
+
+test("removeWorkspace recreates a fresh workspace when deleting the last remaining one", () => {
+  resetWorkspaceStore();
+  const folderId = useWorkspaceStore.getState().addFolder("Main Folder");
+  useWorkspaceStore.getState().addWorkspace("Only Workspace", folderId, "main");
+  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId;
+
+  useWorkspaceStore.getState().removeWorkspace(workspaceId);
+
+  const state = useWorkspaceStore.getState();
+  const remainingWorkspace = state.workspaces[0];
+  const folder = findFolder(state.sidebarTree, folderId);
+
+  expect(state.workspaces).toHaveLength(1);
+  expect(remainingWorkspace).toBeTruthy();
+  expect(state.activeWorkspaceId).toBe(remainingWorkspace!.id);
+  expect(remainingWorkspace!.name).toBe("Workspace 1");
+  expect(state.pinnedSidebarNodes).toEqual([]);
+  expect(folder).toBeTruthy();
+  expect(folder!.children).toEqual([]);
+  expect(state.sidebarTree).toContainEqual({
+    type: "workspace",
+    workspaceId: remainingWorkspace!.id,
+  });
+});
+
 test("moveSidebarNode moves a workspace from one folder to another", () => {
   const firstWsId = setupWorkspace("WS A");
   useWorkspaceStore.getState().addWorkspace("WS B");
