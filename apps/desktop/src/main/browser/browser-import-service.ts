@@ -166,6 +166,26 @@ function findKeychainWarning(warnings: string[]): string | undefined {
   return warnings.find((warning) => /keychain/i.test(warning));
 }
 
+function throwProviderWarning(code: string, warnings: string[]): void {
+  const providerWarning = warnings[0];
+  if (providerWarning) {
+    throw new BrowserImportServiceError(code, providerWarning);
+  }
+}
+
+function throwChromiumProviderWarnings(errorPrefix: string, warnings: string[]): void {
+  const keychainWarning = findKeychainWarning(warnings);
+  if (keychainWarning) {
+    throw new BrowserImportServiceError(
+      `${errorPrefix}_KEYCHAIN_ACCESS_REQUIRED`,
+      keychainWarning,
+      true,
+    );
+  }
+
+  throwProviderWarning(`${errorPrefix}_COOKIE_IMPORT_FAILED`, warnings);
+}
+
 function throwCookieImportError(code: string, error: unknown): never {
   throw new BrowserImportServiceError(code, errorMessage(error));
 }
@@ -540,19 +560,7 @@ export class BrowserImportService {
         includeExpired: false,
       } as GetCookiesOptions);
 
-      const keychainWarning = findKeychainWarning(result.warnings);
-      if (keychainWarning) {
-        throw new BrowserImportServiceError(
-          `${errorPrefix}_KEYCHAIN_ACCESS_REQUIRED`,
-          keychainWarning,
-          true,
-        );
-      }
-
-      const providerWarning = result.warnings[0];
-      if (providerWarning) {
-        throw new BrowserImportServiceError(`${errorPrefix}_COOKIE_IMPORT_FAILED`, providerWarning);
-      }
+      throwChromiumProviderWarnings(errorPrefix, result.warnings);
 
       return result.cookies;
     } catch (error) {
@@ -583,27 +591,11 @@ export class BrowserImportService {
     `,
     );
 
-    const browserProfile = basename(profilePath);
-    const source = HISTORY_SOURCES[target as BrowserImportSource] ?? `${target}-import`;
-    const entries: ImportedHistoryEntry[] = [];
-
-    for (const row of rows) {
-      const url = asString(row.url);
-      const visitedAt = chromeTimeToUnixMs(row.visited_at);
-      if (!url || !Number.isFinite(visitedAt)) {
-        continue;
-      }
-
-      entries.push({
-        url,
-        title: asString(row.title) ?? url,
-        visitedAt,
-        source,
-        browserProfile,
-      });
-    }
-
-    return entries;
+    return mapHistoryRows(rows, {
+      source: HISTORY_SOURCES[target as BrowserImportSource] ?? `${target}-import`,
+      browserProfile: basename(profilePath),
+      toVisitedAt: chromeTimeToUnixMs,
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -661,10 +653,7 @@ export class BrowserImportService {
         includeExpired: false,
       } as GetCookiesOptions);
 
-      const providerWarning = result.warnings[0];
-      if (providerWarning) {
-        throw new BrowserImportServiceError("SAFARI_COOKIE_IMPORT_FAILED", providerWarning);
-      }
+      throwProviderWarning("SAFARI_COOKIE_IMPORT_FAILED", result.warnings);
 
       return result.cookies;
     } catch (error) {
@@ -694,24 +683,10 @@ export class BrowserImportService {
     `,
     );
 
-    const entries: ImportedHistoryEntry[] = [];
-
-    for (const row of rows) {
-      const url = asString(row.url);
-      const visitedAt = safariTimeToUnixMs(row.visited_at);
-      if (!url || !Number.isFinite(visitedAt)) {
-        continue;
-      }
-
-      entries.push({
-        url,
-        title: asString(row.title) ?? url,
-        visitedAt,
-        source: HISTORY_SOURCES.safari,
-      });
-    }
-
-    return entries;
+    return mapHistoryRows(rows, {
+      source: HISTORY_SOURCES.safari,
+      toVisitedAt: safariTimeToUnixMs,
+    });
   }
 
   private async detectSafariAccessFromFs(mode: BrowserImportMode): Promise<BrowserAccessResult> {
@@ -837,26 +812,11 @@ export class BrowserImportService {
     `,
     );
 
-    const browserProfile = basename(profilePath);
-    const entries: ImportedHistoryEntry[] = [];
-
-    for (const row of rows) {
-      const url = asString(row.url);
-      const visitedAt = firefoxTimeToUnixMs(row.visited_at);
-      if (!url || !Number.isFinite(visitedAt)) {
-        continue;
-      }
-
-      entries.push({
-        url,
-        title: asString(row.title) ?? url,
-        visitedAt,
-        source: HISTORY_SOURCES.zen,
-        browserProfile,
-      });
-    }
-
-    return entries;
+    return mapHistoryRows(rows, {
+      source: HISTORY_SOURCES.zen,
+      browserProfile: basename(profilePath),
+      toVisitedAt: firefoxTimeToUnixMs,
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -1001,6 +961,35 @@ function copyOptionalSidecar(sourceDbPath: string, tempDbPath: string, suffix: s
   } catch (err) {
     console.warn(`[browser-import] Sidecar copy (${suffix}) failed:`, err);
   }
+}
+
+function mapHistoryRows(
+  rows: Array<Record<string, unknown>>,
+  options: {
+    source: string;
+    browserProfile?: string;
+    toVisitedAt: (value: unknown) => number;
+  },
+): ImportedHistoryEntry[] {
+  const entries: ImportedHistoryEntry[] = [];
+
+  for (const row of rows) {
+    const url = asString(row.url);
+    const visitedAt = options.toVisitedAt(row.visited_at);
+    if (!url || !Number.isFinite(visitedAt)) {
+      continue;
+    }
+
+    entries.push({
+      url,
+      title: asString(row.title) ?? url,
+      visitedAt,
+      source: options.source,
+      ...(options.browserProfile ? { browserProfile: options.browserProfile } : {}),
+    });
+  }
+
+  return entries;
 }
 
 async function queryHistoryDb(
