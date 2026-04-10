@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu } from "electron";
+import { app, BrowserWindow } from "electron";
 import { createServer as createHttpServer } from "http";
 import { join } from "path";
 import { existsSync, statSync, writeFileSync, mkdirSync } from "fs";
@@ -14,15 +14,11 @@ import { BrowserHistoryService } from "./browser/browser-history-service";
 import { BrowserImportService } from "./browser/browser-import-service";
 import { installWindowZoomReset } from "./window-zoom";
 import { getTrafficLightPosition } from "./window-chrome";
+import { installDynamicAppMenu } from "./app-menu";
 import { IS_DEV, CLI_PORT, EDITOR_PARTITION } from "./dev-mode";
 import { resolveDevelopmentPath } from "./dev-paths";
 import { ShortcutStore } from "./shortcut-store";
-import {
-  DEFAULT_SHORTCUTS,
-  getAllNativeBridgeShortcuts,
-  resolveShortcut,
-  toElectronAccelerator,
-} from "../shared/shortcuts";
+import { DEFAULT_SHORTCUTS, resolveShortcut } from "../shared/shortcuts";
 
 // Keep the same userData path as before the monorepo conversion.
 // Without this, Electron derives the path from package.json "name" (@devspace/desktop)
@@ -316,115 +312,7 @@ app.whenReady().then(() => {
   // ── Dynamic application menu ──────────────────────────────────────────
   // Built from the shortcut registry so accelerators stay in sync with
   // user customizations. Rebuilt whenever shortcuts change.
-
-  function buildAppMenu(): void {
-    const send = (channel: string, ...args: unknown[]): void => {
-      const win = BrowserWindow.getFocusedWindow();
-      if (win) win.webContents.send(channel, ...args);
-    };
-
-    const overrides = activeShortcutStore.getAllOverrides();
-
-    // Build menu items from registry, grouped by menuGroup.
-    // Some groups have additional static items (roles, separators).
-    type MenuItem = Electron.MenuItemConstructorOptions;
-
-    function menuItemsForGroup(group: string): MenuItem[] {
-      const defs = DEFAULT_SHORTCUTS.filter((d) => d.menuGroup === group);
-      return defs.map((def) => {
-        const shortcut = resolveShortcut(def.action, overrides);
-        const accelerator = toElectronAccelerator(shortcut);
-
-        // For numbered shortcuts, extract the digit and pass as arg
-        if (def.numbered) {
-          const digit = parseInt(def.action.slice(-1), 10);
-          return {
-            label: def.label,
-            accelerator,
-            click: () => send(def.ipcChannel, digit),
-            visible: false,
-          };
-        }
-
-        return {
-          label: def.label,
-          accelerator,
-          click: () => send(def.ipcChannel),
-          visible: !def.hidden,
-        };
-      });
-    }
-
-    const menuTemplate: MenuItem[] = [
-      {
-        label: app.name,
-        submenu: [
-          { role: "about" },
-          { type: "separator" },
-          ...menuItemsForGroup("App"),
-          { type: "separator" },
-          { role: "hide" },
-          { role: "hideOthers" },
-          { role: "unhide" },
-          { type: "separator" },
-          { role: "quit" },
-        ],
-      },
-      {
-        label: "File",
-        submenu: menuItemsForGroup("File"),
-      },
-      {
-        label: "Edit",
-        submenu: [
-          { role: "undo" },
-          { role: "redo" },
-          { type: "separator" },
-          { role: "cut" },
-          { role: "copy" },
-          { role: "paste" },
-          { role: "selectAll" },
-        ],
-      },
-      {
-        label: "View",
-        submenu: [...menuItemsForGroup("View")],
-      },
-      {
-        label: "Browser",
-        submenu: menuItemsForGroup("Browser"),
-      },
-      {
-        label: "Window",
-        submenu: [
-          { role: "minimize" },
-          { role: "zoom" },
-          ...menuItemsForGroup("Window"),
-          { role: "close" },
-        ],
-      },
-    ];
-    Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate));
-  }
-
-  buildAppMenu();
-
-  // Sync reserved shortcuts to the native bridge so Ghostty doesn't consume them.
-  function syncNativeBridgeShortcuts(): void {
-    const overrides = activeShortcutStore.getAllOverrides();
-    terminalManager.setReservedShortcuts(getAllNativeBridgeShortcuts(overrides));
-  }
-
-  syncNativeBridgeShortcuts();
-
-  // Rebuild menu and native bridge when shortcuts change, and notify all windows
-  activeShortcutStore.onChange(() => {
-    buildAppMenu();
-    syncNativeBridgeShortcuts();
-    for (const win of BrowserWindow.getAllWindows()) {
-      win.webContents.send("shortcuts:changed");
-    }
-  });
+  installDynamicAppMenu(activeShortcutStore, terminalManager);
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
