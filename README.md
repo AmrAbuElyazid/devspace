@@ -104,6 +104,30 @@ The active improvement plan lives in:
 
 - [`docs/release-process.md`](./docs/release-process.md)
 
+## Local Browser And Editor Behavior
+
+Devspace embeds both general browser panes and VS Code web editor panes. A few
+security and persistence tradeoffs are intentional today:
+
+- embedded VS Code runs through a local `code serve-web` server bound to
+  `127.0.0.1` on a fixed port with a Devspace-managed base path and connection
+  token
+- browser panes and editor panes use separate persistent Electron session
+  partitions so editor auth/session state is isolated from normal browser panes
+- browser-pane session cookies without an expiry are promoted to persistent
+  cookies so sign-ins survive app restarts
+- browser history is stored locally as plaintext JSON under Electron's
+  `userData` directory in `browser-history.json`
+- editor pane URLs are intentionally excluded from browser history because they
+  carry connection tokens
+- browser-pane passkeys on macOS Electron are not fully reliable today; use the
+  `Open in External Browser` action for auth flows that need full browser
+  support
+
+In development, Devspace also uses separate `userData`, `sessionData`, and
+browser/editor partitions so a dev run does not share browser/editor state with
+the packaged app.
+
 ## Contributing
 
 Contribution guidelines live in [`CONTRIBUTING.md`](./CONTRIBUTING.md).

@@ -6,14 +6,7 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 
 ## Open
 
-### 1. Browser Pane Passkeys / WebAuthn
-
-- Status: open
-- Priority: high
-- Type: capability bug
-- Detail: passkeys do not currently work reliably inside browser panes on macOS. Devspace now forwards broader Electron permission types to the renderer instead of silently denying unknown ones, and browser panes provide an explicit `Open in External Browser` escape hatch from the toolbar/context menu, but a real GitHub login test still reports only partial passkey support in-pane. The current evidence points more strongly to an upstream Electron/macOS WebAuthn limitation than to a remaining Devspace permission bug.
-- Relevant files: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/shared/browser.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.tsx`, `apps/desktop/src/main/browser/browser-pane-manager.ts`, `docs/issues.md`
-- Upstream reference: `electron/electron#24573`
+No currently open tactical issues are tracked here.
 
 ## Completed
 
@@ -123,3 +116,12 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Type: interaction polish bug
 - Resolution: sidebar drag filtering now preserves real root targets for empty-space drops, prefers concrete folder/workspace targets over root collisions when both are present, and keeps the main scrollable content itself droppable so blank space can accept drops. The empty pinned section no longer appears during active drag, so dragging does not shift because a temporary section was inserted.
 - Relevant files: `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`, `apps/desktop/src/renderer/lib/dnd/handlers/sidebar-reorder.ts`, `apps/desktop/src/renderer/lib/dnd/handlers/tab-to-sidebar.ts`, `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/Sidebar/sidebar.css`, `apps/desktop/src/renderer/components/SidebarShell.test.tsx`
+
+### 13. Browser Pane Passkeys / WebAuthn
+
+- Status: fixed
+- Priority: high
+- Type: capability bug
+- Resolution: full in-pane passkey support on macOS appears limited by upstream Electron WebAuthn behavior, so Devspace now treats the explicit `Open in External Browser` action as the product fallback for those auth flows instead of continuing to chase a pane-local fix.
+- Relevant files: `apps/desktop/src/renderer/components/BrowserPane.tsx`, `apps/desktop/src/renderer/lib/browser-context-menu.ts`, `apps/desktop/src/renderer/hooks/useBrowserBridge.ts`, `docs/issues.md`
+- Upstream reference: `electron/electron#24573`
