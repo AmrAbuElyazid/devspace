@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { createDecipheriv, pbkdf2Sync } from "node:crypto";
+import { pbkdf2Sync } from "node:crypto";
 import {
   copyFileSync,
   existsSync,
@@ -26,6 +26,10 @@ import {
   snapshotExistingCookies,
   type BrowserCookieStore,
 } from "./browser-import-cookie-store";
+import {
+  collectChromiumCookies,
+  decryptChromiumCookieValue,
+} from "./browser-import-chromium-cookies";
 import {
   hasChromiumImportableData,
   hasZenImportableData,
@@ -272,6 +276,7 @@ export function toElectronCookieInput(cookie: ImportedBrowserCookie): ImportedCo
 // ---------------------------------------------------------------------------
 
 export { parseProfilesIni };
+export { collectChromiumCookies };
 
 // ---------------------------------------------------------------------------
 // BrowserImportService
@@ -1188,74 +1193,6 @@ async function queryCookieDb(dbPath: string): Promise<Array<Record<string, unkno
   }
 }
 
-export function collectChromiumCookies(
-  rows: Array<Record<string, unknown>>,
-  options: {
-    browser: string;
-    profile: string;
-    includeExpired: boolean;
-    decrypt: (encryptedValue: Uint8Array) => string | null;
-  },
-): ImportedBrowserCookie[] {
-  const cookies: ImportedBrowserCookie[] = [];
-  const seen = new Set<string>();
-  const now = Math.floor(Date.now() / 1000);
-
-  for (const row of rows) {
-    const name = asString(row.name);
-    const hostKey = asString(row.host_key);
-    if (!name || !hostKey) {
-      continue;
-    }
-
-    let value = typeof row.value === "string" ? row.value : "";
-    if (!value) {
-      const encryptedValue = row.encrypted_value instanceof Uint8Array ? row.encrypted_value : null;
-      if (!encryptedValue) {
-        continue;
-      }
-
-      value = options.decrypt(encryptedValue) ?? "";
-      if (!value) {
-        continue;
-      }
-    }
-
-    const expires = normalizeExpirationSeconds(row.expires_utc);
-    if (!options.includeExpired && expires && expires < now) {
-      continue;
-    }
-
-    const domain = hostKey.replace(/^\./, "");
-    const hostOnly = !hostKey.startsWith(".");
-    const path = asString(row.path) ?? "/";
-    const key = `${name}|${domain}|${path}|${hostOnly ? "host" : "domain"}`;
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    const sameSite = normalizeChromiumSameSite(row.samesite);
-    cookies.push({
-      name,
-      value,
-      ...(domain ? { domain } : {}),
-      path,
-      ...(hostOnly ? { hostOnly: true } : {}),
-      secure: isTruthyDbFlag(row.is_secure),
-      httpOnly: isTruthyDbFlag(row.is_httponly),
-      ...(expires ? { expires } : {}),
-      ...(sameSite ? { sameSite } : {}),
-      source: {
-        browser: options.browser as BrowserName,
-        profile: options.profile,
-      },
-    });
-  }
-
-  return cookies;
-}
-
 // ---------------------------------------------------------------------------
 // Firefox / Zen cookie collector
 // ---------------------------------------------------------------------------
@@ -1318,122 +1255,6 @@ function normalizeFirefoxSameSite(value: unknown): SweetCookie["sameSite"] | und
   }
   if (numeric === 2) {
     return "Strict";
-  }
-
-  return undefined;
-}
-
-// ---------------------------------------------------------------------------
-// Chromium cookie decryption
-// ---------------------------------------------------------------------------
-
-function decryptChromiumCookieValue(
-  encryptedValue: Uint8Array,
-  key: Buffer,
-  stripHashPrefix: boolean,
-): string | null {
-  const buf = Buffer.from(encryptedValue);
-  if (buf.length < 3) {
-    return null;
-  }
-
-  const prefix = buf.subarray(0, 3).toString("utf8");
-  if (!/^v\d\d$/.test(prefix)) {
-    return decodeUtf8CookieValue(buf, false);
-  }
-
-  const ciphertext = buf.subarray(3);
-  if (!ciphertext.length) {
-    return "";
-  }
-
-  try {
-    const iv = Buffer.alloc(16, 0x20);
-    const decipher = createDecipheriv("aes-128-cbc", key, iv);
-    decipher.setAutoPadding(false);
-    const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    return decodeUtf8CookieValue(removePkcs7Padding(plaintext), stripHashPrefix);
-  } catch (err) {
-    console.warn("[browser-import] Cookie value decryption failed:", err);
-    return null;
-  }
-}
-
-function decodeUtf8CookieValue(value: Uint8Array, stripHashPrefix: boolean): string | null {
-  const bytes = stripHashPrefix && value.length >= 32 ? value.subarray(32) : value;
-
-  try {
-    return stripLeadingControlChars(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-  } catch {
-    // Expected: non-UTF-8 byte sequences in cookie values
-    return null;
-  }
-}
-
-function removePkcs7Padding(value: Buffer): Buffer {
-  if (!value.length) {
-    return value;
-  }
-
-  const padding = value[value.length - 1];
-  if (!padding || padding > 16) {
-    return value;
-  }
-
-  return value.subarray(0, value.length - padding);
-}
-
-function stripLeadingControlChars(value: string): string {
-  let index = 0;
-  while (index < value.length && value.charCodeAt(index) < 0x20) {
-    index += 1;
-  }
-
-  return value.slice(index);
-}
-
-function normalizeExpirationSeconds(value: unknown): number | undefined {
-  const numeric = asNumber(value);
-  if (numeric === null || numeric <= 0) {
-    return undefined;
-  }
-
-  if (numeric > 10_000_000_000_000) {
-    return Math.round(numeric / 1_000_000 - 11_644_473_600);
-  }
-
-  if (numeric > 10_000_000_000) {
-    return Math.round(numeric / 1000);
-  }
-
-  return Math.round(numeric);
-}
-
-function normalizeChromiumSameSite(value: unknown): SweetCookie["sameSite"] | undefined {
-  const numeric = asNumber(value);
-  if (numeric === 2) {
-    return "Strict";
-  }
-
-  if (numeric === 1) {
-    return "Lax";
-  }
-
-  if (numeric === 0) {
-    return "None";
-  }
-
-  if (typeof value === "string") {
-    const normalized = value.toLowerCase();
-    if (normalized === "strict") {
-      return "Strict";
-    }
-    if (normalized === "lax") {
-      return "Lax";
-    }
-    if (normalized === "none" || normalized === "no_restriction") {
-      return "None";
-    }
   }
 
   return undefined;
