@@ -1,8 +1,8 @@
 import { app, BrowserWindow } from "electron";
-import { createServer as createHttpServer } from "http";
 import { join } from "path";
-import { existsSync, statSync, writeFileSync, mkdirSync } from "fs";
 import { randomBytes } from "crypto";
+import { createCliHttpServer, writeCliAuthTokenFile } from "./cli-server";
+import { configureGhosttyEnvironment } from "./ghostty-env";
 import { syncShellEnvironment } from "./shell-env";
 import { TerminalManager } from "./terminal-manager";
 import { VscodeServerManager } from "./vscode-server";
@@ -16,7 +16,6 @@ import { installWindowZoomReset } from "./window-zoom";
 import { getTrafficLightPosition } from "./window-chrome";
 import { installDynamicAppMenu } from "./app-menu";
 import { IS_DEV, CLI_PORT, EDITOR_PARTITION } from "./dev-mode";
-import { resolveDevelopmentPath } from "./dev-paths";
 import { ShortcutStore } from "./shortcut-store";
 import { DEFAULT_SHORTCUTS, resolveShortcut } from "../shared/shortcuts";
 
@@ -54,42 +53,10 @@ function sendOpenEditor(folderPath: string): void {
   win.webContents.send("open-editor", folderPath);
 }
 
-const cliHttpServer = createHttpServer((req, res) => {
-  if (!req.url) {
-    res.writeHead(404).end();
-    return;
-  }
-
-  // Validate auth token — reject requests without a valid token
-  const token = req.headers["x-devspace-token"];
-  if (token !== cliAuthToken) {
-    res.writeHead(403).end("forbidden");
-    return;
-  }
-
-  const url = new URL(req.url, `http://127.0.0.1:${CLI_PORT}`);
-
-  if (url.pathname === "/open-editor") {
-    const folderPath = url.searchParams.get("path");
-    try {
-      if (folderPath && statSync(folderPath).isDirectory()) {
-        sendOpenEditor(folderPath);
-        res.writeHead(200).end("ok");
-      } else {
-        res.writeHead(400).end("invalid path");
-      }
-    } catch (err) {
-      console.warn("[main] Path validation failed:", err);
-      res.writeHead(400).end("invalid path");
-    }
-    return;
-  }
-
-  res.writeHead(404).end();
-});
-
-cliHttpServer.on("error", (err) => {
-  console.error(`[cli] HTTP server error:`, err);
+const cliHttpServer = createCliHttpServer({
+  port: CLI_PORT,
+  authToken: cliAuthToken,
+  onOpenEditor: sendOpenEditor,
 });
 
 // ---------------------------------------------------------------------------
@@ -215,35 +182,13 @@ function createWindow(): void {
     },
   });
 
-  // Set up Ghostty resources before initializing the terminal bridge.
-  // GHOSTTY_RESOURCES_DIR: tells libghostty where shell integration scripts live.
-  // Terminfo is stored OUTSIDE GHOSTTY_RESOURCES_DIR to prevent the native bridge
-  // from forcing TERM=xterm-ghostty (which causes display issues). TERMINFO is set
-  // separately so the xterm-ghostty entry is available if libghostty requests it.
-  if (!process.env.GHOSTTY_RESOURCES_DIR) {
-    const bundledResources = app.isPackaged
-      ? join(process.resourcesPath, "ghostty")
-      : resolveDevelopmentPath("packages/ghostty-electron/deps/libghostty/share/ghostty", {
-          appPath: app.getAppPath(),
-          cwd: process.cwd(),
-          moduleDir: __dirname,
-        });
-    if (existsSync(bundledResources)) {
-      process.env.GHOSTTY_RESOURCES_DIR = bundledResources;
-    }
-  }
-  if (!process.env.TERMINFO) {
-    const terminfoDir = app.isPackaged
-      ? join(process.resourcesPath, "terminfo")
-      : resolveDevelopmentPath("packages/ghostty-electron/deps/libghostty/share/terminfo", {
-          appPath: app.getAppPath(),
-          cwd: process.cwd(),
-          moduleDir: __dirname,
-        });
-    if (existsSync(terminfoDir)) {
-      process.env.TERMINFO = terminfoDir;
-    }
-  }
+  configureGhosttyEnvironment({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+    cwd: process.cwd(),
+    moduleDir: __dirname,
+  });
 
   terminalManager.init(window);
   registerIpcHandlers(
@@ -283,10 +228,7 @@ app.whenReady().then(() => {
   // Write the auth token to a file so the CLI script can read it.
   // File permissions restrict access to the current user.
   // The filename includes the port so dev and production don't collide.
-  const tokenDir = join(app.getPath("userData"), "cli");
-  mkdirSync(tokenDir, { recursive: true });
-  const tokenPath = join(tokenDir, `token.${CLI_PORT}`);
-  writeFileSync(tokenPath, cliAuthToken, { mode: 0o600 });
+  writeCliAuthTokenFile(app.getPath("userData"), CLI_PORT, cliAuthToken);
 
   // Start the CLI HTTP server only after the single-instance lock succeeds
   // (whenReady won't fire for the second instance since app.quit() was called).
