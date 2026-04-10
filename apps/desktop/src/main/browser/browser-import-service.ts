@@ -158,6 +158,27 @@ type BrowserImportServiceDeps = {
   statPathImpl?: (path: string) => { isFile: () => boolean; isDirectory: () => boolean };
 };
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function findKeychainWarning(warnings: string[]): string | undefined {
+  return warnings.find((warning) => /keychain/i.test(warning));
+}
+
+function throwCookieImportError(code: string, error: unknown): never {
+  throw new BrowserImportServiceError(code, errorMessage(error));
+}
+
+function throwChromiumCookieImportError(errorPrefix: string, error: unknown): never {
+  const message = errorMessage(error);
+  if (/keychain/i.test(message)) {
+    throw new BrowserImportServiceError(`${errorPrefix}_KEYCHAIN_ACCESS_REQUIRED`, message, true);
+  }
+
+  throw new BrowserImportServiceError(`${errorPrefix}_COOKIE_IMPORT_FAILED`, message);
+}
+
 // ---------------------------------------------------------------------------
 // Custom error
 // ---------------------------------------------------------------------------
@@ -519,7 +540,7 @@ export class BrowserImportService {
         includeExpired: false,
       } as GetCookiesOptions);
 
-      const keychainWarning = result.warnings.find((warning) => /keychain/i.test(warning));
+      const keychainWarning = findKeychainWarning(result.warnings);
       if (keychainWarning) {
         throw new BrowserImportServiceError(
           `${errorPrefix}_KEYCHAIN_ACCESS_REQUIRED`,
@@ -539,16 +560,7 @@ export class BrowserImportService {
         throw error;
       }
 
-      const message = error instanceof Error ? error.message : String(error);
-      if (/keychain/i.test(message)) {
-        throw new BrowserImportServiceError(
-          `${errorPrefix}_KEYCHAIN_ACCESS_REQUIRED`,
-          message,
-          true,
-        );
-      }
-
-      throw new BrowserImportServiceError(`${errorPrefix}_COOKIE_IMPORT_FAILED`, message);
+      throwChromiumCookieImportError(errorPrefix, error);
     }
   }
 
@@ -660,10 +672,7 @@ export class BrowserImportService {
         throw error;
       }
 
-      throw new BrowserImportServiceError(
-        "SAFARI_COOKIE_IMPORT_FAILED",
-        error instanceof Error ? error.message : String(error),
-      );
+      throwCookieImportError("SAFARI_COOKIE_IMPORT_FAILED", error);
     } finally {
       snapshot.cleanup();
     }
@@ -1323,13 +1332,7 @@ async function loadChromiumCookiesFromProfileSnapshot(
         decryptChromiumCookieValue(encryptedValue, key, metaVersion >= 24),
     });
   } catch (error) {
-    const errorPrefix = target.toUpperCase();
-    const message = error instanceof Error ? error.message : String(error);
-    if (/keychain/i.test(message)) {
-      throw new BrowserImportServiceError(`${errorPrefix}_KEYCHAIN_ACCESS_REQUIRED`, message, true);
-    }
-
-    throw new BrowserImportServiceError(`${errorPrefix}_COOKIE_IMPORT_FAILED`, message);
+    throwChromiumCookieImportError(target.toUpperCase(), error);
   } finally {
     snapshot.cleanup();
   }
@@ -1350,10 +1353,7 @@ async function loadSafariCookiesFromSnapshot(
       (cookie) => !cookie.expires || cookie.expires >= Math.floor(Date.now() / 1000),
     );
   } catch (error) {
-    throw new BrowserImportServiceError(
-      "SAFARI_COOKIE_IMPORT_FAILED",
-      error instanceof Error ? error.message : String(error),
-    );
+    throwCookieImportError("SAFARI_COOKIE_IMPORT_FAILED", error);
   } finally {
     snapshot.cleanup();
   }
