@@ -15,9 +15,9 @@ import {
   buildRecentTabOrder,
   clearRecentTabTraversal,
   removeGroupRecentState,
-  removeTabFromRecentOrder,
 } from "../tab-history";
 import type { PaneCleanup } from "../store-helpers";
+import { applySourceGroupTabRemovalResolution } from "../source-group-state";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type WorkspaceCrudSlice = Pick<
@@ -402,34 +402,12 @@ export function createWorkspaceCrudSlice(
       // Create new workspace using pane title as workspace name
       const newWs = createDefaultWorkspace(pane.title, newGroup);
 
-      // Handle source group cleanup
-      const newPaneGroups = { ...state.paneGroups, [newGroup.id]: newGroup };
-      let newWorkspaces = [...state.workspaces, newWs];
-      let newPanes = state.panes;
-
       const resolution = resolveSourceGroupAfterTabRemoval(
         sourceWs,
         sourceGroupId,
         sourceGroup,
         tabId,
       );
-      switch (resolution.kind) {
-        case "tabs-remaining":
-          newPaneGroups[sourceGroupId] = resolution.srcGroup;
-          break;
-        case "group-removed":
-          delete newPaneGroups[sourceGroupId];
-          newWorkspaces = newWorkspaces.map((w) =>
-            w.id === sourceWorkspaceId
-              ? { ...w, root: resolution.newRoot, focusedGroupId: resolution.newFocusedGroupId }
-              : w,
-          );
-          break;
-        case "group-replaced-with-fallback":
-          newPanes = { ...state.panes, [resolution.fallbackPane.id]: resolution.fallbackPane };
-          newPaneGroups[sourceGroupId] = resolution.srcGroup;
-          break;
-      }
 
       // Insert new workspace node into sidebar tree
       const targetContainer = opts?.container ?? "main";
@@ -450,46 +428,33 @@ export function createWorkspaceCrudSlice(
         insertIndex,
       );
 
-      const nextTabHistoryByGroupId = {
-        ...state.tabHistoryByGroupId,
-        [newGroup.id]: [newTabId],
-      };
-      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
-        state.recentTabTraversalByGroupId,
-        newGroup.id,
-      );
-
-      switch (resolution.kind) {
-        case "tabs-remaining":
-        case "group-replaced-with-fallback":
-          nextTabHistoryByGroupId[sourceGroupId] = buildRecentTabOrder(
-            removeTabFromRecentOrder(state.tabHistoryByGroupId[sourceGroupId], tabId),
-            resolution.srcGroup.tabs,
-            resolution.srcGroup.activeTabId,
-          );
-          nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
-            nextRecentTabTraversalByGroupId,
-            sourceGroupId,
-          );
-          break;
-        case "group-removed":
-          delete nextTabHistoryByGroupId[sourceGroupId];
-          nextRecentTabTraversalByGroupId = removeGroupRecentState(
-            nextRecentTabTraversalByGroupId,
-            sourceGroupId,
-          );
-          break;
-      }
+      const nextState = applySourceGroupTabRemovalResolution({
+        state,
+        sourceWorkspaceId,
+        sourceGroupId,
+        removedTabId: tabId,
+        resolution,
+        nextWorkspaces: [...state.workspaces, newWs],
+        nextPaneGroups: { ...state.paneGroups, [newGroup.id]: newGroup },
+        nextTabHistoryByGroupId: {
+          ...state.tabHistoryByGroupId,
+          [newGroup.id]: [newTabId],
+        },
+        nextRecentTabTraversalByGroupId: clearRecentTabTraversal(
+          state.recentTabTraversalByGroupId,
+          newGroup.id,
+        ),
+      });
 
       set({
-        workspaces: newWorkspaces,
+        workspaces: nextState.workspaces,
         activeWorkspaceId: newWs.id,
-        panes: newPanes,
-        paneGroups: newPaneGroups,
+        panes: nextState.panes,
+        paneGroups: nextState.paneGroups,
         sidebarTree: targetContainer === "main" ? insertedNodes : state.sidebarTree,
         pinnedSidebarNodes: targetContainer === "pinned" ? insertedNodes : state.pinnedSidebarNodes,
-        tabHistoryByGroupId: nextTabHistoryByGroupId,
-        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
+        tabHistoryByGroupId: nextState.tabHistoryByGroupId,
+        recentTabTraversalByGroupId: nextState.recentTabTraversalByGroupId,
       });
     },
   };

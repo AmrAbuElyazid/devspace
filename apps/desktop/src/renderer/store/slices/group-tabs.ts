@@ -16,13 +16,9 @@ import {
 } from "../../lib/split-tree";
 import { createPane, findNearestTerminalCwd } from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
-import {
-  buildRecentTabOrder,
-  clearRecentTabTraversal,
-  removeGroupRecentState,
-  removeTabFromRecentOrder,
-} from "../tab-history";
 import type { PaneCleanup } from "../store-helpers";
+import { applySourceGroupTabRemovalResolution } from "../source-group-state";
+import { buildRecentTabOrder, clearRecentTabTraversal } from "../tab-history";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type GroupTabsSlice = Pick<
@@ -91,72 +87,24 @@ export function createGroupTabsSlice(
       if (!tab) return;
 
       cleanupPanes(state.panes, [tab.paneId]);
-      const newPanes = { ...state.panes };
-      delete newPanes[tab.paneId];
+      const nextPanes = { ...state.panes };
+      delete nextPanes[tab.paneId];
 
-      // Resolve source group after tab removal
-      const newPaneGroups = { ...state.paneGroups };
       const resolution = resolveSourceGroupAfterTabRemoval(ws, groupId, group, tabId);
-      switch (resolution.kind) {
-        case "tabs-remaining":
-          newPaneGroups[groupId] = resolution.srcGroup;
-          set({
-            panes: newPanes,
-            paneGroups: newPaneGroups,
-            tabHistoryByGroupId: {
-              ...state.tabHistoryByGroupId,
-              [groupId]: removeTabFromRecentOrder(state.tabHistoryByGroupId[groupId], tabId),
-            },
-            recentTabTraversalByGroupId: clearRecentTabTraversal(
-              state.recentTabTraversalByGroupId,
-              groupId,
-            ),
-          });
-          if (resolution.srcGroup.activeTabId !== tabId) {
-            get().recordTabActivation(groupId, resolution.srcGroup.activeTabId);
-          }
-          break;
-        case "group-removed":
-          delete newPaneGroups[groupId];
-          set({
-            workspaces: state.workspaces.map((w) =>
-              w.id === workspaceId
-                ? {
-                    ...w,
-                    root: resolution.newRoot,
-                    focusedGroupId: resolution.newFocusedGroupId,
-                  }
-                : w,
-            ),
-            panes: newPanes,
-            paneGroups: newPaneGroups,
-            tabHistoryByGroupId: {
-              ...state.tabHistoryByGroupId,
-              [groupId]: [],
-            },
-            recentTabTraversalByGroupId: clearRecentTabTraversal(
-              state.recentTabTraversalByGroupId,
-              groupId,
-            ),
-          });
-          break;
-        case "group-replaced-with-fallback":
-          newPanes[resolution.fallbackPane.id] = resolution.fallbackPane;
-          newPaneGroups[groupId] = resolution.srcGroup;
-          set({
-            panes: newPanes,
-            paneGroups: newPaneGroups,
-            tabHistoryByGroupId: {
-              ...state.tabHistoryByGroupId,
-              [groupId]: removeTabFromRecentOrder(state.tabHistoryByGroupId[groupId], tabId),
-            },
-            recentTabTraversalByGroupId: clearRecentTabTraversal(
-              state.recentTabTraversalByGroupId,
-              groupId,
-            ),
-          });
-          get().recordTabActivation(groupId, resolution.srcGroup.activeTabId);
-          break;
+      const nextState = applySourceGroupTabRemovalResolution({
+        state,
+        sourceWorkspaceId: workspaceId,
+        sourceGroupId: groupId,
+        removedTabId: tabId,
+        resolution,
+        nextPanes,
+        removedGroupTabHistoryMode: "empty",
+      });
+
+      set(nextState);
+
+      if (resolution.kind !== "group-removed" && resolution.srcGroup.activeTabId !== tabId) {
+        get().recordTabActivation(groupId, resolution.srcGroup.activeTabId);
       }
     },
 
@@ -217,18 +165,16 @@ export function createGroupTabsSlice(
         insertIndex !== undefined ? Math.min(insertIndex, destTabs.length) : destTabs.length;
       destTabs.splice(idx, 0, tab);
 
-      const newPaneGroups = { ...state.paneGroups };
-      let newWorkspaces = state.workspaces;
-      let newPanes = state.panes;
-
       // Update destination group
-      newPaneGroups[destGroupId] = {
+      const nextPaneGroups = {
+        ...state.paneGroups,
+      };
+      nextPaneGroups[destGroupId] = {
         ...destGroup,
         tabs: destTabs,
         activeTabId: tab.id,
       };
 
-      // Resolve source group after tab removal
       const resolution = resolveSourceGroupAfterTabRemoval(
         ws,
         srcGroupId,
@@ -236,66 +182,28 @@ export function createGroupTabsSlice(
         tabId,
         destGroupId,
       );
-      switch (resolution.kind) {
-        case "tabs-remaining":
-          newPaneGroups[srcGroupId] = resolution.srcGroup;
-          break;
-        case "group-removed":
-          delete newPaneGroups[srcGroupId];
-          newWorkspaces = state.workspaces.map((w) =>
-            w.id === workspaceId
-              ? { ...w, root: resolution.newRoot, focusedGroupId: resolution.newFocusedGroupId }
-              : w,
-          );
-          break;
-        case "group-replaced-with-fallback":
-          newPanes = { ...state.panes, [resolution.fallbackPane.id]: resolution.fallbackPane };
-          newPaneGroups[srcGroupId] = resolution.srcGroup;
-          break;
-      }
-
-      const nextTabHistoryByGroupId = {
-        ...state.tabHistoryByGroupId,
-        [destGroupId]: buildRecentTabOrder(
-          state.tabHistoryByGroupId[destGroupId],
-          destTabs,
-          tab.id,
+      const nextState = applySourceGroupTabRemovalResolution({
+        state,
+        sourceWorkspaceId: workspaceId,
+        sourceGroupId: srcGroupId,
+        removedTabId: tabId,
+        resolution,
+        nextPaneGroups,
+        nextTabHistoryByGroupId: {
+          ...state.tabHistoryByGroupId,
+          [destGroupId]: buildRecentTabOrder(
+            state.tabHistoryByGroupId[destGroupId],
+            destTabs,
+            tab.id,
+          ),
+        },
+        nextRecentTabTraversalByGroupId: clearRecentTabTraversal(
+          state.recentTabTraversalByGroupId,
+          destGroupId,
         ),
-      };
-      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
-        state.recentTabTraversalByGroupId,
-        destGroupId,
-      );
-
-      switch (resolution.kind) {
-        case "tabs-remaining":
-        case "group-replaced-with-fallback":
-          nextTabHistoryByGroupId[srcGroupId] = buildRecentTabOrder(
-            removeTabFromRecentOrder(state.tabHistoryByGroupId[srcGroupId], tabId),
-            resolution.srcGroup.tabs,
-            resolution.srcGroup.activeTabId,
-          );
-          nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
-            nextRecentTabTraversalByGroupId,
-            srcGroupId,
-          );
-          break;
-        case "group-removed":
-          delete nextTabHistoryByGroupId[srcGroupId];
-          nextRecentTabTraversalByGroupId = removeGroupRecentState(
-            nextRecentTabTraversalByGroupId,
-            srcGroupId,
-          );
-          break;
-      }
-
-      set({
-        workspaces: newWorkspaces,
-        panes: newPanes,
-        paneGroups: newPaneGroups,
-        tabHistoryByGroupId: nextTabHistoryByGroupId,
-        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
       });
+
+      set(nextState);
     },
 
     splitGroupWithTab(workspaceId, srcGroupId, tabId, targetGroupId, side) {
@@ -334,71 +242,34 @@ export function createGroupTabsSlice(
       };
 
       let newRoot = replaceLeafInTree(ws.root, targetGroupId, replacement);
-      const newPaneGroups = { ...state.paneGroups, [newGroup.id]: newGroup };
-      let newWorkspaces = state.workspaces;
-      let newPanes = state.panes;
-
-      // Resolve source group after tab removal.
+      const nextPaneGroups = { ...state.paneGroups, [newGroup.id]: newGroup };
       const resolution = resolveSourceGroupAfterTabRemoval(ws, srcGroupId, srcGroup, tabId);
-      switch (resolution.kind) {
-        case "tabs-remaining":
-          newPaneGroups[srcGroupId] = resolution.srcGroup;
-          break;
-        case "group-removed":
-          {
-            const cleaned = removeGroupFromTree(newRoot, srcGroupId);
-            newRoot = cleaned ? simplifyTree(cleaned) : newRoot;
-          }
-          delete newPaneGroups[srcGroupId];
-          break;
-        case "group-replaced-with-fallback":
-          newPanes = { ...state.panes, [resolution.fallbackPane.id]: resolution.fallbackPane };
-          newPaneGroups[srcGroupId] = resolution.srcGroup;
-          break;
+      if (resolution.kind === "group-removed") {
+        const cleaned = removeGroupFromTree(newRoot, srcGroupId);
+        newRoot = cleaned ? simplifyTree(cleaned) : newRoot;
       }
 
-      const nextTabHistoryByGroupId = {
-        ...state.tabHistoryByGroupId,
-        [newGroup.id]: [newTabId],
-      };
-      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
-        state.recentTabTraversalByGroupId,
-        newGroup.id,
-      );
-
-      switch (resolution.kind) {
-        case "tabs-remaining":
-        case "group-replaced-with-fallback":
-          nextTabHistoryByGroupId[srcGroupId] = buildRecentTabOrder(
-            removeTabFromRecentOrder(state.tabHistoryByGroupId[srcGroupId], tabId),
-            resolution.srcGroup.tabs,
-            resolution.srcGroup.activeTabId,
-          );
-          nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
-            nextRecentTabTraversalByGroupId,
-            srcGroupId,
-          );
-          break;
-        case "group-removed":
-          delete nextTabHistoryByGroupId[srcGroupId];
-          nextRecentTabTraversalByGroupId = removeGroupRecentState(
-            nextRecentTabTraversalByGroupId,
-            srcGroupId,
-          );
-          break;
-      }
-
-      newWorkspaces = state.workspaces.map((w) =>
-        w.id === workspaceId ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
-      );
-
-      set({
-        workspaces: newWorkspaces,
-        panes: newPanes,
-        paneGroups: newPaneGroups,
-        tabHistoryByGroupId: nextTabHistoryByGroupId,
-        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
+      const nextState = applySourceGroupTabRemovalResolution({
+        state,
+        sourceWorkspaceId: workspaceId,
+        sourceGroupId: srcGroupId,
+        removedTabId: tabId,
+        resolution,
+        nextWorkspaces: state.workspaces.map((w) =>
+          w.id === workspaceId ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
+        ),
+        nextPaneGroups,
+        nextTabHistoryByGroupId: {
+          ...state.tabHistoryByGroupId,
+          [newGroup.id]: [newTabId],
+        },
+        nextRecentTabTraversalByGroupId: clearRecentTabTraversal(
+          state.recentTabTraversalByGroupId,
+          newGroup.id,
+        ),
       });
+
+      set(nextState);
     },
 
     moveTabToWorkspace(srcWorkspaceId, srcGroupId, tabId, destWorkspaceId) {
@@ -427,76 +298,34 @@ export function createGroupTabsSlice(
       const newTab: PaneGroupTab = { id: nanoid(), paneId: tab.paneId };
       const destTabs = [...destGroup.tabs, newTab];
 
-      const newPaneGroups = {
+      const nextPaneGroups = {
         ...state.paneGroups,
         [destGroupId]: { ...destGroup, tabs: destTabs, activeTabId: newTab.id },
       };
 
-      // Resolve source group after tab removal
-      let newWorkspaces = state.workspaces;
-      let newPanes = state.panes;
-
       const resolution = resolveSourceGroupAfterTabRemoval(srcWs, srcGroupId, srcGroup, tabId);
-      switch (resolution.kind) {
-        case "tabs-remaining":
-          newPaneGroups[srcGroupId] = resolution.srcGroup;
-          break;
-        case "group-removed":
-          delete newPaneGroups[srcGroupId];
-          newWorkspaces = state.workspaces.map((w) =>
-            w.id === srcWorkspaceId
-              ? { ...w, root: resolution.newRoot, focusedGroupId: resolution.newFocusedGroupId }
-              : w,
-          );
-          break;
-        case "group-replaced-with-fallback":
-          newPanes = { ...state.panes, [resolution.fallbackPane.id]: resolution.fallbackPane };
-          newPaneGroups[srcGroupId] = resolution.srcGroup;
-          break;
-      }
-
-      const nextTabHistoryByGroupId = {
-        ...state.tabHistoryByGroupId,
-        [destGroupId]: buildRecentTabOrder(
-          state.tabHistoryByGroupId[destGroupId],
-          destTabs,
-          newTab.id,
+      const nextState = applySourceGroupTabRemovalResolution({
+        state,
+        sourceWorkspaceId: srcWorkspaceId,
+        sourceGroupId: srcGroupId,
+        removedTabId: tabId,
+        resolution,
+        nextPaneGroups,
+        nextTabHistoryByGroupId: {
+          ...state.tabHistoryByGroupId,
+          [destGroupId]: buildRecentTabOrder(
+            state.tabHistoryByGroupId[destGroupId],
+            destTabs,
+            newTab.id,
+          ),
+        },
+        nextRecentTabTraversalByGroupId: clearRecentTabTraversal(
+          state.recentTabTraversalByGroupId,
+          destGroupId,
         ),
-      };
-      let nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
-        state.recentTabTraversalByGroupId,
-        destGroupId,
-      );
-
-      switch (resolution.kind) {
-        case "tabs-remaining":
-        case "group-replaced-with-fallback":
-          nextTabHistoryByGroupId[srcGroupId] = buildRecentTabOrder(
-            removeTabFromRecentOrder(state.tabHistoryByGroupId[srcGroupId], tabId),
-            resolution.srcGroup.tabs,
-            resolution.srcGroup.activeTabId,
-          );
-          nextRecentTabTraversalByGroupId = clearRecentTabTraversal(
-            nextRecentTabTraversalByGroupId,
-            srcGroupId,
-          );
-          break;
-        case "group-removed":
-          delete nextTabHistoryByGroupId[srcGroupId];
-          nextRecentTabTraversalByGroupId = removeGroupRecentState(
-            nextRecentTabTraversalByGroupId,
-            srcGroupId,
-          );
-          break;
-      }
-
-      set({
-        workspaces: newWorkspaces,
-        panes: newPanes,
-        paneGroups: newPaneGroups,
-        tabHistoryByGroupId: nextTabHistoryByGroupId,
-        recentTabTraversalByGroupId: nextRecentTabTraversalByGroupId,
       });
+
+      set(nextState);
     },
 
     openBrowserInGroup(workspaceId, groupId, url) {

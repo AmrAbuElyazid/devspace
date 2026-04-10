@@ -18,7 +18,7 @@ import { createPane } from "./pane-factory";
  * This is a pure data structure describing the mutations to apply, with no
  * side effects.
  */
-type SourceGroupResolution =
+export type SourceGroupResolution =
   | {
       /** The source group still has remaining tabs. */
       kind: "tabs-remaining";
