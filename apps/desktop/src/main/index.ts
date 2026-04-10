@@ -3,6 +3,7 @@ import { join } from "path";
 import { randomBytes } from "crypto";
 import { createCliHttpServer, writeCliAuthTokenFile } from "./cli-server";
 import { configureGhosttyEnvironment } from "./ghostty-env";
+import { buildAppShortcutBindings } from "./app-shortcut-bindings";
 import { syncShellEnvironment } from "./shell-env";
 import { TerminalManager } from "./terminal-manager";
 import { VscodeServerManager } from "./vscode-server";
@@ -17,7 +18,6 @@ import { getTrafficLightPosition } from "./window-chrome";
 import { installDynamicAppMenu } from "./app-menu";
 import { IS_DEV, CLI_PORT, EDITOR_PARTITION } from "./dev-mode";
 import { ShortcutStore } from "./shortcut-store";
-import { DEFAULT_SHORTCUTS, resolveShortcut } from "../shared/shortcuts";
 
 // Keep the same userData path as before the monorepo conversion.
 // Without this, Electron derives the path from package.json "name" (@devspace/desktop)
@@ -134,26 +134,7 @@ function createWindow(): void {
     addChildView: (view) => window.contentView.addChildView(view),
     removeChildView: (view) => window.contentView.removeChildView(view),
     sendToRenderer: (channel, ...args) => window.webContents.send(channel, ...args),
-    getAppShortcutBindings: () => {
-      if (!shortcutStore) {
-        return [];
-      }
-      const overrides = shortcutStore.getAllOverrides();
-      return DEFAULT_SHORTCUTS.map((def) =>
-        def.numbered
-          ? {
-              action: def.action,
-              channel: def.ipcChannel,
-              shortcut: resolveShortcut(def.action, overrides),
-              args: [parseInt(def.action.slice(-1), 10)],
-            }
-          : {
-              action: def.action,
-              channel: def.ipcChannel,
-              shortcut: resolveShortcut(def.action, overrides),
-            },
-      );
-    },
+    getAppShortcutBindings: () => buildAppShortcutBindings(shortcutStore),
     getSession: (kind) =>
       kind === "editor" ? editorSessionManager.getSession() : browserSessionManager.getSession(),
     historyService: browserHistoryService,
