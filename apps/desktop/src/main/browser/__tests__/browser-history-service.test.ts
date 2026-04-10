@@ -78,6 +78,26 @@ test("missing history files are treated as empty state without warnings", () => 
   }
 });
 
+test("first persisted visit does not warn when no backup exists yet", () => {
+  const appDataPath = mkdtempSync(join(tmpdir(), "devspace-history-"));
+
+  try {
+    const warnSpy = vi.spyOn(console, "warn");
+    const service = new BrowserHistoryService({ appDataPath });
+
+    service.recordVisit({
+      url: "https://devspace.example.com",
+      title: "Devspace",
+      visitedAt: 123,
+      source: "devspace",
+    });
+
+    expect(warnSpy).not.toHaveBeenCalled();
+  } finally {
+    rmSync(appDataPath, { recursive: true, force: true });
+  }
+});
+
 test("keeps last good history when storage is interrupted or corrupted on startup", () => {
   const appDataPath = mkdtempSync(join(tmpdir(), "devspace-history-"));
 

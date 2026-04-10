@@ -21,6 +21,8 @@ type FoundInPageResult = {
   matches?: number;
 };
 
+const POINTER_DRIVEN_FOCUS_WINDOW_MS = 1_000;
+
 function normalizeContextMenuText(value: unknown): string | null {
   if (typeof value !== "string") {
     return null;
@@ -69,6 +71,7 @@ export function registerBrowserPaneWebContentsListeners({
   recordCommittedHistoryVisit,
   refreshPendingHistoryTitle,
 }: BrowserPaneWebContentsListenerDeps): void {
+  let lastPointerDownAt = 0;
   const webContents = pane.view.webContents as Electron.WebContents &
     Partial<WebContentsEventEmitter>;
   const setWindowOpenHandler = (
@@ -109,7 +112,22 @@ export function registerBrowserPaneWebContentsListeners({
     applyRuntimePatch(pane.runtimeState.paneId, { isLoading: true, failure: null });
   });
 
+  webContents.on("before-mouse-event", (_event: unknown, mouseInput: unknown) => {
+    const type =
+      typeof mouseInput === "object" && mouseInput !== null && "type" in mouseInput
+        ? mouseInput.type
+        : undefined;
+    if (type === "mouseDown") {
+      lastPointerDownAt = Date.now();
+    }
+  });
+
   webContents.on("focus", () => {
+    if (Date.now() - lastPointerDownAt > POINTER_DRIVEN_FOCUS_WINDOW_MS) {
+      return;
+    }
+
+    lastPointerDownAt = 0;
     sendToRenderer("browser:focused", pane.runtimeState.paneId);
   });
 

@@ -1,4 +1,12 @@
-import { copyFileSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -176,7 +184,7 @@ export class BrowserHistoryService implements BrowserHistoryRecorder {
     const nextContents = JSON.stringify(entries, null, 2);
     const tempPath = `${this.storagePath}.tmp`;
 
-    if (this.backupStoragePath) {
+    if (this.backupStoragePath && existsSync(this.storagePath)) {
       try {
         copyFileSync(this.storagePath, this.backupStoragePath);
       } catch (err) {

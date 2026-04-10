@@ -93,8 +93,18 @@ export function useBrowserBridge(): void {
           return;
         }
 
+        if (action === "page-open-external") {
+          window.api.shell.openExternal(request.pageUrl);
+          return;
+        }
+
         if (action === "page-inspect") {
           void window.api.browser.toggleDevTools(request.paneId);
+          return;
+        }
+
+        if (action === "link-open-external" && request.linkUrl) {
+          window.api.shell.openExternal(request.linkUrl);
           return;
         }
 

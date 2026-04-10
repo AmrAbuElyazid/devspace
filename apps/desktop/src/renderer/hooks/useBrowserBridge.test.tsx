@@ -42,6 +42,7 @@ const browserBridgeMocks = vi.hoisted(() => ({
   browserForward: vi.fn(),
   browserReload: vi.fn(),
   browserToggleDevTools: vi.fn(),
+  shellOpenExternal: vi.fn(),
   contextMenuShow: vi.fn(),
   findWorkspaceIdForPane: vi.fn(() => "workspace-1"),
   workspaceState: {
@@ -146,6 +147,7 @@ beforeEach(async () => {
   browserBridgeMocks.browserForward.mockReset();
   browserBridgeMocks.browserReload.mockReset();
   browserBridgeMocks.browserToggleDevTools.mockReset();
+  browserBridgeMocks.shellOpenExternal.mockReset();
   browserBridgeMocks.contextMenuShow.mockReset();
   browserBridgeMocks.findWorkspaceIdForPane.mockReset();
   browserBridgeMocks.findWorkspaceIdForPane.mockReturnValue("workspace-1");
@@ -165,6 +167,9 @@ beforeEach(async () => {
     },
     contextMenu: {
       show: browserBridgeMocks.contextMenuShow,
+    },
+    shell: {
+      openExternal: browserBridgeMocks.shellOpenExternal,
     },
   });
 
@@ -208,6 +213,7 @@ test("opens link context-menu targets in a new tab for the focused group", async
   expect(browserBridgeMocks.contextMenuShow).toHaveBeenCalledWith(
     [
       { id: "link-open-new-tab", label: "Open in New Tab" },
+      { id: "link-open-external", label: "Open in External Browser" },
       { id: "link-copy", label: "Copy Link" },
     ],
     { x: 24, y: 48 },
@@ -217,6 +223,41 @@ test("opens link context-menu targets in a new tab for the focused group", async
     "group-1",
     "https://devspace.dev/docs",
   );
+});
+
+test("opens the current page in the external browser from the page context menu", async () => {
+  browserBridgeMocks.contextMenuShow.mockResolvedValueOnce("page-open-external");
+
+  expect(browserBridgeMocks.contextMenuRequestHandler).toBeTypeOf("function");
+  const handler = browserBridgeMocks.contextMenuRequestHandler;
+  if (!handler) {
+    throw new Error("expected useBrowserBridge to register a context menu handler");
+  }
+
+  await act(async () => {
+    await handler({
+      paneId: "pane-1",
+      position: { x: 24, y: 48 },
+      target: "page",
+      pageUrl: "https://example.com/",
+      linkUrl: null,
+      selectionText: null,
+      canGoBack: true,
+      canGoForward: false,
+    });
+  });
+
+  expect(browserBridgeMocks.contextMenuShow).toHaveBeenCalledWith(
+    [
+      { id: "page-back", label: "Back" },
+      { id: "page-forward", label: "Forward" },
+      { id: "page-reload", label: "Reload" },
+      { id: "page-open-external", label: "Open in External Browser" },
+      { id: "page-inspect", label: "Inspect" },
+    ],
+    { x: 24, y: 48 },
+  );
+  expect(browserBridgeMocks.shellOpenExternal).toHaveBeenCalledWith("https://example.com/");
 });
 
 test("syncs workspace focus when a webcontents-based pane gains focus", async () => {

@@ -11,19 +11,11 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Status: open
 - Priority: high
 - Type: capability bug
-- Detail: passkeys do not currently work reliably inside browser panes on macOS. Devspace now forwards broader Electron permission types to the renderer instead of silently denying unknown ones, but a real GitHub login test still reports only partial passkey support. The current evidence points more strongly to an upstream Electron/macOS WebAuthn limitation than to a remaining Devspace permission bug, so the likely product follow-up is external-browser fallback and clearer user-facing messaging.
+- Detail: passkeys do not currently work reliably inside browser panes on macOS. Devspace now forwards broader Electron permission types to the renderer instead of silently denying unknown ones, and browser panes provide an explicit `Open in External Browser` escape hatch from the toolbar/context menu, but a real GitHub login test still reports only partial passkey support in-pane. The current evidence points more strongly to an upstream Electron/macOS WebAuthn limitation than to a remaining Devspace permission bug.
 - Relevant files: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/shared/browser.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.tsx`, `apps/desktop/src/main/browser/browser-pane-manager.ts`, `docs/issues.md`
 - Upstream reference: `electron/electron#24573`
 
-### 2. Localhost Hot Reload Steals Focus
-
-- Status: open
-- Priority: high
-- Type: usability bug
-- Detail: when a localhost app is open in a browser pane and its dev server hot reloads, Devspace can steal focus and surface the browser pane even while work is happening elsewhere. Focus currently propagates from native `webContents` events back into renderer workspace focus state and likely needs tighter gating around reload-driven focus churn.
-- Relevant files: `apps/desktop/src/main/browser/browser-pane-webcontents-events.ts`, `apps/desktop/src/renderer/hooks/useBrowserBridge.ts`, `apps/desktop/src/renderer/components/BrowserPane.tsx`, `apps/desktop/src/renderer/hooks/useNativeView.ts`
-
-### 3. Tab Dragging Does Not Reorder Reliably
+### 2. Tab Dragging Does Not Reorder Reliably
 
 - Status: open
 - Priority: medium
@@ -31,7 +23,7 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Detail: dragging tabs should reorder them predictably within and across groups, but the current drag intent and execute flow likely needs alignment between DnD hit targets, tab-bar behavior, and workspace store mutations.
 - Relevant files: `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/lib/dnd/handlers/tab-reorder.ts`, `apps/desktop/src/renderer/store/slices/group-tabs.ts`
 
-### 4. Sidebar Drag Bounds And Pinned Section Behavior
+### 3. Sidebar Drag Bounds And Pinned Section Behavior
 
 - Status: open
 - Priority: medium
@@ -115,3 +107,19 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Type: browser capability bug
 - Resolution: browser session permission handling now forwards broader Electron permission types like `storage-access` to the renderer prompt instead of hard-denying everything outside the original camera/microphone/geolocation/notifications set, and the prompt UI now renders readable labels for those requests.
 - Relevant files: `apps/desktop/src/main/browser/browser-session-manager.ts`, `apps/desktop/src/shared/browser.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.tsx`, `apps/desktop/src/main/browser/__tests__/browser-session-manager.test.ts`, `apps/desktop/src/renderer/components/browser/BrowserPermissionPrompt.test.tsx`
+
+### 9. Localhost Hot Reload Steals Focus
+
+- Status: fixed
+- Priority: high
+- Type: usability bug
+- Resolution: browser pane focus events now only propagate back into renderer workspace focus state when they follow an actual pointer interaction inside the native web contents, which prevents localhost reload churn from surfacing a browser pane and stealing focus on its own.
+- Relevant files: `apps/desktop/src/main/browser/browser-pane-webcontents-events.ts`, `apps/desktop/src/main/browser/__tests__/browser-pane-manager.test.ts`
+
+### 10. Browser History Backup Warns On First Persist
+
+- Status: fixed
+- Priority: low
+- Type: logging bug
+- Resolution: browser history persistence no longer warns on the initial backup copy when the primary history file has not been created yet.
+- Relevant files: `apps/desktop/src/main/browser/browser-history-service.ts`, `apps/desktop/src/main/browser/__tests__/browser-history-service.test.ts`

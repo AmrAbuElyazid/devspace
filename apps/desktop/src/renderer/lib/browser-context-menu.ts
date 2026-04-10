@@ -6,8 +6,10 @@ type BrowserContextMenuAction =
   | "page-back"
   | "page-forward"
   | "page-reload"
+  | "page-open-external"
   | "page-inspect"
   | "link-open-new-tab"
+  | "link-open-external"
   | "link-copy"
   | "selection-copy"
   | "selection-search-web";
@@ -18,6 +20,7 @@ export function buildBrowserContextMenuItems(
   if (request.target === "link") {
     return [
       { id: "link-open-new-tab", label: "Open in New Tab" },
+      { id: "link-open-external", label: "Open in External Browser" },
       { id: "link-copy", label: "Copy Link" },
     ];
   }
@@ -33,6 +36,7 @@ export function buildBrowserContextMenuItems(
     { id: "page-back", label: "Back" },
     { id: "page-forward", label: "Forward" },
     { id: "page-reload", label: "Reload" },
+    { id: "page-open-external", label: "Open in External Browser" },
     { id: "page-inspect", label: "Inspect" },
   ];
 }

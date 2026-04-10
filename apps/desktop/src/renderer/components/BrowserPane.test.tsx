@@ -30,6 +30,7 @@ const browserPaneMocks = vi.hoisted(() => ({
   browserBack: vi.fn(),
   browserForward: vi.fn(),
   browserToggleDevTools: vi.fn(),
+  shellOpenExternal: vi.fn(),
   onContextMenuRequest: vi.fn<
     (callback: (request: BrowserContextMenuRequest) => void) => () => void
   >(() => () => {}),
@@ -154,6 +155,7 @@ beforeEach(() => {
   browserPaneMocks.browserBack.mockReset();
   browserPaneMocks.browserForward.mockReset();
   browserPaneMocks.browserToggleDevTools.mockReset();
+  browserPaneMocks.shellOpenExternal.mockReset();
   browserPaneMocks.onContextMenuRequest.mockReset();
   browserPaneMocks.contextMenuRequestHandler = null;
   browserPaneMocks.onContextMenuRequest.mockImplementation(
@@ -206,6 +208,9 @@ beforeEach(() => {
     },
     window: {
       focusContent: vi.fn(),
+    },
+    shell: {
+      openExternal: browserPaneMocks.shellOpenExternal,
     },
     contextMenu: {
       show: vi.fn(),
@@ -418,4 +423,26 @@ test("dismissing or allowing a permission request clears local state and resolve
 
   expect(browserPaneMocks.clearPendingPermissionRequest).toHaveBeenCalledTimes(2);
   expect(browserPaneMocks.browserResolvePermission).toHaveBeenCalledWith("token-1", "allow-once");
+});
+
+test("opens the current page in the external browser from the toolbar", async () => {
+  await act(async () => {
+    root?.render(
+      <BrowserPane
+        paneId="pane-1"
+        workspaceId="workspace-1"
+        config={{ url: "https://example.com/" }}
+        isFocused={true}
+      />,
+    );
+  });
+
+  const externalButton = container.querySelector('button[aria-label="Open in external browser"]');
+  expect(externalButton).toBeTruthy();
+
+  await act(async () => {
+    externalButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  expect(browserPaneMocks.shellOpenExternal).toHaveBeenCalledWith("https://example.com/");
 });

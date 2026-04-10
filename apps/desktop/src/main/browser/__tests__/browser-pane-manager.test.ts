@@ -125,7 +125,36 @@ test("runtime updates capture title, favicon, and loading state", () => {
   expect(manager.getRuntimeState("pane-1")?.isLoading).toBe(true);
 });
 
-test("webcontents focus events are forwarded to the renderer", () => {
+test("pointer-driven webcontents focus events are forwarded to the renderer", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload });
+    },
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  rendererMessages.length = 0;
+
+  listeners.get("before-mouse-event")?.({}, { type: "mouseDown" });
+  listeners.get("focus")?.();
+
+  expect(rendererMessages).toEqual([{ channel: "browser:focused", payload: "pane-1" }]);
+});
+
+test("focus events without a preceding pointer interaction are ignored", () => {
   const listeners = new Map<string, (...args: unknown[]) => void>();
   const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
   const manager = new BrowserPaneManager({
@@ -150,7 +179,7 @@ test("webcontents focus events are forwarded to the renderer", () => {
 
   listeners.get("focus")?.();
 
-  expect(rendererMessages).toEqual([{ channel: "browser:focused", payload: "pane-1" }]);
+  expect(rendererMessages).toEqual([]);
 });
 
 test("before-input-event routes app-owned shortcuts and modifier hints from webcontents", () => {

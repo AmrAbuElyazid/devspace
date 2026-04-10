@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { ArrowLeft, ArrowRight, RotateCw, Search, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ExternalLink, RotateCw, Search, X } from "lucide-react";
 import { resolveDisplayString } from "../../shared/shortcuts";
 import { Button } from "./ui/button";
 import { Tooltip } from "./ui/tooltip";
@@ -114,6 +114,18 @@ export default function BrowserPane({
             className="browser-nav-btn"
           >
             <Search size={14} />
+          </Button>
+        </Tooltip>
+
+        <Tooltip content="Open in external browser">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => window.api.shell.openExternal(currentUrl)}
+            className="browser-nav-btn"
+            aria-label="Open in external browser"
+          >
+            <ExternalLink size={14} />
           </Button>
         </Tooltip>
       </div>
