@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "node:fs";
 import { basename, join } from "node:path";
-import type { Cookie as SweetCookie } from "@steipete/sweet-cookie";
+import type { Cookie as SweetCookie, GetCookiesOptions } from "@steipete/sweet-cookie";
 import type { BrowserImportSource, BrowserProfileDescriptor } from "../../shared/browser";
 import {
   readChromeSafeStorageKey,
@@ -10,7 +10,11 @@ import {
   collectChromiumCookies,
   decryptChromiumCookieValue,
 } from "./browser-import-chromium-cookies";
-import { throwChromiumCookieImportError } from "./browser-import-errors";
+import {
+  BrowserImportServiceError,
+  throwChromiumCookieImportError,
+  throwChromiumProviderWarnings,
+} from "./browser-import-errors";
 import {
   chromeTimeToUnixMs,
   mapHistoryRows,
@@ -33,6 +37,11 @@ type ImportedBrowserCookie = SweetCookie & {
   hostOnly?: boolean;
   expiresAt?: number | null;
 };
+
+type ChromiumGetCookiesImpl = (options: GetCookiesOptions) => Promise<{
+  cookies: ImportedBrowserCookie[];
+  warnings: string[];
+}>;
 
 export async function listChromiumProfiles(
   root: string,
@@ -88,6 +97,45 @@ export async function loadChromiumHistory(
 }
 
 export async function loadChromiumCookies(
+  profilePath: string,
+  target: ChromiumBrowserTarget,
+  getCookiesImpl: ChromiumGetCookiesImpl | null,
+): Promise<ImportedBrowserCookie[]> {
+  if (getCookiesImpl) {
+    return loadChromiumCookiesFromProvider(profilePath, target, getCookiesImpl);
+  }
+
+  return loadChromiumCookiesFromProfileSnapshot(profilePath, target);
+}
+
+async function loadChromiumCookiesFromProvider(
+  profilePath: string,
+  target: ChromiumBrowserTarget,
+  getCookiesImpl: ChromiumGetCookiesImpl,
+): Promise<ImportedBrowserCookie[]> {
+  const errorPrefix = target.toUpperCase();
+
+  try {
+    const result = await getCookiesImpl({
+      browsers: ["chrome"],
+      chromeProfile: profilePath,
+      chromiumBrowser: target,
+      includeExpired: false,
+    } as GetCookiesOptions);
+
+    throwChromiumProviderWarnings(errorPrefix, result.warnings);
+
+    return result.cookies;
+  } catch (error) {
+    if (error instanceof BrowserImportServiceError) {
+      throw error;
+    }
+
+    throwChromiumCookieImportError(errorPrefix, error);
+  }
+}
+
+async function loadChromiumCookiesFromProfileSnapshot(
   profilePath: string,
   target: ChromiumBrowserTarget,
 ): Promise<ImportedBrowserCookie[]> {
