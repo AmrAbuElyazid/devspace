@@ -213,10 +213,7 @@ function hasObservedVisibleElements(): boolean {
 function syncVisibleBoundsNow(): void {
   visibleBoundsFrameId = null;
   nativeViewProfilingCounters.visibleBoundsSyncPasses++;
-  const state = useNativeViewStore.getState();
-  for (const id of getVisibleNativeViewIds(state)) {
-    const element = elementCache.get(id);
-    if (!element) continue;
+  for (const [id, element] of observedElements) {
     const next = measureElementBounds(element);
     if (!next) continue;
     updateNativeViewBounds(id, next);
