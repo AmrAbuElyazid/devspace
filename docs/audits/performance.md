@@ -192,3 +192,45 @@ Current repo coverage is stronger on throughput benchmarking and native-view lif
 6. Debounce or delay persisted settings writes for sidebar resize and text entry.
 7. Move drag hot state out of React Context into a selector-based store.
 8. Precompute or memoize sidebar metadata.
+
+## Persistence Follow-up Phases
+
+### Phase 1
+
+- keep incremental row-level persistence instead of full snapshot rewrites
+- use `INSERT ... ON CONFLICT DO UPDATE` and targeted deletes as the default write pattern
+- wrap multi-step logical writes in explicit transactions scoped to one operation
+- fix hot settings writes first:
+  - keep sidebar width local during drag
+  - debounce text and number setting persistence
+  - commit settled values instead of persisting every interaction tick
+
+### Phase 2
+
+- add a real migration system for the workspace SQLite DB instead of only schema bootstrap plus `SCHEMA_VERSION`
+- keep persistence shaped around durable domain data, not transient renderer or UI state
+
+### Phase 3
+
+- split persistence by domain area over time:
+  - workspaces
+  - panes
+  - pane groups and tabs
+  - sidebar tree and metadata
+- cache prepared statements if the persistence layer grows more query-heavy
+
+### Phase 4
+
+- add indexes only when a real query path needs them
+- measure first, then add indexes for actual reads and lookups
+
+### Phase 5
+
+- move cold, low-frequency desktop settings to atomic main-process file persistence where it makes sense
+- use temp-file-plus-rename writes for those settings
+- keep hot and transient UI state out of that path
+
+## Persistence Non-goals
+
+- do not copy `t3code`'s event-sourcing or projection architecture
+- do not adopt its heavier Effect and SQL abstraction unless Devspace persistence becomes much more complex

@@ -15,11 +15,125 @@ type SqliteDatabase = {
   close: () => void;
 };
 
+type PreparedWorkspaceRow = {
+  id: string;
+  name: string;
+  focusedGroupId: string | null;
+  zoomedGroupId: string | null;
+  lastActiveAt: number;
+  lastTerminalCwd: string | null;
+  rootJson: string;
+};
+
+type PreparedPaneRow = {
+  id: string;
+  type: string;
+  title: string;
+  configJson: string;
+};
+
+type PreparedTabRow = {
+  id: string;
+  groupId: string;
+  paneId: string;
+  position: number;
+};
+
+type PreparedPaneGroupRow = {
+  id: string;
+  activeTabId: string;
+  tabs: PreparedTabRow[];
+};
+
+type PreparedWorkspaceSnapshot = {
+  workspaceRows: PreparedWorkspaceRow[];
+  paneRows: PreparedPaneRow[];
+  paneGroupRows: PreparedPaneGroupRow[];
+  activeWorkspaceId: string;
+  sidebarTreeJson: string;
+  pinnedSidebarNodesJson: string;
+};
+
 const SCHEMA_VERSION = "1";
+
+function prepareSnapshot(snapshot: PersistedWorkspaceState): PreparedWorkspaceSnapshot {
+  return {
+    workspaceRows: snapshot.workspaces.map((workspace) => ({
+      id: workspace.id,
+      name: workspace.name,
+      focusedGroupId: workspace.focusedGroupId,
+      zoomedGroupId: workspace.zoomedGroupId,
+      lastActiveAt: workspace.lastActiveAt,
+      lastTerminalCwd: workspace.lastTerminalCwd ?? null,
+      rootJson: JSON.stringify(workspace.root),
+    })),
+    paneRows: Object.values(snapshot.panes).map((pane) => ({
+      id: pane.id,
+      type: pane.type,
+      title: pane.title,
+      configJson: JSON.stringify(pane.config),
+    })),
+    paneGroupRows: Object.values(snapshot.paneGroups).map((group) => ({
+      id: group.id,
+      activeTabId: group.activeTabId,
+      tabs: group.tabs.map((tab, position) => ({
+        id: tab.id,
+        groupId: group.id,
+        paneId: tab.paneId,
+        position,
+      })),
+    })),
+    activeWorkspaceId: snapshot.activeWorkspaceId,
+    sidebarTreeJson: JSON.stringify(snapshot.sidebarTree),
+    pinnedSidebarNodesJson: JSON.stringify(snapshot.pinnedSidebarNodes),
+  };
+}
+
+function rowsById<Row extends { id: string }>(rows: Row[]): Map<string, Row> {
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
+function tabsEqual(previous: PreparedTabRow[], next: PreparedTabRow[]): boolean {
+  if (previous.length !== next.length) return false;
+  return previous.every((tab, index) => {
+    const nextTab = next[index];
+    return (
+      nextTab !== undefined &&
+      tab.id === nextTab.id &&
+      tab.groupId === nextTab.groupId &&
+      tab.paneId === nextTab.paneId &&
+      tab.position === nextTab.position
+    );
+  });
+}
+
+function workspaceRowsEqual(previous: PreparedWorkspaceRow, next: PreparedWorkspaceRow): boolean {
+  return (
+    previous.name === next.name &&
+    previous.focusedGroupId === next.focusedGroupId &&
+    previous.zoomedGroupId === next.zoomedGroupId &&
+    previous.lastActiveAt === next.lastActiveAt &&
+    previous.lastTerminalCwd === next.lastTerminalCwd &&
+    previous.rootJson === next.rootJson
+  );
+}
+
+function paneRowsEqual(previous: PreparedPaneRow, next: PreparedPaneRow): boolean {
+  return (
+    previous.type === next.type &&
+    previous.title === next.title &&
+    previous.configJson === next.configJson
+  );
+}
+
+function paneGroupRowsEqual(previous: PreparedPaneGroupRow, next: PreparedPaneGroupRow): boolean {
+  return previous.activeTabId === next.activeTabId && tabsEqual(previous.tabs, next.tabs);
+}
 
 export class WorkspacePersistenceStore {
   private readonly filePath: string;
   private db: SqliteDatabase | null = null;
+  private lastSavedSnapshot: PreparedWorkspaceSnapshot | null = null;
 
   constructor(userDataPath: string) {
     this.filePath = join(userDataPath, "workspace-state.sqlite");
@@ -36,6 +150,7 @@ export class WorkspacePersistenceStore {
       .all();
 
     if (workspaceRows.length === 0) {
+      this.lastSavedSnapshot = null;
       return null;
     }
 
@@ -64,6 +179,7 @@ export class WorkspacePersistenceStore {
     const pinnedSidebarNodesJson = meta.get("pinned_sidebar_nodes_json");
 
     if (!activeWorkspaceId || !sidebarTreeJson || !pinnedSidebarNodesJson) {
+      this.lastSavedSnapshot = null;
       return null;
     }
 
@@ -102,7 +218,7 @@ export class WorkspacePersistenceStore {
         }),
       );
 
-      return {
+      const snapshot = {
         workspaces: workspaceRows.map((row) => ({
           id: String(row["id"]),
           name: String(row["name"]),
@@ -122,93 +238,29 @@ export class WorkspacePersistenceStore {
         pinnedSidebarNodes: JSON.parse(pinnedSidebarNodesJson),
         sidebarTree: JSON.parse(sidebarTreeJson),
       };
+      this.lastSavedSnapshot = prepareSnapshot(snapshot);
+      return snapshot;
     } catch (error) {
+      this.lastSavedSnapshot = null;
       console.warn("[WorkspacePersistenceStore] Failed to read workspace state:", error);
       return null;
     }
   }
 
   save(snapshot: PersistedWorkspaceState): void {
+    const nextSnapshot = prepareSnapshot(snapshot);
     const db = this.getDb();
     db.exec("BEGIN IMMEDIATE TRANSACTION");
 
     try {
-      db.exec("DELETE FROM pane_group_tabs");
-      db.exec("DELETE FROM pane_groups");
-      db.exec("DELETE FROM panes");
-      db.exec("DELETE FROM workspaces");
-      db.exec("DELETE FROM meta");
-
-      const insertWorkspace = db.prepare(
-        `INSERT INTO workspaces (
-           id, name, focused_group_id, zoomed_group_id, last_active_at, last_terminal_cwd, root_json
-         ) VALUES (
-           $id, $name, $focusedGroupId, $zoomedGroupId, $lastActiveAt, $lastTerminalCwd, $rootJson
-         )`,
-      );
-      const insertPane = db.prepare(
-        `INSERT INTO panes (id, type, title, config_json)
-         VALUES ($id, $type, $title, $configJson)`,
-      );
-      const insertPaneGroup = db.prepare(
-        `INSERT INTO pane_groups (id, active_tab_id)
-         VALUES ($id, $activeTabId)`,
-      );
-      const insertPaneGroupTab = db.prepare(
-        `INSERT INTO pane_group_tabs (id, group_id, pane_id, position)
-         VALUES ($id, $groupId, $paneId, $position)`,
-      );
-      const insertMeta = db.prepare(`INSERT INTO meta (key, value) VALUES ($key, $value)`);
-
-      for (const workspace of snapshot.workspaces) {
-        insertWorkspace.run({
-          $id: workspace.id,
-          $name: workspace.name,
-          $focusedGroupId: workspace.focusedGroupId,
-          $zoomedGroupId: workspace.zoomedGroupId,
-          $lastActiveAt: workspace.lastActiveAt,
-          $lastTerminalCwd: workspace.lastTerminalCwd ?? null,
-          $rootJson: JSON.stringify(workspace.root),
-        });
+      if (this.lastSavedSnapshot) {
+        this.saveIncremental(db, this.lastSavedSnapshot, nextSnapshot);
+      } else {
+        this.saveFullSnapshot(db, nextSnapshot);
       }
-
-      for (const pane of Object.values(snapshot.panes)) {
-        insertPane.run({
-          $id: pane.id,
-          $type: pane.type,
-          $title: pane.title,
-          $configJson: JSON.stringify(pane.config),
-        });
-      }
-
-      for (const group of Object.values(snapshot.paneGroups)) {
-        insertPaneGroup.run({
-          $id: group.id,
-          $activeTabId: group.activeTabId,
-        });
-
-        group.tabs.forEach((tab, index) => {
-          insertPaneGroupTab.run({
-            $id: tab.id,
-            $groupId: group.id,
-            $paneId: tab.paneId,
-            $position: index,
-          });
-        });
-      }
-
-      insertMeta.run({ $key: "schema_version", $value: SCHEMA_VERSION });
-      insertMeta.run({ $key: "active_workspace_id", $value: snapshot.activeWorkspaceId });
-      insertMeta.run({
-        $key: "sidebar_tree_json",
-        $value: JSON.stringify(snapshot.sidebarTree),
-      });
-      insertMeta.run({
-        $key: "pinned_sidebar_nodes_json",
-        $value: JSON.stringify(snapshot.pinnedSidebarNodes),
-      });
 
       db.exec("COMMIT");
+      this.lastSavedSnapshot = nextSnapshot;
     } catch (error) {
       db.exec("ROLLBACK");
       throw error;
@@ -266,6 +318,206 @@ export class WorkspacePersistenceStore {
     `);
 
     return db;
+  }
+
+  private saveFullSnapshot(db: SqliteDatabase, snapshot: PreparedWorkspaceSnapshot): void {
+    db.exec("DELETE FROM pane_group_tabs");
+    db.exec("DELETE FROM pane_groups");
+    db.exec("DELETE FROM panes");
+    db.exec("DELETE FROM workspaces");
+    db.exec("DELETE FROM meta");
+
+    const insertWorkspace = db.prepare(
+      `INSERT INTO workspaces (
+         id, name, focused_group_id, zoomed_group_id, last_active_at, last_terminal_cwd, root_json
+       ) VALUES (
+         $id, $name, $focusedGroupId, $zoomedGroupId, $lastActiveAt, $lastTerminalCwd, $rootJson
+       )`,
+    );
+    const insertPane = db.prepare(
+      `INSERT INTO panes (id, type, title, config_json)
+       VALUES ($id, $type, $title, $configJson)`,
+    );
+    const insertPaneGroup = db.prepare(
+      `INSERT INTO pane_groups (id, active_tab_id)
+       VALUES ($id, $activeTabId)`,
+    );
+    const insertPaneGroupTab = db.prepare(
+      `INSERT INTO pane_group_tabs (id, group_id, pane_id, position)
+       VALUES ($id, $groupId, $paneId, $position)`,
+    );
+    const insertMeta = db.prepare(`INSERT INTO meta (key, value) VALUES ($key, $value)`);
+
+    for (const workspace of snapshot.workspaceRows) {
+      insertWorkspace.run({
+        $id: workspace.id,
+        $name: workspace.name,
+        $focusedGroupId: workspace.focusedGroupId,
+        $zoomedGroupId: workspace.zoomedGroupId,
+        $lastActiveAt: workspace.lastActiveAt,
+        $lastTerminalCwd: workspace.lastTerminalCwd,
+        $rootJson: workspace.rootJson,
+      });
+    }
+
+    for (const pane of snapshot.paneRows) {
+      insertPane.run({
+        $id: pane.id,
+        $type: pane.type,
+        $title: pane.title,
+        $configJson: pane.configJson,
+      });
+    }
+
+    for (const group of snapshot.paneGroupRows) {
+      insertPaneGroup.run({
+        $id: group.id,
+        $activeTabId: group.activeTabId,
+      });
+
+      for (const tab of group.tabs) {
+        insertPaneGroupTab.run({
+          $id: tab.id,
+          $groupId: tab.groupId,
+          $paneId: tab.paneId,
+          $position: tab.position,
+        });
+      }
+    }
+
+    insertMeta.run({ $key: "schema_version", $value: SCHEMA_VERSION });
+    insertMeta.run({ $key: "active_workspace_id", $value: snapshot.activeWorkspaceId });
+    insertMeta.run({ $key: "sidebar_tree_json", $value: snapshot.sidebarTreeJson });
+    insertMeta.run({ $key: "pinned_sidebar_nodes_json", $value: snapshot.pinnedSidebarNodesJson });
+  }
+
+  private saveIncremental(
+    db: SqliteDatabase,
+    previous: PreparedWorkspaceSnapshot,
+    next: PreparedWorkspaceSnapshot,
+  ): void {
+    const previousWorkspaces = rowsById(previous.workspaceRows);
+    const nextWorkspaces = rowsById(next.workspaceRows);
+    const previousPanes = rowsById(previous.paneRows);
+    const nextPanes = rowsById(next.paneRows);
+    const previousGroups = rowsById(previous.paneGroupRows);
+    const nextGroups = rowsById(next.paneGroupRows);
+
+    const deleteWorkspace = db.prepare(`DELETE FROM workspaces WHERE id = $id`);
+    const upsertWorkspace = db.prepare(
+      `INSERT INTO workspaces (
+         id, name, focused_group_id, zoomed_group_id, last_active_at, last_terminal_cwd, root_json
+       ) VALUES (
+         $id, $name, $focusedGroupId, $zoomedGroupId, $lastActiveAt, $lastTerminalCwd, $rootJson
+       )
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         focused_group_id = excluded.focused_group_id,
+         zoomed_group_id = excluded.zoomed_group_id,
+         last_active_at = excluded.last_active_at,
+         last_terminal_cwd = excluded.last_terminal_cwd,
+         root_json = excluded.root_json`,
+    );
+    const deletePane = db.prepare(`DELETE FROM panes WHERE id = $id`);
+    const upsertPane = db.prepare(
+      `INSERT INTO panes (id, type, title, config_json)
+       VALUES ($id, $type, $title, $configJson)
+       ON CONFLICT(id) DO UPDATE SET
+         type = excluded.type,
+         title = excluded.title,
+         config_json = excluded.config_json`,
+    );
+    const deletePaneGroupTabs = db.prepare(`DELETE FROM pane_group_tabs WHERE group_id = $groupId`);
+    const deletePaneGroup = db.prepare(`DELETE FROM pane_groups WHERE id = $id`);
+    const upsertPaneGroup = db.prepare(
+      `INSERT INTO pane_groups (id, active_tab_id)
+       VALUES ($id, $activeTabId)
+       ON CONFLICT(id) DO UPDATE SET
+         active_tab_id = excluded.active_tab_id`,
+    );
+    const insertPaneGroupTab = db.prepare(
+      `INSERT INTO pane_group_tabs (id, group_id, pane_id, position)
+       VALUES ($id, $groupId, $paneId, $position)
+       ON CONFLICT(id) DO UPDATE SET
+         group_id = excluded.group_id,
+         pane_id = excluded.pane_id,
+         position = excluded.position`,
+    );
+    const upsertMeta = db.prepare(
+      `INSERT INTO meta (key, value)
+       VALUES ($key, $value)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+    );
+
+    for (const previousWorkspace of previous.workspaceRows) {
+      if (!nextWorkspaces.has(previousWorkspace.id)) {
+        deleteWorkspace.run({ $id: previousWorkspace.id });
+      }
+    }
+
+    for (const workspace of next.workspaceRows) {
+      const previousWorkspace = previousWorkspaces.get(workspace.id);
+      if (!previousWorkspace || !workspaceRowsEqual(previousWorkspace, workspace)) {
+        upsertWorkspace.run({
+          $id: workspace.id,
+          $name: workspace.name,
+          $focusedGroupId: workspace.focusedGroupId,
+          $zoomedGroupId: workspace.zoomedGroupId,
+          $lastActiveAt: workspace.lastActiveAt,
+          $lastTerminalCwd: workspace.lastTerminalCwd,
+          $rootJson: workspace.rootJson,
+        });
+      }
+    }
+
+    for (const previousPane of previous.paneRows) {
+      if (!nextPanes.has(previousPane.id)) {
+        deletePane.run({ $id: previousPane.id });
+      }
+    }
+
+    for (const pane of next.paneRows) {
+      const previousPane = previousPanes.get(pane.id);
+      if (!previousPane || !paneRowsEqual(previousPane, pane)) {
+        upsertPane.run({
+          $id: pane.id,
+          $type: pane.type,
+          $title: pane.title,
+          $configJson: pane.configJson,
+        });
+      }
+    }
+
+    for (const previousGroup of previous.paneGroupRows) {
+      if (!nextGroups.has(previousGroup.id)) {
+        deletePaneGroupTabs.run({ $groupId: previousGroup.id });
+        deletePaneGroup.run({ $id: previousGroup.id });
+      }
+    }
+
+    for (const group of next.paneGroupRows) {
+      const previousGroup = previousGroups.get(group.id);
+      if (!previousGroup || !paneGroupRowsEqual(previousGroup, group)) {
+        upsertPaneGroup.run({
+          $id: group.id,
+          $activeTabId: group.activeTabId,
+        });
+        deletePaneGroupTabs.run({ $groupId: group.id });
+        for (const tab of group.tabs) {
+          insertPaneGroupTab.run({
+            $id: tab.id,
+            $groupId: tab.groupId,
+            $paneId: tab.paneId,
+            $position: tab.position,
+          });
+        }
+      }
+    }
+
+    upsertMeta.run({ $key: "schema_version", $value: SCHEMA_VERSION });
+    upsertMeta.run({ $key: "active_workspace_id", $value: next.activeWorkspaceId });
+    upsertMeta.run({ $key: "sidebar_tree_json", $value: next.sidebarTreeJson });
+    upsertMeta.run({ $key: "pinned_sidebar_nodes_json", $value: next.pinnedSidebarNodesJson });
   }
 
   private getDirectoryPath(): string {
