@@ -13,6 +13,7 @@ import {
   createDefaultPersistedWorkspaceState,
   normalizePersistedWorkspaceState,
 } from "./persistence-model";
+import { validateWorkspaceGraph } from "../lib/workspace-graph";
 import { buildPaneOwnersByPaneId } from "./pane-ownership";
 import { buildWorkspaceSidebarMetadataByWorkspaceId } from "./workspace-sidebar-metadata";
 
@@ -29,6 +30,23 @@ export {
 
 const defaultPersistedState = createDefaultPersistedWorkspaceState();
 let persistenceInitialized = false;
+const runtimeEnv = (import.meta as ImportMeta & { env?: { DEV?: boolean; MODE?: string } }).env;
+const shouldAssertWorkspaceGraph = runtimeEnv?.DEV === true && runtimeEnv.MODE !== "test";
+
+function assertWorkspaceGraph(
+  state: Pick<WorkspaceState, "activeWorkspaceId" | "workspaces" | "paneGroups" | "panes">,
+): void {
+  const validation = validateWorkspaceGraph({
+    activeWorkspaceId: state.activeWorkspaceId,
+    workspaces: state.workspaces,
+    paneGroups: state.paneGroups,
+    panes: state.panes,
+  });
+
+  if (!validation.valid) {
+    throw new Error(`[WorkspaceStore] Invalid workspace graph: ${validation.reason}`);
+  }
+}
 
 function applyWorkspaceSnapshot(
   snapshot: ReturnType<typeof normalizePersistedWorkspaceState>,
@@ -79,6 +97,13 @@ export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   ...createSplitTreeSlice(set, get, defaultPaneCleanup),
   ...createNavigationSlice(set, get),
 }));
+
+if (shouldAssertWorkspaceGraph) {
+  assertWorkspaceGraph(useWorkspaceStore.getState());
+  useWorkspaceStore.subscribe((state) => {
+    assertWorkspaceGraph(state);
+  });
+}
 
 export async function initializeWorkspaceStore(): Promise<void> {
   const persistedState = await window.api.workspaceState.load();

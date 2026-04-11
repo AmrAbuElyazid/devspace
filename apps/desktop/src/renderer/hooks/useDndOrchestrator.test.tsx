@@ -3,7 +3,10 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { validateWorkspaceGraph } from "../lib/workspace-graph";
+import { tabSplitHandler } from "../lib/dnd/handlers/tab-split";
 import type { DndHandler, DropIntent } from "../lib/dnd/types";
+import { collectGroupIds, useWorkspaceStore } from "../store/workspace-store";
 import {
   resetDndState,
   useActiveDrag,
@@ -40,6 +43,22 @@ function createCollision(type: string) {
         data: {
           current: { type },
         },
+      },
+    },
+  };
+}
+
+function createPaneDropCollision(
+  groupId: string,
+  rect: { left: number; top: number; width: number; height: number },
+) {
+  return {
+    data: {
+      droppableContainer: {
+        data: {
+          current: { type: "pane-drop", groupId, visible: true },
+        },
+        rect: { current: rect },
       },
     },
   };
@@ -294,4 +313,102 @@ test("drag move skips re-rendering when the resolved drop intent is unchanged", 
 
   expect(latestDropIntent).toEqual(resolvedIntent);
   expect(renderCount).toBe(3);
+});
+
+test("drag end preserves the moved tab when splitting away the last tab in a source group", async () => {
+  dndMocks.handlers.push(tabSplitHandler);
+
+  useWorkspaceStore.setState({
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Workspace One",
+        root: {
+          type: "branch",
+          direction: "horizontal",
+          children: [
+            { type: "leaf", groupId: "group-1" },
+            { type: "leaf", groupId: "group-2" },
+          ],
+          sizes: [50, 50],
+        },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: 1,
+      },
+    ],
+    activeWorkspaceId: "workspace-1",
+    panes: {
+      "pane-1": { id: "pane-1", title: "Terminal One", type: "terminal", config: {} },
+      "pane-2": { id: "pane-2", title: "Terminal Two", type: "terminal", config: {} },
+    },
+    paneGroups: {
+      "group-1": { id: "group-1", activeTabId: "tab-1", tabs: [{ id: "tab-1", paneId: "pane-1" }] },
+      "group-2": { id: "group-2", activeTabId: "tab-2", tabs: [{ id: "tab-2", paneId: "pane-2" }] },
+    },
+    paneOwnersByPaneId: {
+      "pane-1": { workspaceId: "workspace-1", groupId: "group-1" },
+      "pane-2": { workspaceId: "workspace-1", groupId: "group-2" },
+    },
+    workspaceSidebarMetadataByWorkspaceId: { "workspace-1": "" },
+    tabHistoryByGroupId: { "group-1": ["tab-1"], "group-2": ["tab-2"] },
+    recentTabTraversalByGroupId: {},
+    pinnedSidebarNodes: [],
+    sidebarTree: [{ type: "workspace", workspaceId: "workspace-1" }],
+    pendingEditId: null,
+    pendingEditType: null,
+  });
+
+  const dragData = createGroupTabDrag();
+
+  await act(async () => {
+    latestHook?.onDragStart({ active: { data: { current: dragData } } } as never);
+  });
+
+  await act(async () => {
+    latestHook?.onDragMove({
+      active: { data: { current: dragData } },
+      activatorEvent: new PointerEvent("pointermove", { clientX: 120, clientY: 180 }),
+      delta: { x: 0, y: 0 },
+      collisions: [
+        createPaneDropCollision("group-2", { left: 100, top: 100, width: 300, height: 200 }),
+      ],
+    } as never);
+  });
+
+  expect(latestDropIntent).toEqual({
+    kind: "split-group",
+    workspaceId: "workspace-1",
+    sourceGroupId: "group-1",
+    sourceTabId: "tab-1",
+    targetGroupId: "group-2",
+    side: "left",
+  });
+
+  await act(async () => {
+    latestHook?.onDragEnd({ active: { data: { current: dragData } } } as never);
+  });
+
+  const nextState = useWorkspaceStore.getState();
+  const nextWorkspace = nextState.workspaces[0]!;
+  const groupIds = collectGroupIds(nextWorkspace.root);
+  const movedGroupId = groupIds.find((groupId) => groupId !== "group-2");
+
+  expect(groupIds).not.toContain("group-1");
+  expect(movedGroupId).toBeTruthy();
+  expect(nextState.paneGroups[movedGroupId!]?.tabs).toEqual([
+    expect.objectContaining({ paneId: "pane-1" }),
+  ]);
+  expect(nextState.paneOwnersByPaneId["pane-1"]).toEqual({
+    workspaceId: "workspace-1",
+    groupId: movedGroupId,
+  });
+
+  const validation = validateWorkspaceGraph({
+    activeWorkspaceId: nextState.activeWorkspaceId,
+    workspaces: nextState.workspaces,
+    paneGroups: nextState.paneGroups,
+    panes: nextState.panes,
+  });
+  expect(validation.valid).toBe(true);
 });

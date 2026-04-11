@@ -765,6 +765,45 @@ test("createWorkspaceFromTab inserts the new workspace into the requested sideba
   expect(state.sidebarTree).toEqual([{ type: "workspace", workspaceId: sourceWorkspaceId }]);
   expect(pinnedFolder).toBeTruthy();
   expect(pinnedFolder!.children).toEqual([{ type: "workspace", workspaceId: newWorkspaceId }]);
+  expectWorkspaceGraphValid(state);
+});
+
+test("createWorkspaceFromTab clears zoom when the removed source group was zoomed", () => {
+  const sourceWorkspaceId = setupWorkspace("Source");
+  const sourceWorkspace = getWorkspace(sourceWorkspaceId)!;
+  const sourceGroupId = sourceWorkspace.focusedGroupId!;
+
+  useWorkspaceStore.getState().splitGroup(sourceWorkspaceId, sourceGroupId, "horizontal");
+
+  const splitWorkspace = getWorkspace(sourceWorkspaceId)!;
+  const remainingGroupId = collectGroupIds(splitWorkspace.root).find(
+    (groupId) => groupId !== sourceGroupId,
+  )!;
+
+  useWorkspaceStore.setState((state) => ({
+    workspaces: state.workspaces.map((workspace) =>
+      workspace.id === sourceWorkspaceId
+        ? { ...workspace, zoomedGroupId: sourceGroupId }
+        : workspace,
+    ),
+  }));
+
+  const sourceTabId = useWorkspaceStore.getState().paneGroups[sourceGroupId]!.tabs[0]!.id;
+
+  useWorkspaceStore
+    .getState()
+    .createWorkspaceFromTab(sourceTabId, sourceGroupId, sourceWorkspaceId);
+
+  const nextState = useWorkspaceStore.getState();
+  const nextSourceWorkspace = nextState.workspaces.find(
+    (workspace) => workspace.id === sourceWorkspaceId,
+  )!;
+
+  expect(collectGroupIds(nextSourceWorkspace.root)).toEqual([remainingGroupId]);
+  expect(nextSourceWorkspace.focusedGroupId).toBe(remainingGroupId);
+  expect(nextSourceWorkspace.zoomedGroupId).toBeNull();
+  expect(nextState.activeWorkspaceId).not.toBe(sourceWorkspaceId);
+  expectWorkspaceGraphValid(nextState);
 });
 
 test("removeWorkspace recreates a fresh workspace when deleting the last remaining one", () => {
