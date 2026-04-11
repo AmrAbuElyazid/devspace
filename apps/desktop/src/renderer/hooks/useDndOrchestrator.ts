@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   useSensors,
   useSensor,
@@ -12,18 +12,32 @@ import {
   pointerWithin,
   closestCenter,
 } from "@dnd-kit/core";
+import { create } from "zustand";
 import { useWorkspaceStore } from "../store/workspace-store";
 import { dndHandlers } from "../lib/dnd/registry";
 import type { DragItemData } from "../types/dnd";
 import type { DropIntent, DndHandler } from "../lib/dnd/types";
 
-// Drag state updates on pointer movement, so split the hot preview state from
-// activeDrag to avoid re-rendering active-only consumers on every move.
-export const ActiveDragContext = createContext<DragItemData | null>(null);
-export const DropIntentContext = createContext<DropIntent | null>(null);
+type DndState = {
+  activeDrag: DragItemData | null;
+  dropIntent: DropIntent | null;
+};
 
-export const useActiveDrag = () => useContext(ActiveDragContext);
-export const useDropIntent = () => useContext(DropIntentContext);
+const useDndStateStore = create<DndState>(() => ({
+  activeDrag: null,
+  dropIntent: null,
+}));
+
+export const useActiveDrag = () => useDndStateStore((state) => state.activeDrag);
+export const useDropIntent = () => useDndStateStore((state) => state.dropIntent);
+
+export function resetDndState(): void {
+  useDndStateStore.setState({ activeDrag: null, dropIntent: null });
+}
+
+export function setDndState(state: Partial<DndState>): void {
+  useDndStateStore.setState(state);
+}
 
 function areDropIntentsEqual(a: DropIntent | null, b: DropIntent | null): boolean {
   if (a === b) return true;
@@ -120,17 +134,21 @@ function filterCollisions(
 }
 
 export function useDndOrchestrator() {
-  const [activeDrag, setActiveDrag] = useState<DragItemData | null>(null);
-  const [dropIntent, setDropIntent] = useState<DropIntent | null>(null);
   // Ref mirror of dropIntent — onDragEnd reads from this to avoid stale
   // closure issues where React hasn't re-rendered between the last onDragMove
   // and onDragEnd.
-  const dropIntentRef = useRef<DropIntent | null>(null);
+  const dropIntentRef = useRef<DropIntent | null>(useDndStateStore.getState().dropIntent);
   const folderExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoveredFolderIdRef = useRef<string | null>(null);
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null);
 
   const store = useWorkspaceStore;
+
+  useEffect(() => {
+    return () => {
+      resetDndState();
+    };
+  }, []);
 
   const setResolvedDropIntent = useCallback((next: DropIntent | null) => {
     if (areDropIntentsEqual(dropIntentRef.current, next)) {
@@ -138,7 +156,7 @@ export function useDndOrchestrator() {
     }
 
     dropIntentRef.current = next;
-    setDropIntent(next);
+    setDndState({ dropIntent: next });
   }, []);
 
   const sensors = useSensors(
@@ -153,42 +171,40 @@ export function useDndOrchestrator() {
   // closestCenter must never return pane-drop zones, otherwise dragging between
   // tabs (where pointer isn't inside any tab rect) would match a drop zone
   // by proximity and trigger an unintended split.
-  const collisionDetection: CollisionDetection = useCallback(
-    (args) => {
-      if (!activeDrag) return [];
+  const collisionDetection: CollisionDetection = useCallback((args) => {
+    const activeDrag = useDndStateStore.getState().activeDrag;
+    if (!activeDrag) return [];
 
-      const activeHandlers = dndHandlers.filter((h) => h.canHandle(activeDrag));
+    const activeHandlers = dndHandlers.filter((h) => h.canHandle(activeDrag));
 
-      const pointerCollisions = pointerWithin(args);
-      if (pointerCollisions.length > 0) {
-        return filterCollisions(
-          activeDrag,
-          pointerCollisions as CollisionDescriptor[],
-          activeHandlers,
-        );
-      }
-
-      // closestCenter fallback — exclude targets that require strict pointer
-      // containment (pane-drop zones). Also exclude sidebar targets when
-      // dragging a sidebar-workspace, so the nearest tab wins over
-      // sidebar-root when the pointer is on the tab bar spacer.
-      const centerCollisions = closestCenter(args);
-      const SIDEBAR_TYPES = new Set(["sidebar-workspace", "sidebar-folder", "sidebar-root"]);
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) {
       return filterCollisions(
         activeDrag,
-        centerCollisions.filter((c) => {
-          const t = (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type as
-            | string
-            | undefined;
-          if (t === "pane-drop") return false;
-          if (activeDrag.type === "sidebar-workspace" && t && SIDEBAR_TYPES.has(t)) return false;
-          return true;
-        }) as CollisionDescriptor[],
+        pointerCollisions as CollisionDescriptor[],
         activeHandlers,
       );
-    },
-    [activeDrag],
-  );
+    }
+
+    // closestCenter fallback — exclude targets that require strict pointer
+    // containment (pane-drop zones). Also exclude sidebar targets when
+    // dragging a sidebar-workspace, so the nearest tab wins over
+    // sidebar-root when the pointer is on the tab bar spacer.
+    const centerCollisions = closestCenter(args);
+    const SIDEBAR_TYPES = new Set(["sidebar-workspace", "sidebar-folder", "sidebar-root"]);
+    return filterCollisions(
+      activeDrag,
+      centerCollisions.filter((c) => {
+        const t = (c.data?.droppableContainer?.data?.current as Record<string, unknown>)?.type as
+          | string
+          | undefined;
+        if (t === "pane-drop") return false;
+        if (activeDrag.type === "sidebar-workspace" && t && SIDEBAR_TYPES.has(t)) return false;
+        return true;
+      }) as CollisionDescriptor[],
+      activeHandlers,
+    );
+  }, []);
 
   const clearFolderExpandTimer = useCallback(() => {
     if (folderExpandTimerRef.current) {
@@ -201,7 +217,7 @@ export function useDndOrchestrator() {
   const onDragStart = useCallback(
     (event: DragStartEvent) => {
       const data = event.active.data.current as DragItemData;
-      setActiveDrag(data);
+      setDndState({ activeDrag: data });
       setResolvedDropIntent(null);
     },
     [setResolvedDropIntent],
@@ -271,7 +287,7 @@ export function useDndOrchestrator() {
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active } = event;
-      setActiveDrag(null);
+      setDndState({ activeDrag: null });
       clearFolderExpandTimer();
       // Read from ref to avoid stale closure — onDragMove may have updated
       // the intent after the last React render that created this callback.
@@ -296,7 +312,7 @@ export function useDndOrchestrator() {
   );
 
   const onDragCancel = useCallback(() => {
-    setActiveDrag(null);
+    setDndState({ activeDrag: null });
     setResolvedDropIntent(null);
     pointerPosRef.current = null;
     clearFolderExpandTimer();
@@ -305,8 +321,6 @@ export function useDndOrchestrator() {
   return {
     sensors,
     collisionDetection,
-    activeDrag,
-    dropIntent,
     onDragStart,
     onDragMove,
     onDragOver,

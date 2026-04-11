@@ -40,9 +40,8 @@ const appMocks = vi.hoisted(() => ({
     onDragOver: vi.fn(),
     onDragEnd: vi.fn(),
     onDragCancel: vi.fn(),
-    activeDrag: null,
-    dropIntent: null,
   },
+  activeDrag: null,
 }));
 
 vi.mock("./store/workspace-store", () => ({
@@ -72,9 +71,8 @@ vi.mock("./hooks/useTheme", () => ({
 }));
 
 vi.mock("./hooks/useDndOrchestrator", () => ({
-  ActiveDragContext: { Provider: ({ children }: { children: unknown }) => children },
-  DropIntentContext: { Provider: ({ children }: { children: unknown }) => children },
   useDndOrchestrator: () => appMocks.dnd,
+  useActiveDrag: () => appMocks.activeDrag,
 }));
 
 vi.mock("./hooks/useModifierHeld", () => ({

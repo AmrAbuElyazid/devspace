@@ -48,7 +48,7 @@ Relevant files: `packages/ghostty-electron/native/ghostty_bridge.mm`, `packages/
 - Only the active workspace layer mounts in React, which avoids keeping full inactive workspace trees mounted.
 - Sidebar resize keeps live width local and commits the persisted setting only on mouseup.
 - Settings text and number inputs now keep local draft state and commit on blur or Enter instead of persisting on every keystroke.
-- Drag state was split into `activeDrag` and `dropIntent`, and `dropIntent` updates are semantically deduped.
+- Drag state now lives in a selector-based store instead of top-level React contexts, and `dropIntent` updates are semantically deduped.
 
 Relevant files: `apps/desktop/src/renderer/store/workspace-sidebar-metadata.ts`, `apps/desktop/src/renderer/store/pane-ownership.ts`, `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/SettingsPage.tsx`, `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`
 
@@ -108,13 +108,12 @@ Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/de
 
 Relevant files: `apps/desktop/src/renderer/hooks/useTerminalEvents.ts`, `apps/desktop/src/renderer/store/slices/pane-management.ts`, `apps/desktop/src/renderer/store/persistence.ts`
 
-### Some settings and drag invalidation paths still deserve profiling
+### Some settings persistence paths still deserve profiling
 
 - The settings store is still a persisted Zustand store, and immediate controls such as toggles and segmented controls still write through it on click.
-- Drag state still lives in top-level React contexts, so provider value changes still invalidate consumers across the sidebar, pane groups, and tab bars.
 - These are no longer blind first-priority targets, but they remain worth revisiting if interaction profiling still points there.
 
-Relevant files: `apps/desktop/src/renderer/store/settings-store.ts`, `apps/desktop/src/renderer/components/SettingsPage.tsx`, `apps/desktop/src/renderer/components/Sidebar/QuickLaunchGrid.tsx`, `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`, `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`, `apps/desktop/src/renderer/components/GroupTabBar.tsx`
+Relevant files: `apps/desktop/src/renderer/store/settings-store.ts`, `apps/desktop/src/renderer/components/SettingsPage.tsx`, `apps/desktop/src/renderer/components/Sidebar/QuickLaunchGrid.tsx`
 
 ## Recommended Order
 
@@ -122,5 +121,5 @@ Relevant files: `apps/desktop/src/renderer/store/settings-store.ts`, `apps/deskt
 2. Re-run repeatable stress scenarios and capture baselines before making deeper changes.
 3. Revisit hidden-terminal retention only if measurements show meaningful memory pressure.
 4. Revisit native-view batching or bounds work only if tab-switch, overlay, or resize profiling still points there.
-5. Revisit settings-store and drag invalidation only if user-interaction profiling still shows them hot.
+5. Revisit settings-store writes only if user-interaction profiling still shows them hot.
 6. Revisit extra terminal event batching only if bursty workloads still show queue pressure.

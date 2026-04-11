@@ -3,7 +3,7 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { ActiveDragContext, DropIntentContext } from "../hooks/useDndOrchestrator";
+import { resetDndState, setDndState } from "../hooks/useDndOrchestrator";
 import { useNativeViewStore } from "../store/native-view-store";
 import { useWorkspaceStore } from "../store/workspace-store";
 import PaneGroupContainer from "./PaneGroupContainer";
@@ -74,18 +74,15 @@ const emptyDragContextValue = {
   dropIntent: null,
 };
 
-function renderWithDragContexts(
+function renderWithDragState(
   value:
     | typeof activeTabDragValue
     | typeof activeTabDragWithoutDropValue
     | typeof emptyDragContextValue,
   children: ReactNode,
 ) {
-  return (
-    <ActiveDragContext.Provider value={value.activeDrag}>
-      <DropIntentContext.Provider value={value.dropIntent}>{children}</DropIntentContext.Provider>
-    </ActiveDragContext.Provider>
-  );
+  setDndState(value);
+  return children;
 }
 
 let container: HTMLDivElement;
@@ -98,6 +95,7 @@ beforeEach(() => {
 
   paneGroupContainerMocks.isOver = true;
   paneGroupContainerMocks.setNodeRef.mockReset();
+  resetDndState();
 
   useWorkspaceStore.setState({
     workspaces: [
@@ -139,6 +137,8 @@ afterEach(async () => {
     });
   }
 
+  resetDndState();
+
   container.remove();
 });
 
@@ -147,7 +147,7 @@ test("renders a drag placeholder and split preview when native views are hidden 
 
   await act(async () => {
     root?.render(
-      renderWithDragContexts(
+      renderWithDragState(
         activeTabDragValue,
         <PaneGroupContainer
           groupId="group-1"
@@ -167,7 +167,7 @@ test("renders a drag placeholder and split preview when native views are hidden 
 test("keeps the placeholder hidden when native views remain visible", async () => {
   await act(async () => {
     root?.render(
-      renderWithDragContexts(
+      renderWithDragState(
         activeTabDragWithoutDropValue,
         <PaneGroupContainer
           groupId="group-1"
@@ -213,7 +213,7 @@ test("mounts only the active tab layer for the focused group", async () => {
 
   await act(async () => {
     root?.render(
-      renderWithDragContexts(
+      renderWithDragState(
         emptyDragContextValue,
         <PaneGroupContainer
           groupId="group-1"
@@ -245,7 +245,7 @@ test("mounts only the active tab layer for the focused group", async () => {
 
   await act(async () => {
     root?.render(
-      renderWithDragContexts(
+      renderWithDragState(
         emptyDragContextValue,
         <PaneGroupContainer
           groupId="group-1"

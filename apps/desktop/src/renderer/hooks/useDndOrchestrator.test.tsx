@@ -4,7 +4,12 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { DndHandler, DropIntent } from "../lib/dnd/types";
-import { useDndOrchestrator } from "./useDndOrchestrator";
+import {
+  resetDndState,
+  useActiveDrag,
+  useDndOrchestrator,
+  useDropIntent,
+} from "./useDndOrchestrator";
 
 const dndMocks = vi.hoisted(() => ({
   useSensor: vi.fn((_sensor: unknown, options: unknown) => options),
@@ -59,11 +64,15 @@ function createSidebarWorkspaceDrag() {
 }
 
 let latestHook: ReturnType<typeof useDndOrchestrator> | null = null;
+let latestActiveDrag: ReturnType<typeof useActiveDrag> | null = null;
+let latestDropIntent: ReturnType<typeof useDropIntent> | null = null;
 let renderCount = 0;
 
 function HookHarness() {
   renderCount += 1;
   latestHook = useDndOrchestrator();
+  latestActiveDrag = useActiveDrag();
+  latestDropIntent = useDropIntent();
   return null;
 }
 
@@ -79,7 +88,10 @@ beforeEach(async () => {
   document.body.appendChild(container);
   root = createRoot(container);
   latestHook = null;
+  latestActiveDrag = null;
+  latestDropIntent = null;
   renderCount = 0;
+  resetDndState();
 
   dndMocks.handlers.length = 0;
   dndMocks.useSensor.mockClear();
@@ -103,6 +115,8 @@ afterEach(async () => {
       root = null;
     });
   }
+
+  resetDndState();
 
   container.remove();
 });
@@ -220,7 +234,7 @@ test("drag end executes the latest resolved intent and clears drag state", async
   });
 
   expect(resolveIntent).toHaveBeenCalledTimes(1);
-  expect(latestHook?.dropIntent).toEqual(resolvedIntent);
+  expect(latestDropIntent).toEqual(resolvedIntent);
 
   await act(async () => {
     latestHook?.onDragEnd({
@@ -229,8 +243,8 @@ test("drag end executes the latest resolved intent and clears drag state", async
   });
 
   expect(execute).toHaveBeenCalledWith(resolvedIntent, expect.any(Function));
-  expect(latestHook?.activeDrag).toBeNull();
-  expect(latestHook?.dropIntent).toBeNull();
+  expect(latestActiveDrag).toBeNull();
+  expect(latestDropIntent).toBeNull();
 });
 
 test("drag move skips re-rendering when the resolved drop intent is unchanged", async () => {
@@ -278,6 +292,6 @@ test("drag move skips re-rendering when the resolved drop intent is unchanged", 
     } as never);
   });
 
-  expect(latestHook?.dropIntent).toEqual(resolvedIntent);
+  expect(latestDropIntent).toEqual(resolvedIntent);
   expect(renderCount).toBe(3);
 });
