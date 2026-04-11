@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
 
 import { beforeEach, expect, test, vi } from "vitest";
+import * as splitTree from "../lib/split-tree";
 import { useSettingsStore } from "./settings-store";
 import { installMockWindowApi } from "../test-utils/mock-window-api";
 import {
   getNativeViewProfilingSnapshot,
+  initNativeViewSubscriptions,
   recordNativeFocusRequest,
   resetNativeViewProfilingCounters,
   setNativeViewElement,
@@ -221,4 +223,44 @@ test("removing the last observed native view element detaches layout listeners",
 
   expect(removeEventListener).toHaveBeenCalledWith("resize", expect.any(Function));
   expect(removeEventListener).toHaveBeenCalledWith("scroll", expect.any(Function), true);
+});
+
+test("workspace visibility subscription skips pane-only updates", () => {
+  const collectGroupIds = vi.spyOn(splitTree, "collectGroupIds");
+
+  useWorkspaceStore.setState({
+    activeWorkspaceId: "workspace-1",
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Workspace",
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: Date.now(),
+      },
+    ],
+    panes: {
+      "pane-1": {
+        id: "pane-1",
+        title: "Terminal One",
+        type: "terminal",
+        config: {},
+      },
+    },
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "pane-1" }],
+      },
+    },
+  });
+
+  initNativeViewSubscriptions();
+  collectGroupIds.mockClear();
+
+  useWorkspaceStore.getState().updatePaneTitle("pane-1", "Renamed terminal");
+
+  expect(collectGroupIds).not.toHaveBeenCalled();
 });

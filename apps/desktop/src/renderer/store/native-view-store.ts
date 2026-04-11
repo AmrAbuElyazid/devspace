@@ -496,9 +496,25 @@ export function initNativeViewSubscriptions(): void {
 
   // Only reconcile when fields that affect visibility actually change:
   // activeWorkspaceId, split-tree structure, or which tab is active per group.
-  let lastVisibilityKey = getVisibilityKey(useWorkspaceStore.getState());
+  const initialWorkspaceState = useWorkspaceStore.getState();
+  let lastActiveWorkspaceId = initialWorkspaceState.activeWorkspaceId;
+  let lastWorkspaces = initialWorkspaceState.workspaces;
+  let lastPaneGroups = initialWorkspaceState.paneGroups;
+  let lastVisibilityKey = getVisibilityKey(initialWorkspaceState);
   useWorkspaceStore.subscribe(() => {
     const state = useWorkspaceStore.getState();
+    if (
+      state.activeWorkspaceId === lastActiveWorkspaceId &&
+      state.workspaces === lastWorkspaces &&
+      state.paneGroups === lastPaneGroups
+    ) {
+      return;
+    }
+
+    lastActiveWorkspaceId = state.activeWorkspaceId;
+    lastWorkspaces = state.workspaces;
+    lastPaneGroups = state.paneGroups;
+
     const key = getVisibilityKey(state);
     if (key === lastVisibilityKey) return;
     lastVisibilityKey = key;
