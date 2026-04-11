@@ -290,6 +290,10 @@ function getLatestBounds(id: string): ViewBounds | null {
 
 export function setNativeViewElement(id: string, element: HTMLElement | null): void {
   if (element) {
+    if (elementCache.get(id) === element) {
+      return;
+    }
+
     elementCache.set(id, element);
     if (getVisibleNativeViewIds(useNativeViewStore.getState()).includes(id)) {
       refreshObservedVisibleElements();
