@@ -3,6 +3,10 @@ import type { BrowserPaneManagerDeps, BrowserPaneRecord } from "./browser-types"
 
 type BrowserPaneViewDeps = Pick<BrowserPaneManagerDeps, "addChildView" | "removeChildView">;
 
+function boundsEqual(a: BrowserBounds | null, b: BrowserBounds): boolean {
+  return a !== null && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
 function applyPaneBounds(pane: BrowserPaneRecord, bounds: BrowserBounds): void {
   pane.bounds = bounds;
   const setBounds = pane.view.setBounds;
@@ -19,6 +23,10 @@ function applyPaneZoom(pane: BrowserPaneRecord): void {
 }
 
 export function setPaneBounds(pane: BrowserPaneRecord, bounds: BrowserBounds): void {
+  if (boundsEqual(pane.bounds, bounds)) {
+    return;
+  }
+
   applyPaneBounds(pane, bounds);
 }
 

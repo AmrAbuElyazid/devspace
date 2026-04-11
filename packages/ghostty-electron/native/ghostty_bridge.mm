@@ -904,31 +904,46 @@ static void resetModifierStateForFocusLoss() {
 // Surface layout helpers
 // ---------------------------------------------------------------------------
 
-static std::vector<GhosttyView*> snapshotSurfaceViews();
+static std::vector<GhosttyView*> snapshotDesiredVisibleSurfaceViews();
 
 // Apply DOM-space bounds (top-left origin) to a GhosttyView using the current
 // content view height for Y-flipping.  Also stores the DOM bounds on the
 // view so they can be re-applied when the window resizes.
 static void applyDomBounds(GhosttyView* view, double domX, double domY, double w, double h) {
+    NSView* contentView = [g_state.window contentView];
+    CGFloat contentHeight = [contentView bounds].size.height;
+    CGFloat nsY = contentHeight - domY - h;
+    NSRect nextFrame = NSMakeRect(domX, nsY, w, h);
+
+    if (view.hasBounds &&
+        view.lastDomX == domX &&
+        view.lastDomY == domY &&
+        view.lastDomW == w &&
+        view.lastDomH == h &&
+        NSEqualRects([view frame], nextFrame)) {
+        return;
+    }
+
     view.lastDomX = domX;
     view.lastDomY = domY;
     view.lastDomW = w;
     view.lastDomH = h;
     view.hasBounds = YES;
-
-    NSView* contentView = [g_state.window contentView];
-    CGFloat contentHeight = [contentView bounds].size.height;
-    CGFloat nsY = contentHeight - domY - h;
-    [view setFrame:NSMakeRect(domX, nsY, w, h)];
+    [view setFrame:nextFrame];
 }
 
-// Re-apply Y-flip for ALL surfaces that have stored DOM bounds.
-// Called synchronously on window resize so native views track the
-// window without waiting for the renderer's ResizeObserver round-trip.
+// Re-apply Y-flip for the surfaces that are currently desired-visible and
+// already have bounds. Hidden surfaces get fresh bounds before showing again,
+// so resize-time refits do not need to scale with the full retained set.
 static void refitAllSurfacesForNewContentHeight() {
     NSView* contentView = [g_state.window contentView];
     CGFloat contentHeight = [contentView bounds].size.height;
-    for (GhosttyView* view : snapshotSurfaceViews()) {
+    if (g_state.lastRefitContentHeight == contentHeight) {
+        return;
+    }
+
+    g_state.lastRefitContentHeight = contentHeight;
+    for (GhosttyView* view : snapshotDesiredVisibleSurfaceViews()) {
         if (!view.hasBounds) continue;
         CGFloat nsY = contentHeight - view.lastDomY - view.lastDomH;
         [view setFrame:NSMakeRect(view.lastDomX, nsY, view.lastDomW, view.lastDomH)];
@@ -975,12 +990,15 @@ static void runOnMainQueueSync(dispatch_block_t block) {
     dispatch_sync(dispatch_get_main_queue(), block);
 }
 
-static std::vector<GhosttyView*> snapshotSurfaceViews() {
+static std::vector<GhosttyView*> snapshotDesiredVisibleSurfaceViews() {
     std::lock_guard<std::mutex> lock(g_state.surfacesMutex);
     std::vector<GhosttyView*> views;
-    views.reserve(g_state.surfaces.size());
-    for (const auto& pair : g_state.surfaces) {
-        views.push_back(pair.second);
+    views.reserve(g_state.desiredVisibleSurfaceIds.size());
+    for (const auto& surfaceId : g_state.desiredVisibleSurfaceIds) {
+        auto it = g_state.surfaces.find(surfaceId);
+        if (it != g_state.surfaces.end()) {
+            views.push_back(it->second);
+        }
     }
     return views;
 }
@@ -1122,6 +1140,7 @@ static void shutdownGhosttyState() {
     g_state.window = nil;
     g_state.reservedShortcuts.clear();
     g_state.lastModifierFlags = 0;
+    g_state.lastRefitContentHeight = -1;
 }
 
 // Helper: find surface ID for a ghostty surface handle
@@ -1582,6 +1601,7 @@ static Napi::Value InitGhostty(const Napi::CallbackInfo& info) {
         return env.Undefined();
     }
     g_state.window = [electronView window];
+    g_state.lastRefitContentHeight = -1;
     if (!g_state.window) {
         Napi::Error::New(env, "Native window handle was not attached to an NSWindow").ThrowAsJavaScriptException();
         return env.Undefined();
@@ -1661,7 +1681,6 @@ static Napi::Value InitGhostty(const Napi::CallbackInfo& info) {
     // perfectly aligned with the window without waiting for the renderer.
     for (NSNotificationName name in @[
         NSWindowDidResizeNotification,
-        NSWindowDidMoveNotification,
     ]) {
         id observer = [[NSNotificationCenter defaultCenter]
             addObserverForName:name

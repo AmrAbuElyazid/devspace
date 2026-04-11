@@ -117,6 +117,15 @@ test("setPaneBounds stores the bounds and applies them to the view", () => {
   expect(pane.view.setBounds).toHaveBeenCalledWith(bounds);
 });
 
+test("setPaneBounds skips duplicate no-op bounds updates", () => {
+  const pane = makePane();
+
+  setPaneBounds(pane, { ...pane.bounds! });
+
+  expect(pane.view.setBounds).not.toHaveBeenCalled();
+  expect(pane.bounds).toEqual({ x: 10, y: 20, width: 800, height: 600 });
+});
+
 test("destroyPaneView prefers closing webContents before destroying the view", () => {
   const pane = makePane();
   const destroy = (pane.view as unknown as { destroy: ReturnType<typeof vi.fn> }).destroy;

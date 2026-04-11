@@ -50,6 +50,7 @@ struct GhosttyAppState {
     std::vector<id> windowObserverTokens;
     std::vector<std::string> clipboardTempFiles;
     NSEventModifierFlags lastModifierFlags = 0;
+    CGFloat lastRefitContentHeight = -1;
     std::atomic_bool pendingAppTick = false;
     std::mutex surfacesMutex;
 };
