@@ -24,6 +24,7 @@ import {
   repairTree,
 } from "./workspace-store";
 import { findFolder } from "../lib/sidebar-tree";
+import { validateWorkspaceGraph } from "../lib/workspace-graph";
 
 /**
  * Reset the workspace store to a clean initial state suitable for tests.
@@ -65,6 +66,33 @@ function getLeafGroupIds(workspaceId: string): string[] {
   const workspace = getWorkspace(workspaceId);
   expect(workspace).toBeTruthy();
   return collectGroupIds(workspace!.root);
+}
+
+function getWorkspacePaneIds(
+  state: ReturnType<typeof useWorkspaceStore.getState>,
+  workspaceId: string,
+) {
+  const workspace = state.workspaces.find((candidate) => candidate.id === workspaceId);
+  expect(workspace).toBeTruthy();
+
+  return collectGroupIds(workspace!.root).flatMap(
+    (groupId) => state.paneGroups[groupId]?.tabs.map((tab) => tab.paneId) ?? [],
+  );
+}
+
+function expectWorkspaceGraphValid(
+  state: ReturnType<typeof useWorkspaceStore.getState> = useWorkspaceStore.getState(),
+): void {
+  const validation = validateWorkspaceGraph({
+    activeWorkspaceId: state.activeWorkspaceId,
+    workspaces: state.workspaces,
+    paneGroups: state.paneGroups,
+    panes: state.panes,
+  });
+
+  if (!validation.valid) {
+    throw new Error(validation.reason);
+  }
 }
 
 function setupFourGroupWorkspace(): { wsId: string; groupIds: string[] } {
@@ -1082,6 +1110,47 @@ test("splitGroupWithTab removes src group when last tab moved and multiple group
   expect(allIds.includes(groupId)).toBe(false);
 });
 
+test("splitGroupWithTab keeps the moved pane reachable when the source group is removed", () => {
+  const wsId = setupWorkspace();
+  const state = useWorkspaceStore.getState();
+  const ws = state.workspaces.find((w) => w.id === wsId)!;
+  const sourceGroupId = ws.root.type === "leaf" ? ws.root.groupId : "";
+
+  useWorkspaceStore.getState().splitGroup(wsId, sourceGroupId, "horizontal");
+
+  const splitState = useWorkspaceStore.getState();
+  const splitWorkspace = splitState.workspaces.find((w) => w.id === wsId)!;
+  expect(splitWorkspace.root.type).toBe("branch");
+  if (splitWorkspace.root.type !== "branch") return;
+
+  const targetGroupId =
+    splitWorkspace.root.children[1]?.type === "leaf" ? splitWorkspace.root.children[1].groupId : "";
+  const sourceTab = splitState.paneGroups[sourceGroupId]!.tabs[0]!;
+
+  useWorkspaceStore
+    .getState()
+    .splitGroupWithTab(wsId, sourceGroupId, sourceTab.id, targetGroupId, "right");
+
+  const nextState = useWorkspaceStore.getState();
+  const nextWorkspace = nextState.workspaces.find((w) => w.id === wsId)!;
+  const remainingGroupIds = collectGroupIds(nextWorkspace.root);
+  const movedGroupId = remainingGroupIds.find((groupId) => groupId !== targetGroupId);
+
+  expect(remainingGroupIds).not.toContain(sourceGroupId);
+  expect(nextState.paneGroups[sourceGroupId]).toBeUndefined();
+  expect(movedGroupId).toBeTruthy();
+  expect(nextWorkspace.focusedGroupId).toBe(movedGroupId);
+  expect(nextState.paneGroups[movedGroupId!]?.tabs).toEqual([
+    expect.objectContaining({ paneId: sourceTab.paneId }),
+  ]);
+  expect(nextState.paneOwnersByPaneId[sourceTab.paneId]).toEqual({
+    workspaceId: wsId,
+    groupId: movedGroupId,
+  });
+
+  expectWorkspaceGraphValid(nextState);
+});
+
 // ── moveTabToWorkspace ──
 
 test("moveTabToWorkspace moves tab from one workspace to another", () => {
@@ -1113,6 +1182,7 @@ test("moveTabToWorkspace moves tab from one workspace to another", () => {
   expect(s3.paneGroups[destGroupId]!.tabs.some((t) => t.paneId === movedPaneId)).toBeTruthy();
   // The pane itself should still exist in the global panes map
   expect(s3.panes[movedPaneId]).toBeTruthy();
+  expectWorkspaceGraphValid(s3);
 });
 
 test("moveTabToWorkspace collapses empty source group when multiple exist", () => {
@@ -1142,6 +1212,7 @@ test("moveTabToWorkspace collapses empty source group when multiple exist", () =
   // Source workspace tree should be simplified (single leaf)
   const srcWs3 = s3.workspaces.find((w) => w.id === srcWs.id)!;
   expect(srcWs3.root.type).toBe("leaf");
+  expectWorkspaceGraphValid(s3);
 });
 
 test("moveTabToWorkspace adds empty pane when only group becomes empty", () => {
@@ -1174,6 +1245,129 @@ test("moveTabToWorkspace adds empty pane when only group becomes empty", () => {
   expect(s4.paneGroups[srcGroupId]!.tabs.length).toBe(1);
   const replacementPane = s4.panes[s4.paneGroups[srcGroupId]!.tabs[0]!.paneId]!;
   expect(replacementPane.type).toBe("terminal");
+  expectWorkspaceGraphValid(s4);
+});
+
+test("mergeWorkspaceIntoGroup transfers all source panes into the target group", () => {
+  resetWorkspaceStore();
+  const sourceWorkspaceId = useWorkspaceStore.getState().addWorkspace("Source");
+  const destWorkspaceId = useWorkspaceStore.getState().addWorkspace("Dest");
+
+  const initialState = useWorkspaceStore.getState();
+  const sourceWorkspace = initialState.workspaces.find(
+    (workspace) => workspace.id === sourceWorkspaceId,
+  )!;
+  const destWorkspace = initialState.workspaces.find(
+    (workspace) => workspace.id === destWorkspaceId,
+  )!;
+  const sourceGroupId = sourceWorkspace.root.type === "leaf" ? sourceWorkspace.root.groupId : "";
+  const destGroupId = destWorkspace.root.type === "leaf" ? destWorkspace.root.groupId : "";
+
+  useWorkspaceStore.getState().splitGroup(sourceWorkspaceId, sourceGroupId, "horizontal");
+
+  const sourceGroupIds = getLeafGroupIds(sourceWorkspaceId);
+  useWorkspaceStore.getState().addGroupTab(sourceWorkspaceId, sourceGroupIds[0]!);
+  useWorkspaceStore.getState().setActiveWorkspace(sourceWorkspaceId);
+
+  const beforeTransferState = useWorkspaceStore.getState();
+  const sourcePaneIds = getWorkspacePaneIds(beforeTransferState, sourceWorkspaceId);
+  const originalTargetTabCount = beforeTransferState.paneGroups[destGroupId]!.tabs.length;
+
+  useWorkspaceStore.getState().mergeWorkspaceIntoGroup(sourceWorkspaceId, destGroupId);
+
+  const nextState = useWorkspaceStore.getState();
+  const nextDestWorkspace = nextState.workspaces.find(
+    (workspace) => workspace.id === destWorkspaceId,
+  )!;
+  const mergedGroup = nextState.paneGroups[destGroupId]!;
+  const transferredPaneIds = mergedGroup.tabs
+    .slice(originalTargetTabCount)
+    .map((tab) => tab.paneId);
+
+  expect(nextState.activeWorkspaceId).toBe(destWorkspaceId);
+  expect(
+    nextState.workspaces.find((workspace) => workspace.id === sourceWorkspaceId),
+  ).toBeUndefined();
+  expect(nextState.sidebarTree).toEqual([{ type: "workspace", workspaceId: destWorkspaceId }]);
+  expect(nextDestWorkspace.focusedGroupId).toBe(destGroupId);
+  expect(transferredPaneIds).toEqual(sourcePaneIds);
+  expect(mergedGroup.tabs.find((tab) => tab.id === mergedGroup.activeTabId)?.paneId).toBe(
+    sourcePaneIds.at(-1),
+  );
+
+  for (const groupId of sourceGroupIds) {
+    expect(nextState.paneGroups[groupId]).toBeUndefined();
+  }
+
+  for (const paneId of sourcePaneIds) {
+    expect(nextState.paneOwnersByPaneId[paneId]).toEqual({
+      workspaceId: destWorkspaceId,
+      groupId: destGroupId,
+    });
+  }
+
+  expectWorkspaceGraphValid(nextState);
+});
+
+test("splitGroupWithWorkspace creates a new split group and removes the source workspace", () => {
+  resetWorkspaceStore();
+  const sourceWorkspaceId = useWorkspaceStore.getState().addWorkspace("Source");
+  const destWorkspaceId = useWorkspaceStore.getState().addWorkspace("Dest");
+
+  const initialState = useWorkspaceStore.getState();
+  const sourceWorkspace = initialState.workspaces.find(
+    (workspace) => workspace.id === sourceWorkspaceId,
+  )!;
+  const destWorkspace = initialState.workspaces.find(
+    (workspace) => workspace.id === destWorkspaceId,
+  )!;
+  const sourceGroupId = sourceWorkspace.root.type === "leaf" ? sourceWorkspace.root.groupId : "";
+  const destGroupId = destWorkspace.root.type === "leaf" ? destWorkspace.root.groupId : "";
+
+  useWorkspaceStore.getState().splitGroup(sourceWorkspaceId, sourceGroupId, "horizontal");
+
+  const beforeTransferState = useWorkspaceStore.getState();
+  const sourceGroupIds = getLeafGroupIds(sourceWorkspaceId);
+  const sourcePaneIds = getWorkspacePaneIds(beforeTransferState, sourceWorkspaceId);
+
+  useWorkspaceStore.getState().splitGroupWithWorkspace(sourceWorkspaceId, destGroupId, "bottom");
+
+  const nextState = useWorkspaceStore.getState();
+  const nextDestWorkspace = nextState.workspaces.find(
+    (workspace) => workspace.id === destWorkspaceId,
+  )!;
+
+  expect(
+    nextState.workspaces.find((workspace) => workspace.id === sourceWorkspaceId),
+  ).toBeUndefined();
+  expect(nextState.sidebarTree).toEqual([{ type: "workspace", workspaceId: destWorkspaceId }]);
+  expect(nextDestWorkspace.root.type).toBe("branch");
+  if (nextDestWorkspace.root.type !== "branch") return;
+
+  expect(nextDestWorkspace.root.direction).toBe("vertical");
+  expect(nextDestWorkspace.root.children[0]).toEqual({ type: "leaf", groupId: destGroupId });
+  expect(nextDestWorkspace.root.children[1]?.type).toBe("leaf");
+
+  const newGroupId =
+    nextDestWorkspace.root.children[1]?.type === "leaf"
+      ? nextDestWorkspace.root.children[1].groupId
+      : null;
+  expect(newGroupId).toBeTruthy();
+  expect(nextDestWorkspace.focusedGroupId).toBe(newGroupId);
+  expect(nextState.paneGroups[newGroupId!]?.tabs.map((tab) => tab.paneId)).toEqual(sourcePaneIds);
+
+  for (const groupId of sourceGroupIds) {
+    expect(nextState.paneGroups[groupId]).toBeUndefined();
+  }
+
+  for (const paneId of sourcePaneIds) {
+    expect(nextState.paneOwnersByPaneId[paneId]).toEqual({
+      workspaceId: destWorkspaceId,
+      groupId: newGroupId,
+    });
+  }
+
+  expectWorkspaceGraphValid(nextState);
 });
 
 // ── repairTree ──

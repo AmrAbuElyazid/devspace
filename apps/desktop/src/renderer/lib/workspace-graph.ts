@@ -44,6 +44,8 @@ export function validateWorkspaceGraph({
   }
 
   const owningWorkspaceByGroupId = new Map<string, string>();
+  const referencedGroupIds = new Set<string>();
+  const referencedPaneIds = new Set<string>();
 
   for (const workspace of workspaces) {
     const splitError = validateSplitNode(workspace.root);
@@ -72,6 +74,7 @@ export function validateWorkspaceGraph({
         return { valid: false, reason: `group ${groupId} is referenced by multiple workspaces` };
       }
       owningWorkspaceByGroupId.set(groupId, workspace.id);
+      referencedGroupIds.add(groupId);
 
       const group = paneGroups[groupId];
       if (!group) {
@@ -90,7 +93,20 @@ export function validateWorkspaceGraph({
         if (!panes[tab.paneId]) {
           return { valid: false, reason: `group ${groupId} references missing pane ${tab.paneId}` };
         }
+        referencedPaneIds.add(tab.paneId);
       }
+    }
+  }
+
+  for (const groupId of Object.keys(paneGroups)) {
+    if (!referencedGroupIds.has(groupId)) {
+      return { valid: false, reason: `pane group ${groupId} is not referenced by any workspace` };
+    }
+  }
+
+  for (const paneId of Object.keys(panes)) {
+    if (!referencedPaneIds.has(paneId)) {
+      return { valid: false, reason: `pane ${paneId} is not referenced by any pane group` };
     }
   }
 

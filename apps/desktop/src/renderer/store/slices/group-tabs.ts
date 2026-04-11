@@ -214,13 +214,17 @@ export function createGroupTabsSlice(
         const cleaned = removeGroupFromTree(newRoot, srcGroupId);
         newRoot = cleaned ? simplifyTree(cleaned) : newRoot;
       }
+      const nextResolution =
+        resolution.kind === "group-removed"
+          ? { ...resolution, newRoot, newFocusedGroupId: newGroup.id }
+          : resolution;
 
       const nextState = applySourceGroupTabRemovalResolution({
         state,
         sourceWorkspaceId: workspaceId,
         sourceGroupId: srcGroupId,
         removedTabId: tabId,
-        resolution,
+        resolution: nextResolution,
         nextWorkspaces: state.workspaces.map((w) =>
           w.id === workspaceId ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
         ),

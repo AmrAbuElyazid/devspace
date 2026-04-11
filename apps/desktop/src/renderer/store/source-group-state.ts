@@ -74,6 +74,8 @@ export function applySourceGroupTabRemovalResolution({
               ...workspace,
               root: resolution.newRoot,
               focusedGroupId: resolution.newFocusedGroupId,
+              zoomedGroupId:
+                workspace.zoomedGroupId === sourceGroupId ? null : workspace.zoomedGroupId,
             }
           : workspace,
       );

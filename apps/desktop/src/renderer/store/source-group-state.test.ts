@@ -80,7 +80,16 @@ test("tabs-remaining updates the source group and tab history", () => {
 });
 
 test("group-removed deletes the source group and tab history by default", () => {
-  const state = createBaseState();
+  const baseState = createBaseState();
+  const state = {
+    ...baseState,
+    workspaces: [
+      {
+        ...baseState.workspaces[0]!,
+        zoomedGroupId: "group-1" as string | null,
+      },
+    ],
+  };
   const resolution: SourceGroupResolution = {
     kind: "group-removed",
     newRoot: { type: "leaf", groupId: "group-2" },
@@ -98,6 +107,7 @@ test("group-removed deletes the source group and tab history by default", () => 
   expect(nextState.paneGroups["group-1"]).toBeUndefined();
   expect(nextState.tabHistoryByGroupId["group-1"]).toBeUndefined();
   expect(nextState.workspaces[0]?.focusedGroupId).toBe("group-2");
+  expect(nextState.workspaces[0]?.zoomedGroupId).toBeNull();
 });
 
 test("group-removed can preserve an empty tab history entry for close-tab flows", () => {

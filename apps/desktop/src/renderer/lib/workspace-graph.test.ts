@@ -126,3 +126,36 @@ test("validateWorkspaceGraph rejects malformed split sizes", () => {
   expect(result.valid).toBe(false);
   expect(!result.valid && result.reason).toMatch(/sizes/);
 });
+
+test("validateWorkspaceGraph rejects pane groups that are unreachable from any workspace", () => {
+  const result = validateWorkspaceGraph({
+    activeWorkspaceId: "ws-1",
+    workspaces: [makeWorkspace("ws-1", "group-1")],
+    paneGroups: {
+      "group-1": makeGroup("group-1", "pane-1"),
+      orphaned: makeGroup("orphaned", "pane-2"),
+    },
+    panes: {
+      "pane-1": makePane("pane-1"),
+      "pane-2": makePane("pane-2"),
+    },
+  });
+
+  expect(result.valid).toBe(false);
+  expect(!result.valid && result.reason).toMatch(/not referenced by any workspace/);
+});
+
+test("validateWorkspaceGraph rejects panes that are unreachable from any pane group", () => {
+  const result = validateWorkspaceGraph({
+    activeWorkspaceId: "ws-1",
+    workspaces: [makeWorkspace("ws-1", "group-1")],
+    paneGroups: { "group-1": makeGroup("group-1", "pane-1") },
+    panes: {
+      "pane-1": makePane("pane-1"),
+      orphaned: makePane("orphaned"),
+    },
+  });
+
+  expect(result.valid).toBe(false);
+  expect(!result.valid && result.reason).toMatch(/not referenced by any pane group/);
+});
