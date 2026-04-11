@@ -48,17 +48,40 @@ That workflow rebuilds the pinned bundle on macOS, verifies the committed
 checksum manifest, and uploads the release asset referenced by
 `packages/ghostty-electron/libghostty-bundle.json`.
 
-## Build A macOS Release Directory
+## Build A Signed macOS DMG
 
-From the repo root:
+For a public macOS release, the app must be signed with a `Developer ID
+Application` certificate and notarized by Apple.
+
+Before running the release build:
+
+- make the signing certificate available in Keychain or via `CSC_LINK` and
+  `CSC_KEY_PASSWORD`
+- provide one supported Apple notarization credential set:
+  - `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
+  - `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
+  - `APPLE_KEYCHAIN`, `APPLE_KEYCHAIN_PROFILE`
+
+Then run from the repo root:
 
 ```sh
 bun run dist
 ```
 
-This produces the Electron Builder output configured by `apps/desktop/package.json`.
+This produces a signed macOS arm64 DMG in `apps/desktop/release/` using the
+Electron Builder config in `apps/desktop/package.json`. The release command
+fails if notarization credentials are missing or if Electron Builder cannot
+code sign the app.
 
-## Promote A Build Into /Applications
+After the build completes, validate the signed artifacts:
+
+```sh
+codesign --verify --deep --strict --verbose=2 "apps/desktop/release/mac-arm64/Devspace.app"
+spctl --assess --type exec --verbose "apps/desktop/release/mac-arm64/Devspace.app"
+xcrun stapler validate apps/desktop/release/Devspace-*.dmg
+```
+
+## Promote A Local Build Into /Applications
 
 For local day-to-day use, the repo includes a helper script:
 
@@ -69,9 +92,13 @@ scripts/promote.sh
 This script:
 
 - runs the verification gate
-- builds the app unless `--skip-build` is used
+- builds an unpacked local app unless `--skip-build` is used
 - replaces `/Applications/Devspace.app`
 - updates the CLI symlink if it already exists
+
+`scripts/promote.sh` intentionally uses `bun run --cwd apps/desktop dist:dir`
+instead of the signed DMG release path so local promotion does not depend on
+release notarization credentials.
 
 ## Versioning Notes
 
@@ -114,6 +141,5 @@ After tagging a release:
 
 ## Future Improvements
 
-- signed/notarized release flow
 - artifact publishing from CI
 - clearer versioning policy for `ghostty-electron`

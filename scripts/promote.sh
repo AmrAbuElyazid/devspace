@@ -39,7 +39,7 @@ if [ "$SKIP_BUILD" = false ]; then
 
   echo ""
   echo "==> Building app..."
-  bun run dist
+  bun run --cwd apps/desktop dist:dir
 
   echo ""
 fi
