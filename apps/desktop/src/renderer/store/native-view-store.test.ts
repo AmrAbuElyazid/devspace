@@ -225,6 +225,41 @@ test("removing the last observed native view element detaches layout listeners",
   expect(removeEventListener).toHaveBeenCalledWith("scroll", expect.any(Function), true);
 });
 
+test("unregister clears observed native view state", () => {
+  const removeEventListener = vi.spyOn(window, "removeEventListener");
+  const element = document.createElement("div");
+
+  useWorkspaceStore.setState({
+    activeWorkspaceId: "workspace-1",
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Workspace",
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: Date.now(),
+      },
+    ],
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "terminal-1" }],
+      },
+    },
+  });
+
+  useNativeViewStore.getState().register("terminal-1", "terminal");
+  setNativeViewElement("terminal-1", element);
+  useNativeViewStore.getState().reconcile();
+
+  useNativeViewStore.getState().unregister("terminal-1");
+
+  expect(removeEventListener).toHaveBeenCalledWith("resize", expect.any(Function));
+  expect(removeEventListener).toHaveBeenCalledWith("scroll", expect.any(Function), true);
+});
+
 test("visible bounds sync reuses an already pending animation frame", () => {
   const requestAnimationFrame = vi.fn(() => 7);
   globalThis.requestAnimationFrame = requestAnimationFrame;

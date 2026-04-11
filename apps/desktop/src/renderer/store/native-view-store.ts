@@ -387,7 +387,8 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
     nativeViewProfilingCounters.unregisterCalls++;
     const next = { ...views };
     delete next[id];
-    boundsCache.delete(id);
+    setNativeViewElement(id, null);
+    clearNativeViewBounds(id);
     set({ views: next });
     get().reconcile();
   },

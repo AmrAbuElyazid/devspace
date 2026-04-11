@@ -1,209 +1,126 @@
 # Performance Audit
 
-**Purpose:** capture the current performance hotspots discussed during the Ghostty/native terminal and renderer audit, ordered by priority so future profiling and optimization work has one reference point.
+**Purpose:** capture the current performance state of the repo in an explicit `done` / `open` format so follow-up work stays grounded in what has actually landed.
 
 ## Summary
 
-Devspace's biggest performance risks are not centered on one bad library choice. The main remaining pressure points are:
+Devspace's biggest earlier renderer and native-view no-op paths have been reduced substantially. The highest-value remaining work is now measurement first, then targeted follow-up only where profiling still shows real cost.
 
-- broad workspace persistence that still runs on the Electron main thread
-- retained hidden Ghostty terminal surfaces and their memory footprint
-- remaining native-view visibility and resize churn that still shows up under profiling
-- a few renderer hot paths that rerender or persist more often than they need to
-- limited direct measurement for CPU, memory, and frame pacing regressions
+The main open risks are:
 
-Zustand is not the main bottleneck. The bigger costs come from state shape, persistence wiring, native surface retention, and broad UI invalidation in a few hot paths.
+- broad workspace persistence that still runs through synchronous SQLite work on the Electron main thread
+- retained hidden terminal surfaces and the memory they keep resident
+- native terminal events that still fan out across processes one message at a time
+- remaining native-view visible-set and bounds work that still scales with active visible panes
+- limited in-repo CPU, memory, and frame-pacing telemetry
 
-## Prioritized Findings
+## Done
 
-### 1. Workspace persistence is much cheaper, but still broad and main-thread bound
+### Persistence baseline is much stronger
 
-- Priority: highest
-- Why it matters: persistence is no longer doing full world rewrites, but it still snapshots a broad slice of workspace state and applies writes on the Electron main thread. As workspace count, pane count, and terminal churn grow, save cost can still scale with the breadth of persisted state.
-- Current behavior:
-  - renderer persistence watches `workspaces`, `activeWorkspaceId`, `pinnedSidebarNodes`, `sidebarTree`, `panes`, and `paneGroups`
-  - after debounce, the main process receives the whole snapshot
-  - SQLite save now prepares a snapshot diff and applies incremental `UPSERT`/targeted delete work inside one transaction instead of deleting and reinserting every row
-- Main costs:
-  - snapshot prep and persistence still run on the main thread
-  - noisy terminal-driven updates can still participate in the same persistence path
-  - broad persistence subscriptions still mean unrelated-looking churn can share the same save boundary
-- Recommended direction:
-  - keep queued saves collapsed so only the latest pending snapshot is written
-  - consider slower persistence or narrower dirty tracking for noisy fields like `lastTerminalCwd` if profiling still points there
-  - keep measuring main-thread save time before adding more persistence complexity
-- Relevant files: `apps/desktop/src/renderer/store/persistence.ts`, `apps/desktop/src/main/ipc/workspace-state.ts`, `apps/desktop/src/main/workspace-persistence-store.ts`
+- Renderer persistence is debounced and limited to the durable workspace snapshot instead of transient UI state.
+- Main-process persistence now uses SQLite with migrations, prepared statements, and incremental row-level upserts/deletes inside a transaction instead of full delete-and-reinsert saves.
+- Pane ownership is indexed by `paneId`, which lets terminal updates target the owning workspace directly instead of repeatedly searching the whole workspace graph.
 
-### 2. Hidden terminal panes stay alive and keep memory resident
+Relevant files: `apps/desktop/src/renderer/store/persistence.ts`, `apps/desktop/src/main/workspace-persistence-store.ts`, `apps/desktop/src/main/workspace-persistence-migrations.ts`, `apps/desktop/src/main/workspace-persistence-statements.ts`, `apps/desktop/src/renderer/store/pane-ownership.ts`
 
-- Priority: highest
-- Why it matters: Devspace creates one Ghostty surface per terminal pane and keeps it alive until explicit destroy. Hidden tabs and hidden workspaces still retain native surfaces, memory, and usually the child shell process.
-- Current behavior:
-  - terminal panes create native surfaces once per `paneId`
-  - surfaces survive remounts and workspace switches
-  - non-visible surfaces are hidden, not destroyed
-- Main costs:
-  - memory scales with total terminal pane count, not visible pane count
-  - more retained native views and GPU-backed surfaces in the window hierarchy
-  - user workloads inside those shells also continue to consume resources
-- Recommended direction:
-  - keep current behavior as the default if session continuity is the priority
-  - optionally add a memory-saving mode that destroys long-hidden terminals
-  - if Ghostty/libghostty later supports a stronger detach-and-restore model, revisit terminal hibernation
-- Relevant files: `apps/desktop/src/renderer/components/TerminalPane.tsx`, `apps/desktop/src/renderer/lib/terminal-surface-session.ts`, `packages/ghostty-electron/native/ghostty_bridge.mm`
+### Native-view and browser visibility churn was cut down substantially
 
-### 3. Native terminal events are cheaper than before, but still cross process boundaries one by one
+- Native-view reconcile now keys off visibility-relevant workspace and overlay changes rather than broad whole-store churn.
+- Terminal and browser visible sets are diffed before IPC visibility updates are sent.
+- Renderer bounds sync is coalesced behind one `requestAnimationFrame`, only observes visible native elements, and skips duplicate bounds writes.
+- Browser pane lifecycle skips duplicate `setBounds` work and applies bounds before showing newly visible panes.
+- Terminal unregister now clears cached element and bounds state so stale native-view bookkeeping is cleaned up promptly.
 
-- Priority: high
-- Why it matters: Ghostty native callbacks for title, cwd, search, focus, and close are forwarded individually from native code to the main process and then to the renderer. Under noisy terminals, this can create avoidable CPU and queue pressure.
-- Current behavior:
-  - native wakeups are coalesced behind pending-tick scheduling
-  - duplicate title and cwd updates are suppressed before they trigger broader store work
-  - events still cross native -> main -> renderer one by one through Electron IPC
-- Main costs:
-  - extra CPU overhead per event
-  - possible queue buildup if the renderer is busy
-  - more work than a simpler single-process terminal architecture
-- Recommended direction:
-  - keep the current wakeup and duplicate suppression as the baseline
-  - batch or debounce only the high-frequency events that still show up as hot under profiling
-  - consider tighter queue bounds for best-effort UI notifications
-- Relevant files: `packages/ghostty-electron/native/ghostty_bridge.mm`, `apps/desktop/src/main/ipc/terminal-editor.ts`, `apps/desktop/src/renderer/hooks/useTerminalEvents.ts`
+Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/src/main/browser/browser-pane-view-lifecycle.ts`, `packages/ghostty-electron/native/ghostty_bridge.mm`
 
-### 4. Native-view churn is smaller now, but still the highest-leverage remaining visibility path
+### Terminal event handling has meaningful duplicate suppression
 
-- Priority: high
-- Why it matters: the worst full-registry passes are gone, but native-view visibility, bounds, and refit work are still the most likely remaining source of tab-switch, overlay, and resize overhead if profiling shows a problem.
-- Current behavior:
-  - renderer and main-process visibility updates for terminal and browser panes are now diff-based rather than unconditional full replacement scans
-  - native terminal resize refits skip window-move notifications, skip unchanged content heights, and only touch desired-visible surfaces
-  - terminal and browser bounds application now skip duplicate no-op frame and `setBounds` writes, and renderer listener/scheduling paths also coalesce several empty or duplicate cases
-- Main costs:
-  - hidden terminals still exist and still drive retained-surface scale and memory
-  - switch and resize work still grows with the visible native set even though several no-op paths are gone
-  - remaining costs are now harder to reason about without direct measurement
-- Recommended direction:
-  - keep profiling actual tab-switch, overlay, and resize behavior before adding more complexity
-  - if needed, add more targeted instrumentation or batching around visible-set transitions and bounds delivery
-  - keep browser and terminal visibility semantics aligned as the native-view stack evolves
-- Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `packages/ghostty-electron/native/ghostty_bridge.mm`
+- Ghostty native wakeups are coalesced behind a pending tick instead of waking the app repeatedly for each callback.
+- Repeated `title-changed` and `pwd-changed` values are deduped in the terminal bridge before broader app work runs.
+- Renderer title updates also skip redundant pane-title writes.
 
-### 5. Terminal cwd updates fan out less than before, but can still touch broader persisted state
+Relevant files: `packages/ghostty-electron/native/ghostty_bridge.mm`, `packages/ghostty-electron/src/terminal-manager.ts`, `apps/desktop/src/renderer/hooks/useTerminalEvents.ts`
 
-- Priority: medium-high
-- Why it matters: a terminal `cwd` change still updates pane config, workspace-level cwd fallback state, and related derived data, so noisy shells can still create broader store and persistence work than a purely local terminal field.
-- Current behavior:
-  - cwd changes enter through terminal event handling
-  - the owning workspace gets a `lastTerminalCwd` update
-- Main costs:
-  - cwd churn can still trigger broader pane/workspace updates than a purely local terminal field
-  - extra persistence traffic remains possible when cwd changes frequently
-- Recommended direction:
-  - keep ownership indexing as the baseline
-  - debounce persistence of workspace cwd fallback state if cwd-heavy workloads still show up in profiling
-  - measure real cwd event frequency before adding more special-case logic
-- Relevant files: `apps/desktop/src/renderer/hooks/useTerminalEvents.ts`, `apps/desktop/src/renderer/store/slices/pane-management.ts`, workspace move/split slices under `apps/desktop/src/renderer/store/slices/`
+### Several renderer hot paths are narrower than before
 
-### 6. Settings persistence is better on resize, but still eager for some text-entry and number-input paths
+- Workspace sidebar metadata is computed and updated by affected workspace ids instead of forcing broader recompute patterns in hot flows.
+- Only the active workspace layer mounts in React, which avoids keeping full inactive workspace trees mounted.
+- Sidebar resize keeps live width local and commits the persisted setting only on mouseup.
+- Settings text and number inputs now keep local draft state and commit on blur or Enter instead of persisting on every keystroke.
+- Drag state was split into `activeDrag` and `dropIntent`, and `dropIntent` updates are semantically deduped.
 
-- Priority: medium
-- Why it matters: settings use persisted Zustand state, and some updates still happen on every keystroke or stepper interaction, which keeps persistence and rerender work on hot UI paths.
-- Current behavior:
-  - several settings text and number inputs still persist on every change
-- Main costs:
-  - repeated local persistence writes during typing and number stepping
-  - unnecessary rerenders tied to those hot interaction loops
-- Recommended direction:
-  - debounce text and number setting persistence or commit on blur
-  - keep hot transient UI state separate from persisted settings state
-- Relevant files: `apps/desktop/src/renderer/store/settings-store.ts`, `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/SettingsPage.tsx`
+Relevant files: `apps/desktop/src/renderer/store/workspace-sidebar-metadata.ts`, `apps/desktop/src/renderer/store/pane-ownership.ts`, `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/SettingsPage.tsx`, `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`
 
-### 7. Drag-and-drop hot state is broadcast through React Context
+### Some measurement coverage already exists
 
-- Priority: medium
-- Why it matters: drag state changes on pointer movement, and the current top-level context invalidates a broad part of the tree. That means many pane groups, tab bars, and sidebar sections rerender even when only one drop target actually changed.
-- Current behavior:
-  - `activeDrag` and `dropIntent` live in React state inside the drag orchestrator
-  - they are exposed through a top-level `DragContext.Provider`
-  - consumers across pane groups, tab bars, and the sidebar rerender when the provider value changes
-- Main costs:
-  - broad rerender fan-out during drag still remains possible, even though redundant updates are reduced
-  - reduced drag smoothness as workspace and sidebar complexity grow
-- Recommended direction:
-  - move the remaining hot drag state to a selector-based store if profiling still shows context churn
-  - expose narrow derived selectors like split preview side, tab insert index, or sidebar insertion state
-  - keep semantic `dropIntent` dedupe in place and extend it if other drag signals still churn
-- Relevant files: `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`, `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`, `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`
+- Native-view profiling counters and snapshots are exposed in the renderer for debug and E2E usage.
+- The mixed-workspace stress E2E covers native-view lifecycle behavior across repeated workspace switching.
+- Manual benchmark and stress scripts already exist for terminal throughput and load testing.
 
-## State Management Notes
+Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/main.tsx`, `apps/desktop/e2e/mixed-workspace-stress.spec.ts`, `apps/desktop/e2e/helpers/app.ts`, `BENCHMARKS.md`, `scripts/terminal-bench.sh`, `scripts/terminal-stress.sh`
 
-- Zustand is not the primary performance problem in this codebase.
-- The main issues are broad invalidation, eager persistence, and expensive derived work on top of store updates.
-- There are still a few Zustand usage improvements worth making:
-  - avoid whole-store subscriptions like `useSettingsStore()` without a selector in hot components
-  - move very hot transient drag state out of broad React Context and into a selector-based store
-  - keep persisted cold state separate from hot interactive state where possible
+## Open
 
-## Measurement Gaps
+### Measurement and instrumentation are still the top priority
 
-Current repo coverage is stronger on throughput benchmarking and native-view lifecycle checks than on actual memory and CPU telemetry.
+- The repo has useful native-view counters, but they are narrow and mostly lifecycle-focused.
+- There is still no in-repo app or process CPU and memory sampling for the main process, renderer, GPU process, or per-terminal retention.
+- Resize latency, frame pacing, and long-run leak detection still depend mostly on manual observation and external tools.
 
-- Existing coverage:
-  - `BENCHMARKS.md` documents terminal throughput results and benchmark setup
-  - `scripts/terminal-bench.sh` and `scripts/terminal-stress.sh` provide manual workloads
-  - `apps/desktop/e2e/mixed-workspace-stress.spec.ts` validates native-view lifecycle behavior
-- Missing coverage:
-  - app memory by process
-  - main/renderer/GPU CPU usage
-  - per-terminal memory growth
-  - resize latency and frame pacing
-  - long-run leak detection
-- Recommended direction:
-  - add `app.getAppMetrics()` and process memory sampling in the main process
-  - capture measurements around terminal create, show, hide, resize, and destroy
-  - continue using macOS Activity Monitor and Instruments for native memory and CPU validation
+Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/e2e/mixed-workspace-stress.spec.ts`, `BENCHMARKS.md`
 
-## Suggested Execution Order
+### Workspace persistence is still broad and main-thread bound
 
-1. Add measurement and instrumentation for memory, CPU, resize latency, and native-view lifecycle cost.
-2. Revisit hidden-terminal memory strategy only if real workloads show retention pressure.
-3. Continue profiling native-view visibility and bounds churn before adding more complexity.
-4. Debounce or delay the remaining persisted settings text and number writes.
-5. Move drag hot state out of React Context only if drag profiling still shows broad invalidation.
+- The persisted snapshot still includes `workspaces`, `activeWorkspaceId`, `pinnedSidebarNodes`, `sidebarTree`, `panes`, and `paneGroups`.
+- Saves still run through `DatabaseSync` on the Electron main process.
+- `beforeunload` still performs a synchronous final flush.
+
+Relevant files: `apps/desktop/src/renderer/store/persistence.ts`, `apps/desktop/src/main/ipc/workspace-state.ts`, `apps/desktop/src/main/workspace-persistence-store.ts`
+
+### Hidden terminal panes still retain native surfaces and shell processes
+
+- Terminal surfaces survive remounts and workspace switches.
+- Hidden panes are generally hidden rather than destroyed.
+- Memory therefore still scales more with total terminal count than visible terminal count.
+
+Relevant files: `apps/desktop/src/renderer/components/TerminalPane.tsx`, `apps/desktop/src/renderer/lib/terminal-surface-session.ts`, `apps/desktop/src/renderer/lib/pane-cleanup.ts`, `packages/ghostty-electron/native/ghostty_bridge.mm`
+
+### Terminal events still cross layers one by one
+
+- Title, close, focus, pwd, and search events still fan out as separate messages across native code, the main process, preload, and the renderer.
+- The existing dedupe helps, but bursty terminals can still create per-event CPU and queue overhead.
+
+Relevant files: `packages/ghostty-electron/native/ghostty_bridge.mm`, `packages/ghostty-electron/src/terminal-manager.ts`, `apps/desktop/src/main/terminal-manager.ts`, `apps/desktop/src/main/ipc/terminal-editor.ts`, `apps/desktop/src/preload/index.ts`
+
+### Native-view work still scales with visible native panes
+
+- Reconcile still walks the active workspace split tree and active tabs to build the desired visible terminal and browser sets.
+- Visible-bounds sync still iterates the currently observed visible native elements each pass.
+- Hidden retained terminals still exist outside the visible set, so visibility wins do not solve the retention problem.
+
+Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/main/browser/browser-pane-view-lifecycle.ts`, `packages/ghostty-electron/native/ghostty_bridge.mm`
+
+### Terminal cwd updates still touch broader persisted workspace state
+
+- A real terminal cwd change still updates both the pane config and the owning workspace's `lastTerminalCwd` fallback.
+- Both `panes` and `workspaces` are part of the persisted workspace snapshot.
+
+Relevant files: `apps/desktop/src/renderer/hooks/useTerminalEvents.ts`, `apps/desktop/src/renderer/store/slices/pane-management.ts`, `apps/desktop/src/renderer/store/persistence.ts`
+
+### Some settings and drag invalidation paths still deserve profiling
+
+- The settings store is still a persisted Zustand store, and immediate controls such as toggles and segmented controls still write through it on click.
+- Drag state still lives in top-level React contexts, so provider value changes still invalidate consumers across the sidebar, pane groups, and tab bars.
+- These are no longer blind first-priority targets, but they remain worth revisiting if interaction profiling still points there.
+
+Relevant files: `apps/desktop/src/renderer/store/settings-store.ts`, `apps/desktop/src/renderer/components/SettingsPage.tsx`, `apps/desktop/src/renderer/components/Sidebar/QuickLaunchGrid.tsx`, `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`, `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`, `apps/desktop/src/renderer/components/GroupTabBar.tsx`
+
+## Recommended Order
+
+1. Add lightweight CPU, memory, and resize-latency measurement around terminal and browser lifecycle events.
+2. Re-run repeatable stress scenarios and capture baselines before making deeper changes.
+3. Revisit hidden-terminal retention only if measurements show meaningful memory pressure.
+4. Revisit native-view batching or bounds work only if tab-switch, overlay, or resize profiling still points there.
+5. Revisit settings-store and drag invalidation only if user-interaction profiling still shows them hot.
 6. Revisit extra terminal event batching only if bursty workloads still show queue pressure.
-
-## Persistence Follow-up Phases
-
-### Phase 1
-
-- keep incremental row-level persistence as the default instead of falling back to broad rewrites
-- keep `INSERT ... ON CONFLICT DO UPDATE` and targeted deletes as the default write pattern
-- wrap multi-step logical writes in explicit transactions scoped to one operation
-- finish the remaining hot settings follow-up:
-  - debounce text and number setting persistence
-  - commit settled values instead of persisting every interaction tick
-
-### Phase 2
-
-- add a real migration system for the workspace SQLite DB instead of only schema bootstrap plus `SCHEMA_VERSION`
-- keep persistence shaped around durable domain data, not transient renderer or UI state
-
-### Phase 3
-
-- split persistence by domain area over time:
-  - workspaces
-  - panes
-  - pane groups and tabs
-  - sidebar tree and metadata
-- cache prepared statements if the persistence layer grows more query-heavy
-
-### Phase 4
-
-- add indexes only when a real query path needs them
-- measure first, then add indexes for actual reads and lookups
-
-### Phase 5
-
-- move cold, low-frequency desktop settings to atomic main-process file persistence where it makes sense
-- use temp-file-plus-rename writes for those settings
-- keep hot and transient UI state out of that path
