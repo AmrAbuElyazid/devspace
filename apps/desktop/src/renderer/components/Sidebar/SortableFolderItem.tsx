@@ -1,7 +1,7 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { ChevronDown, ChevronRight, FolderClosed, FolderOpen, Plus } from "lucide-react";
-import { useDragContext } from "../../hooks/useDndOrchestrator";
+import { useActiveDrag } from "../../hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
@@ -52,7 +52,7 @@ export function SortableFolderItem({
   );
 
   // Folder uses edge zones (0.25 threshold): edges show insertion line, center shows folder highlight
-  const { activeDrag } = useDragContext();
+  const activeDrag = useActiveDrag();
   const isRelevantDrag =
     activeDrag?.type === "sidebar-workspace" ||
     activeDrag?.type === "sidebar-folder" ||

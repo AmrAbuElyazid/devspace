@@ -31,6 +31,8 @@ vi.mock("../App", () => ({
 }));
 
 vi.mock("../hooks/useDndOrchestrator", () => ({
+  useActiveDrag: () => sidebarShellMocks.activeDrag,
+  useDropIntent: () => null,
   useDragContext: () => ({ activeDrag: sidebarShellMocks.activeDrag, dropIntent: null }),
 }));
 

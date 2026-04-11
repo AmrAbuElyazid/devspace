@@ -2,7 +2,7 @@ import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { X } from "lucide-react";
 import { useWorkspaceStore } from "../../store/workspace-store";
-import { useDragContext } from "../../hooks/useDndOrchestrator";
+import { useActiveDrag } from "../../hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
 import { getWorkspaceMetadata } from "./sidebar-utils";
@@ -59,7 +59,7 @@ export function SortableWorkspaceItem({
     if (idx === s.workspaces.length - 1) return "⌘9";
     return null;
   });
-  const { activeDrag } = useDragContext();
+  const activeDrag = useActiveDrag();
   const mergedRef = useRef<HTMLDivElement | null>(null);
 
   const {

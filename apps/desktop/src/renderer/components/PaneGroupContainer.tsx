@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, type ReactElement } from "react";
 import { useWorkspaceStore, getTopLeftGroupId } from "../store/workspace-store";
 import { useNativeViewStore } from "../store/native-view-store";
-import { useDragContext } from "../hooks/useDndOrchestrator";
+import { useActiveDrag, useDropIntent } from "../hooks/useDndOrchestrator";
 import GroupTabBar from "./GroupTabBar";
 import PaneGroupContent from "./PaneGroupContent";
 
@@ -30,7 +30,8 @@ export default memo(function PaneGroupContainer({
   });
   const setFocusedGroup = useWorkspaceStore((s) => s.setFocusedGroup);
 
-  const { activeDrag, dropIntent } = useDragContext();
+  const activeDrag = useActiveDrag();
+  const dropIntent = useDropIntent();
   const isFocused = focusedGroupId === groupId;
   const dragHidesViews = useNativeViewStore((s) => s.dragHidesViews);
   const hasDragOverlay =

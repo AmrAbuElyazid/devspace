@@ -3,7 +3,7 @@ import { Plus, Columns2, Rows2, X, Menu } from "lucide-react";
 import { SortableContext, useSortable, horizontalListSortingStrategy } from "@dnd-kit/sortable";
 import { useWorkspaceStore } from "../store/workspace-store";
 import { collectGroupIds } from "../lib/split-tree";
-import { useDragContext } from "../hooks/useDndOrchestrator";
+import { useActiveDrag, useDropIntent } from "../hooks/useDndOrchestrator";
 import { useSettingsStore } from "../store/settings-store";
 import { useModifierHeldContext } from "../App";
 import { resolveDisplayString } from "../../shared/shortcuts";
@@ -60,7 +60,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
   const pendingEditId = useWorkspaceStore((s) => s.pendingEditId);
   const pendingEditType = useWorkspaceStore((s) => s.pendingEditType);
   const clearPendingEdit = useWorkspaceStore((s) => s.clearPendingEdit);
-  const { activeDrag } = useDragContext();
+  const activeDrag = useActiveDrag();
   const { attributes, listeners, setNodeRef, isDragging, isOver } = useSortable({
     id: `gtab-${tabId}`,
     disabled: !dndEnabled,
@@ -198,7 +198,7 @@ export default memo(function GroupTabBar({
   });
 
   const modifierHeld = useModifierHeldContext();
-  const { dropIntent } = useDragContext();
+  const dropIntent = useDropIntent();
 
   useEffect(() => {
     if (!isTopLeftGroup) {

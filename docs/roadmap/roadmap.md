@@ -10,6 +10,7 @@ Devspace has a much stronger engineering baseline than earlier drafts of this ro
 
 - split IPC modules, typed preload surface, and narrower privileged bridges are in place
 - workspace persistence now lives behind main/preload with SQLite
+- workspace persistence now uses incremental SQLite writes, real migrations, and cached statements instead of full rewrites on every save; hot settings persistence and pane ownership lookups were also tightened
 - native pane lifecycle, focus ownership, and active-tab mounting were tightened
 - browser-session handling is more deliberate and better covered than before
 - embedded VS Code now uses fixed-port listener ownership checks, isolated dev/build data, isolated editor Chromium sessions, and a default-off background server lifecycle
@@ -35,7 +36,7 @@ Tactical bugs and smaller polish requests should live in `docs/issues.md`. This 
 - [ ] Keep breaking up maintainability hotspots in core files that still carry too much change risk. `apps/desktop/src/main/browser/browser-import-service.ts`, `apps/desktop/src/renderer/hooks/useAppShortcuts.ts`, `apps/desktop/src/renderer/store/slices/workspace-crud.ts`, and more of the renderer transfer/create/split helpers are in much better shape now; the remaining larger cleanup seam is mostly the window/bootstrap wiring still left in `apps/desktop/src/main/index.ts`, with renderer-side risk now more distributed across smaller helpers instead of one dominant hotspot
 - [ ] Reduce preload contract drift risk as the bridge grows. The current preload surface is much safer than before, but it is still broad and manually mirrored across preload/shared/main registration points. Refs: `apps/desktop/src/preload/index.ts`, `apps/desktop/src/shared/types.ts`, `apps/desktop/src/main/ipc-handlers.ts`
 - [ ] Add a macOS native smoke lane to CI for Electron/Playwright coverage so browser/editor/native-pane regressions are exercised automatically, not only locally. Refs: `.github/workflows/ci.yml`, `apps/desktop/e2e/playwright.config.ts`, `apps/desktop/package.json`
-- [ ] Revisit workspace persistence write amplification when profiling says it matters. The current full-snapshot rewrite approach is simple and correct, but it will become a scaling hotspot as workspace size and churn grow. Refs: `apps/desktop/src/renderer/store/persistence.ts`, `apps/desktop/src/main/workspace-persistence-store.ts`
+- [ ] Continue the remaining performance hardening pass from `docs/audits/performance.md`. Incremental workspace persistence, hot settings write reduction, and pane ownership indexing are in place; the next likely scaling hotspots are native terminal event coalescing, diff-based native visibility updates, drag/drop invalidation, and sidebar metadata recomputation. Refs: `docs/audits/performance.md`, `packages/ghostty-electron/native/ghostty_bridge.mm`, `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`, `apps/desktop/src/renderer/components/Sidebar/sidebar-utils.ts`
 
 ## Opportunistic
 

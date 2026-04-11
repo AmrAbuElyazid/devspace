@@ -1,10 +1,14 @@
-import { createContext, useContext, useEffect, useMemo, memo } from "react";
+import { createContext, useContext, useEffect, memo } from "react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { useWorkspaceStore } from "./store/workspace-store";
 import { useSettingsStore } from "./store/settings-store";
 import { useNativeViewStore, initNativeViewSubscriptions } from "./store/native-view-store";
 import { useTheme } from "./hooks/useTheme";
-import { useDndOrchestrator, DragContext } from "./hooks/useDndOrchestrator";
+import {
+  ActiveDragContext,
+  DropIntentContext,
+  useDndOrchestrator,
+} from "./hooks/useDndOrchestrator";
 import { useModifierHeld, type HeldModifier } from "./hooks/useModifierHeld";
 import { useAppShortcuts } from "./hooks/useAppShortcuts";
 import { useBrowserBridge } from "./hooks/useBrowserBridge";
@@ -64,7 +68,6 @@ export default function App() {
 
   const dnd = useDndOrchestrator();
   const { activeDrag, dropIntent } = dnd;
-  const dragContextValue = useMemo(() => ({ activeDrag, dropIntent }), [activeDrag, dropIntent]);
   const modifierHeld = useModifierHeld();
 
   // ── Extracted hook subscriptions ─────────────────────────────────────
@@ -110,60 +113,62 @@ export default function App() {
         onDragEnd={dnd.onDragEnd}
         onDragCancel={dnd.onDragCancel}
       >
-        <DragContext.Provider value={dragContextValue}>
-          <div className="app-shell" data-dragging={activeDrag ? "true" : undefined}>
-            <Sidebar />
-            <div className="app-main">
-              <div className="app-content">
-                {/* Only mount the active workspace layer so hidden work scales with
-                  what is visible. Native panes survive workspace switches via the
-                  per-pane session tracking in their own components. */}
-                {activeWorkspaceId ? (
-                  <WorkspaceLayer
-                    key={activeWorkspaceId}
-                    workspaceId={activeWorkspaceId}
-                    isActive
-                    sidebarOpen={sidebarOpen}
-                  />
-                ) : null}
+        <ActiveDragContext.Provider value={activeDrag}>
+          <DropIntentContext.Provider value={dropIntent}>
+            <div className="app-shell" data-dragging={activeDrag ? "true" : undefined}>
+              <Sidebar />
+              <div className="app-main">
+                <div className="app-content">
+                  {/* Only mount the active workspace layer so hidden work scales with
+                    what is visible. Native panes survive workspace switches via the
+                    per-pane session tracking in their own components. */}
+                  {activeWorkspaceId ? (
+                    <WorkspaceLayer
+                      key={activeWorkspaceId}
+                      workspaceId={activeWorkspaceId}
+                      isActive
+                      sidebarOpen={sidebarOpen}
+                    />
+                  ) : null}
 
-                {/* Pane picker dialog */}
-                <PanePickerDialog />
+                  {/* Pane picker dialog */}
+                  <PanePickerDialog />
+                </div>
               </div>
+              {settingsOpen && <SettingsPage />}
+              <ToastViewport />
             </div>
-            {settingsOpen && <SettingsPage />}
-            <ToastViewport />
-          </div>
 
-          <DragOverlay dropAnimation={null}>
-            {activeDrag?.type === "sidebar-workspace" &&
-              (() => {
-                const ws = useWorkspaceStore
-                  .getState()
-                  .workspaces.find((w) => w.id === activeDrag.workspaceId);
-                return ws ? <div className="drag-overlay-workspace">{ws.name}</div> : null;
-              })()}
-            {activeDrag?.type === "sidebar-folder" &&
-              (() => {
-                const sidebarTree = useWorkspaceStore.getState().sidebarTree;
-                const folder = findFolder(sidebarTree, activeDrag.folderId);
-                return (
-                  <div className="drag-overlay-folder">
-                    <FolderClosed size={12} />
-                    <span>{folder?.name ?? "Folder"}</span>
-                  </div>
-                );
-              })()}
-            {activeDrag?.type === "group-tab" &&
-              (() => {
-                const state = useWorkspaceStore.getState();
-                const group = state.paneGroups[activeDrag.groupId];
-                const tab = group?.tabs.find((t) => t.id === activeDrag.tabId);
-                const pane = tab ? state.panes[tab.paneId] : null;
-                return pane ? <div className="drag-overlay-tab">{pane.title}</div> : null;
-              })()}
-          </DragOverlay>
-        </DragContext.Provider>
+            <DragOverlay dropAnimation={null}>
+              {activeDrag?.type === "sidebar-workspace" &&
+                (() => {
+                  const ws = useWorkspaceStore
+                    .getState()
+                    .workspaces.find((w) => w.id === activeDrag.workspaceId);
+                  return ws ? <div className="drag-overlay-workspace">{ws.name}</div> : null;
+                })()}
+              {activeDrag?.type === "sidebar-folder" &&
+                (() => {
+                  const sidebarTree = useWorkspaceStore.getState().sidebarTree;
+                  const folder = findFolder(sidebarTree, activeDrag.folderId);
+                  return (
+                    <div className="drag-overlay-folder">
+                      <FolderClosed size={12} />
+                      <span>{folder?.name ?? "Folder"}</span>
+                    </div>
+                  );
+                })()}
+              {activeDrag?.type === "group-tab" &&
+                (() => {
+                  const state = useWorkspaceStore.getState();
+                  const group = state.paneGroups[activeDrag.groupId];
+                  const tab = group?.tabs.find((t) => t.id === activeDrag.tabId);
+                  const pane = tab ? state.panes[tab.paneId] : null;
+                  return pane ? <div className="drag-overlay-tab">{pane.title}</div> : null;
+                })()}
+            </DragOverlay>
+          </DropIntentContext.Provider>
+        </ActiveDragContext.Provider>
       </DndContext>
     </ModifierHeldContext.Provider>
   );

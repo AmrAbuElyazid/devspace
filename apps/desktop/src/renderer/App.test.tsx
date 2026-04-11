@@ -72,7 +72,8 @@ vi.mock("./hooks/useTheme", () => ({
 }));
 
 vi.mock("./hooks/useDndOrchestrator", () => ({
-  DragContext: { Provider: ({ children }: { children: unknown }) => children },
+  ActiveDragContext: { Provider: ({ children }: { children: unknown }) => children },
+  DropIntentContext: { Provider: ({ children }: { children: unknown }) => children },
   useDndOrchestrator: () => appMocks.dnd,
 }));
 

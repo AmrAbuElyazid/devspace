@@ -59,8 +59,10 @@ function createSidebarWorkspaceDrag() {
 }
 
 let latestHook: ReturnType<typeof useDndOrchestrator> | null = null;
+let renderCount = 0;
 
 function HookHarness() {
+  renderCount += 1;
   latestHook = useDndOrchestrator();
   return null;
 }
@@ -77,6 +79,7 @@ beforeEach(async () => {
   document.body.appendChild(container);
   root = createRoot(container);
   latestHook = null;
+  renderCount = 0;
 
   dndMocks.handlers.length = 0;
   dndMocks.useSensor.mockClear();
@@ -228,4 +231,53 @@ test("drag end executes the latest resolved intent and clears drag state", async
   expect(execute).toHaveBeenCalledWith(resolvedIntent, expect.any(Function));
   expect(latestHook?.activeDrag).toBeNull();
   expect(latestHook?.dropIntent).toBeNull();
+});
+
+test("drag move skips re-rendering when the resolved drop intent is unchanged", async () => {
+  const dragData = createGroupTabDrag();
+  const resolvedIntent = {
+    kind: "reorder-tab" as const,
+    workspaceId: "workspace-1",
+    sourceGroupId: "group-1",
+    sourceTabId: "tab-1",
+    targetGroupId: "group-1",
+    targetIndex: 1,
+  };
+
+  dndMocks.handlers.push({
+    id: "test-handler",
+    canHandle: () => true,
+    isValidTarget: () => true,
+    resolveIntent: () => ({ ...resolvedIntent }),
+    execute: () => false,
+  });
+
+  await act(async () => {
+    latestHook?.onDragStart({
+      active: { data: { current: dragData } },
+    } as never);
+  });
+
+  await act(async () => {
+    latestHook?.onDragMove({
+      active: { data: { current: dragData } },
+      activatorEvent: new PointerEvent("pointermove", { clientX: 40, clientY: 20 }),
+      delta: { x: 5, y: 10 },
+      collisions: [createCollision("group-tab")],
+    } as never);
+  });
+
+  expect(renderCount).toBe(3);
+
+  await act(async () => {
+    latestHook?.onDragMove({
+      active: { data: { current: dragData } },
+      activatorEvent: new PointerEvent("pointermove", { clientX: 45, clientY: 25 }),
+      delta: { x: 5, y: 10 },
+      collisions: [createCollision("group-tab")],
+    } as never);
+  });
+
+  expect(latestHook?.dropIntent).toEqual(resolvedIntent);
+  expect(renderCount).toBe(3);
 });

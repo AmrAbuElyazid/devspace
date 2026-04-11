@@ -9,7 +9,7 @@ import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { ScrollArea } from "../ui/scroll-area";
 import { AlertDialog } from "../ui/alert-dialog";
-import { useDragContext } from "../../hooks/useDndOrchestrator";
+import { useActiveDrag, useDropIntent } from "../../hooks/useDndOrchestrator";
 import { findSidebarNode } from "../../lib/sidebar-tree";
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
 import { SidebarProvider, type SidebarContextValue } from "./SidebarContext";
@@ -48,7 +48,8 @@ export default function Sidebar() {
   const toggleSettings = useSettingsStore((s) => s.toggleSettings);
   const [isFullScreen, setIsFullScreen] = useState(false);
 
-  const { activeDrag, dropIntent } = useDragContext();
+  const activeDrag = useActiveDrag();
+  const dropIntent = useDropIntent();
 
   const [searchQuery, setSearchQuery] = useState("");
 

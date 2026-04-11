@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, createContext, useContext } from "react";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 import {
   useSensors,
   useSensor,
@@ -17,12 +17,26 @@ import { dndHandlers } from "../lib/dnd/registry";
 import type { DragItemData } from "../types/dnd";
 import type { DropIntent, DndHandler } from "../lib/dnd/types";
 
-// React context to share activeDrag + dropIntent without prop drilling
-export const DragContext = createContext<{
-  activeDrag: DragItemData | null;
-  dropIntent: DropIntent | null;
-}>({ activeDrag: null, dropIntent: null });
-export const useDragContext = () => useContext(DragContext);
+// Drag state updates on pointer movement, so split the hot preview state from
+// activeDrag to avoid re-rendering active-only consumers on every move.
+export const ActiveDragContext = createContext<DragItemData | null>(null);
+export const DropIntentContext = createContext<DropIntent | null>(null);
+
+export const useActiveDrag = () => useContext(ActiveDragContext);
+export const useDropIntent = () => useContext(DropIntentContext);
+
+function areDropIntentsEqual(a: DropIntent | null, b: DropIntent | null): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.kind !== b.kind) return false;
+
+  const aRecord = a as Record<string, unknown>;
+  const bRecord = b as Record<string, unknown>;
+  const aKeys = Object.keys(aRecord);
+  const bKeys = Object.keys(bRecord);
+  if (aKeys.length !== bKeys.length) return false;
+
+  return aKeys.every((key) => aRecord[key] === bRecord[key]);
+}
 
 function getPointerPosition(event: {
   activatorEvent: Event;
@@ -118,6 +132,15 @@ export function useDndOrchestrator() {
 
   const store = useWorkspaceStore;
 
+  const setResolvedDropIntent = useCallback((next: DropIntent | null) => {
+    if (areDropIntentsEqual(dropIntentRef.current, next)) {
+      return;
+    }
+
+    dropIntentRef.current = next;
+    setDropIntent(next);
+  }, []);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
@@ -175,12 +198,14 @@ export function useDndOrchestrator() {
     hoveredFolderIdRef.current = null;
   }, []);
 
-  const onDragStart = useCallback((event: DragStartEvent) => {
-    const data = event.active.data.current as DragItemData;
-    setActiveDrag(data);
-    setDropIntent(null);
-    dropIntentRef.current = null;
-  }, []);
+  const onDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const data = event.active.data.current as DragItemData;
+      setActiveDrag(data);
+      setResolvedDropIntent(null);
+    },
+    [setResolvedDropIntent],
+  );
 
   const onDragMove = useCallback(
     (event: DragMoveEvent) => {
@@ -189,8 +214,7 @@ export function useDndOrchestrator() {
       pointerPosRef.current = pointer;
 
       if (!dragData || !pointer) {
-        setDropIntent(null);
-        dropIntentRef.current = null;
+        setResolvedDropIntent(null);
         return;
       }
 
@@ -206,16 +230,14 @@ export function useDndOrchestrator() {
           store,
         });
         if (intent) {
-          setDropIntent(intent);
-          dropIntentRef.current = intent;
+          setResolvedDropIntent(intent);
           return;
         }
       }
 
-      setDropIntent(null);
-      dropIntentRef.current = null;
+      setResolvedDropIntent(null);
     },
-    [store],
+    [setResolvedDropIntent, store],
   );
 
   const onDragOver = useCallback(
@@ -255,8 +277,7 @@ export function useDndOrchestrator() {
       // the intent after the last React render that created this callback.
       const currentDropIntent = dropIntentRef.current;
       pointerPosRef.current = null;
-      dropIntentRef.current = null;
-      setDropIntent(null);
+      setResolvedDropIntent(null);
 
       if (!currentDropIntent) return;
 
@@ -271,16 +292,15 @@ export function useDndOrchestrator() {
         if (handler.execute(currentDropIntent, store)) break;
       }
     },
-    [clearFolderExpandTimer, store],
+    [clearFolderExpandTimer, setResolvedDropIntent, store],
   );
 
   const onDragCancel = useCallback(() => {
     setActiveDrag(null);
-    setDropIntent(null);
-    dropIntentRef.current = null;
+    setResolvedDropIntent(null);
     pointerPosRef.current = null;
     clearFolderExpandTimer();
-  }, [clearFolderExpandTimer]);
+  }, [clearFolderExpandTimer, setResolvedDropIntent]);
 
   return {
     sensors,
