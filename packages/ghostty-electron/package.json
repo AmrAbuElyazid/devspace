@@ -18,7 +18,8 @@
     "src",
     "native",
     "deps",
-    "share"
+    "share",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "main": "./src/index.ts",
   "types": "./src/index.ts",

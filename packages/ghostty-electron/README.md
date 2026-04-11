@@ -255,4 +255,8 @@ scripts/
 
 ## License
 
-MIT
+The `ghostty-electron` package source in this repository is MIT licensed.
+
+Bundled third-party dependency assets and preserved upstream notices for
+`deps/libghostty/` are documented in
+[`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).

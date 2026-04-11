@@ -5,7 +5,7 @@
 Please do not report security vulnerabilities in public issues.
 
 If private vulnerability reporting is enabled for the repository, use that
-channel. Otherwise, contact the maintainer directly before public disclosure.
+channel. Otherwise, email `aboelyazid.amr@gmail.com` before public disclosure.
 
 When reporting, include:
 

@@ -26,8 +26,9 @@ that do not align with this code of conduct.
 
 ## Reporting
 
-If you experience or witness unacceptable behavior, contact the maintainer
-privately instead of escalating in public issue threads when possible.
+If you experience or witness unacceptable behavior, email
+`aboelyazid.amr@gmail.com` privately instead of escalating in public issue
+threads when possible.
 
 ## Scope
 

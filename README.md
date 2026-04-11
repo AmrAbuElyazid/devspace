@@ -139,3 +139,6 @@ Security reporting guidance lives in [`SECURITY.md`](./SECURITY.md).
 ## License
 
 This repository is licensed under the MIT License. See [`LICENSE`](./LICENSE).
+
+Bundled third-party dependency notices for `ghostty-electron` live in
+[`packages/ghostty-electron/THIRD_PARTY_NOTICES.md`](./packages/ghostty-electron/THIRD_PARTY_NOTICES.md).
