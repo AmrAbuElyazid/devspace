@@ -956,7 +956,13 @@ static void evaluateVisibility(GhosttyView* view) {
 // ---------------------------------------------------------------------------
 
 static void wakeup_cb(void* userdata) {
+    bool expected = false;
+    if (!g_state.pendingAppTick.compare_exchange_strong(expected, true)) {
+        return;
+    }
+
     dispatch_async(dispatch_get_main_queue(), ^{
+        g_state.pendingAppTick.store(false);
         if (g_state.app) ghostty_app_tick(g_state.app);
     });
 }
@@ -1734,6 +1740,7 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
     view.tabId = [NSString stringWithUTF8String:surfaceId.c_str()];
     view.autoresizingMask = NSViewNotSizable;
     view.wantsLayer = YES;
+    view.wantVisible = g_state.desiredVisibleSurfaceIds.count(surfaceId) > 0 ? YES : NO;
     [view setHidden:YES]; // Caller will show when ready
     [contentView addSubview:view];
 
@@ -1795,6 +1802,7 @@ static Napi::Value DestroySurface(const Napi::CallbackInfo& info) {
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
 
     GhosttyView* view = takeSurfaceView(surfaceId);
+    g_state.desiredVisibleSurfaceIds.erase(surfaceId);
     if (view) {
         destroySurfaceView(view);
     }
@@ -1883,19 +1891,29 @@ static Napi::Value SetVisibleSurfaces(const Napi::CallbackInfo& info) {
         }
     }
 
-    std::vector<std::pair<std::string, GhosttyView*>> surfaces;
-    {
-        std::lock_guard<std::mutex> lock(g_state.surfacesMutex);
-        surfaces.reserve(g_state.surfaces.size());
-        for (const auto& pair : g_state.surfaces) {
-            surfaces.push_back(pair);
+    std::vector<std::string> changedSurfaceIds;
+    changedSurfaceIds.reserve(visibleSet.size() + g_state.desiredVisibleSurfaceIds.size());
+
+    for (const auto& surfaceId : g_state.desiredVisibleSurfaceIds) {
+        if (visibleSet.count(surfaceId) == 0) {
+            changedSurfaceIds.push_back(surfaceId);
         }
     }
 
-    for (const auto& pair : surfaces) {
-        bool want = visibleSet.count(pair.first) > 0;
-        pair.second.wantVisible = want ? YES : NO;
-        evaluateVisibility(pair.second);
+    for (const auto& surfaceId : visibleSet) {
+        if (g_state.desiredVisibleSurfaceIds.count(surfaceId) == 0) {
+            changedSurfaceIds.push_back(surfaceId);
+        }
+    }
+
+    g_state.desiredVisibleSurfaceIds = visibleSet;
+
+    for (const auto& surfaceId : changedSurfaceIds) {
+        GhosttyView* view = findSurfaceView(surfaceId);
+        if (!view) continue;
+        bool want = visibleSet.count(surfaceId) > 0;
+        view.wantVisible = want ? YES : NO;
+        evaluateVisibility(view);
     }
 
     return env.Undefined();

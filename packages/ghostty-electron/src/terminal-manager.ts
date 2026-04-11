@@ -36,6 +36,31 @@ export class GhosttyTerminal {
   private bridge: GhosttyNativeBridge | null = null;
   private activeSurfaces = new Set<string>();
   private listeners = new Map<string, Set<(...args: any[]) => void>>();
+  private lastTitlesBySurface = new Map<string, string>();
+  private lastPwdsBySurface = new Map<string, string>();
+
+  private emitDedupedSurfaceStringEvent(
+    cache: Map<string, string>,
+    event: "title-changed" | "pwd-changed",
+    surfaceId: unknown,
+    value: unknown,
+  ): void {
+    if (typeof surfaceId !== "string" || typeof value !== "string") {
+      return;
+    }
+
+    if (cache.get(surfaceId) === value) {
+      return;
+    }
+
+    cache.set(surfaceId, value);
+    this.emit(event, surfaceId, value);
+  }
+
+  private clearSurfaceEventCache(surfaceId: string): void {
+    this.lastTitlesBySurface.delete(surfaceId);
+    this.lastPwdsBySurface.delete(surfaceId);
+  }
 
   /**
    * Initialize the Ghostty bridge with the given Electron window.
@@ -46,9 +71,12 @@ export class GhosttyTerminal {
 
     // Register native callbacks that forward to the event system
     this.bridge.setCallback("title-changed", (surfaceId: unknown, title: unknown) => {
-      if (typeof surfaceId === "string" && typeof title === "string") {
-        this.emit("title-changed", surfaceId, title);
-      }
+      this.emitDedupedSurfaceStringEvent(
+        this.lastTitlesBySurface,
+        "title-changed",
+        surfaceId,
+        title,
+      );
     });
 
     this.bridge.setCallback("surface-closed", (surfaceId: unknown) => {
@@ -58,6 +86,7 @@ export class GhosttyTerminal {
         }
         this.bridge?.destroySurface(surfaceId);
         this.activeSurfaces.delete(surfaceId);
+        this.clearSurfaceEventCache(surfaceId);
         this.emit("surface-closed", surfaceId);
       }
     });
@@ -75,9 +104,7 @@ export class GhosttyTerminal {
     });
 
     this.bridge.setCallback("pwd-changed", (surfaceId: unknown, pwd: unknown) => {
-      if (typeof surfaceId === "string" && typeof pwd === "string") {
-        this.emit("pwd-changed", surfaceId, pwd);
-      }
+      this.emitDedupedSurfaceStringEvent(this.lastPwdsBySurface, "pwd-changed", surfaceId, pwd);
     });
 
     this.bridge.setCallback("notification", (surfaceId: unknown, title: unknown, body: unknown) => {
@@ -149,6 +176,7 @@ export class GhosttyTerminal {
   createSurface(surfaceId: string, options?: CreateSurfaceOptions): void {
     if (!this.bridge) return;
     this.bridge.createSurface(surfaceId, options);
+    this.clearSurfaceEventCache(surfaceId);
     this.activeSurfaces.add(surfaceId);
   }
 
@@ -158,6 +186,7 @@ export class GhosttyTerminal {
   destroySurface(surfaceId: string): void {
     if (!this.bridge) return;
     this.activeSurfaces.delete(surfaceId);
+    this.clearSurfaceEventCache(surfaceId);
     this.bridge.destroySurface(surfaceId);
   }
 
@@ -236,6 +265,8 @@ export class GhosttyTerminal {
 
     this.activeSurfaces.clear();
     this.listeners.clear();
+    this.lastTitlesBySurface.clear();
+    this.lastPwdsBySurface.clear();
     this.bridge = null;
 
     let firstError: unknown = null;

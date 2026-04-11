@@ -2,8 +2,10 @@
 
 #include <napi.h>
 #import <AppKit/AppKit.h>
+#include <atomic>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <string>
 
@@ -30,6 +32,7 @@ struct GhosttyAppState {
     // Dynamic reserved shortcuts list — set from JS via setReservedShortcuts().
     // Replaces the hardcoded isAppReservedShortcut() function.
     std::vector<ReservedShortcut> reservedShortcuts;
+    std::unordered_set<std::string> desiredVisibleSurfaceIds;
 
     Napi::ThreadSafeFunction titleChangedCallback;
     Napi::ThreadSafeFunction surfaceClosedCallback;
@@ -47,6 +50,7 @@ struct GhosttyAppState {
     std::vector<id> windowObserverTokens;
     std::vector<std::string> clipboardTempFiles;
     NSEventModifierFlags lastModifierFlags = 0;
+    std::atomic_bool pendingAppTick = false;
     std::mutex surfacesMutex;
 };
 

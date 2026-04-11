@@ -48,10 +48,12 @@ test("init loads the addon, initializes the bridge, and forwards valid events", 
   const onTitleChanged = vi.fn();
   const onModifierChanged = vi.fn();
   const onNotification = vi.fn();
+  const onPwdChanged = vi.fn();
 
   terminal.on("title-changed", onTitleChanged);
   terminal.on("modifier-changed", onModifierChanged);
   terminal.on("notification", onNotification);
+  terminal.on("pwd-changed", onPwdChanged);
 
   const windowHandle = Buffer.from("window-handle");
   terminal.init({
@@ -63,16 +65,25 @@ test("init loads the addon, initializes the bridge, and forwards valid events", 
   expect(nativeMocks.bridge.init).toHaveBeenCalledWith(windowHandle);
 
   nativeMocks.bridgeCallbacks.get("title-changed")?.("surface-1", "Shell");
+  nativeMocks.bridgeCallbacks.get("title-changed")?.("surface-1", "Shell");
+  nativeMocks.bridgeCallbacks.get("title-changed")?.("surface-1", "Shell 2");
   nativeMocks.bridgeCallbacks.get("modifier-changed")?.("command");
   nativeMocks.bridgeCallbacks.get("modifier-changed")?.(null);
+  nativeMocks.bridgeCallbacks.get("pwd-changed")?.("surface-1", "/tmp/project");
+  nativeMocks.bridgeCallbacks.get("pwd-changed")?.("surface-1", "/tmp/project");
+  nativeMocks.bridgeCallbacks.get("pwd-changed")?.("surface-1", "/tmp/project-2");
   nativeMocks.bridgeCallbacks.get("notification")?.("surface-1", "Build", "Done");
   nativeMocks.bridgeCallbacks.get("title-changed")?.("surface-1", 42);
 
   expect(onTitleChanged).toHaveBeenCalledWith("surface-1", "Shell");
+  expect(onTitleChanged).toHaveBeenCalledWith("surface-1", "Shell 2");
   expect(onModifierChanged).toHaveBeenCalledWith("command");
   expect(onModifierChanged).toHaveBeenCalledWith(null);
+  expect(onPwdChanged).toHaveBeenCalledWith("surface-1", "/tmp/project");
+  expect(onPwdChanged).toHaveBeenCalledWith("surface-1", "/tmp/project-2");
   expect(onNotification).toHaveBeenCalledWith("surface-1", "Build", "Done");
-  expect(onTitleChanged).toHaveBeenCalledTimes(1);
+  expect(onTitleChanged).toHaveBeenCalledTimes(2);
+  expect(onPwdChanged).toHaveBeenCalledTimes(2);
 });
 
 test("surface lifecycle methods forward to the bridge and closed callbacks retire surfaces", () => {
@@ -133,6 +144,31 @@ test("late surface-closed callbacks do not double-destroy or re-emit retired sur
   expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledTimes(1);
   expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledWith("surface-1");
   expect(onClosed).not.toHaveBeenCalled();
+});
+
+test("recreating a surface clears duplicate suppression caches", () => {
+  const terminal = new GhosttyTerminal();
+  const onTitleChanged = vi.fn();
+  const onPwdChanged = vi.fn();
+
+  terminal.init({
+    windowHandle: Buffer.from("window-handle"),
+    nativeAddonPath: "/tmp/ghostty_bridge.node",
+  });
+  terminal.on("title-changed", onTitleChanged);
+  terminal.on("pwd-changed", onPwdChanged);
+
+  terminal.createSurface("surface-1");
+  nativeMocks.bridgeCallbacks.get("title-changed")?.("surface-1", "Shell");
+  nativeMocks.bridgeCallbacks.get("pwd-changed")?.("surface-1", "/tmp/project");
+
+  terminal.destroySurface("surface-1");
+  terminal.createSurface("surface-1");
+  nativeMocks.bridgeCallbacks.get("title-changed")?.("surface-1", "Shell");
+  nativeMocks.bridgeCallbacks.get("pwd-changed")?.("surface-1", "/tmp/project");
+
+  expect(onTitleChanged).toHaveBeenCalledTimes(2);
+  expect(onPwdChanged).toHaveBeenCalledTimes(2);
 });
 
 test("destroy clears listeners and active surfaces before late native callbacks", () => {
