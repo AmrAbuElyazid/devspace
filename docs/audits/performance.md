@@ -9,7 +9,7 @@ Devspace's biggest earlier renderer and native-view no-op paths have been reduce
 The main open risks are:
 
 - broad workspace persistence that still runs through synchronous SQLite work on the Electron main thread
-- retained hidden terminal surfaces and the memory they keep resident
+- hidden terminal tabs in the active workspace still keep their native surfaces resident until the workspace is deactivated or the panes are closed
 - native terminal events that still fan out across processes one message at a time
 - remaining native-view visible-set and bounds work that still scales with active visible panes
 - limited in-repo CPU, memory, and frame-pacing telemetry
@@ -46,20 +46,22 @@ Relevant files: `packages/ghostty-electron/native/ghostty_bridge.mm`, `packages/
 
 - Workspace sidebar metadata is computed and updated by affected workspace ids instead of forcing broader recompute patterns in hot flows.
 - Only the active workspace layer mounts in React, which avoids keeping full inactive workspace trees mounted.
+- Terminal surfaces in inactive workspaces are now evicted on workspace switch instead of remaining resident until later pane cleanup.
 - Sidebar resize keeps live width local and commits the persisted setting only on mouseup.
 - Settings text and number inputs now keep local draft state and commit on blur or Enter instead of persisting on every keystroke.
 - Drag state now lives in a selector-based store instead of top-level React contexts, and `dropIntent` updates are semantically deduped.
 
-Relevant files: `apps/desktop/src/renderer/store/workspace-sidebar-metadata.ts`, `apps/desktop/src/renderer/store/pane-ownership.ts`, `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/SettingsPage.tsx`, `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`
+Relevant files: `apps/desktop/src/renderer/store/workspace-sidebar-metadata.ts`, `apps/desktop/src/renderer/store/pane-ownership.ts`, `apps/desktop/src/renderer/App.tsx`, `apps/desktop/src/renderer/lib/terminal-surface-session.ts`, `apps/desktop/src/renderer/lib/pane-cleanup.ts`, `apps/desktop/src/renderer/components/Sidebar/Sidebar.tsx`, `apps/desktop/src/renderer/components/SettingsPage.tsx`, `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`
 
 ### Some measurement coverage already exists
 
 - Native-view profiling counters and snapshots are exposed in the renderer for debug and E2E usage.
 - Main-process performance snapshots now expose process memory and CPU, Electron app metrics, and per-operation timings for terminal and browser lifecycle calls.
 - The mixed-workspace stress E2E covers native-view lifecycle behavior across repeated workspace switching.
+- A dedicated hidden-terminal retention E2E now captures create/hide/destroy lifecycle counts and memory snapshots for retained terminal tabs.
 - Manual benchmark and stress scripts already exist for terminal throughput and load testing.
 
-Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/main.tsx`, `apps/desktop/src/main/performance-monitor.ts`, `apps/desktop/src/main/terminal-manager.ts`, `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/e2e/mixed-workspace-stress.spec.ts`, `apps/desktop/e2e/helpers/app.ts`, `BENCHMARKS.md`, `scripts/terminal-bench.sh`, `scripts/terminal-stress.sh`
+Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/main.tsx`, `apps/desktop/src/main/performance-monitor.ts`, `apps/desktop/src/main/terminal-manager.ts`, `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/e2e/mixed-workspace-stress.spec.ts`, `apps/desktop/e2e/hidden-terminal-retention.spec.ts`, `apps/desktop/e2e/helpers/app.ts`, `BENCHMARKS.md`, `scripts/terminal-bench.sh`, `scripts/terminal-stress.sh`
 
 ## Open
 
@@ -79,11 +81,11 @@ Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/de
 
 Relevant files: `apps/desktop/src/renderer/store/persistence.ts`, `apps/desktop/src/main/ipc/workspace-state.ts`, `apps/desktop/src/main/workspace-persistence-store.ts`
 
-### Hidden terminal panes still retain native surfaces and shell processes
+### Hidden terminal tabs in the active workspace still retain native surfaces and shell processes
 
-- Terminal surfaces survive remounts and workspace switches.
-- Hidden panes are generally hidden rather than destroyed.
-- Memory therefore still scales more with total terminal count than visible terminal count.
+- Terminal surfaces no longer survive inactive-workspace switches, but they still survive active-workspace tab switches and remounts.
+- Hidden terminal tabs inside the active workspace are still hidden rather than destroyed.
+- Memory therefore still scales with terminal tab count inside the active workspace until the workspace is deactivated or panes are explicitly closed.
 
 Relevant files: `apps/desktop/src/renderer/components/TerminalPane.tsx`, `apps/desktop/src/renderer/lib/terminal-surface-session.ts`, `apps/desktop/src/renderer/lib/pane-cleanup.ts`, `packages/ghostty-electron/native/ghostty_bridge.mm`
 
@@ -120,7 +122,7 @@ Relevant files: `apps/desktop/src/renderer/store/settings-store.ts`, `apps/deskt
 
 1. Re-run repeatable stress scenarios and capture baselines with the new main/renderer instrumentation before making deeper changes.
 2. Expand the measurement surface only where the current snapshots still leave ambiguity, especially around renderer memory and long-run leak detection.
-3. Revisit hidden-terminal retention only if measurements show meaningful memory pressure.
+3. Revisit active-workspace hidden-terminal retention only if measurements still show meaningful memory pressure after the inactive-workspace eviction pass.
 4. Revisit native-view batching or bounds work only if tab-switch, overlay, or resize profiling still points there.
 5. Revisit settings-store writes only if user-interaction profiling still shows them hot.
 6. Revisit extra terminal event batching only if bursty workloads still show queue pressure.

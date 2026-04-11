@@ -13,6 +13,7 @@ globalThis.window = {
 } as any;
 
 import { cleanupPaneResources } from "../lib/pane-cleanup";
+import { markTerminalSurfaceCreated } from "../lib/terminal-surface-session";
 import {
   useWorkspaceStore,
   collectGroupIds,
@@ -128,6 +129,84 @@ test("cleanupPaneResources destroys browser panes and clears runtime state", () 
 
   expect(destroyedPaneIds).toEqual(["pane-1"]);
   expect(clearedPaneIds).toEqual(["pane-1"]);
+});
+
+test("cleanupPaneResources only destroys tracked terminal panes", () => {
+  const destroyedPaneIds: string[] = [];
+
+  markTerminalSurfaceCreated("pane-1");
+
+  cleanupPaneResources(
+    {
+      "pane-1": {
+        id: "pane-1",
+        type: "terminal",
+        title: "Terminal",
+        config: {},
+      },
+      "pane-2": {
+        id: "pane-2",
+        type: "terminal",
+        title: "Terminal",
+        config: {},
+      },
+    },
+    "pane-1",
+    {
+      destroyTerminal: (paneId) => {
+        destroyedPaneIds.push(paneId);
+      },
+      destroyBrowser: () => {
+        throw new Error("unexpected browser cleanup");
+      },
+      destroyEditor: () => {
+        throw new Error("unexpected editor cleanup");
+      },
+      destroyT3Code: () => {
+        throw new Error("unexpected t3code cleanup");
+      },
+      clearBrowserRuntime: () => {
+        throw new Error("unexpected browser runtime cleanup");
+      },
+    },
+  );
+
+  cleanupPaneResources(
+    {
+      "pane-1": {
+        id: "pane-1",
+        type: "terminal",
+        title: "Terminal",
+        config: {},
+      },
+      "pane-2": {
+        id: "pane-2",
+        type: "terminal",
+        title: "Terminal",
+        config: {},
+      },
+    },
+    "pane-2",
+    {
+      destroyTerminal: (paneId) => {
+        destroyedPaneIds.push(paneId);
+      },
+      destroyBrowser: () => {
+        throw new Error("unexpected browser cleanup");
+      },
+      destroyEditor: () => {
+        throw new Error("unexpected editor cleanup");
+      },
+      destroyT3Code: () => {
+        throw new Error("unexpected t3code cleanup");
+      },
+      clearBrowserRuntime: () => {
+        throw new Error("unexpected browser runtime cleanup");
+      },
+    },
+  );
+
+  expect(destroyedPaneIds).toEqual(["pane-1"]);
 });
 
 test("updateBrowserPaneZoom persists zoom on browser pane config only", () => {

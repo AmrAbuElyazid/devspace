@@ -15,6 +15,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "bun run rebuild-native && bun run build && bunx playwright test --config e2e/playwright.config.ts",
     "test:e2e:dev": "bun run rebuild-native && bunx playwright test --config e2e/playwright.config.ts",
+    "test:e2e:hidden-retention": "bun run rebuild-native && bun run build && bunx playwright test --config e2e/playwright.config.ts e2e/hidden-terminal-retention.spec.ts",
     "test:e2e:stress": "bun run rebuild-native && bun run build && bunx playwright test --config e2e/playwright.config.ts e2e/mixed-workspace-stress.spec.ts",
     "knip": "knip"
   },

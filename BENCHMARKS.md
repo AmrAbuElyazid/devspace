@@ -126,4 +126,10 @@ Mixed-workspace Electron stress pass (builds the app, then cycles terminal/brows
 bun run --cwd apps/desktop test:e2e:stress
 ```
 
+Hidden-terminal retention pass (builds the app, creates multiple terminal tabs, switches away to verify inactive-workspace terminal eviction, then destroys the workspace while printing memory and lifecycle snapshots):
+
+```bash
+bun run --cwd apps/desktop test:e2e:hidden-retention
+```
+
 Note: The shell-based benchmarks measure command execution time, not terminal rendering speed. All modern terminals process shell output faster than the shell can produce it, so these scripts show similar results across terminals. Use vtebench for meaningful renderer comparisons.

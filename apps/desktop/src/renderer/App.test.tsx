@@ -14,6 +14,21 @@ const appMocks = vi.hoisted(() => ({
       { id: "workspace-active", root: { kind: "active-root" } },
       { id: "workspace-hidden", root: { kind: "hidden-root" } },
     ],
+    panes: {
+      "terminal-active": { id: "terminal-active", type: "terminal", title: "Active", config: {} },
+      "terminal-hidden": { id: "terminal-hidden", type: "terminal", title: "Hidden", config: {} },
+      "browser-hidden": {
+        id: "browser-hidden",
+        type: "browser",
+        title: "Browser",
+        config: { url: "https://example.com" },
+      },
+    },
+    paneOwnersByPaneId: {
+      "terminal-active": { workspaceId: "workspace-active", groupId: "group-active" },
+      "terminal-hidden": { workspaceId: "workspace-hidden", groupId: "group-hidden" },
+      "browser-hidden": { workspaceId: "workspace-hidden", groupId: "group-hidden" },
+    },
     openEditorTab: vi.fn(),
     sidebarTree: [],
     paneGroups: {},
@@ -42,6 +57,7 @@ const appMocks = vi.hoisted(() => ({
     onDragCancel: vi.fn(),
   },
   activeDrag: null,
+  createdTerminalSurfaces: new Set<string>(),
 }));
 
 vi.mock("./store/workspace-store", () => ({
@@ -122,8 +138,30 @@ vi.mock("./lib/sidebar-tree", () => ({
   findFolder: () => null,
 }));
 
+vi.mock("./lib/terminal-surface-session", () => ({
+  destroyTrackedTerminalSurfaces: (
+    surfaceIds: Iterable<string>,
+    destroySurface: (surfaceId: string) => void,
+  ) => {
+    const destroyedSurfaceIds: string[] = [];
+
+    for (const surfaceId of surfaceIds) {
+      if (!appMocks.createdTerminalSurfaces.has(surfaceId)) {
+        continue;
+      }
+
+      appMocks.createdTerminalSurfaces.delete(surfaceId);
+      destroySurface(surfaceId);
+      destroyedSurfaceIds.push(surfaceId);
+    }
+
+    return destroyedSurfaceIds;
+  },
+}));
+
 afterEach(() => {
   appMocks.splitLayoutCalls.length = 0;
+  appMocks.createdTerminalSurfaces.clear();
   document.body.innerHTML = "";
 });
 
@@ -149,6 +187,37 @@ test("App only mounts the active workspace layer", async () => {
   ]);
   expect(container.querySelector('[data-testid="workspace-workspace-active"]')).toBeTruthy();
   expect(container.querySelector('[data-testid="workspace-workspace-hidden"]')).toBeNull();
+
+  await act(async () => {
+    root.unmount();
+  });
+});
+
+test("App evicts tracked terminal surfaces from the previously active workspace", async () => {
+  const api = installMockWindowApi();
+  appMocks.createdTerminalSurfaces.add("terminal-active");
+  appMocks.createdTerminalSurfaces.add("terminal-hidden");
+
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root: Root = createRoot(container);
+
+  const { default: App } = await import("./App");
+
+  await act(async () => {
+    root.render(<App />);
+  });
+
+  appMocks.workspaceState.activeWorkspaceId = "workspace-hidden";
+
+  await act(async () => {
+    root.render(<App />);
+  });
+
+  expect(api.terminal.destroy).toHaveBeenCalledTimes(1);
+  expect(api.terminal.destroy).toHaveBeenCalledWith("terminal-active");
+  expect(appMocks.createdTerminalSurfaces.has("terminal-active")).toBe(false);
+  expect(appMocks.createdTerminalSurfaces.has("terminal-hidden")).toBe(true);
 
   await act(async () => {
     root.unmount();

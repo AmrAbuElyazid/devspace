@@ -1,5 +1,5 @@
 import type { Pane } from "../types/workspace";
-import { markTerminalSurfaceDestroyed } from "./terminal-surface-session";
+import { destroyTrackedTerminalSurfaces } from "./terminal-surface-session";
 import { markEditorDestroyed } from "../components/EditorPane";
 import { markT3CodeDestroyed } from "../components/T3CodePane";
 
@@ -19,8 +19,7 @@ export function cleanupPaneResources(
   const pane = panes[paneId];
 
   if (pane?.type === "terminal") {
-    markTerminalSurfaceDestroyed(paneId);
-    deps.destroyTerminal(paneId);
+    destroyTrackedTerminalSurfaces([paneId], deps.destroyTerminal);
   }
 
   if (pane?.type === "browser") {
