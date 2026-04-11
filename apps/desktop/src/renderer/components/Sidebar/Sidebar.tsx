@@ -17,6 +17,10 @@ import { QuickLaunchGrid } from "./QuickLaunchGrid";
 import type { ContextMenuItem } from "../../../shared/types";
 import type { SidebarContainer } from "../../types/dnd";
 
+function clampSidebarWidth(width: number): number {
+  return Math.max(160, Math.min(400, width));
+}
+
 export default function Sidebar() {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
@@ -82,7 +86,11 @@ export default function Sidebar() {
 
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [isResizing, setIsResizing] = useState(false);
-  const resizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const [liveSidebarWidth, setLiveSidebarWidth] = useState<number | null>(null);
+  const resizeRef = useRef<{ startX: number; startWidth: number; currentWidth: number } | null>(
+    null,
+  );
+  const renderedSidebarWidth = liveSidebarWidth ?? sidebarWidth;
 
   const filteredWorkspaceIds = useMemo(() => {
     if (!searchQuery.trim()) return null; // null = show all
@@ -155,16 +163,28 @@ export default function Sidebar() {
   const handleResizeStart = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      resizeRef.current = { startX: e.clientX, startWidth: sidebarWidth };
+      resizeRef.current = {
+        startX: e.clientX,
+        startWidth: sidebarWidth,
+        currentWidth: sidebarWidth,
+      };
+      setLiveSidebarWidth(sidebarWidth);
       setIsResizing(true);
 
       const onMouseMove = (ev: MouseEvent) => {
         if (!resizeRef.current) return;
         const delta = ev.clientX - resizeRef.current.startX;
-        setSidebarWidth(resizeRef.current.startWidth + delta);
+        const nextWidth = clampSidebarWidth(resizeRef.current.startWidth + delta);
+        resizeRef.current.currentWidth = nextWidth;
+        setLiveSidebarWidth(nextWidth);
       };
       const onMouseUp = () => {
+        const nextWidth = resizeRef.current?.currentWidth;
+        if (nextWidth !== undefined) {
+          setSidebarWidth(nextWidth);
+        }
         setIsResizing(false);
+        setLiveSidebarWidth(null);
         resizeRef.current = null;
         document.removeEventListener("mousemove", onMouseMove);
         document.removeEventListener("mouseup", onMouseUp);
@@ -311,7 +331,9 @@ export default function Sidebar() {
     <SidebarProvider value={sidebarContextValue}>
       <div
         className={`sidebar ${!sidebarOpen ? "sidebar-collapsed" : ""} ${isResizing ? "sidebar-resizing" : ""}`}
-        style={sidebarOpen ? { width: sidebarWidth, minWidth: sidebarWidth } : undefined}
+        style={
+          sidebarOpen ? { width: renderedSidebarWidth, minWidth: renderedSidebarWidth } : undefined
+        }
       >
         {/* Header — drag region with traffic light space + branding */}
         <div

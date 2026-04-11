@@ -12,6 +12,7 @@ import { installMockWindowApi } from "../test-utils/mock-window-api";
 
 let container: HTMLDivElement;
 let root: Root | null;
+const setInputValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
 
 beforeEach(() => {
   localStorage.clear();
@@ -76,4 +77,48 @@ test("shows the resolved VS Code CLI path in settings", async () => {
   expect(container.textContent).toContain(
     "Using /Applications/Visual Studio Code.app/Contents/Resources/app/bin/code (VS Code app bundle)",
   );
+});
+
+test("does not persist number settings until the value is committed", async () => {
+  await act(async () => {
+    root?.render(<SettingsPage />);
+  });
+
+  const input = container.querySelector('input[type="number"]') as HTMLInputElement;
+  expect(input).toBeTruthy();
+
+  await act(async () => {
+    setInputValue?.call(input, "18");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  expect(useSettingsStore.getState().fontSize).toBe(13);
+
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+
+  expect(useSettingsStore.getState().fontSize).toBe(18);
+});
+
+test("does not persist text settings until the value is committed", async () => {
+  await act(async () => {
+    root?.render(<SettingsPage />);
+  });
+
+  const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+  expect(input).toBeTruthy();
+
+  await act(async () => {
+    setInputValue?.call(input, "/bin/zsh");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  expect(useSettingsStore.getState().defaultShell).toBe("");
+
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+
+  expect(useSettingsStore.getState().defaultShell).toBe("/bin/zsh");
 });

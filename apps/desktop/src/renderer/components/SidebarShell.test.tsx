@@ -252,6 +252,35 @@ test("drops the reserved traffic-light gutter when the native window is fullscre
   expect(header?.getAttribute("data-fullscreen")).toBe("true");
 });
 
+test("only persists sidebar width when resize ends", async () => {
+  await act(async () => {
+    root?.render(<Sidebar />);
+  });
+
+  const sidebar = container.querySelector(".sidebar") as HTMLDivElement;
+  const resizeHandle = container.querySelector(".sidebar-resize-handle") as HTMLDivElement;
+
+  expect(sidebar.style.width).toBe("240px");
+  expect(useSettingsStore.getState().sidebarWidth).toBe(240);
+
+  await act(async () => {
+    resizeHandle.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 100 }));
+  });
+
+  await act(async () => {
+    document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 160 }));
+  });
+
+  expect(sidebar.style.width).toBe("300px");
+  expect(useSettingsStore.getState().sidebarWidth).toBe(240);
+
+  await act(async () => {
+    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  });
+
+  expect(useSettingsStore.getState().sidebarWidth).toBe(300);
+});
+
 test("picks up pending folder edit requests from the store and clears the pending flag", async () => {
   const clearPendingEdit = vi.fn(() => {
     useWorkspaceStore.setState({ pendingEditId: null, pendingEditType: null });

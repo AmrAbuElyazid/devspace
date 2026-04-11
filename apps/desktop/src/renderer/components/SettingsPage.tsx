@@ -478,13 +478,37 @@ function NumberInput({
   max?: number;
   step?: number;
 }) {
+  const [draft, setDraft] = useState(String(value));
+
+  useEffect(() => {
+    setDraft(String(value));
+  }, [value]);
+
+  const commitValue = useCallback(() => {
+    const parsed = parseInt(draft, 10);
+    if (isNaN(parsed)) {
+      setDraft(String(value));
+      return;
+    }
+
+    const nextValue = Math.max(min ?? parsed, Math.min(max ?? parsed, parsed));
+    setDraft(String(nextValue));
+    if (nextValue !== value) {
+      onChange(nextValue);
+    }
+  }, [draft, max, min, onChange, value]);
+
   return (
     <input
       type="number"
-      value={value}
-      onChange={(e) => {
-        const v = parseInt(e.target.value, 10);
-        if (!isNaN(v)) onChange(Math.max(min ?? v, Math.min(max ?? v, v)));
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commitValue}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          commitValue();
+          e.currentTarget.blur();
+        }
       }}
       min={min}
       max={max}
@@ -511,11 +535,30 @@ function TextInput({
   placeholder?: string;
   className?: string;
 }) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const commitValue = useCallback(() => {
+    if (draft !== value) {
+      onChange(draft);
+    }
+  }, [draft, onChange, value]);
+
   return (
     <input
       type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commitValue}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          commitValue();
+          e.currentTarget.blur();
+        }
+      }}
       placeholder={placeholder}
       className={`${className ?? "w-40"} h-7 px-2 text-xs rounded outline-none`}
       style={{
