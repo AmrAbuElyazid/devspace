@@ -330,3 +330,13 @@ test("workspace visibility subscription skips unrelated workspace updates", () =
 
   expect(collectGroupIds).not.toHaveBeenCalled();
 });
+
+test("settings overlay subscription skips unrelated setting updates", () => {
+  initNativeViewSubscriptions();
+  const reconcile = vi.spyOn(useNativeViewStore.getState(), "reconcile");
+  reconcile.mockClear();
+
+  useSettingsStore.getState().updateSetting("fontSize", 14);
+
+  expect(reconcile).not.toHaveBeenCalled();
+});

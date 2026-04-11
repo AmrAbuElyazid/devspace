@@ -547,10 +547,21 @@ export function initNativeViewSubscriptions(): void {
     useNativeViewStore.getState().reconcile();
   });
 
-  // Only reconcile when overlay state actually changes.
-  let lastOverlayActive = useSettingsStore.getState().isOverlayActive();
+  // Only reconcile when overlay-driving settings actually change.
+  const initialSettingsState = useSettingsStore.getState();
+  let lastSettingsOpen = initialSettingsState.settingsOpen;
+  let lastOverlayCount = initialSettingsState.overlayCount;
+  let lastOverlayActive = initialSettingsState.isOverlayActive();
   useSettingsStore.subscribe(() => {
-    const current = useSettingsStore.getState().isOverlayActive();
+    const state = useSettingsStore.getState();
+    if (state.settingsOpen === lastSettingsOpen && state.overlayCount === lastOverlayCount) {
+      return;
+    }
+
+    lastSettingsOpen = state.settingsOpen;
+    lastOverlayCount = state.overlayCount;
+
+    const current = state.settingsOpen || state.overlayCount > 0;
     if (current === lastOverlayActive) return;
     lastOverlayActive = current;
     useNativeViewStore.getState().reconcile();
