@@ -7,12 +7,14 @@ import {
   getNativeViewProfilingSnapshot,
   recordNativeFocusRequest,
   resetNativeViewProfilingCounters,
+  setNativeViewElement,
   updateNativeViewBounds,
   useNativeViewStore,
 } from "./native-view-store";
 import { useWorkspaceStore } from "./workspace-store";
 
 beforeEach(() => {
+  vi.restoreAllMocks();
   globalThis.ResizeObserver = class {
     observe() {}
     unobserve() {}
@@ -43,6 +45,8 @@ beforeEach(() => {
     visibleBrowsers: [],
     dragHidesViews: false,
   });
+  setNativeViewElement("terminal-1", null);
+  setNativeViewElement("browser-1", null);
   useWorkspaceStore.setState({
     activeWorkspaceId: "",
     workspaces: [],
@@ -111,4 +115,75 @@ test("resetNativeViewProfilingCounters clears accumulated counts", () => {
     terminalFocusRequests: 0,
     browserFocusRequests: 0,
   });
+});
+
+test("reconcile detaches idle layout listeners when no native views remain visible", () => {
+  const addEventListener = vi.spyOn(window, "addEventListener");
+  const removeEventListener = vi.spyOn(window, "removeEventListener");
+  const element = document.createElement("div");
+
+  useWorkspaceStore.setState({
+    activeWorkspaceId: "workspace-1",
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Workspace",
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: Date.now(),
+      },
+    ],
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "terminal-1" }],
+      },
+    },
+  });
+
+  useNativeViewStore.getState().register("terminal-1", "terminal");
+  setNativeViewElement("terminal-1", element);
+  useNativeViewStore.getState().reconcile();
+
+  expect(addEventListener).toHaveBeenCalledWith("resize", expect.any(Function));
+  expect(addEventListener).toHaveBeenCalledWith("scroll", expect.any(Function), true);
+
+  useSettingsStore.setState({ overlayCount: 1 });
+  useNativeViewStore.getState().reconcile();
+
+  expect(removeEventListener).toHaveBeenCalledWith("resize", expect.any(Function));
+  expect(removeEventListener).toHaveBeenCalledWith("scroll", expect.any(Function), true);
+});
+
+test("reconcile does not attach layout listeners before a visible native view has an element", () => {
+  const addEventListener = vi.spyOn(window, "addEventListener");
+
+  useWorkspaceStore.setState({
+    activeWorkspaceId: "workspace-1",
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Workspace",
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: Date.now(),
+      },
+    ],
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "terminal-1" }],
+      },
+    },
+  });
+
+  useNativeViewStore.getState().register("terminal-1", "terminal");
+  useNativeViewStore.getState().reconcile();
+
+  expect(addEventListener).not.toHaveBeenCalledWith("resize", expect.any(Function));
+  expect(addEventListener).not.toHaveBeenCalledWith("scroll", expect.any(Function), true);
 });

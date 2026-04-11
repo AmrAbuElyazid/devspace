@@ -169,19 +169,34 @@ function measureElementBounds(element: HTMLElement): ViewBounds | null {
   };
 }
 
-function ensureVisibleLayoutTracking(): void {
-  if (typeof window === "undefined") return;
-
+function ensureVisibleLayoutObserver(): void {
   if (!visibleLayoutObserver) {
     visibleLayoutObserver = new ResizeObserver(() => {
       scheduleVisibleBoundsSync();
     });
   }
+}
 
-  if (!resizeListenerAttached) {
+function setVisibleLayoutListenersEnabled(enabled: boolean): void {
+  if (typeof window === "undefined") return;
+
+  if (enabled) {
+    if (resizeListenerAttached) return;
     window.addEventListener("resize", scheduleVisibleBoundsSync);
     window.addEventListener("scroll", scheduleVisibleBoundsSync, true);
     resizeListenerAttached = true;
+    return;
+  }
+
+  if (!resizeListenerAttached) return;
+
+  window.removeEventListener("resize", scheduleVisibleBoundsSync);
+  window.removeEventListener("scroll", scheduleVisibleBoundsSync, true);
+  resizeListenerAttached = false;
+
+  if (visibleBoundsFrameId !== null) {
+    cancelAnimationFrame(visibleBoundsFrameId);
+    visibleBoundsFrameId = null;
   }
 }
 
@@ -189,6 +204,10 @@ function getVisibleNativeViewIds(
   state: Pick<NativeViewState, "visibleTerminals" | "visibleBrowsers">,
 ): string[] {
   return [...state.visibleTerminals, ...state.visibleBrowsers];
+}
+
+function hasObservedVisibleElements(): boolean {
+  return observedElements.size > 0;
 }
 
 function syncVisibleBoundsNow(): void {
@@ -206,7 +225,17 @@ function syncVisibleBoundsNow(): void {
 
 function scheduleVisibleBoundsSync(): void {
   if (typeof window === "undefined") return;
-  ensureVisibleLayoutTracking();
+  if (!hasObservedVisibleElements()) {
+    setVisibleLayoutListenersEnabled(false);
+    if (visibleBoundsFrameId !== null) {
+      cancelAnimationFrame(visibleBoundsFrameId);
+      visibleBoundsFrameId = null;
+    }
+    return;
+  }
+
+  ensureVisibleLayoutObserver();
+  setVisibleLayoutListenersEnabled(true);
   if (visibleBoundsFrameId !== null) {
     cancelAnimationFrame(visibleBoundsFrameId);
   }
@@ -214,18 +243,27 @@ function scheduleVisibleBoundsSync(): void {
 }
 
 function refreshObservedVisibleElements(): void {
-  ensureVisibleLayoutTracking();
-  if (!visibleLayoutObserver) return;
-
   const visibleIds = new Set(getVisibleNativeViewIds(useNativeViewStore.getState()));
+  if (visibleIds.size > 0) {
+    ensureVisibleLayoutObserver();
+  }
 
-  for (const [id, element] of observedElements) {
-    const current = elementCache.get(id);
-    if (!visibleIds.has(id) || current !== element) {
-      visibleLayoutObserver.unobserve(element);
-      observedElements.delete(id);
+  if (visibleLayoutObserver) {
+    for (const [id, element] of observedElements) {
+      const current = elementCache.get(id);
+      if (!visibleIds.has(id) || current !== element) {
+        visibleLayoutObserver.unobserve(element);
+        observedElements.delete(id);
+      }
     }
   }
+
+  if (visibleIds.size === 0) {
+    setVisibleLayoutListenersEnabled(false);
+    return;
+  }
+
+  if (!visibleLayoutObserver) return;
 
   for (const id of visibleIds) {
     const element = elementCache.get(id);
@@ -233,6 +271,8 @@ function refreshObservedVisibleElements(): void {
     visibleLayoutObserver.observe(element);
     observedElements.set(id, element);
   }
+
+  setVisibleLayoutListenersEnabled(observedElements.size > 0);
 }
 
 function getLatestBounds(id: string): ViewBounds | null {
