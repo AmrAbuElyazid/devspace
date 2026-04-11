@@ -1873,6 +1873,7 @@ static Napi::Value ShowSurface(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (info.Length() < 1 || !info[0].IsString()) return env.Undefined();
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
+    g_state.desiredVisibleSurfaceIds.insert(surfaceId);
     GhosttyView* view = findSurfaceView(surfaceId);
     if (view) {
         view.wantVisible = YES;
@@ -1885,6 +1886,7 @@ static Napi::Value HideSurface(const Napi::CallbackInfo& info) {
     Napi::Env env = info.Env();
     if (info.Length() < 1 || !info[0].IsString()) return env.Undefined();
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
+    g_state.desiredVisibleSurfaceIds.erase(surfaceId);
     GhosttyView* view = findSurfaceView(surfaceId);
     if (view) {
         view.wantVisible = NO;
