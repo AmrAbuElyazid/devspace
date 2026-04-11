@@ -200,10 +200,23 @@ function setVisibleLayoutListenersEnabled(enabled: boolean): void {
   }
 }
 
-function getVisibleNativeViewIds(
+function getVisibleNativeViewIdSet(
   state: Pick<NativeViewState, "visibleTerminals" | "visibleBrowsers">,
-): string[] {
-  return [...state.visibleTerminals, ...state.visibleBrowsers];
+): Set<string> {
+  const ids = new Set<string>();
+  for (const id of state.visibleTerminals) ids.add(id);
+  for (const id of state.visibleBrowsers) ids.add(id);
+  return ids;
+}
+
+function isNativeViewVisible(
+  state: Pick<NativeViewState, "views" | "visibleTerminals" | "visibleBrowsers">,
+  id: string,
+): boolean {
+  const viewType = state.views[id];
+  if (viewType === "terminal") return state.visibleTerminals.includes(id);
+  if (viewType === "browser") return state.visibleBrowsers.includes(id);
+  return false;
 }
 
 function hasObservedVisibleElements(): boolean {
@@ -240,7 +253,7 @@ function scheduleVisibleBoundsSync(): void {
 }
 
 function refreshObservedVisibleElements(): void {
-  const visibleIds = new Set(getVisibleNativeViewIds(useNativeViewStore.getState()));
+  const visibleIds = getVisibleNativeViewIdSet(useNativeViewStore.getState());
   if (visibleIds.size > 0) {
     ensureVisibleLayoutObserver();
   }
@@ -292,7 +305,7 @@ export function setNativeViewElement(id: string, element: HTMLElement | null): v
     }
 
     elementCache.set(id, element);
-    if (getVisibleNativeViewIds(useNativeViewStore.getState()).includes(id)) {
+    if (isNativeViewVisible(useNativeViewStore.getState(), id)) {
       refreshObservedVisibleElements();
       scheduleVisibleBoundsSync();
     }
@@ -323,12 +336,12 @@ export function updateNativeViewBounds(id: string, bounds: ViewBounds): void {
 
   const state = useNativeViewStore.getState();
   const viewType = state.views[id];
-  if (viewType === undefined) return;
+  if (!isNativeViewVisible(state, id)) return;
 
-  if (viewType === "terminal" && state.visibleTerminals.includes(id)) {
+  if (viewType === "terminal") {
     recordBoundsSync();
     void window.api.terminal.setBounds(id, bounds);
-  } else if (viewType === "browser" && state.visibleBrowsers.includes(id)) {
+  } else if (viewType === "browser") {
     recordBoundsSync();
     void window.api.browser.setBounds(id, bounds);
   }
