@@ -55,20 +55,21 @@ Relevant files: `apps/desktop/src/renderer/store/workspace-sidebar-metadata.ts`,
 ### Some measurement coverage already exists
 
 - Native-view profiling counters and snapshots are exposed in the renderer for debug and E2E usage.
+- Main-process performance snapshots now expose process memory and CPU, Electron app metrics, and per-operation timings for terminal and browser lifecycle calls.
 - The mixed-workspace stress E2E covers native-view lifecycle behavior across repeated workspace switching.
 - Manual benchmark and stress scripts already exist for terminal throughput and load testing.
 
-Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/main.tsx`, `apps/desktop/e2e/mixed-workspace-stress.spec.ts`, `apps/desktop/e2e/helpers/app.ts`, `BENCHMARKS.md`, `scripts/terminal-bench.sh`, `scripts/terminal-stress.sh`
+Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/main.tsx`, `apps/desktop/src/main/performance-monitor.ts`, `apps/desktop/src/main/terminal-manager.ts`, `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/e2e/mixed-workspace-stress.spec.ts`, `apps/desktop/e2e/helpers/app.ts`, `BENCHMARKS.md`, `scripts/terminal-bench.sh`, `scripts/terminal-stress.sh`
 
 ## Open
 
 ### Measurement and instrumentation are still the top priority
 
-- The repo has useful native-view counters, but they are narrow and mostly lifecycle-focused.
-- There is still no in-repo app or process CPU and memory sampling for the main process, renderer, GPU process, or per-terminal retention.
-- Resize latency, frame pacing, and long-run leak detection still depend mostly on manual observation and external tools.
+- The repo now has a lightweight built-in performance snapshot for main-process memory, CPU, app metrics, native-view timings, and terminal/browser lifecycle call timings.
+- What is still missing is repeatable baseline capture, renderer-specific memory attribution, per-terminal retention accounting, and longer-run leak detection.
+- Resize latency and frame pacing still need stronger scenario-based measurement than the current counters provide.
 
-Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/e2e/mixed-workspace-stress.spec.ts`, `BENCHMARKS.md`
+Relevant files: `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/main/performance-monitor.ts`, `apps/desktop/e2e/mixed-workspace-stress.spec.ts`, `BENCHMARKS.md`
 
 ### Workspace persistence is still broad and main-thread bound
 
@@ -117,8 +118,8 @@ Relevant files: `apps/desktop/src/renderer/store/settings-store.ts`, `apps/deskt
 
 ## Recommended Order
 
-1. Add lightweight CPU, memory, and resize-latency measurement around terminal and browser lifecycle events.
-2. Re-run repeatable stress scenarios and capture baselines before making deeper changes.
+1. Re-run repeatable stress scenarios and capture baselines with the new main/renderer instrumentation before making deeper changes.
+2. Expand the measurement surface only where the current snapshots still leave ambiguity, especially around renderer memory and long-run leak detection.
 3. Revisit hidden-terminal retention only if measurements show meaningful memory pressure.
 4. Revisit native-view batching or bounds work only if tab-switch, overlay, or resize profiling still points there.
 5. Revisit settings-store writes only if user-interaction profiling still shows them hot.

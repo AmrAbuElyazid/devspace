@@ -35,6 +35,25 @@ function createDefaultWindowApi(): DevspaceBridge {
     platform: "darwin",
     app: {
       onAction: vi.fn(() => unsubscribe),
+      getPerformanceSnapshot: vi.fn(async () => ({
+        sampledAt: Date.now(),
+        process: {
+          memory: {
+            rss: 1,
+            heapTotal: 1,
+            heapUsed: 1,
+            external: 0,
+            arrayBuffers: 0,
+          },
+          cpu: {
+            user: 0,
+            system: 0,
+          },
+        },
+        appMetrics: [],
+        operations: {},
+      })),
+      resetPerformanceCounters: vi.fn(async () => {}),
     },
     terminal: {
       create: vi.fn(async () => ({ ok: true as const })),

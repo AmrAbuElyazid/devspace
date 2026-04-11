@@ -46,6 +46,8 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
     throw new Error("Expected preload bridge to be exposed");
   }
 
+  await bridge.app.getPerformanceSnapshot();
+  await bridge.app.resetPerformanceCounters();
   await bridge.window.isFullScreen();
   await bridge.editor.isAvailable("code-insiders");
   await bridge.editor.getCliStatus("code-insiders");
@@ -96,6 +98,8 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   unsubscribeOpenInNewTab();
 
   expect(invokeCalls).toEqual([
+    ["app:getPerformanceSnapshot"],
+    ["app:resetPerformanceCounters"],
     ["window:isFullScreen"],
     ["editor:isAvailable", "code-insiders"],
     ["editor:getCliStatus", "code-insiders"],

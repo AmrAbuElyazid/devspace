@@ -275,6 +275,25 @@ test("window isFullScreen IPC returns the native fullscreen state", async () => 
   expect(result).toBe(false);
 });
 
+test("app performance IPC returns a snapshot and supports reset", async () => {
+  const first = await handlers.get("app:getPerformanceSnapshot")?.({});
+  await handlers.get("app:resetPerformanceCounters")?.({});
+  const second = await handlers.get("app:getPerformanceSnapshot")?.({});
+
+  expect(first).toMatchObject({
+    sampledAt: expect.any(Number),
+    process: {
+      memory: { rss: expect.any(Number) },
+      cpu: { user: expect.any(Number), system: expect.any(Number) },
+    },
+    appMetrics: expect.any(Array),
+    operations: expect.any(Object),
+  });
+  expect(second).toMatchObject({
+    operations: expect.any(Object),
+  });
+});
+
 test("editor CLI status IPC returns the resolved CLI status", async () => {
   editorCalls.length = 0;
 

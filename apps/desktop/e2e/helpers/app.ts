@@ -107,14 +107,111 @@ export async function getNativeViewSnapshot(page: Page): Promise<{
   });
 }
 
-export async function resetNativeViewCounters(page: Page): Promise<void> {
-  await page.evaluate(() => {
-    const profiling = (window as unknown as Record<string, unknown>).__DEVSPACE_NATIVE_VIEWS__;
+export async function getPerformanceSnapshot(page: Page): Promise<{
+  main: {
+    sampledAt: number;
+    process: {
+      memory: Record<string, number>;
+      cpu: Record<string, number>;
+    };
+    appMetrics: Array<{
+      pid: number | null;
+      type: string;
+      creationTime: number | null;
+      name: string | null;
+      cpu: Record<string, number>;
+      memory: Record<string, number | null>;
+    }>;
+    operations: Record<
+      string,
+      {
+        count: number;
+        totalDurationMs: number;
+        avgDurationMs: number;
+        maxDurationMs: number;
+        lastDurationMs: number;
+      }
+    >;
+  };
+  nativeViews: {
+    registered: { terminals: number; browsers: number; total: number };
+    visible: { terminals: number; browsers: number; total: number };
+    hiddenByOverlay: boolean;
+    hiddenByDrag: boolean;
+    counters: Record<string, number>;
+    timings: Record<
+      string,
+      {
+        count: number;
+        totalDurationMs: number;
+        avgDurationMs: number;
+        maxDurationMs: number;
+        lastDurationMs: number;
+      }
+    >;
+  };
+}> {
+  return page.evaluate(async () => {
+    const profiling = (window as unknown as Record<string, unknown>).__DEVSPACE_PERF__;
     if (!profiling) {
-      throw new Error("Native view profiling not available — __DEVSPACE_NATIVE_VIEWS__ missing");
+      throw new Error("Performance profiling not available — __DEVSPACE_PERF__ missing");
     }
 
-    (profiling as { resetCounters: () => void }).resetCounters();
+    return (profiling as { getSnapshot: () => Promise<unknown> }).getSnapshot() as Promise<{
+      main: {
+        sampledAt: number;
+        process: {
+          memory: Record<string, number>;
+          cpu: Record<string, number>;
+        };
+        appMetrics: Array<{
+          pid: number | null;
+          type: string;
+          creationTime: number | null;
+          name: string | null;
+          cpu: Record<string, number>;
+          memory: Record<string, number | null>;
+        }>;
+        operations: Record<
+          string,
+          {
+            count: number;
+            totalDurationMs: number;
+            avgDurationMs: number;
+            maxDurationMs: number;
+            lastDurationMs: number;
+          }
+        >;
+      };
+      nativeViews: {
+        registered: { terminals: number; browsers: number; total: number };
+        visible: { terminals: number; browsers: number; total: number };
+        hiddenByOverlay: boolean;
+        hiddenByDrag: boolean;
+        counters: Record<string, number>;
+        timings: Record<
+          string,
+          {
+            count: number;
+            totalDurationMs: number;
+            avgDurationMs: number;
+            maxDurationMs: number;
+            lastDurationMs: number;
+          }
+        >;
+      };
+    }>;
+  });
+}
+
+export async function resetPerformanceCounters(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const profiling = (window as unknown as Record<string, unknown>).__DEVSPACE_PERF__;
+    if (!profiling) {
+      throw new Error("Performance profiling not available — __DEVSPACE_PERF__ missing");
+    }
+
+    await (profiling as { resetCounters: () => Promise<void> }).resetCounters();
   });
 }
 

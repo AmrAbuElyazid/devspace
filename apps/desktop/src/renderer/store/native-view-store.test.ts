@@ -87,6 +87,8 @@ test("profiles native view registration, bounds sync, and focus requests", () =>
     terminalFocusRequests: 1,
     browserFocusRequests: 1,
   });
+  expect(snapshot.timings.reconcile.count).toBe(snapshot.counters.reconcileCalls);
+  expect(snapshot.timings.visibleBoundsSync.count).toBeGreaterThanOrEqual(0);
   expect(window.api.terminal.setBounds).toHaveBeenCalledWith("terminal-1", {
     x: 10,
     y: 20,
@@ -116,6 +118,22 @@ test("resetNativeViewProfilingCounters clears accumulated counts", () => {
     focusRequests: 0,
     terminalFocusRequests: 0,
     browserFocusRequests: 0,
+  });
+  expect(getNativeViewProfilingSnapshot().timings).toEqual({
+    reconcile: {
+      count: 0,
+      totalDurationMs: 0,
+      avgDurationMs: 0,
+      maxDurationMs: 0,
+      lastDurationMs: 0,
+    },
+    visibleBoundsSync: {
+      count: 0,
+      totalDurationMs: 0,
+      avgDurationMs: 0,
+      maxDurationMs: 0,
+      lastDurationMs: 0,
+    },
   });
 });
 

@@ -9,6 +9,16 @@ import { collectGroupIds } from "../lib/split-tree";
 
 export type NativeViewType = "terminal" | "browser";
 
+interface ProfilingTimingStat {
+  count: number;
+  totalDurationMs: number;
+  avgDurationMs: number;
+  maxDurationMs: number;
+  lastDurationMs: number;
+}
+
+type MutableProfilingTimingStat = Omit<ProfilingTimingStat, "avgDurationMs">;
+
 interface NativeViewProfilingSnapshot {
   registered: { total: number; terminals: number; browsers: number };
   visible: { total: number; terminals: number; browsers: number };
@@ -23,6 +33,10 @@ interface NativeViewProfilingSnapshot {
     focusRequests: number;
     terminalFocusRequests: number;
     browserFocusRequests: number;
+  };
+  timings: {
+    reconcile: ProfilingTimingStat;
+    visibleBoundsSync: ProfilingTimingStat;
   };
 }
 
@@ -83,6 +97,24 @@ const nativeViewProfilingCounters: NativeViewProfilingSnapshot["counters"] = {
   browserFocusRequests: 0,
 };
 
+const nativeViewProfilingTimings: Record<
+  keyof NativeViewProfilingSnapshot["timings"],
+  MutableProfilingTimingStat
+> = {
+  reconcile: {
+    count: 0,
+    totalDurationMs: 0,
+    maxDurationMs: 0,
+    lastDurationMs: 0,
+  },
+  visibleBoundsSync: {
+    count: 0,
+    totalDurationMs: 0,
+    maxDurationMs: 0,
+    lastDurationMs: 0,
+  },
+};
+
 function getRegisteredCounts(views: Record<string, NativeViewType>) {
   let terminals = 0;
   let browsers = 0;
@@ -99,6 +131,23 @@ function getRegisteredCounts(views: Record<string, NativeViewType>) {
 
 function recordBoundsSync(): void {
   nativeViewProfilingCounters.boundsSyncCalls++;
+}
+
+function recordTiming(stat: MutableProfilingTimingStat, durationMs: number): void {
+  stat.count++;
+  stat.totalDurationMs += durationMs;
+  stat.maxDurationMs = Math.max(stat.maxDurationMs, durationMs);
+  stat.lastDurationMs = durationMs;
+}
+
+function snapshotTiming(stat: MutableProfilingTimingStat): ProfilingTimingStat {
+  return {
+    count: stat.count,
+    totalDurationMs: stat.totalDurationMs,
+    avgDurationMs: stat.count === 0 ? 0 : stat.totalDurationMs / stat.count,
+    maxDurationMs: stat.maxDurationMs,
+    lastDurationMs: stat.lastDurationMs,
+  };
 }
 
 export function recordNativeFocusRequest(type: NativeViewType): void {
@@ -120,6 +169,14 @@ export function resetNativeViewProfilingCounters(): void {
   nativeViewProfilingCounters.focusRequests = 0;
   nativeViewProfilingCounters.terminalFocusRequests = 0;
   nativeViewProfilingCounters.browserFocusRequests = 0;
+  nativeViewProfilingTimings.reconcile.count = 0;
+  nativeViewProfilingTimings.reconcile.totalDurationMs = 0;
+  nativeViewProfilingTimings.reconcile.maxDurationMs = 0;
+  nativeViewProfilingTimings.reconcile.lastDurationMs = 0;
+  nativeViewProfilingTimings.visibleBoundsSync.count = 0;
+  nativeViewProfilingTimings.visibleBoundsSync.totalDurationMs = 0;
+  nativeViewProfilingTimings.visibleBoundsSync.maxDurationMs = 0;
+  nativeViewProfilingTimings.visibleBoundsSync.lastDurationMs = 0;
 }
 
 export function getNativeViewProfilingSnapshot(): NativeViewProfilingSnapshot {
@@ -134,6 +191,10 @@ export function getNativeViewProfilingSnapshot(): NativeViewProfilingSnapshot {
     hiddenByOverlay: useSettingsStore.getState().isOverlayActive(),
     hiddenByDrag: state.dragHidesViews,
     counters: { ...nativeViewProfilingCounters },
+    timings: {
+      reconcile: snapshotTiming(nativeViewProfilingTimings.reconcile),
+      visibleBoundsSync: snapshotTiming(nativeViewProfilingTimings.visibleBoundsSync),
+    },
   };
 }
 
@@ -224,12 +285,17 @@ function hasObservedVisibleElements(): boolean {
 }
 
 function syncVisibleBoundsNow(): void {
-  visibleBoundsFrameId = null;
-  nativeViewProfilingCounters.visibleBoundsSyncPasses++;
-  for (const [id, element] of observedElements) {
-    const next = measureElementBounds(element);
-    if (!next) continue;
-    updateNativeViewBounds(id, next);
+  const startedAt = performance.now();
+  try {
+    visibleBoundsFrameId = null;
+    nativeViewProfilingCounters.visibleBoundsSyncPasses++;
+    for (const [id, element] of observedElements) {
+      const next = measureElementBounds(element);
+      if (!next) continue;
+      updateNativeViewBounds(id, next);
+    }
+  } finally {
+    recordTiming(nativeViewProfilingTimings.visibleBoundsSync, performance.now() - startedAt);
   }
 }
 
@@ -400,80 +466,85 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
   },
 
   reconcile() {
-    nativeViewProfilingCounters.reconcileCalls++;
-    const { views, visibleTerminals, visibleBrowsers, dragHidesViews } = get();
-    const wsState = useWorkspaceStore.getState();
-    const overlayActive = useSettingsStore.getState().isOverlayActive();
-    const shouldShowAny = !overlayActive && !dragHidesViews;
+    const startedAt = performance.now();
+    try {
+      nativeViewProfilingCounters.reconcileCalls++;
+      const { views, visibleTerminals, visibleBrowsers, dragHidesViews } = get();
+      const wsState = useWorkspaceStore.getState();
+      const overlayActive = useSettingsStore.getState().isOverlayActive();
+      const shouldShowAny = !overlayActive && !dragHidesViews;
 
-    const desiredTerminals: string[] = [];
-    const desiredBrowsers: string[] = [];
+      const desiredTerminals: string[] = [];
+      const desiredBrowsers: string[] = [];
 
-    if (shouldShowAny) {
-      const activeWs = wsState.workspaces.find((w) => w.id === wsState.activeWorkspaceId);
-      if (activeWs) {
-        const groupIds = collectGroupIds(activeWs.root);
-        for (const groupId of groupIds) {
-          const group = wsState.paneGroups[groupId];
-          if (!group) continue;
-          const activeTab = group.tabs.find((t) => t.id === group.activeTabId);
-          if (!activeTab) continue;
-          const viewType = views[activeTab.paneId];
-          if (viewType === "terminal") {
-            desiredTerminals.push(activeTab.paneId);
-          } else if (viewType === "browser") {
-            desiredBrowsers.push(activeTab.paneId);
+      if (shouldShowAny) {
+        const activeWs = wsState.workspaces.find((w) => w.id === wsState.activeWorkspaceId);
+        if (activeWs) {
+          const groupIds = collectGroupIds(activeWs.root);
+          for (const groupId of groupIds) {
+            const group = wsState.paneGroups[groupId];
+            if (!group) continue;
+            const activeTab = group.tabs.find((t) => t.id === group.activeTabId);
+            if (!activeTab) continue;
+            const viewType = views[activeTab.paneId];
+            if (viewType === "terminal") {
+              desiredTerminals.push(activeTab.paneId);
+            } else if (viewType === "browser") {
+              desiredBrowsers.push(activeTab.paneId);
+            }
           }
         }
       }
-    }
 
-    const terminalsChanged = !arraysEqual(desiredTerminals, visibleTerminals);
-    const browsersChanged = !arraysEqual(desiredBrowsers, visibleBrowsers);
-    if (!terminalsChanged && !browsersChanged) return;
+      const terminalsChanged = !arraysEqual(desiredTerminals, visibleTerminals);
+      const browsersChanged = !arraysEqual(desiredBrowsers, visibleBrowsers);
+      if (!terminalsChanged && !browsersChanged) return;
 
-    const visibleTerminalIds = terminalsChanged ? new Set(visibleTerminals) : null;
-    const visibleBrowserIds = browsersChanged ? new Set(visibleBrowsers) : null;
+      const visibleTerminalIds = terminalsChanged ? new Set(visibleTerminals) : null;
+      const visibleBrowserIds = browsersChanged ? new Set(visibleBrowsers) : null;
 
-    // Send bounds for newly-visible views BEFORE showing them (prevents flash)
-    if (terminalsChanged) {
-      for (const id of desiredTerminals) {
-        if (!visibleTerminalIds?.has(id)) {
-          const b = getLatestBounds(id);
-          if (b) {
-            recordBoundsSync();
-            void window.api.terminal.setBounds(id, b);
+      // Send bounds for newly-visible views BEFORE showing them (prevents flash)
+      if (terminalsChanged) {
+        for (const id of desiredTerminals) {
+          if (!visibleTerminalIds?.has(id)) {
+            const b = getLatestBounds(id);
+            if (b) {
+              recordBoundsSync();
+              void window.api.terminal.setBounds(id, b);
+            }
           }
         }
+        void window.api.terminal.setVisibleSurfaces(desiredTerminals);
       }
-      void window.api.terminal.setVisibleSurfaces(desiredTerminals);
-    }
 
-    if (browsersChanged) {
-      for (const id of desiredBrowsers) {
-        if (!visibleBrowserIds?.has(id)) {
-          const b = getLatestBounds(id);
-          if (b) {
-            recordBoundsSync();
-            void window.api.browser.setBounds(id, b);
+      if (browsersChanged) {
+        for (const id of desiredBrowsers) {
+          if (!visibleBrowserIds?.has(id)) {
+            const b = getLatestBounds(id);
+            if (b) {
+              recordBoundsSync();
+              void window.api.browser.setBounds(id, b);
+            }
           }
         }
+        void window.api.browser.setVisiblePanes(desiredBrowsers);
       }
-      void window.api.browser.setVisiblePanes(desiredBrowsers);
+
+      // Blur terminals when transitioning from visible to hidden
+      if (overlayActive && visibleTerminals.length > 0 && desiredTerminals.length === 0) {
+        void window.api.terminal.blur();
+      }
+
+      set({
+        visibleTerminals: desiredTerminals,
+        visibleBrowsers: desiredBrowsers,
+      });
+
+      refreshObservedVisibleElements();
+      scheduleVisibleBoundsSync();
+    } finally {
+      recordTiming(nativeViewProfilingTimings.reconcile, performance.now() - startedAt);
     }
-
-    // Blur terminals when transitioning from visible to hidden
-    if (overlayActive && visibleTerminals.length > 0 && desiredTerminals.length === 0) {
-      void window.api.terminal.blur();
-    }
-
-    set({
-      visibleTerminals: desiredTerminals,
-      visibleBrowsers: desiredBrowsers,
-    });
-
-    refreshObservedVisibleElements();
-    scheduleVisibleBoundsSync();
   },
 }));
 

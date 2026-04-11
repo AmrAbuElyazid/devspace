@@ -47,6 +47,16 @@ async function bootstrap(): Promise<void> {
       getSnapshot: getNativeViewProfilingSnapshot,
       resetCounters: resetNativeViewProfilingCounters,
     };
+    (window as unknown as Record<string, unknown>).__DEVSPACE_PERF__ = {
+      getSnapshot: async () => ({
+        main: await window.api.app.getPerformanceSnapshot(),
+        nativeViews: getNativeViewProfilingSnapshot(),
+      }),
+      resetCounters: async () => {
+        resetNativeViewProfilingCounters();
+        await window.api.app.resetPerformanceCounters();
+      },
+    };
 
     ReactDOM.createRoot(document.getElementById("root")!).render(
       <React.StrictMode>

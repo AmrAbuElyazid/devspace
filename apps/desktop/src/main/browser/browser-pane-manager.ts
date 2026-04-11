@@ -55,6 +55,7 @@ import {
   setRuntimeStateFindQuery,
   setRuntimeStateZoom,
 } from "./browser-runtime-state";
+import { measureMainProcessOperation } from "../performance-monitor";
 
 export class BrowserPaneManager implements BrowserPaneController {
   private readonly panes: ReturnType<typeof createBrowserPaneRegistry>;
@@ -71,64 +72,74 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   createPane(paneId: string, initialUrl: string, kind: BrowserPaneKind = "browser"): void {
-    if (this.panes.has(paneId)) {
-      const existingRuntime = this.getRuntimeState(paneId);
-      if (existingRuntime?.url !== initialUrl) {
-        this.navigate(paneId, initialUrl);
+    measureMainProcessOperation("browser.createPane", () => {
+      if (this.panes.has(paneId)) {
+        const existingRuntime = this.getRuntimeState(paneId);
+        if (existingRuntime?.url !== initialUrl) {
+          this.navigate(paneId, initialUrl);
+        }
+        return;
       }
-      return;
-    }
 
-    const session = this.deps.getSession?.(kind);
-    const pane = createBrowserPaneRecord({
-      createView: this.createView,
-      initialUrl,
-      kind,
-      paneId,
-      ...(session ? { session } : {}),
+      const session = this.deps.getSession?.(kind);
+      const pane = createBrowserPaneRecord({
+        createView: this.createView,
+        initialUrl,
+        kind,
+        paneId,
+        ...(session ? { session } : {}),
+      });
+
+      this.panes.register(paneId, pane);
+      this.registerWebContentsListeners(pane);
+      this.navigate(paneId, initialUrl);
     });
-
-    this.panes.register(paneId, pane);
-    this.registerWebContentsListeners(pane);
-    this.navigate(paneId, initialUrl);
   }
 
   destroyPane(paneId: string): void {
-    const pane = this.panes.get(paneId);
-    if (!pane) {
-      return;
-    }
+    measureMainProcessOperation("browser.destroyPane", () => {
+      const pane = this.panes.get(paneId);
+      if (!pane) {
+        return;
+      }
 
-    hidePaneView(pane, this.deps);
-    this.visiblePaneIds.delete(paneId);
-    this.permissionTracker.denyPendingForPane(paneId);
-    this.historyTracker.deletePane(paneId);
-    this.panes.unregister(paneId);
+      hidePaneView(pane, this.deps);
+      this.visiblePaneIds.delete(paneId);
+      this.permissionTracker.denyPendingForPane(paneId);
+      this.historyTracker.deletePane(paneId);
+      this.panes.unregister(paneId);
 
-    destroyPaneView(pane);
+      destroyPaneView(pane);
+    });
   }
 
   showPane(paneId: string): void {
-    this.panes.withPane(paneId, (pane) => {
-      showPaneView(pane, this.deps);
-      this.visiblePaneIds.add(paneId);
+    measureMainProcessOperation("browser.showPane", () => {
+      this.panes.withPane(paneId, (pane) => {
+        showPaneView(pane, this.deps);
+        this.visiblePaneIds.add(paneId);
+      });
     });
   }
 
   hidePane(paneId: string): void {
-    this.panes.withPane(paneId, (pane) => {
-      hidePaneView(pane, this.deps);
-      this.visiblePaneIds.delete(paneId);
+    measureMainProcessOperation("browser.hidePane", () => {
+      this.panes.withPane(paneId, (pane) => {
+        hidePaneView(pane, this.deps);
+        this.visiblePaneIds.delete(paneId);
+      });
     });
   }
 
   setVisiblePanes(paneIds: string[]): void {
-    this.visiblePaneIds = syncVisiblePaneViews(
-      this.visiblePaneIds,
-      this.panes.records(),
-      paneIds,
-      this.deps,
-    );
+    measureMainProcessOperation("browser.setVisiblePanes", () => {
+      this.visiblePaneIds = syncVisiblePaneViews(
+        this.visiblePaneIds,
+        this.panes.records(),
+        paneIds,
+        this.deps,
+      );
+    });
   }
 
   isPaneVisible(paneId: string): boolean {
@@ -136,8 +147,10 @@ export class BrowserPaneManager implements BrowserPaneController {
   }
 
   setBounds(paneId: string, bounds: BrowserBounds): void {
-    this.panes.withPane(paneId, (pane) => {
-      setPaneBounds(pane, bounds);
+    measureMainProcessOperation("browser.setBounds", () => {
+      this.panes.withPane(paneId, (pane) => {
+        setPaneBounds(pane, bounds);
+      });
     });
   }
 

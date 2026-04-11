@@ -5,6 +5,10 @@ import { mkdir, readFile, readdir, rename, writeFile } from "fs/promises";
 import { join } from "path";
 import type { BrowserWindow } from "electron";
 import { resolveDevelopmentPath } from "../dev-paths";
+import {
+  getMainProcessPerformanceSnapshot,
+  resetMainProcessPerformanceCounters,
+} from "../performance-monitor";
 import { getSafeExternalUrl } from "../validation";
 import { getTrafficLightPosition } from "../window-chrome";
 import { safeHandle, safeOn } from "./shared";
@@ -46,6 +50,14 @@ export function registerSystemIpc(mainWindow: BrowserWindow): void {
 
   safeHandle("window:isFullScreen", () => {
     return mainWindow.isFullScreen();
+  });
+
+  safeHandle("app:getPerformanceSnapshot", () => {
+    return getMainProcessPerformanceSnapshot();
+  });
+
+  safeHandle("app:resetPerformanceCounters", () => {
+    resetMainProcessPerformanceCounters();
   });
 
   mainWindow.on("maximize", () => {

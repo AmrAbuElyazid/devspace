@@ -24,6 +24,8 @@ const bridge: DevspaceBridge = {
         for (const dispose of disposers) dispose();
       };
     },
+    getPerformanceSnapshot: () => ipcRenderer.invoke("app:getPerformanceSnapshot"),
+    resetPerformanceCounters: () => ipcRenderer.invoke("app:resetPerformanceCounters"),
   },
 
   terminal: {

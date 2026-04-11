@@ -1,5 +1,13 @@
-import { test, expect, vi } from "vitest";
+import { beforeEach, test, expect, vi } from "vitest";
 import { BrowserPaneManager } from "../browser-pane-manager";
+import {
+  getMainProcessPerformanceSnapshot,
+  resetMainProcessPerformanceCounters,
+} from "../../performance-monitor";
+
+beforeEach(() => {
+  resetMainProcessPerformanceCounters();
+});
 
 function makeManager(): BrowserPaneManager {
   return new BrowserPaneManager({
@@ -60,6 +68,41 @@ test("tracks pane lifecycle bookkeeping across create show hide and destroy", ()
   expect(childViews).toEqual([]);
   expect(destroyed).toBe(true);
   expect(manager.getRuntimeState("pane-1")).toBe(undefined);
+});
+
+test("records browser pane lifecycle timings for profiling", () => {
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        setBounds: () => {},
+        webContents: {
+          close: () => {},
+          loadURL: () => Promise.resolve(),
+          setZoomFactor: () => Promise.resolve(),
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  manager.showPane("pane-1");
+  manager.setBounds("pane-1", { x: 10, y: 20, width: 300, height: 200 });
+  manager.setVisiblePanes(["pane-1"]);
+  manager.hidePane("pane-1");
+  manager.destroyPane("pane-1");
+
+  const snapshot = getMainProcessPerformanceSnapshot();
+
+  expect(snapshot.operations).toMatchObject({
+    "browser.createPane": { count: 1 },
+    "browser.showPane": { count: 1 },
+    "browser.setBounds": { count: 1 },
+    "browser.setVisiblePanes": { count: 1 },
+    "browser.hidePane": { count: 1 },
+    "browser.destroyPane": { count: 1 },
+  });
 });
 
 test("createPane uses explicit hardened webPreferences for browser views", () => {

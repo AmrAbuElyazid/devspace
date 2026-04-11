@@ -16,6 +16,7 @@ import type {
 } from "./browser";
 import type { ShortcutAction, StoredShortcut } from "./shortcuts";
 import type { PersistedWorkspaceState } from "./workspace-persistence";
+import type { MainProcessPerformanceSnapshot } from "./performance";
 
 export interface TerminalBounds {
   x: number;
@@ -46,6 +47,8 @@ export interface DevspaceBridge {
   platform: string;
   app: {
     onAction: (callback: (channel: string, ...args: unknown[]) => void) => () => void;
+    getPerformanceSnapshot: () => Promise<MainProcessPerformanceSnapshot>;
+    resetPerformanceCounters: () => Promise<void>;
   };
   terminal: {
     create: (surfaceId: string, options?: TerminalCreateOptions) => Promise<TerminalCreateResult>;

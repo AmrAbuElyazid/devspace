@@ -1,5 +1,13 @@
-import { describe, expect, test } from "vitest";
-import { buildShellIntegrationEnvVars, detectShellName } from "./terminal-manager";
+import { beforeEach, describe, expect, test, vi } from "vitest";
+import { buildShellIntegrationEnvVars, detectShellName, TerminalManager } from "./terminal-manager";
+import {
+  getMainProcessPerformanceSnapshot,
+  resetMainProcessPerformanceCounters,
+} from "./performance-monitor";
+
+beforeEach(() => {
+  resetMainProcessPerformanceCounters();
+});
 
 describe("detectShellName", () => {
   test("extracts basename from SHELL env var", () => {
@@ -111,5 +119,45 @@ describe("buildShellIntegrationEnvVars", () => {
       {},
     );
     expect(result.PROMPT_COMMAND).toBeUndefined();
+  });
+});
+
+describe("TerminalManager profiling", () => {
+  test("records terminal lifecycle timings for profiling", () => {
+    const manager = new TerminalManager();
+    const terminal = {
+      createSurface: vi.fn(),
+      destroySurface: vi.fn(),
+      showSurface: vi.fn(),
+      hideSurface: vi.fn(),
+      focusSurface: vi.fn(),
+      setVisibleSurfaces: vi.fn(),
+      setBounds: vi.fn(),
+      blurSurfaces: vi.fn(),
+    };
+
+    (manager as unknown as { terminal: typeof terminal }).terminal = terminal;
+
+    manager.createSurface("surface-1", { cwd: "/tmp/project" });
+    manager.showSurface("surface-1");
+    manager.hideSurface("surface-1");
+    manager.focusSurface("surface-1");
+    manager.setVisibleSurfaces(["surface-1"]);
+    manager.setBounds("surface-1", { x: 10, y: 20, width: 300, height: 200 });
+    manager.blurSurfaces();
+    manager.destroySurface("surface-1");
+
+    const snapshot = getMainProcessPerformanceSnapshot();
+
+    expect(snapshot.operations).toMatchObject({
+      "terminal.createSurface": { count: 1 },
+      "terminal.showSurface": { count: 1 },
+      "terminal.hideSurface": { count: 1 },
+      "terminal.focusSurface": { count: 1 },
+      "terminal.setVisibleSurfaces": { count: 1 },
+      "terminal.setBounds": { count: 1 },
+      "terminal.blurSurfaces": { count: 1 },
+      "terminal.destroySurface": { count: 1 },
+    });
   });
 });

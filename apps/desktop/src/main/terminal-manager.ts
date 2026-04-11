@@ -3,6 +3,7 @@ import { existsSync } from "fs";
 import { join, resolve } from "path";
 import { GhosttyTerminal, type ReservedShortcut, type TerminalBounds } from "ghostty-electron";
 import { resolveDevelopmentPath } from "./dev-paths";
+import { measureMainProcessOperation } from "./performance-monitor";
 
 function bashSingleQuote(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
@@ -203,56 +204,72 @@ export class TerminalManager {
   ): void {
     if (!this.terminal) return;
 
-    // Inject shell integration env vars based on user's shell (zsh, bash, fish).
-    const shellName = detectShellName();
-    const envVars = buildShellIntegrationEnvVars(
-      shellName,
-      {
-        zshDir: this.shellIntegrationZshDir,
-        ghosttyResourcesDir: process.env.GHOSTTY_RESOURCES_DIR || null,
-      },
-      options?.envVars,
-    );
+    measureMainProcessOperation("terminal.createSurface", () => {
+      // Inject shell integration env vars based on user's shell (zsh, bash, fish).
+      const shellName = detectShellName();
+      const envVars = buildShellIntegrationEnvVars(
+        shellName,
+        {
+          zshDir: this.shellIntegrationZshDir,
+          ghosttyResourcesDir: process.env.GHOSTTY_RESOURCES_DIR || null,
+        },
+        options?.envVars,
+      );
 
-    // Only pass envVars if we actually have entries
-    const merged = Object.keys(envVars).length > 0 ? { ...options, envVars } : options;
+      // Only pass envVars if we actually have entries
+      const merged = Object.keys(envVars).length > 0 ? { ...options, envVars } : options;
 
-    this.terminal.createSurface(surfaceId, merged);
+      this.terminal?.createSurface(surfaceId, merged);
+    });
   }
 
   destroySurface(surfaceId: string): void {
     if (!this.terminal) return;
-    this.terminal.destroySurface(surfaceId);
+    measureMainProcessOperation("terminal.destroySurface", () => {
+      this.terminal?.destroySurface(surfaceId);
+    });
   }
 
   showSurface(surfaceId: string): void {
     if (!this.terminal) return;
-    this.terminal.showSurface(surfaceId);
+    measureMainProcessOperation("terminal.showSurface", () => {
+      this.terminal?.showSurface(surfaceId);
+    });
   }
 
   hideSurface(surfaceId: string): void {
     if (!this.terminal) return;
-    this.terminal.hideSurface(surfaceId);
+    measureMainProcessOperation("terminal.hideSurface", () => {
+      this.terminal?.hideSurface(surfaceId);
+    });
   }
 
   focusSurface(surfaceId: string): void {
     if (!this.terminal) return;
-    this.terminal.focusSurface(surfaceId);
+    measureMainProcessOperation("terminal.focusSurface", () => {
+      this.terminal?.focusSurface(surfaceId);
+    });
   }
 
   setVisibleSurfaces(surfaceIds: string[]): void {
     if (!this.terminal) return;
-    this.terminal.setVisibleSurfaces(surfaceIds);
+    measureMainProcessOperation("terminal.setVisibleSurfaces", () => {
+      this.terminal?.setVisibleSurfaces(surfaceIds);
+    });
   }
 
   setBounds(surfaceId: string, bounds: TerminalBounds): void {
     if (!this.terminal) return;
-    this.terminal.setBounds(surfaceId, bounds);
+    measureMainProcessOperation("terminal.setBounds", () => {
+      this.terminal?.setBounds(surfaceId, bounds);
+    });
   }
 
   blurSurfaces(): void {
     if (!this.terminal) return;
-    this.terminal.blurSurfaces();
+    measureMainProcessOperation("terminal.blurSurfaces", () => {
+      this.terminal?.blurSurfaces();
+    });
   }
 
   /** Send a Ghostty binding action to a surface (e.g. "increase_font_size:1"). */

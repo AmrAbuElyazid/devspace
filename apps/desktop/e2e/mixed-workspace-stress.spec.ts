@@ -1,9 +1,10 @@
 import { expect, test } from "@playwright/test";
 import {
+  getPerformanceSnapshot,
   getNativeViewSnapshot,
   getStoreState,
   launchApp,
-  resetNativeViewCounters,
+  resetPerformanceCounters,
 } from "./helpers/app";
 
 test.describe("Stress: mixed workspace remounting", () => {
@@ -11,7 +12,7 @@ test.describe("Stress: mixed workspace remounting", () => {
     const { app, page } = await launchApp();
 
     try {
-      await resetNativeViewCounters(page);
+      await resetPerformanceCounters(page);
 
       const workspaceIds = await page.evaluate(() => {
         const store = (window as unknown as Record<string, unknown>).__DEVSPACE_STORE__;
@@ -116,6 +117,14 @@ test.describe("Stress: mixed workspace remounting", () => {
       expect(snapshotAfterCycles.visible.total).toBeLessThanOrEqual(1);
       expect(snapshotAfterCycles.counters.reconcileCalls).toBeGreaterThan(0);
       expect(snapshotAfterCycles.counters.visibleBoundsSyncPasses).toBeGreaterThan(0);
+
+      const performanceSnapshot = await getPerformanceSnapshot(page);
+      expect(performanceSnapshot.nativeViews.timings.reconcile.count).toBeGreaterThan(0);
+      expect(performanceSnapshot.nativeViews.timings.visibleBoundsSync.count).toBeGreaterThan(0);
+      expect(performanceSnapshot.main.process.memory.rss).toBeGreaterThan(0);
+      expect(
+        performanceSnapshot.main.operations["terminal.setVisibleSurfaces"]?.count ?? 0,
+      ).toBeGreaterThan(0);
     } finally {
       await app.close();
     }
