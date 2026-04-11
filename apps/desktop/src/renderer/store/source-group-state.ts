@@ -6,6 +6,7 @@ import {
   removeGroupRecentState,
   removeTabFromRecentOrder,
 } from "./tab-history";
+import { buildWorkspaceSidebarMetadataByWorkspaceId } from "./workspace-sidebar-metadata";
 import type { WorkspaceState } from "./workspace-state";
 
 type SourceGroupStateSlice = Pick<
@@ -14,6 +15,7 @@ type SourceGroupStateSlice = Pick<
   | "panes"
   | "paneGroups"
   | "paneOwnersByPaneId"
+  | "workspaceSidebarMetadataByWorkspaceId"
   | "tabHistoryByGroupId"
   | "recentTabTraversalByGroupId"
 >;
@@ -105,6 +107,11 @@ export function applySourceGroupTabRemovalResolution({
     panes,
     paneGroups,
     paneOwnersByPaneId: buildPaneOwnersByPaneId(workspaces, paneGroups),
+    workspaceSidebarMetadataByWorkspaceId: buildWorkspaceSidebarMetadataByWorkspaceId(
+      workspaces,
+      panes,
+      paneGroups,
+    ),
     tabHistoryByGroupId,
     recentTabTraversalByGroupId,
   };

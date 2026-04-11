@@ -19,7 +19,7 @@ import {
   insertWorkspaceIntoSidebarState,
   resolveWorkspaceTabCreationContext,
 } from "../workspace-creation-state";
-import { attachPaneOwnersByPaneId } from "../pane-ownership";
+import { attachWorkspaceDerivedState } from "../pane-ownership";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type WorkspaceCrudSlice = Pick<
@@ -63,7 +63,7 @@ export function createWorkspaceCrudSlice(
           insertIndex: 0,
         });
 
-        return attachPaneOwnersByPaneId(state, {
+        return attachWorkspaceDerivedState(state, {
           workspaces: [...state.workspaces, workspace],
           activeWorkspaceId: workspace.id,
           panes: { ...state.panes, [pane.id]: pane },
@@ -87,7 +87,7 @@ export function createWorkspaceCrudSlice(
       if (nextRemovalState.workspaces.length === 0) {
         const freshWorkspace = createDefaultWorkspaceBundle("Workspace 1");
         set((currentState) =>
-          attachPaneOwnersByPaneId(currentState, {
+          attachWorkspaceDerivedState(currentState, {
             workspaces: [freshWorkspace.workspace],
             activeWorkspaceId: freshWorkspace.workspace.id,
             panes: {
@@ -111,7 +111,7 @@ export function createWorkspaceCrudSlice(
       }
 
       set((currentState) =>
-        attachPaneOwnersByPaneId(currentState, {
+        attachWorkspaceDerivedState(currentState, {
           workspaces: nextRemovalState.workspaces,
           activeWorkspaceId: nextRemovalState.activeWorkspaceId ?? state.activeWorkspaceId,
           panes: nextRemovalState.panes,
@@ -131,12 +131,14 @@ export function createWorkspaceCrudSlice(
     },
 
     setActiveWorkspace(id) {
-      set((state) => ({
-        activeWorkspaceId: id,
-        workspaces: state.workspaces.map((w) =>
-          w.id === id ? { ...w, lastActiveAt: Date.now() } : w,
-        ),
-      }));
+      set((state) =>
+        attachWorkspaceDerivedState(state, {
+          activeWorkspaceId: id,
+          workspaces: state.workspaces.map((w) =>
+            w.id === id ? { ...w, lastActiveAt: Date.now() } : w,
+          ),
+        }),
+      );
     },
 
     setFocusedGroup(workspaceId, groupId) {
@@ -170,7 +172,7 @@ export function createWorkspaceCrudSlice(
       });
 
       set((currentState) =>
-        attachPaneOwnersByPaneId(currentState, {
+        attachWorkspaceDerivedState(currentState, {
           workspaces: nextTransferState.workspaces,
           activeWorkspaceId: nextTransferState.activeWorkspaceId,
           paneGroups: nextTransferState.paneGroups,
@@ -205,7 +207,7 @@ export function createWorkspaceCrudSlice(
       });
 
       set((currentState) =>
-        attachPaneOwnersByPaneId(currentState, {
+        attachWorkspaceDerivedState(currentState, {
           workspaces: nextTransferState.workspaces.map((w) =>
             w.id === targetWorkspace.id ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
           ),

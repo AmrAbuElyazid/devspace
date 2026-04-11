@@ -55,14 +55,20 @@ export function hidePaneView(pane: BrowserPaneRecord, deps: BrowserPaneViewDeps)
 }
 
 export function syncVisiblePaneViews(
-  panes: ReadonlyMap<string, BrowserPaneRecord>,
+  visiblePaneIds: ReadonlySet<string>,
+  panes: Pick<ReadonlyMap<string, BrowserPaneRecord>, "get">,
   paneIds: string[],
   deps: BrowserPaneViewDeps,
-): void {
+): Set<string> {
   const desiredVisible = new Set(paneIds);
 
-  for (const [paneId, pane] of panes) {
-    if (pane.isVisible && !desiredVisible.has(paneId)) {
+  for (const paneId of visiblePaneIds) {
+    if (desiredVisible.has(paneId)) {
+      continue;
+    }
+
+    const pane = panes.get(paneId);
+    if (pane) {
       hidePaneView(pane, deps);
     }
   }
@@ -75,6 +81,8 @@ export function syncVisiblePaneViews(
 
     showPaneView(pane, deps, { boundsFirst: true });
   }
+
+  return desiredVisible;
 }
 
 export function destroyPaneView(pane: BrowserPaneRecord): void {

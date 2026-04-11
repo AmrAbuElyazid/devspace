@@ -2,6 +2,7 @@ import { expect, test } from "vitest";
 import type { SourceGroupResolution } from "../lib/source-group-resolution";
 import { buildPaneOwnersByPaneId } from "./pane-ownership";
 import { applySourceGroupTabRemovalResolution } from "./source-group-state";
+import { buildWorkspaceSidebarMetadataByWorkspaceId } from "./workspace-sidebar-metadata";
 
 function createBaseState() {
   const state = {
@@ -46,6 +47,11 @@ function createBaseState() {
   return {
     ...state,
     paneOwnersByPaneId: buildPaneOwnersByPaneId(state.workspaces, state.paneGroups),
+    workspaceSidebarMetadataByWorkspaceId: buildWorkspaceSidebarMetadataByWorkspaceId(
+      state.workspaces,
+      state.panes,
+      state.paneGroups,
+    ),
   };
 }
 

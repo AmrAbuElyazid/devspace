@@ -1,7 +1,8 @@
 import type { Pane } from "../../types/workspace";
 import { createPane } from "../../lib/pane-factory";
 import type { PaneCleanup } from "../store-helpers";
-import { attachPaneOwnersByPaneId } from "../pane-ownership";
+import { attachWorkspaceDerivedState } from "../pane-ownership";
+import { updateWorkspaceSidebarMetadataByWorkspaceId } from "../workspace-sidebar-metadata";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type PaneSlice = Pick<
@@ -17,7 +18,9 @@ export function createPaneManagementSlice(
   return {
     addPane(type, config) {
       const pane = createPane(type, config);
-      set((state) => ({ panes: { ...state.panes, [pane.id]: pane } }));
+      set((state) =>
+        attachWorkspaceDerivedState(state, { panes: { ...state.panes, [pane.id]: pane } }),
+      );
       return pane.id;
     },
 
@@ -26,9 +29,7 @@ export function createPaneManagementSlice(
       set((state) => {
         const newPanes = { ...state.panes };
         delete newPanes[paneId];
-        const nextPaneOwnersByPaneId = { ...state.paneOwnersByPaneId };
-        delete nextPaneOwnersByPaneId[paneId];
-        return { panes: newPanes, paneOwnersByPaneId: nextPaneOwnersByPaneId };
+        return attachWorkspaceDerivedState(state, { panes: newPanes });
       });
     },
 
@@ -49,17 +50,44 @@ export function createPaneManagementSlice(
           },
         };
 
+        const metadataAffectedWorkspaceIds = new Set<string>();
+
         // Track last terminal CWD on the owning workspace for inheritance fallback
         if (pane.type === "terminal" && "cwd" in updates && typeof updates.cwd === "string") {
           const owner = state.paneOwnersByPaneId[paneId];
           if (owner) {
+            metadataAffectedWorkspaceIds.add(owner.workspaceId);
             patch.workspaces = state.workspaces.map((ws) =>
               ws.id === owner.workspaceId ? { ...ws, lastTerminalCwd: updates.cwd as string } : ws,
             );
           }
         }
 
-        return patch.workspaces ? attachPaneOwnersByPaneId(state, patch) : patch;
+        if (
+          pane.type === "editor" &&
+          "folderPath" in updates &&
+          typeof updates.folderPath === "string"
+        ) {
+          const owner = state.paneOwnersByPaneId[paneId];
+          if (owner) {
+            metadataAffectedWorkspaceIds.add(owner.workspaceId);
+          }
+        }
+
+        if (metadataAffectedWorkspaceIds.size === 0) {
+          return patch;
+        }
+
+        return {
+          ...patch,
+          workspaceSidebarMetadataByWorkspaceId: updateWorkspaceSidebarMetadataByWorkspaceId(
+            state.workspaceSidebarMetadataByWorkspaceId,
+            patch.workspaces ?? state.workspaces,
+            patch.panes ?? state.panes,
+            state.paneGroups,
+            Array.from(metadataAffectedWorkspaceIds),
+          ),
+        };
       });
     },
 

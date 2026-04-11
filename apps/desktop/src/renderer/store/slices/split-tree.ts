@@ -11,7 +11,7 @@ import {
   updateSizesAtPath,
 } from "../../lib/split-tree";
 import { createPane, createPaneGroup, findNearestTerminalCwd } from "../../lib/pane-factory";
-import { attachPaneOwnersByPaneId } from "../pane-ownership";
+import { attachWorkspaceDerivedState } from "../pane-ownership";
 import { clearRecentTabTraversal } from "../tab-history";
 import type { PaneCleanup } from "../store-helpers";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
@@ -53,7 +53,7 @@ export function createSplitTreeSlice(
       };
 
       set((state) =>
-        attachPaneOwnersByPaneId(state, {
+        attachWorkspaceDerivedState(state, {
           workspaces: state.workspaces.map((w) =>
             w.id === workspaceId
               ? {
@@ -107,7 +107,7 @@ export function createSplitTreeSlice(
           delete newPaneGroups[groupId];
           newPaneGroups[freshGroup.id] = freshGroup;
 
-          return attachPaneOwnersByPaneId(state, {
+          return attachWorkspaceDerivedState(state, {
             workspaces: state.workspaces.map((w) =>
               w.id === workspaceId
                 ? {
@@ -144,7 +144,7 @@ export function createSplitTreeSlice(
 
         delete newPaneGroups[groupId];
 
-        return attachPaneOwnersByPaneId(state, {
+        return attachWorkspaceDerivedState(state, {
           workspaces: state.workspaces.map((w) =>
             w.id === workspaceId
               ? {

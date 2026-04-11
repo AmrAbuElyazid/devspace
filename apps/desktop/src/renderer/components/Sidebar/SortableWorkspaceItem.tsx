@@ -5,7 +5,6 @@ import { useWorkspaceStore } from "../../store/workspace-store";
 import { useActiveDrag } from "../../hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
-import { getWorkspaceMetadata } from "./sidebar-utils";
 import type { HeldModifier } from "../../hooks/useModifierHeld";
 import type { SidebarContainer } from "../../types/dnd";
 
@@ -43,11 +42,9 @@ export function SortableWorkspaceItem({
   // Each workspace item reads its own data from the store so that
   // title/CWD/pane changes in OTHER workspaces don't cascade here.
   const name = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.name ?? "");
-  const metadata = useWorkspaceStore((s) => {
-    const ws = s.workspaces.find((w) => w.id === workspaceId);
-    if (!ws) return "";
-    return getWorkspaceMetadata(ws, s.panes, s.paneGroups);
-  });
+  const metadata = useWorkspaceStore(
+    (s) => s.workspaceSidebarMetadataByWorkspaceId[workspaceId] ?? "",
+  );
   const canDelete = useWorkspaceStore((s) => s.workspaces.length > 1);
 
   // Compute shortcut hint from workspace index

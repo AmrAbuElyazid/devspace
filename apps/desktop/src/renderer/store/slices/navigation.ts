@@ -1,5 +1,6 @@
 import { findGroupInDirection, type FocusDirection } from "../../lib/split-navigation";
 import { collectGroupIds, treeHasGroup } from "../../lib/split-tree";
+import { attachWorkspaceDerivedState } from "../pane-ownership";
 import {
   buildRecentTabOrder,
   clearAllRecentTabTraversals,
@@ -30,12 +31,12 @@ function activateAdjacentWorkspace(set: StoreSet, delta: 1 | -1): void {
     const targetIdx = (idx + delta + state.workspaces.length) % state.workspaces.length;
     const targetWs = state.workspaces[targetIdx];
     if (!targetWs) return state;
-    return {
+    return attachWorkspaceDerivedState(state, {
       activeWorkspaceId: targetWs.id,
       workspaces: state.workspaces.map((w) =>
         w.id === targetWs.id ? { ...w, lastActiveAt: Date.now() } : w,
       ),
-    };
+    });
   });
 }
 

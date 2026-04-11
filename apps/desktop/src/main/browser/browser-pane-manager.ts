@@ -61,6 +61,7 @@ export class BrowserPaneManager implements BrowserPaneController {
   private readonly createView: NonNullable<BrowserPaneManagerDeps["createView"]>;
   private readonly historyTracker: BrowserPaneHistoryTracker;
   private readonly permissionTracker: BrowserPanePermissionTracker;
+  private visiblePaneIds = new Set<string>();
 
   constructor(private readonly deps: BrowserPaneManagerDeps) {
     this.panes = createBrowserPaneRegistry(deps.sendToRenderer);
@@ -99,6 +100,7 @@ export class BrowserPaneManager implements BrowserPaneController {
     }
 
     hidePaneView(pane, this.deps);
+    this.visiblePaneIds.delete(paneId);
     this.permissionTracker.denyPendingForPane(paneId);
     this.historyTracker.deletePane(paneId);
     this.panes.unregister(paneId);
@@ -109,17 +111,24 @@ export class BrowserPaneManager implements BrowserPaneController {
   showPane(paneId: string): void {
     this.panes.withPane(paneId, (pane) => {
       showPaneView(pane, this.deps);
+      this.visiblePaneIds.add(paneId);
     });
   }
 
   hidePane(paneId: string): void {
     this.panes.withPane(paneId, (pane) => {
       hidePaneView(pane, this.deps);
+      this.visiblePaneIds.delete(paneId);
     });
   }
 
   setVisiblePanes(paneIds: string[]): void {
-    syncVisiblePaneViews(this.panes.records(), paneIds, this.deps);
+    this.visiblePaneIds = syncVisiblePaneViews(
+      this.visiblePaneIds,
+      this.panes.records(),
+      paneIds,
+      this.deps,
+    );
   }
 
   isPaneVisible(paneId: string): boolean {

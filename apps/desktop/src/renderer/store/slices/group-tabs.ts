@@ -17,7 +17,7 @@ import {
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
 import { appendPaneToGroupState } from "../group-tab-append-state";
 import { buildDestinationGroupState } from "../group-tab-destination-state";
-import { attachPaneOwnersByPaneId } from "../pane-ownership";
+import { attachWorkspaceDerivedState } from "../pane-ownership";
 import type { PaneCleanup } from "../store-helpers";
 import { applySourceGroupTabRemovalResolution } from "../source-group-state";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
@@ -59,7 +59,7 @@ export function createGroupTabsSlice(
       });
 
       set((state) =>
-        attachPaneOwnersByPaneId(state, {
+        attachWorkspaceDerivedState(state, {
           panes: appendedState.panes,
           paneGroups: appendedState.paneGroups,
         }),
@@ -295,7 +295,7 @@ export function createGroupTabsSlice(
           tabId,
         });
         return {
-          ...attachPaneOwnersByPaneId(state, {
+          ...attachWorkspaceDerivedState(state, {
             panes: appendedState.panes,
             paneGroups: appendedState.paneGroups,
           }),
@@ -329,7 +329,7 @@ export function createGroupTabsSlice(
       });
 
       set((currentState) =>
-        attachPaneOwnersByPaneId(currentState, {
+        attachWorkspaceDerivedState(currentState, {
           panes: appendedState.panes,
           paneGroups: appendedState.paneGroups,
           workspaces: state.workspaces.map((w) =>

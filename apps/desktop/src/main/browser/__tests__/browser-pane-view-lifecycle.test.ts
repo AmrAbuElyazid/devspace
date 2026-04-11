@@ -73,12 +73,38 @@ test("syncVisiblePaneViews hides stale panes and shows requested panes bounds-fi
     ["visible", visiblePane],
   ]);
 
-  syncVisiblePaneViews(panes, ["hidden"], deps);
+  const nextVisible = syncVisiblePaneViews(new Set(["visible"]), panes, ["hidden"], deps);
 
   expect(deps.removeChildView).toHaveBeenCalledWith(visiblePane.view);
   expect(order).toEqual(["setBounds", "addChildView"]);
   expect(hiddenPane.isVisible).toBe(true);
   expect(visiblePane.isVisible).toBe(false);
+  expect([...nextVisible]).toEqual(["hidden"]);
+});
+
+test("syncVisiblePaneViews only looks up panes whose visibility can change", () => {
+  const hiddenPane = makePane();
+  const visiblePane = makePane();
+  visiblePane.isVisible = true;
+  const getPane = vi.fn((paneId: string) => {
+    if (paneId === "hidden") {
+      return hiddenPane;
+    }
+    if (paneId === "visible") {
+      return visiblePane;
+    }
+    return undefined;
+  });
+  const deps = {
+    addChildView: vi.fn(),
+    removeChildView: vi.fn(),
+  };
+
+  syncVisiblePaneViews(new Set(["visible"]), { get: getPane }, ["hidden"], deps);
+
+  expect(getPane).toHaveBeenCalledTimes(2);
+  expect(getPane).toHaveBeenNthCalledWith(1, "visible");
+  expect(getPane).toHaveBeenNthCalledWith(2, "hidden");
 });
 
 test("setPaneBounds stores the bounds and applies them to the view", () => {
