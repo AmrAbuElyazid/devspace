@@ -58,6 +58,136 @@ type PreparedWorkspaceSnapshot = {
   pinnedSidebarNodesJson: string;
 };
 
+type WorkspacePersistenceStatements = {
+  queries: {
+    selectWorkspaces: SqliteStatement;
+    selectPanes: SqliteStatement;
+    selectPaneGroups: SqliteStatement;
+    selectPaneGroupTabs: SqliteStatement;
+    selectMeta: SqliteStatement;
+  };
+  workspaces: {
+    insert: SqliteStatement;
+    delete: SqliteStatement;
+    upsert: SqliteStatement;
+    deleteAll: SqliteStatement;
+  };
+  panes: {
+    insert: SqliteStatement;
+    delete: SqliteStatement;
+    upsert: SqliteStatement;
+    deleteAll: SqliteStatement;
+  };
+  paneGroups: {
+    insert: SqliteStatement;
+    delete: SqliteStatement;
+    upsert: SqliteStatement;
+    deleteAll: SqliteStatement;
+    deleteTabsByGroupId: SqliteStatement;
+    deleteAllTabs: SqliteStatement;
+    insertTab: SqliteStatement;
+  };
+  meta: {
+    insert: SqliteStatement;
+    upsert: SqliteStatement;
+    deleteAll: SqliteStatement;
+  };
+};
+
+function createWorkspacePersistenceStatements(db: SqliteDatabase): WorkspacePersistenceStatements {
+  return {
+    queries: {
+      selectWorkspaces: db.prepare(
+        `SELECT id, name, focused_group_id, zoomed_group_id, last_active_at, last_terminal_cwd, root_json
+         FROM workspaces
+         ORDER BY rowid`,
+      ),
+      selectPanes: db.prepare(`SELECT id, type, title, config_json FROM panes ORDER BY rowid`),
+      selectPaneGroups: db.prepare(`SELECT id, active_tab_id FROM pane_groups ORDER BY rowid`),
+      selectPaneGroupTabs: db.prepare(
+        `SELECT id, group_id, pane_id, position
+         FROM pane_group_tabs
+         ORDER BY group_id, position`,
+      ),
+      selectMeta: db.prepare(`SELECT key, value FROM meta`),
+    },
+    workspaces: {
+      insert: db.prepare(
+        `INSERT INTO workspaces (
+           id, name, focused_group_id, zoomed_group_id, last_active_at, last_terminal_cwd, root_json
+         ) VALUES (
+           $id, $name, $focusedGroupId, $zoomedGroupId, $lastActiveAt, $lastTerminalCwd, $rootJson
+         )`,
+      ),
+      delete: db.prepare(`DELETE FROM workspaces WHERE id = $id`),
+      upsert: db.prepare(
+        `INSERT INTO workspaces (
+           id, name, focused_group_id, zoomed_group_id, last_active_at, last_terminal_cwd, root_json
+         ) VALUES (
+           $id, $name, $focusedGroupId, $zoomedGroupId, $lastActiveAt, $lastTerminalCwd, $rootJson
+         )
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           focused_group_id = excluded.focused_group_id,
+           zoomed_group_id = excluded.zoomed_group_id,
+           last_active_at = excluded.last_active_at,
+           last_terminal_cwd = excluded.last_terminal_cwd,
+           root_json = excluded.root_json`,
+      ),
+      deleteAll: db.prepare(`DELETE FROM workspaces`),
+    },
+    panes: {
+      insert: db.prepare(
+        `INSERT INTO panes (id, type, title, config_json)
+         VALUES ($id, $type, $title, $configJson)`,
+      ),
+      delete: db.prepare(`DELETE FROM panes WHERE id = $id`),
+      upsert: db.prepare(
+        `INSERT INTO panes (id, type, title, config_json)
+         VALUES ($id, $type, $title, $configJson)
+         ON CONFLICT(id) DO UPDATE SET
+           type = excluded.type,
+           title = excluded.title,
+           config_json = excluded.config_json`,
+      ),
+      deleteAll: db.prepare(`DELETE FROM panes`),
+    },
+    paneGroups: {
+      insert: db.prepare(
+        `INSERT INTO pane_groups (id, active_tab_id)
+         VALUES ($id, $activeTabId)`,
+      ),
+      delete: db.prepare(`DELETE FROM pane_groups WHERE id = $id`),
+      upsert: db.prepare(
+        `INSERT INTO pane_groups (id, active_tab_id)
+         VALUES ($id, $activeTabId)
+         ON CONFLICT(id) DO UPDATE SET
+           active_tab_id = excluded.active_tab_id`,
+      ),
+      deleteAll: db.prepare(`DELETE FROM pane_groups`),
+      deleteTabsByGroupId: db.prepare(`DELETE FROM pane_group_tabs WHERE group_id = $groupId`),
+      deleteAllTabs: db.prepare(`DELETE FROM pane_group_tabs`),
+      insertTab: db.prepare(
+        `INSERT INTO pane_group_tabs (id, group_id, pane_id, position)
+         VALUES ($id, $groupId, $paneId, $position)
+         ON CONFLICT(id) DO UPDATE SET
+           group_id = excluded.group_id,
+           pane_id = excluded.pane_id,
+           position = excluded.position`,
+      ),
+    },
+    meta: {
+      insert: db.prepare(`INSERT INTO meta (key, value) VALUES ($key, $value)`),
+      upsert: db.prepare(
+        `INSERT INTO meta (key, value)
+         VALUES ($key, $value)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      ),
+      deleteAll: db.prepare(`DELETE FROM meta`),
+    },
+  };
+}
+
 function prepareSnapshot(snapshot: PersistedWorkspaceState): PreparedWorkspaceSnapshot {
   return {
     workspaceRows: snapshot.workspaces.map((workspace) => ({
@@ -136,38 +266,26 @@ export class WorkspacePersistenceStore {
   private readonly filePath: string;
   private db: SqliteDatabase | null = null;
   private lastSavedSnapshot: PreparedWorkspaceSnapshot | null = null;
+  private statements: WorkspacePersistenceStatements | null = null;
 
   constructor(userDataPath: string) {
     this.filePath = join(userDataPath, "workspace-state.sqlite");
   }
 
   load(): PersistedWorkspaceState | null {
-    const db = this.getDb();
-    const workspaceRows = db
-      .prepare(
-        `SELECT id, name, focused_group_id, zoomed_group_id, last_active_at, last_terminal_cwd, root_json
-         FROM workspaces
-         ORDER BY rowid`,
-      )
-      .all();
+    this.getDb();
+    const statements = this.getStatements();
+    const workspaceRows = statements.queries.selectWorkspaces.all();
 
     if (workspaceRows.length === 0) {
       this.lastSavedSnapshot = null;
       return null;
     }
 
-    const paneRows = db
-      .prepare(`SELECT id, type, title, config_json FROM panes ORDER BY rowid`)
-      .all();
-    const groupRows = db.prepare(`SELECT id, active_tab_id FROM pane_groups ORDER BY rowid`).all();
-    const tabRows = db
-      .prepare(
-        `SELECT id, group_id, pane_id, position
-         FROM pane_group_tabs
-         ORDER BY group_id, position`,
-      )
-      .all();
-    const metaRows = db.prepare(`SELECT key, value FROM meta`).all();
+    const paneRows = statements.queries.selectPanes.all();
+    const groupRows = statements.queries.selectPaneGroups.all();
+    const tabRows = statements.queries.selectPaneGroupTabs.all();
+    const metaRows = statements.queries.selectMeta.all();
 
     const meta = new Map<string, string>();
     for (const row of metaRows) {
@@ -256,9 +374,9 @@ export class WorkspacePersistenceStore {
 
     try {
       if (this.lastSavedSnapshot) {
-        this.saveIncremental(db, this.lastSavedSnapshot, nextSnapshot);
+        this.saveIncremental(this.lastSavedSnapshot, nextSnapshot);
       } else {
-        this.saveFullSnapshot(db, nextSnapshot);
+        this.saveFullSnapshot(nextSnapshot);
       }
 
       db.exec("COMMIT");
@@ -284,40 +402,30 @@ export class WorkspacePersistenceStore {
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA foreign_keys = ON");
     runWorkspaceMigrations(db);
+    this.statements = createWorkspacePersistenceStatements(db);
 
     return db;
   }
 
-  private saveFullSnapshot(db: SqliteDatabase, snapshot: PreparedWorkspaceSnapshot): void {
-    db.exec("DELETE FROM pane_group_tabs");
-    db.exec("DELETE FROM pane_groups");
-    db.exec("DELETE FROM panes");
-    db.exec("DELETE FROM workspaces");
-    db.exec("DELETE FROM meta");
+  private getStatements(): WorkspacePersistenceStatements {
+    if (!this.statements) {
+      this.getDb();
+    }
 
-    const insertWorkspace = db.prepare(
-      `INSERT INTO workspaces (
-         id, name, focused_group_id, zoomed_group_id, last_active_at, last_terminal_cwd, root_json
-       ) VALUES (
-         $id, $name, $focusedGroupId, $zoomedGroupId, $lastActiveAt, $lastTerminalCwd, $rootJson
-       )`,
-    );
-    const insertPane = db.prepare(
-      `INSERT INTO panes (id, type, title, config_json)
-       VALUES ($id, $type, $title, $configJson)`,
-    );
-    const insertPaneGroup = db.prepare(
-      `INSERT INTO pane_groups (id, active_tab_id)
-       VALUES ($id, $activeTabId)`,
-    );
-    const insertPaneGroupTab = db.prepare(
-      `INSERT INTO pane_group_tabs (id, group_id, pane_id, position)
-       VALUES ($id, $groupId, $paneId, $position)`,
-    );
-    const insertMeta = db.prepare(`INSERT INTO meta (key, value) VALUES ($key, $value)`);
+    return this.statements!;
+  }
+
+  private saveFullSnapshot(snapshot: PreparedWorkspaceSnapshot): void {
+    const statements = this.getStatements();
+
+    statements.paneGroups.deleteAllTabs.run();
+    statements.paneGroups.deleteAll.run();
+    statements.panes.deleteAll.run();
+    statements.workspaces.deleteAll.run();
+    statements.meta.deleteAll.run();
 
     for (const workspace of snapshot.workspaceRows) {
-      insertWorkspace.run({
+      statements.workspaces.insert.run({
         $id: workspace.id,
         $name: workspace.name,
         $focusedGroupId: workspace.focusedGroupId,
@@ -329,7 +437,7 @@ export class WorkspacePersistenceStore {
     }
 
     for (const pane of snapshot.paneRows) {
-      insertPane.run({
+      statements.panes.insert.run({
         $id: pane.id,
         $type: pane.type,
         $title: pane.title,
@@ -338,13 +446,13 @@ export class WorkspacePersistenceStore {
     }
 
     for (const group of snapshot.paneGroupRows) {
-      insertPaneGroup.run({
+      statements.paneGroups.insert.run({
         $id: group.id,
         $activeTabId: group.activeTabId,
       });
 
       for (const tab of group.tabs) {
-        insertPaneGroupTab.run({
+        statements.paneGroups.insertTab.run({
           $id: tab.id,
           $groupId: tab.groupId,
           $paneId: tab.paneId,
@@ -353,14 +461,22 @@ export class WorkspacePersistenceStore {
       }
     }
 
-    insertMeta.run({ $key: "schema_version", $value: String(WORKSPACE_SCHEMA_VERSION) });
-    insertMeta.run({ $key: "active_workspace_id", $value: snapshot.activeWorkspaceId });
-    insertMeta.run({ $key: "sidebar_tree_json", $value: snapshot.sidebarTreeJson });
-    insertMeta.run({ $key: "pinned_sidebar_nodes_json", $value: snapshot.pinnedSidebarNodesJson });
+    statements.meta.insert.run({
+      $key: "schema_version",
+      $value: String(WORKSPACE_SCHEMA_VERSION),
+    });
+    statements.meta.insert.run({
+      $key: "active_workspace_id",
+      $value: snapshot.activeWorkspaceId,
+    });
+    statements.meta.insert.run({ $key: "sidebar_tree_json", $value: snapshot.sidebarTreeJson });
+    statements.meta.insert.run({
+      $key: "pinned_sidebar_nodes_json",
+      $value: snapshot.pinnedSidebarNodesJson,
+    });
   }
 
   private saveIncremental(
-    db: SqliteDatabase,
     previous: PreparedWorkspaceSnapshot,
     next: PreparedWorkspaceSnapshot,
   ): void {
@@ -370,63 +486,18 @@ export class WorkspacePersistenceStore {
     const nextPanes = rowsById(next.paneRows);
     const previousGroups = rowsById(previous.paneGroupRows);
     const nextGroups = rowsById(next.paneGroupRows);
-
-    const deleteWorkspace = db.prepare(`DELETE FROM workspaces WHERE id = $id`);
-    const upsertWorkspace = db.prepare(
-      `INSERT INTO workspaces (
-         id, name, focused_group_id, zoomed_group_id, last_active_at, last_terminal_cwd, root_json
-       ) VALUES (
-         $id, $name, $focusedGroupId, $zoomedGroupId, $lastActiveAt, $lastTerminalCwd, $rootJson
-       )
-       ON CONFLICT(id) DO UPDATE SET
-         name = excluded.name,
-         focused_group_id = excluded.focused_group_id,
-         zoomed_group_id = excluded.zoomed_group_id,
-         last_active_at = excluded.last_active_at,
-         last_terminal_cwd = excluded.last_terminal_cwd,
-         root_json = excluded.root_json`,
-    );
-    const deletePane = db.prepare(`DELETE FROM panes WHERE id = $id`);
-    const upsertPane = db.prepare(
-      `INSERT INTO panes (id, type, title, config_json)
-       VALUES ($id, $type, $title, $configJson)
-       ON CONFLICT(id) DO UPDATE SET
-         type = excluded.type,
-         title = excluded.title,
-         config_json = excluded.config_json`,
-    );
-    const deletePaneGroupTabs = db.prepare(`DELETE FROM pane_group_tabs WHERE group_id = $groupId`);
-    const deletePaneGroup = db.prepare(`DELETE FROM pane_groups WHERE id = $id`);
-    const upsertPaneGroup = db.prepare(
-      `INSERT INTO pane_groups (id, active_tab_id)
-       VALUES ($id, $activeTabId)
-       ON CONFLICT(id) DO UPDATE SET
-         active_tab_id = excluded.active_tab_id`,
-    );
-    const insertPaneGroupTab = db.prepare(
-      `INSERT INTO pane_group_tabs (id, group_id, pane_id, position)
-       VALUES ($id, $groupId, $paneId, $position)
-       ON CONFLICT(id) DO UPDATE SET
-         group_id = excluded.group_id,
-         pane_id = excluded.pane_id,
-         position = excluded.position`,
-    );
-    const upsertMeta = db.prepare(
-      `INSERT INTO meta (key, value)
-       VALUES ($key, $value)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-    );
+    const statements = this.getStatements();
 
     for (const previousWorkspace of previous.workspaceRows) {
       if (!nextWorkspaces.has(previousWorkspace.id)) {
-        deleteWorkspace.run({ $id: previousWorkspace.id });
+        statements.workspaces.delete.run({ $id: previousWorkspace.id });
       }
     }
 
     for (const workspace of next.workspaceRows) {
       const previousWorkspace = previousWorkspaces.get(workspace.id);
       if (!previousWorkspace || !workspaceRowsEqual(previousWorkspace, workspace)) {
-        upsertWorkspace.run({
+        statements.workspaces.upsert.run({
           $id: workspace.id,
           $name: workspace.name,
           $focusedGroupId: workspace.focusedGroupId,
@@ -440,14 +511,14 @@ export class WorkspacePersistenceStore {
 
     for (const previousPane of previous.paneRows) {
       if (!nextPanes.has(previousPane.id)) {
-        deletePane.run({ $id: previousPane.id });
+        statements.panes.delete.run({ $id: previousPane.id });
       }
     }
 
     for (const pane of next.paneRows) {
       const previousPane = previousPanes.get(pane.id);
       if (!previousPane || !paneRowsEqual(previousPane, pane)) {
-        upsertPane.run({
+        statements.panes.upsert.run({
           $id: pane.id,
           $type: pane.type,
           $title: pane.title,
@@ -458,21 +529,21 @@ export class WorkspacePersistenceStore {
 
     for (const previousGroup of previous.paneGroupRows) {
       if (!nextGroups.has(previousGroup.id)) {
-        deletePaneGroupTabs.run({ $groupId: previousGroup.id });
-        deletePaneGroup.run({ $id: previousGroup.id });
+        statements.paneGroups.deleteTabsByGroupId.run({ $groupId: previousGroup.id });
+        statements.paneGroups.delete.run({ $id: previousGroup.id });
       }
     }
 
     for (const group of next.paneGroupRows) {
       const previousGroup = previousGroups.get(group.id);
       if (!previousGroup || !paneGroupRowsEqual(previousGroup, group)) {
-        upsertPaneGroup.run({
+        statements.paneGroups.upsert.run({
           $id: group.id,
           $activeTabId: group.activeTabId,
         });
-        deletePaneGroupTabs.run({ $groupId: group.id });
+        statements.paneGroups.deleteTabsByGroupId.run({ $groupId: group.id });
         for (const tab of group.tabs) {
-          insertPaneGroupTab.run({
+          statements.paneGroups.insertTab.run({
             $id: tab.id,
             $groupId: tab.groupId,
             $paneId: tab.paneId,
@@ -482,10 +553,19 @@ export class WorkspacePersistenceStore {
       }
     }
 
-    upsertMeta.run({ $key: "schema_version", $value: String(WORKSPACE_SCHEMA_VERSION) });
-    upsertMeta.run({ $key: "active_workspace_id", $value: next.activeWorkspaceId });
-    upsertMeta.run({ $key: "sidebar_tree_json", $value: next.sidebarTreeJson });
-    upsertMeta.run({ $key: "pinned_sidebar_nodes_json", $value: next.pinnedSidebarNodesJson });
+    statements.meta.upsert.run({
+      $key: "schema_version",
+      $value: String(WORKSPACE_SCHEMA_VERSION),
+    });
+    statements.meta.upsert.run({
+      $key: "active_workspace_id",
+      $value: next.activeWorkspaceId,
+    });
+    statements.meta.upsert.run({ $key: "sidebar_tree_json", $value: next.sidebarTreeJson });
+    statements.meta.upsert.run({
+      $key: "pinned_sidebar_nodes_json",
+      $value: next.pinnedSidebarNodesJson,
+    });
   }
 
   private getDirectoryPath(): string {
