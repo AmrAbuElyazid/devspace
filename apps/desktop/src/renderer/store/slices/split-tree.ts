@@ -11,6 +11,7 @@ import {
   updateSizesAtPath,
 } from "../../lib/split-tree";
 import { createPane, createPaneGroup, findNearestTerminalCwd } from "../../lib/pane-factory";
+import { attachPaneOwnersByPaneId } from "../pane-ownership";
 import { clearRecentTabTraversal } from "../tab-history";
 import type { PaneCleanup } from "../store-helpers";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
@@ -51,19 +52,21 @@ export function createSplitTreeSlice(
         sizes: [50, 50],
       };
 
-      set((state) => ({
-        workspaces: state.workspaces.map((w) =>
-          w.id === workspaceId
-            ? {
-                ...w,
-                root: replaceLeafInTree(w.root, groupId, replacement),
-                focusedGroupId: newGroup.id,
-              }
-            : w,
-        ),
-        panes: { ...state.panes, [newPane.id]: newPane },
-        paneGroups: { ...state.paneGroups, [newGroup.id]: newGroup },
-      }));
+      set((state) =>
+        attachPaneOwnersByPaneId(state, {
+          workspaces: state.workspaces.map((w) =>
+            w.id === workspaceId
+              ? {
+                  ...w,
+                  root: replaceLeafInTree(w.root, groupId, replacement),
+                  focusedGroupId: newGroup.id,
+                }
+              : w,
+          ),
+          panes: { ...state.panes, [newPane.id]: newPane },
+          paneGroups: { ...state.paneGroups, [newGroup.id]: newGroup },
+        }),
+      );
       get().recordTabActivation(newGroup.id, newGroup.activeTabId);
     },
 
@@ -104,7 +107,7 @@ export function createSplitTreeSlice(
           delete newPaneGroups[groupId];
           newPaneGroups[freshGroup.id] = freshGroup;
 
-          return {
+          return attachPaneOwnersByPaneId(state, {
             workspaces: state.workspaces.map((w) =>
               w.id === workspaceId
                 ? {
@@ -125,7 +128,7 @@ export function createSplitTreeSlice(
               state.recentTabTraversalByGroupId,
               groupId,
             ),
-          };
+          });
         }
 
         // Multiple groups — remove from tree and transfer focus
@@ -141,7 +144,7 @@ export function createSplitTreeSlice(
 
         delete newPaneGroups[groupId];
 
-        return {
+        return attachPaneOwnersByPaneId(state, {
           workspaces: state.workspaces.map((w) =>
             w.id === workspaceId
               ? {
@@ -162,7 +165,7 @@ export function createSplitTreeSlice(
             state.recentTabTraversalByGroupId,
             groupId,
           ),
-        };
+        });
       });
     },
 

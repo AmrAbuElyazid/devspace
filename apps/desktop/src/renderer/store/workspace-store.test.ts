@@ -36,6 +36,7 @@ function resetWorkspaceStore(): void {
     activeWorkspaceId: "",
     panes: {},
     paneGroups: {},
+    paneOwnersByPaneId: {},
     tabHistoryByGroupId: {},
     recentTabTraversalByGroupId: {},
     pinnedSidebarNodes: [],
@@ -1370,6 +1371,52 @@ test("updatePaneConfig with CWD change updates lastTerminalCwd on owning workspa
 
   const wsAfter2 = getWorkspace(wsId);
   expect(wsAfter2!.lastTerminalCwd).toBe("/Users/test/project-b");
+});
+
+test("pane ownership index follows a tab moved to another workspace", () => {
+  resetWorkspaceStore();
+  useWorkspaceStore.getState().addWorkspace("WS A");
+  const wsAId = useWorkspaceStore.getState().activeWorkspaceId;
+  useWorkspaceStore.getState().addWorkspace("WS B");
+  const wsBId = useWorkspaceStore.getState().activeWorkspaceId;
+
+  const wsA = getWorkspace(wsAId)!;
+  const sourceGroup = useWorkspaceStore.getState().paneGroups[wsA.focusedGroupId!]!;
+  const sourceTab = sourceGroup.tabs[0]!;
+  const destGroupId = getWorkspace(wsBId)!.focusedGroupId!;
+
+  expect(useWorkspaceStore.getState().paneOwnersByPaneId[sourceTab.paneId]).toEqual({
+    workspaceId: wsAId,
+    groupId: sourceGroup.id,
+  });
+
+  useWorkspaceStore.getState().moveTabToWorkspace(wsAId, sourceGroup.id, sourceTab.id, wsBId);
+
+  expect(useWorkspaceStore.getState().paneOwnersByPaneId[sourceTab.paneId]).toEqual({
+    workspaceId: wsBId,
+    groupId: destGroupId,
+  });
+});
+
+test("pane ownership index follows a tab moved to another group", () => {
+  const wsId = setupWorkspace();
+  const ws = getWorkspace(wsId)!;
+  const sourceGroupId = ws.focusedGroupId!;
+
+  useWorkspaceStore.getState().splitGroup(wsId, sourceGroupId, "horizontal");
+  const nextWs = getWorkspace(wsId)!;
+  const destGroupId = nextWs.focusedGroupId!;
+
+  useWorkspaceStore.getState().addGroupTab(wsId, sourceGroupId, "terminal");
+  const sourceGroup = useWorkspaceStore.getState().paneGroups[sourceGroupId]!;
+  const movedTab = sourceGroup.tabs[sourceGroup.tabs.length - 1]!;
+
+  useWorkspaceStore.getState().moveTabToGroup(wsId, sourceGroupId, movedTab.id, destGroupId);
+
+  expect(useWorkspaceStore.getState().paneOwnersByPaneId[movedTab.paneId]).toEqual({
+    workspaceId: wsId,
+    groupId: destGroupId,
+  });
 });
 
 test("updatePaneConfig CWD change only affects owning workspace, not others", () => {

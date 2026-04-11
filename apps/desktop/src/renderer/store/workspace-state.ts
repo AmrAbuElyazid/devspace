@@ -18,6 +18,8 @@ export interface WorkspaceState {
   activeWorkspaceId: string;
   panes: Record<string, Pane>;
   paneGroups: Record<string, PaneGroup>;
+  /** Ephemeral pane -> workspace/group lookup for hot terminal event paths. */
+  paneOwnersByPaneId: Record<string, { workspaceId: string; groupId: string }>;
   /** Most-recently-used tab order per group. Active tab is normally first. */
   tabHistoryByGroupId: Record<string, string[]>;
   /** Transient traversal session for Ctrl+Tab / Ctrl+Shift+Tab MRU navigation. */

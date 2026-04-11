@@ -1,7 +1,7 @@
 import type { Pane } from "../../types/workspace";
-import { collectGroupIds } from "../../lib/split-tree";
 import { createPane } from "../../lib/pane-factory";
 import type { PaneCleanup } from "../store-helpers";
+import { attachPaneOwnersByPaneId } from "../pane-ownership";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type PaneSlice = Pick<
@@ -26,7 +26,9 @@ export function createPaneManagementSlice(
       set((state) => {
         const newPanes = { ...state.panes };
         delete newPanes[paneId];
-        return { panes: newPanes };
+        const nextPaneOwnersByPaneId = { ...state.paneOwnersByPaneId };
+        delete nextPaneOwnersByPaneId[paneId];
+        return { panes: newPanes, paneOwnersByPaneId: nextPaneOwnersByPaneId };
       });
     },
 
@@ -49,21 +51,15 @@ export function createPaneManagementSlice(
 
         // Track last terminal CWD on the owning workspace for inheritance fallback
         if (pane.type === "terminal" && "cwd" in updates && typeof updates.cwd === "string") {
-          const ownerWs = state.workspaces.find((ws) => {
-            const groupIds = collectGroupIds(ws.root);
-            return groupIds.some((gid) => {
-              const group = state.paneGroups[gid];
-              return group?.tabs.some((tab) => tab.paneId === paneId);
-            });
-          });
-          if (ownerWs) {
+          const owner = state.paneOwnersByPaneId[paneId];
+          if (owner) {
             patch.workspaces = state.workspaces.map((ws) =>
-              ws.id === ownerWs.id ? { ...ws, lastTerminalCwd: updates.cwd as string } : ws,
+              ws.id === owner.workspaceId ? { ...ws, lastTerminalCwd: updates.cwd as string } : ws,
             );
           }
         }
 
-        return patch;
+        return patch.workspaces ? attachPaneOwnersByPaneId(state, patch) : patch;
       });
     },
 

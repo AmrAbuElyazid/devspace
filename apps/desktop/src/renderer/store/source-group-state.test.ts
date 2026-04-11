@@ -1,9 +1,10 @@
 import { expect, test } from "vitest";
 import type { SourceGroupResolution } from "../lib/source-group-resolution";
+import { buildPaneOwnersByPaneId } from "./pane-ownership";
 import { applySourceGroupTabRemovalResolution } from "./source-group-state";
 
 function createBaseState() {
-  return {
+  const state = {
     workspaces: [
       {
         id: "ws-1",
@@ -40,6 +41,11 @@ function createBaseState() {
     recentTabTraversalByGroupId: {
       "group-1": { order: ["tab-2", "tab-1"], index: 0, updatedAt: 1 },
     },
+  };
+
+  return {
+    ...state,
+    paneOwnersByPaneId: buildPaneOwnersByPaneId(state.workspaces, state.paneGroups),
   };
 }
 

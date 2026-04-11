@@ -1,4 +1,5 @@
 import type { SourceGroupResolution } from "../lib/source-group-resolution";
+import { buildPaneOwnersByPaneId } from "./pane-ownership";
 import {
   buildRecentTabOrder,
   clearRecentTabTraversal,
@@ -9,7 +10,12 @@ import type { WorkspaceState } from "./workspace-state";
 
 type SourceGroupStateSlice = Pick<
   WorkspaceState,
-  "workspaces" | "panes" | "paneGroups" | "tabHistoryByGroupId" | "recentTabTraversalByGroupId"
+  | "workspaces"
+  | "panes"
+  | "paneGroups"
+  | "paneOwnersByPaneId"
+  | "tabHistoryByGroupId"
+  | "recentTabTraversalByGroupId"
 >;
 
 interface ApplySourceGroupResolutionOptions {
@@ -98,6 +104,7 @@ export function applySourceGroupTabRemovalResolution({
     workspaces,
     panes,
     paneGroups,
+    paneOwnersByPaneId: buildPaneOwnersByPaneId(workspaces, paneGroups),
     tabHistoryByGroupId,
     recentTabTraversalByGroupId,
   };

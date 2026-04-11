@@ -19,6 +19,7 @@ import {
   insertWorkspaceIntoSidebarState,
   resolveWorkspaceTabCreationContext,
 } from "../workspace-creation-state";
+import { attachPaneOwnersByPaneId } from "../pane-ownership";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type WorkspaceCrudSlice = Pick<
@@ -62,7 +63,7 @@ export function createWorkspaceCrudSlice(
           insertIndex: 0,
         });
 
-        return {
+        return attachPaneOwnersByPaneId(state, {
           workspaces: [...state.workspaces, workspace],
           activeWorkspaceId: workspace.id,
           panes: { ...state.panes, [pane.id]: pane },
@@ -71,7 +72,7 @@ export function createWorkspaceCrudSlice(
           pinnedSidebarNodes: nextSidebarState.pinnedSidebarNodes,
           pendingEditId: workspace.id,
           pendingEditType: "workspace" as const,
-        };
+        });
       });
       return workspace.id;
     },
@@ -85,38 +86,42 @@ export function createWorkspaceCrudSlice(
 
       if (nextRemovalState.workspaces.length === 0) {
         const freshWorkspace = createDefaultWorkspaceBundle("Workspace 1");
-        set({
-          workspaces: [freshWorkspace.workspace],
-          activeWorkspaceId: freshWorkspace.workspace.id,
-          panes: {
-            ...nextRemovalState.panes,
-            [freshWorkspace.pane.id]: freshWorkspace.pane,
-          },
-          paneGroups: {
-            ...nextRemovalState.paneGroups,
-            [freshWorkspace.group.id]: freshWorkspace.group,
-          },
-          pinnedSidebarNodes: [],
-          sidebarTree: [
-            ...nextRemovalState.sidebarTree,
-            { type: "workspace" as const, workspaceId: freshWorkspace.workspace.id },
-          ],
-          tabHistoryByGroupId: {},
-          recentTabTraversalByGroupId: {},
-        });
+        set((currentState) =>
+          attachPaneOwnersByPaneId(currentState, {
+            workspaces: [freshWorkspace.workspace],
+            activeWorkspaceId: freshWorkspace.workspace.id,
+            panes: {
+              ...nextRemovalState.panes,
+              [freshWorkspace.pane.id]: freshWorkspace.pane,
+            },
+            paneGroups: {
+              ...nextRemovalState.paneGroups,
+              [freshWorkspace.group.id]: freshWorkspace.group,
+            },
+            pinnedSidebarNodes: [],
+            sidebarTree: [
+              ...nextRemovalState.sidebarTree,
+              { type: "workspace" as const, workspaceId: freshWorkspace.workspace.id },
+            ],
+            tabHistoryByGroupId: {},
+            recentTabTraversalByGroupId: {},
+          }),
+        );
         return;
       }
 
-      set({
-        workspaces: nextRemovalState.workspaces,
-        activeWorkspaceId: nextRemovalState.activeWorkspaceId ?? state.activeWorkspaceId,
-        panes: nextRemovalState.panes,
-        paneGroups: nextRemovalState.paneGroups,
-        pinnedSidebarNodes: nextRemovalState.pinnedSidebarNodes,
-        sidebarTree: nextRemovalState.sidebarTree,
-        tabHistoryByGroupId: nextRemovalState.tabHistoryByGroupId,
-        recentTabTraversalByGroupId: nextRemovalState.recentTabTraversalByGroupId,
-      });
+      set((currentState) =>
+        attachPaneOwnersByPaneId(currentState, {
+          workspaces: nextRemovalState.workspaces,
+          activeWorkspaceId: nextRemovalState.activeWorkspaceId ?? state.activeWorkspaceId,
+          panes: nextRemovalState.panes,
+          paneGroups: nextRemovalState.paneGroups,
+          pinnedSidebarNodes: nextRemovalState.pinnedSidebarNodes,
+          sidebarTree: nextRemovalState.sidebarTree,
+          tabHistoryByGroupId: nextRemovalState.tabHistoryByGroupId,
+          recentTabTraversalByGroupId: nextRemovalState.recentTabTraversalByGroupId,
+        }),
+      );
     },
 
     renameWorkspace(id, name) {
@@ -164,15 +169,17 @@ export function createWorkspaceCrudSlice(
         fallbackActiveWorkspaceId: targetWorkspace.id,
       });
 
-      set({
-        workspaces: nextTransferState.workspaces,
-        activeWorkspaceId: nextTransferState.activeWorkspaceId,
-        paneGroups: nextTransferState.paneGroups,
-        sidebarTree: nextTransferState.sidebarTree,
-        pinnedSidebarNodes: nextTransferState.pinnedSidebarNodes,
-        tabHistoryByGroupId: nextTransferState.tabHistoryByGroupId,
-        recentTabTraversalByGroupId: nextTransferState.recentTabTraversalByGroupId,
-      });
+      set((currentState) =>
+        attachPaneOwnersByPaneId(currentState, {
+          workspaces: nextTransferState.workspaces,
+          activeWorkspaceId: nextTransferState.activeWorkspaceId,
+          paneGroups: nextTransferState.paneGroups,
+          sidebarTree: nextTransferState.sidebarTree,
+          pinnedSidebarNodes: nextTransferState.pinnedSidebarNodes,
+          tabHistoryByGroupId: nextTransferState.tabHistoryByGroupId,
+          recentTabTraversalByGroupId: nextTransferState.recentTabTraversalByGroupId,
+        }),
+      );
     },
 
     splitGroupWithWorkspace(sourceWorkspaceId, targetGroupId, side) {
@@ -197,17 +204,19 @@ export function createWorkspaceCrudSlice(
         fallbackActiveWorkspaceId: targetWorkspace.id,
       });
 
-      set({
-        workspaces: nextTransferState.workspaces.map((w) =>
-          w.id === targetWorkspace.id ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
-        ),
-        activeWorkspaceId: nextTransferState.activeWorkspaceId,
-        paneGroups: nextTransferState.paneGroups,
-        sidebarTree: nextTransferState.sidebarTree,
-        pinnedSidebarNodes: nextTransferState.pinnedSidebarNodes,
-        tabHistoryByGroupId: nextTransferState.tabHistoryByGroupId,
-        recentTabTraversalByGroupId: nextTransferState.recentTabTraversalByGroupId,
-      });
+      set((currentState) =>
+        attachPaneOwnersByPaneId(currentState, {
+          workspaces: nextTransferState.workspaces.map((w) =>
+            w.id === targetWorkspace.id ? { ...w, root: newRoot, focusedGroupId: newGroup.id } : w,
+          ),
+          activeWorkspaceId: nextTransferState.activeWorkspaceId,
+          paneGroups: nextTransferState.paneGroups,
+          sidebarTree: nextTransferState.sidebarTree,
+          pinnedSidebarNodes: nextTransferState.pinnedSidebarNodes,
+          tabHistoryByGroupId: nextTransferState.tabHistoryByGroupId,
+          recentTabTraversalByGroupId: nextTransferState.recentTabTraversalByGroupId,
+        }),
+      );
     },
 
     createWorkspaceFromTab(tabId, sourceGroupId, sourceWorkspaceId, opts) {
@@ -257,6 +266,7 @@ export function createWorkspaceCrudSlice(
         activeWorkspaceId: newWorkspace.id,
         panes: nextState.panes,
         paneGroups: nextState.paneGroups,
+        paneOwnersByPaneId: nextState.paneOwnersByPaneId,
         sidebarTree: nextSidebarState.sidebarTree,
         pinnedSidebarNodes: nextSidebarState.pinnedSidebarNodes,
         tabHistoryByGroupId: nextState.tabHistoryByGroupId,

@@ -13,6 +13,7 @@ import {
   createDefaultPersistedWorkspaceState,
   normalizePersistedWorkspaceState,
 } from "./persistence-model";
+import { buildPaneOwnersByPaneId } from "./pane-ownership";
 
 // Re-export tree helpers for consumers that import from this module
 export {
@@ -33,6 +34,10 @@ function applyWorkspaceSnapshot(
 ): void {
   useWorkspaceStore.setState({
     ...(snapshot ?? defaultPersistedState),
+    paneOwnersByPaneId: buildPaneOwnersByPaneId(
+      (snapshot ?? defaultPersistedState).workspaces,
+      (snapshot ?? defaultPersistedState).paneGroups,
+    ),
     tabHistoryByGroupId: {},
     recentTabTraversalByGroupId: {},
     pendingEditId: null,
@@ -51,6 +56,10 @@ function applyWorkspaceSnapshot(
 
 export const useWorkspaceStore = create<WorkspaceState>()((set, get) => ({
   ...defaultPersistedState,
+  paneOwnersByPaneId: buildPaneOwnersByPaneId(
+    defaultPersistedState.workspaces,
+    defaultPersistedState.paneGroups,
+  ),
   ...createUIStateSlice(set),
   ...createSidebarTreeSlice(set, get),
   ...createPaneManagementSlice(set, get, defaultPaneCleanup),

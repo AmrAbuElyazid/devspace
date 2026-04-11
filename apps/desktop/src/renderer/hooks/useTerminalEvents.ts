@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
+import { useWorkspaceStore } from "../store/workspace-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useTerminalStore } from "../store/terminal-store";
 import { markTerminalSurfaceDestroyed } from "../lib/terminal-surface-session";
@@ -47,18 +47,12 @@ export function useTerminalEvents(): void {
   useEffect(() => {
     return window.api.terminal.onFocused((surfaceId) => {
       const state = useWorkspaceStore.getState();
-      const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId);
-      if (!ws) return;
+      const owner = state.paneOwnersByPaneId[surfaceId];
+      if (!owner || owner.workspaceId !== state.activeWorkspaceId) return;
 
-      const groupIds = collectGroupIds(ws.root);
-      for (const gid of groupIds) {
-        const group = state.paneGroups[gid];
-        if (group?.tabs.some((t) => t.paneId === surfaceId)) {
-          if (ws.focusedGroupId !== gid) {
-            state.setFocusedGroup(ws.id, gid);
-          }
-          return;
-        }
+      const ws = state.workspaces.find((w) => w.id === owner.workspaceId);
+      if (ws && ws.focusedGroupId !== owner.groupId) {
+        state.setFocusedGroup(ws.id, owner.groupId);
       }
     });
   }, []);

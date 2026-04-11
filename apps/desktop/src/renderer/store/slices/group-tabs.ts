@@ -17,6 +17,7 @@ import {
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
 import { appendPaneToGroupState } from "../group-tab-append-state";
 import { buildDestinationGroupState } from "../group-tab-destination-state";
+import { attachPaneOwnersByPaneId } from "../pane-ownership";
 import type { PaneCleanup } from "../store-helpers";
 import { applySourceGroupTabRemovalResolution } from "../source-group-state";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
@@ -57,7 +58,12 @@ export function createGroupTabsSlice(
         tabId: nanoid(),
       });
 
-      set({ panes: appendedState.panes, paneGroups: appendedState.paneGroups });
+      set((state) =>
+        attachPaneOwnersByPaneId(state, {
+          panes: appendedState.panes,
+          paneGroups: appendedState.paneGroups,
+        }),
+      );
       get().recordTabActivation(groupId, appendedState.newTab.id);
     },
 
@@ -289,8 +295,10 @@ export function createGroupTabsSlice(
           tabId,
         });
         return {
-          panes: appendedState.panes,
-          paneGroups: appendedState.paneGroups,
+          ...attachPaneOwnersByPaneId(state, {
+            panes: appendedState.panes,
+            paneGroups: appendedState.paneGroups,
+          }),
         };
       });
       get().recordTabActivation(groupId, tabId);
@@ -320,13 +328,15 @@ export function createGroupTabsSlice(
         tabId: nanoid(),
       });
 
-      set({
-        panes: appendedState.panes,
-        paneGroups: appendedState.paneGroups,
-        workspaces: state.workspaces.map((w) =>
-          w.id === state.activeWorkspaceId ? { ...w, lastActiveAt: Date.now() } : w,
-        ),
-      });
+      set((currentState) =>
+        attachPaneOwnersByPaneId(currentState, {
+          panes: appendedState.panes,
+          paneGroups: appendedState.paneGroups,
+          workspaces: state.workspaces.map((w) =>
+            w.id === state.activeWorkspaceId ? { ...w, lastActiveAt: Date.now() } : w,
+          ),
+        }),
+      );
       get().recordTabActivation(groupId, appendedState.newTab.id);
     },
   };
