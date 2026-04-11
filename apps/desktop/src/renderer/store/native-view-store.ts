@@ -237,7 +237,7 @@ function scheduleVisibleBoundsSync(): void {
   ensureVisibleLayoutObserver();
   setVisibleLayoutListenersEnabled(true);
   if (visibleBoundsFrameId !== null) {
-    cancelAnimationFrame(visibleBoundsFrameId);
+    return;
   }
   visibleBoundsFrameId = requestAnimationFrame(syncVisibleBoundsNow);
 }
@@ -490,6 +490,14 @@ function getVisibilityKey(wsState: {
   return parts.join(",");
 }
 
+function getTrackedGroupIds(wsState: {
+  activeWorkspaceId: string;
+  workspaces: { id: string; root: import("../types/workspace").SplitNode }[];
+}): string[] {
+  const activeWs = wsState.workspaces.find((w) => w.id === wsState.activeWorkspaceId);
+  return activeWs ? collectGroupIds(activeWs.root) : [];
+}
+
 export function initNativeViewSubscriptions(): void {
   if (subscriptionsInitialized) return;
   subscriptionsInitialized = true;
@@ -500,6 +508,10 @@ export function initNativeViewSubscriptions(): void {
   let lastActiveWorkspaceId = initialWorkspaceState.activeWorkspaceId;
   let lastWorkspaces = initialWorkspaceState.workspaces;
   let lastPaneGroups = initialWorkspaceState.paneGroups;
+  let lastTrackedGroupIds = getTrackedGroupIds(initialWorkspaceState);
+  let lastTrackedGroups = lastTrackedGroupIds.map(
+    (groupId) => initialWorkspaceState.paneGroups[groupId],
+  );
   let lastVisibilityKey = getVisibilityKey(initialWorkspaceState);
   useWorkspaceStore.subscribe(() => {
     const state = useWorkspaceStore.getState();
@@ -511,9 +523,23 @@ export function initNativeViewSubscriptions(): void {
       return;
     }
 
+    if (
+      state.activeWorkspaceId === lastActiveWorkspaceId &&
+      state.workspaces === lastWorkspaces &&
+      state.paneGroups !== lastPaneGroups &&
+      lastTrackedGroupIds.every(
+        (groupId, index) => state.paneGroups[groupId] === lastTrackedGroups[index],
+      )
+    ) {
+      lastPaneGroups = state.paneGroups;
+      return;
+    }
+
     lastActiveWorkspaceId = state.activeWorkspaceId;
     lastWorkspaces = state.workspaces;
     lastPaneGroups = state.paneGroups;
+    lastTrackedGroupIds = getTrackedGroupIds(state);
+    lastTrackedGroups = lastTrackedGroupIds.map((groupId) => state.paneGroups[groupId]);
 
     const key = getVisibilityKey(state);
     if (key === lastVisibilityKey) return;

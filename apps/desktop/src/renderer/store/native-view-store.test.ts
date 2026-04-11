@@ -225,8 +225,11 @@ test("removing the last observed native view element detaches layout listeners",
   expect(removeEventListener).toHaveBeenCalledWith("scroll", expect.any(Function), true);
 });
 
-test("workspace visibility subscription skips pane-only updates", () => {
-  const collectGroupIds = vi.spyOn(splitTree, "collectGroupIds");
+test("visible bounds sync reuses an already pending animation frame", () => {
+  const requestAnimationFrame = vi.fn(() => 7);
+  globalThis.requestAnimationFrame = requestAnimationFrame;
+  const cancelAnimationFrame = vi.spyOn(globalThis, "cancelAnimationFrame");
+  const element = document.createElement("div");
 
   useWorkspaceStore.setState({
     activeWorkspaceId: "workspace-1",
@@ -240,12 +243,66 @@ test("workspace visibility subscription skips pane-only updates", () => {
         lastActiveAt: Date.now(),
       },
     ],
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "terminal-1" }],
+      },
+    },
+  });
+
+  useNativeViewStore.getState().register("terminal-1", "terminal");
+  useNativeViewStore.setState({ visibleTerminals: ["terminal-1"] });
+
+  setNativeViewElement("terminal-1", element);
+  setNativeViewElement("terminal-1", element);
+
+  expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+  expect(cancelAnimationFrame).not.toHaveBeenCalled();
+});
+
+test("workspace visibility subscription skips unrelated workspace updates", () => {
+  const collectGroupIds = vi.spyOn(splitTree, "collectGroupIds");
+
+  useWorkspaceStore.setState({
+    activeWorkspaceId: "workspace-1",
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Workspace",
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: Date.now(),
+      },
+      {
+        id: "workspace-2",
+        name: "Workspace 2",
+        root: { type: "leaf", groupId: "group-2" },
+        focusedGroupId: "group-2",
+        zoomedGroupId: null,
+        lastActiveAt: Date.now(),
+      },
+    ],
     panes: {
       "pane-1": {
         id: "pane-1",
         title: "Terminal One",
         type: "terminal",
         config: {},
+      },
+      "pane-2": {
+        id: "pane-2",
+        title: "Browser One",
+        type: "browser",
+        config: { url: "https://example.com" },
+      },
+      "pane-3": {
+        id: "pane-3",
+        title: "Browser Two",
+        type: "browser",
+        config: { url: "https://example.org" },
       },
     },
     paneGroups: {
@@ -254,6 +311,14 @@ test("workspace visibility subscription skips pane-only updates", () => {
         activeTabId: "tab-1",
         tabs: [{ id: "tab-1", paneId: "pane-1" }],
       },
+      "group-2": {
+        id: "group-2",
+        activeTabId: "tab-2",
+        tabs: [
+          { id: "tab-2", paneId: "pane-2" },
+          { id: "tab-3", paneId: "pane-3" },
+        ],
+      },
     },
   });
 
@@ -261,6 +326,7 @@ test("workspace visibility subscription skips pane-only updates", () => {
   collectGroupIds.mockClear();
 
   useWorkspaceStore.getState().updatePaneTitle("pane-1", "Renamed terminal");
+  useWorkspaceStore.getState().setActiveGroupTab("workspace-2", "group-2", "tab-3");
 
   expect(collectGroupIds).not.toHaveBeenCalled();
 });
