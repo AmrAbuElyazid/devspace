@@ -187,3 +187,38 @@ test("reconcile does not attach layout listeners before a visible native view ha
   expect(addEventListener).not.toHaveBeenCalledWith("resize", expect.any(Function));
   expect(addEventListener).not.toHaveBeenCalledWith("scroll", expect.any(Function), true);
 });
+
+test("removing the last observed native view element detaches layout listeners", () => {
+  const removeEventListener = vi.spyOn(window, "removeEventListener");
+  const element = document.createElement("div");
+
+  useWorkspaceStore.setState({
+    activeWorkspaceId: "workspace-1",
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Workspace",
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: Date.now(),
+      },
+    ],
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "terminal-1" }],
+      },
+    },
+  });
+
+  useNativeViewStore.getState().register("terminal-1", "terminal");
+  setNativeViewElement("terminal-1", element);
+  useNativeViewStore.getState().reconcile();
+
+  setNativeViewElement("terminal-1", null);
+
+  expect(removeEventListener).toHaveBeenCalledWith("resize", expect.any(Function));
+  expect(removeEventListener).toHaveBeenCalledWith("scroll", expect.any(Function), true);
+});

@@ -304,6 +304,9 @@ export function setNativeViewElement(id: string, element: HTMLElement | null): v
     visibleLayoutObserver.unobserve(observed);
   }
   observedElements.delete(id);
+  if (observedElements.size === 0) {
+    setVisibleLayoutListenersEnabled(false);
+  }
 }
 
 /**
