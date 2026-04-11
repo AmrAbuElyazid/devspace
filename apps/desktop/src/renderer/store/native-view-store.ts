@@ -421,10 +421,13 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
     const browsersChanged = !arraysEqual(desiredBrowsers, visibleBrowsers);
     if (!terminalsChanged && !browsersChanged) return;
 
+    const visibleTerminalIds = terminalsChanged ? new Set(visibleTerminals) : null;
+    const visibleBrowserIds = browsersChanged ? new Set(visibleBrowsers) : null;
+
     // Send bounds for newly-visible views BEFORE showing them (prevents flash)
     if (terminalsChanged) {
       for (const id of desiredTerminals) {
-        if (!visibleTerminals.includes(id)) {
+        if (!visibleTerminalIds?.has(id)) {
           const b = getLatestBounds(id);
           if (b) {
             recordBoundsSync();
@@ -437,7 +440,7 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
 
     if (browsersChanged) {
       for (const id of desiredBrowsers) {
-        if (!visibleBrowsers.includes(id)) {
+        if (!visibleBrowserIds?.has(id)) {
           const b = getLatestBounds(id);
           if (b) {
             recordBoundsSync();
