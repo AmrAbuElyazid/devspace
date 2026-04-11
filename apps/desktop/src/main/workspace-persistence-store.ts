@@ -2,6 +2,10 @@ import { mkdirSync } from "fs";
 import { join } from "path";
 import { DatabaseSync } from "node:sqlite";
 import type { PersistedWorkspaceState } from "../shared/workspace-persistence";
+import {
+  runWorkspaceMigrations,
+  WORKSPACE_SCHEMA_VERSION,
+} from "./workspace-persistence-migrations";
 
 type SqliteStatement = {
   all: (params?: Record<string, unknown>) => Array<Record<string, unknown>>;
@@ -53,8 +57,6 @@ type PreparedWorkspaceSnapshot = {
   sidebarTreeJson: string;
   pinnedSidebarNodesJson: string;
 };
-
-const SCHEMA_VERSION = "1";
 
 function prepareSnapshot(snapshot: PersistedWorkspaceState): PreparedWorkspaceSnapshot {
   return {
@@ -281,41 +283,7 @@ export class WorkspacePersistenceStore {
 
     db.exec("PRAGMA journal_mode = WAL");
     db.exec("PRAGMA foreign_keys = ON");
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS meta (
-        key TEXT PRIMARY KEY,
-        value TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS workspaces (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        focused_group_id TEXT,
-        zoomed_group_id TEXT,
-        last_active_at INTEGER NOT NULL,
-        last_terminal_cwd TEXT,
-        root_json TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS panes (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL,
-        title TEXT NOT NULL,
-        config_json TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS pane_groups (
-        id TEXT PRIMARY KEY,
-        active_tab_id TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS pane_group_tabs (
-        id TEXT PRIMARY KEY,
-        group_id TEXT NOT NULL,
-        pane_id TEXT NOT NULL,
-        position INTEGER NOT NULL
-      );
-    `);
+    runWorkspaceMigrations(db);
 
     return db;
   }
@@ -385,7 +353,7 @@ export class WorkspacePersistenceStore {
       }
     }
 
-    insertMeta.run({ $key: "schema_version", $value: SCHEMA_VERSION });
+    insertMeta.run({ $key: "schema_version", $value: String(WORKSPACE_SCHEMA_VERSION) });
     insertMeta.run({ $key: "active_workspace_id", $value: snapshot.activeWorkspaceId });
     insertMeta.run({ $key: "sidebar_tree_json", $value: snapshot.sidebarTreeJson });
     insertMeta.run({ $key: "pinned_sidebar_nodes_json", $value: snapshot.pinnedSidebarNodesJson });
@@ -514,7 +482,7 @@ export class WorkspacePersistenceStore {
       }
     }
 
-    upsertMeta.run({ $key: "schema_version", $value: SCHEMA_VERSION });
+    upsertMeta.run({ $key: "schema_version", $value: String(WORKSPACE_SCHEMA_VERSION) });
     upsertMeta.run({ $key: "active_workspace_id", $value: next.activeWorkspaceId });
     upsertMeta.run({ $key: "sidebar_tree_json", $value: next.sidebarTreeJson });
     upsertMeta.run({ $key: "pinned_sidebar_nodes_json", $value: next.pinnedSidebarNodesJson });

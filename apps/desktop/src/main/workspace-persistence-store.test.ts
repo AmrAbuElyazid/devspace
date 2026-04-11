@@ -2,8 +2,10 @@ import { afterEach, expect, test } from "vitest";
 import { mkdtemp, rm } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
+import { DatabaseSync } from "node:sqlite";
 import { WorkspacePersistenceStore } from "./workspace-persistence-store";
 import type { PersistedWorkspaceState } from "../shared/workspace-persistence";
+import { WORKSPACE_SCHEMA_VERSION } from "./workspace-persistence-migrations";
 
 const tempDirs: string[] = [];
 
@@ -154,4 +156,145 @@ test("workspace persistence store incrementally applies later snapshots", async 
   store.save(nextSnapshot);
 
   expect(store.load()).toEqual(nextSnapshot);
+});
+
+test("workspace persistence store migrates legacy databases without schema_version", async () => {
+  const userDataPath = await mkdtemp(join(tmpdir(), "devspace-workspace-db-"));
+  tempDirs.push(userDataPath);
+
+  const snapshot: PersistedWorkspaceState = {
+    activeWorkspaceId: "workspace-1",
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Legacy Workspace",
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: 321,
+        lastTerminalCwd: "/tmp/legacy",
+      },
+    ],
+    panes: {
+      "pane-1": {
+        id: "pane-1",
+        title: "Legacy Shell",
+        type: "terminal",
+        config: { cwd: "/tmp/legacy" },
+      },
+    },
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "pane-1" }],
+      },
+    },
+    pinnedSidebarNodes: [],
+    sidebarTree: [{ type: "workspace", workspaceId: "workspace-1" }],
+  };
+
+  const db = new DatabaseSync(join(userDataPath, "workspace-state.sqlite"));
+  db.exec(`
+    CREATE TABLE meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+
+    CREATE TABLE workspaces (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      focused_group_id TEXT,
+      zoomed_group_id TEXT,
+      last_active_at INTEGER NOT NULL,
+      last_terminal_cwd TEXT,
+      root_json TEXT NOT NULL
+    );
+
+    CREATE TABLE panes (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      config_json TEXT NOT NULL
+    );
+
+    CREATE TABLE pane_groups (
+      id TEXT PRIMARY KEY,
+      active_tab_id TEXT NOT NULL
+    );
+
+    CREATE TABLE pane_group_tabs (
+      id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL,
+      pane_id TEXT NOT NULL,
+      position INTEGER NOT NULL
+    );
+  `);
+  db.prepare(
+    `INSERT INTO workspaces VALUES ($id, $name, $focusedGroupId, $zoomedGroupId, $lastActiveAt, $lastTerminalCwd, $rootJson)`,
+  ).run({
+    $id: "workspace-1",
+    $name: "Legacy Workspace",
+    $focusedGroupId: "group-1",
+    $zoomedGroupId: null,
+    $lastActiveAt: 321,
+    $lastTerminalCwd: "/tmp/legacy",
+    $rootJson: JSON.stringify(snapshot.workspaces[0]?.root),
+  });
+  db.prepare(`INSERT INTO panes VALUES ($id, $type, $title, $configJson)`).run({
+    $id: "pane-1",
+    $type: "terminal",
+    $title: "Legacy Shell",
+    $configJson: JSON.stringify(snapshot.panes["pane-1"]?.config),
+  });
+  db.prepare(`INSERT INTO pane_groups VALUES ($id, $activeTabId)`).run({
+    $id: "group-1",
+    $activeTabId: "tab-1",
+  });
+  db.prepare(`INSERT INTO pane_group_tabs VALUES ($id, $groupId, $paneId, $position)`).run({
+    $id: "tab-1",
+    $groupId: "group-1",
+    $paneId: "pane-1",
+    $position: 0,
+  });
+  const insertMeta = db.prepare(`INSERT INTO meta VALUES ($key, $value)`);
+  insertMeta.run({ $key: "active_workspace_id", $value: snapshot.activeWorkspaceId });
+  insertMeta.run({ $key: "sidebar_tree_json", $value: JSON.stringify(snapshot.sidebarTree) });
+  insertMeta.run({
+    $key: "pinned_sidebar_nodes_json",
+    $value: JSON.stringify(snapshot.pinnedSidebarNodes),
+  });
+  db.close();
+
+  const store = new WorkspacePersistenceStore(userDataPath);
+  expect(store.load()).toEqual(snapshot);
+
+  const migratedDb = new DatabaseSync(join(userDataPath, "workspace-state.sqlite"));
+  expect(
+    migratedDb.prepare(`SELECT value FROM meta WHERE key = $key`).get({ $key: "schema_version" })?.[
+      "value"
+    ],
+  ).toBe(String(WORKSPACE_SCHEMA_VERSION));
+  migratedDb.close();
+});
+
+test("workspace persistence store rejects unsupported future schema versions", async () => {
+  const userDataPath = await mkdtemp(join(tmpdir(), "devspace-workspace-db-"));
+  tempDirs.push(userDataPath);
+
+  const db = new DatabaseSync(join(userDataPath, "workspace-state.sqlite"));
+  db.exec(`
+    CREATE TABLE meta (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+  db.prepare(`INSERT INTO meta VALUES ($key, $value)`).run({
+    $key: "schema_version",
+    $value: String(WORKSPACE_SCHEMA_VERSION + 1),
+  });
+  db.close();
+
+  const store = new WorkspacePersistenceStore(userDataPath);
+  expect(() => store.load()).toThrow(/Unsupported workspace schema version/);
 });
