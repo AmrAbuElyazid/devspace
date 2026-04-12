@@ -16,11 +16,13 @@ import { BlockPlaceholderKit } from "./block-placeholder-kit";
 import { BlockSelectionKit } from "./block-selection-kit";
 import { CalloutKit } from "./callout-kit";
 import { CodeBlockKit } from "./code-block-kit";
+import { DndKit } from "./dnd-kit";
 import { FloatingToolbarKit } from "./floating-toolbar-kit";
 import { IndentKit } from "./indent-kit";
 import { LinkKit } from "./link-kit";
 import { ListKit } from "./list-kit";
 import { SlashKit } from "./slash-kit";
+import { TableKit } from "./table-kit";
 
 /** Build the full plugin list for the note editor. */
 export function createNoteEditorPlugins() {
@@ -30,12 +32,14 @@ export function createNoteEditorPlugins() {
     ...LinkKit,
     ...CodeBlockKit,
     ...CalloutKit,
+    ...TableKit,
     ...IndentKit,
     ...AutoformatKit,
     ...SlashKit,
     ...FloatingToolbarKit,
     ...BlockSelectionKit,
     ...BlockPlaceholderKit,
+    ...DndKit,
     MarkdownPlugin,
 
     createSlatePlugin({

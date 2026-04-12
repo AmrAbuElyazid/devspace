@@ -11,11 +11,13 @@ const noteEditorKitMocks = vi.hoisted(() => ({
     blockSelection: ["block-selection"],
     callout: ["callout"],
     codeBlock: ["code-block"],
+    dnd: ["dnd"],
     floatingToolbar: ["floating-toolbar"],
     indent: ["indent"],
     link: ["link"],
     list: ["list"],
     slash: ["slash"],
+    table: ["table"],
   },
   markdownPlugin: { key: "markdown" },
 }));
@@ -73,6 +75,14 @@ vi.mock("./slash-kit", () => ({
   SlashKit: noteEditorKitMocks.kits.slash,
 }));
 
+vi.mock("./table-kit", () => ({
+  TableKit: noteEditorKitMocks.kits.table,
+}));
+
+vi.mock("./dnd-kit", () => ({
+  DndKit: noteEditorKitMocks.kits.dnd,
+}));
+
 const { createNoteEditorPlugins } = await import("./note-editor-kit");
 
 describe("createNoteEditorPlugins", () => {
@@ -85,12 +95,14 @@ describe("createNoteEditorPlugins", () => {
       ...noteEditorKitMocks.kits.link,
       ...noteEditorKitMocks.kits.codeBlock,
       ...noteEditorKitMocks.kits.callout,
+      ...noteEditorKitMocks.kits.table,
       ...noteEditorKitMocks.kits.indent,
       ...noteEditorKitMocks.kits.autoformat,
       ...noteEditorKitMocks.kits.slash,
       ...noteEditorKitMocks.kits.floatingToolbar,
       ...noteEditorKitMocks.kits.blockSelection,
       ...noteEditorKitMocks.kits.blockPlaceholder,
+      ...noteEditorKitMocks.kits.dnd,
       noteEditorKitMocks.markdownPlugin,
       expect.objectContaining({ key: "ensure-paragraph" }),
     ]);

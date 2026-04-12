@@ -14,6 +14,7 @@ import {
   PilcrowIcon,
   Quote,
   Square,
+  TableIcon,
 } from "lucide-react";
 import { type TComboboxInputElement, KEYS } from "platejs";
 import { PlateElement } from "platejs/react";
@@ -21,6 +22,7 @@ import { PlateElement } from "platejs/react";
 import { insertCallout } from "@platejs/callout";
 import { insertCodeBlock } from "@platejs/code-block";
 import { toggleList } from "@platejs/list";
+import { insertTable } from "@platejs/table";
 
 import {
   InlineCombobox,
@@ -118,6 +120,15 @@ const groups: Group[] = [
         value: KEYS.codeBlock,
         onSelect: (editor) => {
           insertCodeBlock(editor);
+        },
+      },
+      {
+        icon: <TableIcon />,
+        keywords: ["table", "grid", "spreadsheet"],
+        label: "Table",
+        value: KEYS.table,
+        onSelect: (editor) => {
+          insertTable(editor, { rowCount: 3, colCount: 3 });
         },
       },
       {
