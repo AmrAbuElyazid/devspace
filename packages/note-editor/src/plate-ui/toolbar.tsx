@@ -61,7 +61,7 @@ export function ToolbarSeparator({
 }
 
 const toolbarButtonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium text-sm outline-none transition-[color,box-shadow] hover:bg-muted hover:text-muted-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-checked:bg-secondary aria-checked:text-secondary-foreground aria-invalid:border-destructive aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium text-sm outline-none transition-[color,box-shadow] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] focus-visible:border-[var(--ring)] focus-visible:ring-[3px] focus-visible:ring-[var(--ring)]/50 disabled:pointer-events-none disabled:opacity-50 aria-checked:bg-[var(--secondary)] aria-checked:text-[var(--secondary-foreground)] [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
       size: "default",
@@ -297,7 +297,10 @@ function TooltipContent({
     <TooltipPrimitive.Portal>
       <TooltipPrimitive.Content
         className={cn(
-          "z-50 w-fit origin-(--radix-tooltip-content-transform-origin) text-balance rounded-md bg-primary px-3 py-1.5 text-primary-foreground text-xs",
+          "z-50 w-fit rounded-md px-2.5 py-1 text-[11px] text-balance",
+          "bg-[var(--popover)] text-[var(--popover-foreground)]",
+          "border border-[var(--border)]",
+          "shadow-[0_4px_12px_rgba(0,0,0,0.15)]",
           className,
         )}
         data-slot="tooltip-content"
