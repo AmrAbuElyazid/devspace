@@ -199,6 +199,7 @@ const bridge: DevspaceBridge = {
   notes: {
     read: (noteId) => ipcRenderer.invoke("notes:read", noteId),
     save: (noteId, content) => ipcRenderer.invoke("notes:save", noteId, content),
+    saveSync: (noteId, content) => ipcRenderer.sendSync("notes:saveSync", noteId, content),
     list: () => ipcRenderer.invoke("notes:list"),
   },
 

@@ -95,6 +95,7 @@ function createDefaultWindowApi(): DevspaceBridge {
     notes: {
       read: vi.fn(async () => null),
       save: vi.fn(async () => {}),
+      saveSync: vi.fn(() => {}),
       list: vi.fn(async () => []),
     },
     shell: {

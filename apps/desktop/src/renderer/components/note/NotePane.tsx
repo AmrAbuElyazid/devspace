@@ -28,28 +28,57 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
   const [initialValue, setInitialValue] = useState<NoteEditorValue | string>(DEFAULT_VALUE);
   const [saveError, setSaveError] = useState<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
+  const saveScope = useRef(0);
+  const latestSaveRequest = useRef(0);
   const latestMarkdown = useRef<string | null>(null);
   const lastTitle = useRef<string>("Note");
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
 
-  /** Persist note to disk as markdown. */
-  const saveNow = useCallback(async () => {
-    const md = latestMarkdown.current;
-    if (md === null) return;
-    const result = await window.api.notes.save(config.noteId, md);
+  const handleSaveResult = useCallback((result: void | { error: string }) => {
     if (result && typeof result === "object" && "error" in result) {
       console.error("[NotePane] Save failed:", result.error);
       setSaveError(result.error);
     } else {
       setSaveError(null);
     }
-  }, [config.noteId]);
+  }, []);
+
+  /** Persist note to disk as markdown. */
+  const saveNow = useCallback(async () => {
+    const md = latestMarkdown.current;
+    if (md === null) return;
+
+    const scope = saveScope.current;
+    const requestId = latestSaveRequest.current + 1;
+    latestSaveRequest.current = requestId;
+
+    saveChain.current = saveChain.current
+      .catch(() => {})
+      .then(async () => {
+        let result: void | { error: string };
+        try {
+          result = await window.api.notes.save(config.noteId, md);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          result = { error: `Failed to save note: ${message}` };
+        }
+
+        if (scope !== saveScope.current || requestId !== latestSaveRequest.current) {
+          return;
+        }
+
+        handleSaveResult(result);
+      });
+
+    await saveChain.current;
+  }, [config.noteId, handleSaveResult]);
 
   /** Schedule a debounced save (500ms). */
   const scheduleSave = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveNow();
+      void saveNow();
       saveTimer.current = null;
     }, 500);
   }, [saveNow]);
@@ -57,6 +86,13 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
   // Load note on mount
   useEffect(() => {
     let cancelled = false;
+    saveScope.current += 1;
+    latestSaveRequest.current = 0;
+    latestMarkdown.current = null;
+    lastTitle.current = "Note";
+    setInitialValue(DEFAULT_VALUE);
+    setSaveError(null);
+    setLoadState("loading");
 
     async function load() {
       try {
@@ -86,8 +122,15 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
         clearTimeout(saveTimer.current);
         saveTimer.current = null;
       }
-      if (latestMarkdown.current !== null) {
-        window.api.notes.save(config.noteId, latestMarkdown.current);
+
+      const md = latestMarkdown.current;
+      if (md === null) {
+        return;
+      }
+
+      const result = window.api.notes.saveSync(config.noteId, md);
+      if (result && typeof result === "object" && "error" in result) {
+        console.error("[NotePane] Save failed:", result.error);
       }
     };
 
@@ -108,9 +151,8 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
   }, [config.noteId]);
 
   const handleChange = useCallback(
-    ({ value, editor, markdown }: NoteEditorChangeContext) => {
+    ({ value, editor, markdown, serializationError }: NoteEditorChangeContext) => {
       if (!editor) return;
-      latestMarkdown.current = markdown;
 
       // Update tab title only when it actually changes
       const title = extractNoteTitle(value);
@@ -119,6 +161,19 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
         updatePaneTitle(paneId, title);
       }
 
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+
+      if (serializationError || markdown === null) {
+        latestMarkdown.current = null;
+        setSaveError(serializationError ?? "Failed to serialize note content");
+        return;
+      }
+
+      latestMarkdown.current = markdown;
+      setSaveError(null);
       scheduleSave();
     },
     [paneId, updatePaneTitle, scheduleSave],

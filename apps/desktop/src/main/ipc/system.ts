@@ -1,7 +1,15 @@
 import { app, dialog, Menu, shell } from "electron";
 import { execFileSync } from "child_process";
-import { existsSync, symlinkSync, unlinkSync } from "fs";
-import { mkdir, readFile, readdir, rename, writeFile } from "fs/promises";
+import {
+  existsSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  unlinkSync,
+  writeFileSync,
+} from "fs";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "fs/promises";
 import { join } from "path";
 import type { BrowserWindow } from "electron";
 import { resolveDevelopmentPath } from "../dev-paths";
@@ -16,6 +24,15 @@ import { safeHandle, safeOn } from "./shared";
 /** Escape a string for embedding in an AppleScript double-quoted literal. */
 function escapeAppleScriptString(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
 }
 
 export function registerSystemIpc(mainWindow: BrowserWindow): void {
@@ -114,14 +131,76 @@ export function registerSystemIpc(mainWindow: BrowserWindow): void {
 
   const notesDir = join(app.getPath("userData"), "notes");
   const safeNoteId = /^[\w-]+$/;
+  const noteSaveVersions = new Map<string, number>();
+
+  const nextNoteSaveVersion = (noteId: string): number => {
+    const version = (noteSaveVersions.get(noteId) ?? 0) + 1;
+    noteSaveVersions.set(noteId, version);
+    return version;
+  };
+
+  const saveNote = async (
+    noteId: string,
+    content: string,
+    version: number,
+  ): Promise<void | { error: string }> => {
+    const filePath = join(notesDir, `${noteId}.md`);
+    const tmpPath = join(notesDir, `${noteId}.${version}.${process.pid}.tmp`);
+
+    try {
+      await mkdir(notesDir, { recursive: true });
+      await writeFile(tmpPath, content, "utf-8");
+
+      if (noteSaveVersions.get(noteId) !== version) {
+        await rm(tmpPath, { force: true });
+        return;
+      }
+
+      await rename(tmpPath, filePath);
+    } catch (err) {
+      await rm(tmpPath, { force: true }).catch(() => {});
+      console.error("[notes:save] Failed to save note:", noteId, err);
+      return { error: `Failed to save note: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  };
+
+  const saveNoteSync = (
+    noteId: string,
+    content: string,
+    version: number,
+  ): void | { error: string } => {
+    const filePath = join(notesDir, `${noteId}.md`);
+    const tmpPath = join(notesDir, `${noteId}.${version}.${process.pid}.tmp`);
+
+    try {
+      mkdirSync(notesDir, { recursive: true });
+      writeFileSync(tmpPath, content, "utf-8");
+
+      if (noteSaveVersions.get(noteId) !== version) {
+        rmSync(tmpPath, { force: true });
+        return;
+      }
+
+      renameSync(tmpPath, filePath);
+    } catch (err) {
+      try {
+        rmSync(tmpPath, { force: true });
+      } catch {}
+      console.error("[notes:saveSync] Failed to save note:", noteId, err);
+      return { error: `Failed to save note: ${err instanceof Error ? err.message : String(err)}` };
+    }
+  };
 
   safeHandle("notes:read", async (_event, noteId: unknown) => {
     if (typeof noteId !== "string" || !safeNoteId.test(noteId)) return null;
     const filePath = join(notesDir, `${noteId}.md`);
     try {
       return await readFile(filePath, "utf-8");
-    } catch {
-      return null;
+    } catch (err) {
+      if (isMissingFileError(err)) {
+        return null;
+      }
+      throw err;
     }
   });
 
@@ -133,16 +212,20 @@ export function registerSystemIpc(mainWindow: BrowserWindow): void {
       return { error: "Content must be a string" };
     }
 
-    try {
-      await mkdir(notesDir, { recursive: true });
-      const filePath = join(notesDir, `${noteId}.md`);
-      const tmpPath = join(notesDir, `${noteId}.tmp`);
-      await writeFile(tmpPath, content, "utf-8");
-      await rename(tmpPath, filePath);
-    } catch (err) {
-      console.error("[notes:save] Failed to save note:", noteId, err);
-      return { error: `Failed to save note: ${err instanceof Error ? err.message : String(err)}` };
+    return saveNote(noteId, content, nextNoteSaveVersion(noteId));
+  });
+
+  safeOn("notes:saveSync", (event, noteId: unknown, content: unknown) => {
+    if (typeof noteId !== "string" || !safeNoteId.test(noteId)) {
+      event.returnValue = { error: "Invalid note ID" };
+      return;
     }
+    if (typeof content !== "string") {
+      event.returnValue = { error: "Content must be a string" };
+      return;
+    }
+
+    event.returnValue = saveNoteSync(noteId, content, nextNoteSaveVersion(noteId));
   });
 
   safeHandle("notes:list", async () => {

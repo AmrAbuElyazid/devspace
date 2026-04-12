@@ -157,6 +157,12 @@ describe("notes:read", () => {
     expect(await callHandler("notes:read", "note_with_underscores")).toBeNull();
     expect(await callHandler("notes:read", "ABC-123_xyz")).toBeNull();
   });
+
+  test("propagates non-missing filesystem errors", async () => {
+    await mkdir(join(notesDir, "directory-note.md"), { recursive: true });
+
+    await expect(callHandler("notes:read", "directory-note")).rejects.toThrow();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -203,6 +209,31 @@ describe("notes:save", () => {
     await callHandler("notes:save", "overwrite-test", "second version");
     const onDisk = await readFile(join(notesDir, "overwrite-test.md"), "utf-8");
     expect(onDisk).toBe("second version");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// notes:saveSync
+// ---------------------------------------------------------------------------
+describe("notes:saveSync", () => {
+  test("saves note to disk synchronously", async () => {
+    const content = "# Sync\n\nSaved before close.";
+    expect(callHandler("notes:saveSync", "sync-test", content)).toBeUndefined();
+
+    const onDisk = await readFile(join(notesDir, "sync-test.md"), "utf-8");
+    expect(onDisk).toBe(content);
+  });
+
+  test("rejects invalid noteId", () => {
+    expect(callHandler("notes:saveSync", "../escape", "content")).toEqual({
+      error: "Invalid note ID",
+    });
+  });
+
+  test("rejects non-string content", () => {
+    expect(callHandler("notes:saveSync", "sync-test", 123)).toEqual({
+      error: "Content must be a string",
+    });
   });
 });
 

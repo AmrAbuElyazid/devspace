@@ -59,5 +59,12 @@ export function callRegisteredHandler(
     throw new Error(`No handler for ${channel}`);
   }
 
-  return handler({}, ...args);
+  const event = { returnValue: undefined as unknown };
+  const result = handler(event, ...args);
+
+  if (result instanceof Promise) {
+    return result.then((resolved) => (resolved === undefined ? event.returnValue : resolved));
+  }
+
+  return result === undefined ? event.returnValue : result;
 }

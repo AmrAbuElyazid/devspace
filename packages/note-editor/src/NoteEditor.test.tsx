@@ -130,11 +130,12 @@ test("forwards serialized markdown on editor changes", async () => {
   expect(onChange).toHaveBeenCalledWith({
     editor: mockEditor,
     markdown: "# Saved",
+    serializationError: null,
     value,
   });
 });
 
-test("falls back to JSON when the editor is missing or serialization throws", async () => {
+test("surfaces serialization failures without corrupting persisted markdown", async () => {
   const onChange = vi.fn();
   const throwingEditor = {
     getApi: vi.fn(() => ({
@@ -158,7 +159,8 @@ test("falls back to JSON when the editor is missing or serialization throws", as
 
   expect(onChange).toHaveBeenNthCalledWith(1, {
     editor: null,
-    markdown: JSON.stringify(missingEditorValue),
+    markdown: null,
+    serializationError: "Editor unavailable",
     value: missingEditorValue,
   });
 
@@ -169,7 +171,8 @@ test("falls back to JSON when the editor is missing or serialization throws", as
 
   expect(onChange).toHaveBeenNthCalledWith(2, {
     editor: throwingEditor,
-    markdown: JSON.stringify(throwingValue),
+    markdown: null,
+    serializationError: "serialize failed",
     value: throwingValue,
   });
 });

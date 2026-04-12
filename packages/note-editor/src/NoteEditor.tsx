@@ -9,7 +9,8 @@ import { TooltipProvider } from "./plate-ui/tooltip";
 
 export interface NoteEditorChangeContext {
   editor: PlateEditor | null;
-  markdown: string;
+  markdown: string | null;
+  serializationError: string | null;
   value: Value;
 }
 
@@ -34,7 +35,7 @@ export function NoteEditor({ initialValue, onChange }: NoteEditorProps) {
   const handleChange = useCallback(
     ({ value, editor }: { value: Value; editor: PlateEditor | null }) => {
       if (!editor) {
-        onChange({ editor, markdown: JSON.stringify(value), value });
+        onChange({ editor, markdown: null, serializationError: "Editor unavailable", value });
         return;
       }
 
@@ -42,10 +43,17 @@ export function NoteEditor({ initialValue, onChange }: NoteEditorProps) {
         onChange({
           editor,
           markdown: editor.getApi(MarkdownPlugin).markdown.serialize(),
+          serializationError: null,
           value,
         });
-      } catch {
-        onChange({ editor, markdown: JSON.stringify(value), value });
+      } catch (error) {
+        onChange({
+          editor,
+          markdown: null,
+          serializationError:
+            error instanceof Error ? error.message : "Failed to serialize note content",
+          value,
+        });
       }
     },
     [onChange],

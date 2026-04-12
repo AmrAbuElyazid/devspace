@@ -65,6 +65,10 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   await bridge.browser.importBrowser("chrome", "/tmp/Profile 1", "history");
   await bridge.browser.importBrowser("safari", null, "cookies");
   await bridge.browser.clearBrowsingData("everything");
+  await bridge.notes.read("note-1");
+  await bridge.notes.save("note-1", "# Hello");
+  bridge.notes.saveSync("note-1", "# Hello");
+  await bridge.notes.list();
   await bridge.workspaceState.load();
   await bridge.workspaceState.save({
     activeWorkspaceId: "workspace-1",
@@ -117,6 +121,9 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
     ["browser:import", "chrome", "/tmp/Profile 1", "history"],
     ["browser:import", "safari", null, "cookies"],
     ["browser:clearData", "everything"],
+    ["notes:read", "note-1"],
+    ["notes:save", "note-1", "# Hello"],
+    ["notes:list"],
     ["workspaceState:load"],
     [
       "workspaceState:save",
@@ -149,6 +156,7 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   ]);
 
   expect(syncCalls).toEqual([
+    ["notes:saveSync", "note-1", "# Hello"],
     [
       "workspaceState:saveSync",
       {
