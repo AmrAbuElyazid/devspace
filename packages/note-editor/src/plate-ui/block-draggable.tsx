@@ -12,19 +12,21 @@ import { cn } from "../lib/cn";
 
 const DRAG_EXCLUDED_KEYS = new Set<string>([KEYS.codeLine, KEYS.column, KEYS.td, KEYS.th, KEYS.tr]);
 
-export function BlockDraggable({
-  children,
-  element,
-}: {
-  children: ReactNode;
-  element: TElement;
-  path: number[];
-}) {
+/**
+ * aboveNodes render wrapper for DndPlugin.
+ *
+ * Plate's render pipeline calls this as a HOC factory:
+ *   const hoc = aboveNodes(nodeProps)   // returns a wrapper function or null
+ *   component = hoc({ children, ...nodeProps })  // wraps the node
+ */
+export function BlockDraggable({ element }: { element: TElement }) {
   if (DRAG_EXCLUDED_KEYS.has(element.type as string)) {
-    return <>{children}</>;
+    return null;
   }
 
-  return <DraggableBlock element={element}>{children}</DraggableBlock>;
+  return function DraggableWrapper({ children }: { children: ReactNode }) {
+    return <DraggableBlock element={element}>{children}</DraggableBlock>;
+  };
 }
 
 function DraggableBlock({ children, element }: { children: ReactNode; element: TElement }) {
