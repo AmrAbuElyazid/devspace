@@ -566,3 +566,14 @@
   color: var(--foreground-muted);
   background: color-mix(in srgb, var(--foreground) 8%, transparent);
 }
+
+/* ── Empty folder hint ───────────────────────────────────────────────── */
+
+.folder-empty {
+  padding: 6px 10px;
+  font-size: 10px;
+  color: var(--foreground-faint);
+  opacity: 0.6;
+  font-style: italic;
+  user-select: none;
+}

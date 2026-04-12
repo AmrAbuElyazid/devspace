@@ -129,12 +129,19 @@ export function SortableFolderItem({
       </div>
 
       {isExpanded && (
-        <SidebarTreeLevel
-          nodes={folder.children}
-          container={container}
-          parentFolderId={folder.id}
-          depth={depth + 1}
-        />
+        <>
+          <SidebarTreeLevel
+            nodes={folder.children}
+            container={container}
+            parentFolderId={folder.id}
+            depth={depth + 1}
+          />
+          {folder.children.length === 0 && (
+            <div className="folder-empty" style={{ marginLeft: (depth + 1) * 16 }}>
+              Drop workspaces here
+            </div>
+          )}
+        </>
       )}
     </div>
   );

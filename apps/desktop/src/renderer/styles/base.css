@@ -39,19 +39,26 @@
   .drag-overlay-folder {
     background: var(--popover);
     border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 6px 14px;
-    font-size: 13px;
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
     color: var(--foreground);
-    box-shadow: var(--overlay-shadow);
+    box-shadow:
+      0 4px 16px rgba(0, 0, 0, 0.18),
+      0 1px 3px rgba(0, 0, 0, 0.1);
     pointer-events: none;
     white-space: nowrap;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .drag-overlay-folder {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
   }
 
   .sidebar-item-drag-over-folder {
