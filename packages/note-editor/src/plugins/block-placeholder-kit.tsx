@@ -7,9 +7,9 @@ export const BlockPlaceholderKit = [
   BlockPlaceholderPlugin.configure({
     options: {
       className:
-        "before:absolute before:cursor-text before:text-muted-foreground/80 before:content-[attr(placeholder)]",
+        "before:pointer-events-none before:absolute before:select-none before:text-[var(--foreground-muted)] before:content-[attr(placeholder)]",
       placeholders: {
-        [KEYS.p]: "Type something...",
+        [KEYS.p]: "Start writing...",
       },
       query: ({ path }) => path.length === 1,
     },

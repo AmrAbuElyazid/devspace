@@ -1,8 +1,11 @@
 .note-pane {
   height: 100%;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--background);
   color: var(--foreground);
+  -webkit-app-region: no-drag;
 }
 
 .note-pane-center {
@@ -17,9 +20,41 @@
   position: sticky;
   top: 0;
   z-index: 10;
+  flex-shrink: 0;
   padding: 6px 12px;
   font-size: 12px;
   background: var(--destructive);
   color: #fff;
   text-align: center;
+}
+
+.note-editor-shell {
+  flex: 1;
+  min-height: 0;
+}
+
+.note-editor-content {
+  min-height: 100%;
+  caret-color: var(--foreground);
+}
+
+.note-editor-content [data-slate-placeholder] {
+  color: var(--foreground-muted);
+  pointer-events: none;
+}
+
+.note-editor-content ::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--foreground);
+}
+
+.note-editor-content::-moz-selection,
+.note-editor-content *::-moz-selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--foreground);
+}
+
+.note-editor-content *::selection {
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  color: var(--foreground);
 }

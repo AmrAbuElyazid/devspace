@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, type MouseEvent } from "react";
 import type { Value } from "platejs";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { type PlateEditor, Plate, usePlateEditor } from "platejs/react";
@@ -59,11 +59,28 @@ export function NoteEditor({ initialValue, onChange }: NoteEditorProps) {
     [onChange],
   );
 
+  const handleEditorMouseDown = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (event.target !== event.currentTarget) {
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        const end = editor.api.end([]);
+        if (end) {
+          editor.tf.select(end);
+        }
+        editor.tf.focus();
+      });
+    },
+    [editor],
+  );
+
   return (
     <TooltipProvider>
       <Plate editor={editor} onChange={handleChange}>
-        <EditorContainer>
-          <Editor placeholder="Start writing..." />
+        <EditorContainer className="note-editor-shell">
+          <Editor className="note-editor-content" onMouseDown={handleEditorMouseDown} />
         </EditorContainer>
       </Plate>
     </TooltipProvider>

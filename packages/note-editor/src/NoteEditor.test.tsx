@@ -18,6 +18,11 @@ const noteEditorMocks = vi.hoisted(() => {
 
   return {
     plateProps,
+    editorProps: {
+      onMouseDown: undefined as
+        | ((event: { target: EventTarget | null; currentTarget: EventTarget | null }) => void)
+        | undefined,
+    },
     usePlateEditor: vi.fn(),
     createNoteEditorPlugins: vi.fn(() => ["plugin-a", "plugin-b"]),
     tooltipProviderCalls: 0,
@@ -30,7 +35,11 @@ vi.mock("./plugins/note-editor-kit", () => ({
 
 vi.mock("./plate-ui/editor", () => ({
   EditorContainer: ({ children }: { children: unknown }) => children,
-  Editor: () => null,
+  Editor: ({ onMouseDown }: { onMouseDown?: (event: unknown) => void }) => {
+    noteEditorMocks.editorProps.onMouseDown =
+      onMouseDown as typeof noteEditorMocks.editorProps.onMouseDown;
+    return <div />;
+  },
 }));
 
 vi.mock("./plate-ui/tooltip", () => ({
@@ -73,6 +82,7 @@ beforeEach(() => {
   noteEditorMocks.tooltipProviderCalls = 0;
   noteEditorMocks.plateProps.editor = undefined;
   noteEditorMocks.plateProps.onChange = undefined;
+  noteEditorMocks.editorProps.onMouseDown = undefined;
 });
 
 afterEach(async () => {
@@ -175,4 +185,45 @@ test("surfaces serialization failures without corrupting persisted markdown", as
     serializationError: "serialize failed",
     value: throwingValue,
   });
+});
+
+test("focuses the editor when clicking the blank editor surface", async () => {
+  vi.useFakeTimers();
+  const select = vi.fn();
+  const focus = vi.fn();
+  const mockEditor = {
+    api: {
+      end: vi.fn(() => ({ path: [0, 0], offset: 0 })),
+    },
+    tf: {
+      focus,
+      select,
+    },
+    getApi: vi.fn(() => ({
+      markdown: {
+        serialize: vi.fn(() => ""),
+      },
+    })),
+  };
+  noteEditorMocks.usePlateEditor.mockReturnValue(mockEditor);
+
+  await act(async () => {
+    root?.render(<NoteEditor initialValue={[]} onChange={vi.fn()} />);
+  });
+
+  const target = document.createElement("div");
+
+  await act(async () => {
+    noteEditorMocks.editorProps.onMouseDown?.({
+      currentTarget: target,
+      target,
+    });
+    vi.runAllTimers();
+  });
+
+  expect(mockEditor.api.end).toHaveBeenCalledWith([]);
+  expect(select).toHaveBeenCalledWith({ path: [0, 0], offset: 0 });
+  expect(focus).toHaveBeenCalledTimes(1);
+
+  vi.useRealTimers();
 });
