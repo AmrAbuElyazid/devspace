@@ -1,6 +1,5 @@
 import { memo, useCallback, useEffect, useRef } from "react";
 import { Allotment } from "allotment";
-import "allotment/dist/style.css";
 import { useWorkspaceStore } from "../store/workspace-store";
 import PaneGroupContainer from "./PaneGroupContainer";
 import type { SplitNode } from "../types/workspace";

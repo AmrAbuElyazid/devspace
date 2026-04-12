@@ -36,7 +36,9 @@
   background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
-/* ─── Allotment (Split Pane Sash) ────────────────────────────────────── */
+/* ─── Allotment (Split Pane Sash) ─────────────────────────────────────
+   Allotment's style.css is imported first in main.tsx so our overrides
+   here take precedence. */
 
 :root {
   --focus-border: var(--accent);

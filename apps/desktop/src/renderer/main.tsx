@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import "allotment/dist/style.css";
 import "./styles/index.css";
 import "./styles/design-tokens.css";
 import "./styles/base.css";
