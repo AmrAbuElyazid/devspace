@@ -434,16 +434,11 @@
   font-family: ui-monospace, "SF Mono", monospace;
   font-size: 10px;
   color: var(--foreground-faint);
-  margin-top: 2px;
+  margin-top: 1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   font-variant-numeric: tabular-nums;
-}
-
-/* Slight indent for metadata when a pane icon is present */
-.ws-item-row:has(.ws-pane-icon) ~ .ws-meta {
-  padding-left: 18px;
 }
 
 /* ─── Footer ─────────────────────────────────────────────────────────── */

@@ -60,7 +60,7 @@ afterEach(async () => {
 test("renders settings as a fixed modal overlay", () => {
   const html = renderToStaticMarkup(<SettingsPage />);
 
-  expect(html).toContain("fixed inset-0 z-50 overflow-y-auto");
+  expect(html).toContain("fixed inset-0 z-50");
   expect(html).toContain('role="dialog"');
   expect(html).toContain('aria-modal="true"');
   expect(html).toContain("padding-left:88px");
@@ -69,6 +69,14 @@ test("renders settings as a fixed modal overlay", () => {
 test("shows the resolved VS Code CLI path in settings", async () => {
   await act(async () => {
     root?.render(<SettingsPage />);
+  });
+
+  // Navigate to the Editor section
+  const editorNav = Array.from(container.querySelectorAll("button")).find(
+    (btn) => btn.textContent === "Editor",
+  );
+  await act(async () => {
+    editorNav?.click();
   });
   await act(async () => {
     await Promise.resolve();
@@ -82,6 +90,14 @@ test("shows the resolved VS Code CLI path in settings", async () => {
 test("does not persist number settings until the value is committed", async () => {
   await act(async () => {
     root?.render(<SettingsPage />);
+  });
+
+  // Navigate to the Appearance section where the font size number input lives
+  const appearanceNav = Array.from(container.querySelectorAll("button")).find(
+    (btn) => btn.textContent === "Appearance",
+  );
+  await act(async () => {
+    appearanceNav?.click();
   });
 
   const input = container.querySelector('input[type="number"]') as HTMLInputElement;
@@ -104,6 +120,14 @@ test("does not persist number settings until the value is committed", async () =
 test("does not persist text settings until the value is committed", async () => {
   await act(async () => {
     root?.render(<SettingsPage />);
+  });
+
+  // Navigate to the Terminal section where the default shell text input lives
+  const terminalNav = Array.from(container.querySelectorAll("button")).find(
+    (btn) => btn.textContent === "Terminal",
+  );
+  await act(async () => {
+    terminalNav?.click();
   });
 
   const input = container.querySelector('input[type="text"]') as HTMLInputElement;

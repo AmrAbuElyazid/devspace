@@ -7,11 +7,14 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-sm hover:brightness-110",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-surface-hover",
-        ghost: "hover:bg-surface-hover hover:text-foreground",
-        destructive: "bg-destructive text-white shadow-sm hover:opacity-90",
-        outline: "border border-border bg-background text-foreground hover:bg-surface-hover",
+        default:
+          "bg-[var(--primary)] text-[var(--primary-foreground)] shadow-sm hover:brightness-110",
+        secondary:
+          "bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:bg-[var(--surface-hover)]",
+        ghost: "hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]",
+        destructive: "bg-[var(--destructive)] text-white shadow-sm hover:opacity-90",
+        outline:
+          "border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] hover:bg-[var(--surface-hover)]",
       },
       size: {
         default: "h-8 px-3.5 text-[13px]",
