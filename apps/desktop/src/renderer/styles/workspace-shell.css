@@ -120,21 +120,9 @@
   display: none;
 }
 
-/* Focused group: accent bar along the top edge */
+/* Focused group: slightly elevated tab bar background */
 .pane-group-focused .group-tabbar {
-  border-bottom-color: var(--border);
-}
-
-.pane-group-focused .group-tabbar::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: var(--accent);
-  opacity: 0.6;
-  pointer-events: none;
+  background: color-mix(in srgb, var(--foreground) 4%, var(--background-deep));
 }
 
 .group-tab {
