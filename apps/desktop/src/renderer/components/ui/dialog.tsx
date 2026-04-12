@@ -43,7 +43,7 @@ const DialogClose = forwardRef<HTMLButtonElement, DialogCloseProps>((props, ref)
 ));
 DialogClose.displayName = "DialogClose";
 
-// ── Content ───────────────────────────────────────────────────────────────────
+// ── Content — floating overlay (blur allowed) ────────────────────────────────
 
 interface DialogContentProps extends ComponentProps<typeof DialogPrimitive.Popup> {
   /** Hide the default close button */
@@ -55,8 +55,8 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
     <DialogPrimitive.Portal>
       <DialogPrimitive.Backdrop
         className={cn(
-          "fixed inset-0 z-50 bg-black/32 backdrop-blur-sm",
-          "transition-all duration-150",
+          "fixed inset-0 z-50 bg-black/40",
+          "transition-all duration-200",
           "data-[starting-style]:opacity-0",
           "data-[ending-style]:opacity-0",
         )}
@@ -65,9 +65,10 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
         ref={ref}
         className={cn(
           "fixed top-1/2 left-1/2 z-50 -translate-x-1/2 -translate-y-1/2",
-          "w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl",
+          "w-full max-w-md rounded-xl border border-border bg-popover p-6",
+          "shadow-[var(--overlay-shadow)]",
           "text-foreground",
-          "transition-all duration-150",
+          "transition-all duration-200",
           "data-[starting-style]:scale-95 data-[starting-style]:opacity-0",
           "data-[ending-style]:scale-95 data-[ending-style]:opacity-0",
           className,
@@ -78,9 +79,9 @@ const DialogContent = forwardRef<HTMLDivElement, DialogContentProps>(
         {!hideClose && (
           <DialogPrimitive.Close
             className={cn(
-              "absolute top-3 right-3 inline-flex h-6 w-6 items-center justify-center rounded-md",
-              "text-muted-foreground hover:text-foreground hover:bg-accent",
-              "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "absolute top-3.5 right-3.5 inline-flex h-6 w-6 items-center justify-center rounded-md",
+              "text-muted-foreground hover:text-foreground hover:bg-surface-hover",
+              "transition-colors duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
             )}
           >
             <svg

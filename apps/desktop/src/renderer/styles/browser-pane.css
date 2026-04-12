@@ -2,8 +2,8 @@
 
 .browser-toolbar {
   height: 36px;
-  background-color: var(--card);
-  border-bottom: 1px solid var(--border);
+  background-color: var(--background-deep);
+  border-bottom: 1px solid var(--border-faint);
   position: relative;
   z-index: 2;
 }
@@ -19,8 +19,8 @@
   align-items: center;
   gap: 6px;
   padding: 0 8px;
-  background: color-mix(in srgb, var(--card) 92%, var(--background));
-  border-bottom: 1px solid var(--border);
+  background: var(--background-deep);
+  border-bottom: 1px solid var(--border-faint);
   position: relative;
   z-index: 2;
 }
@@ -31,11 +31,19 @@
   height: 24px;
   padding: 0 8px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--background);
   color: var(--foreground);
   font-size: 11px;
   outline: none;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.browser-find-input:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
 .browser-find-count {
@@ -79,11 +87,25 @@
   border: none;
   background: none;
   padding: 0;
+  border-radius: 6px;
+  transition:
+    background-color 100ms ease,
+    color 100ms ease;
+}
+
+.browser-nav-btn:hover {
+  background: var(--surface-hover);
+  color: var(--foreground);
 }
 
 .browser-nav-btn:disabled {
   opacity: 0.3;
   cursor: default;
+}
+
+.browser-nav-btn:disabled:hover {
+  background: none;
+  color: var(--muted-foreground);
 }
 
 .browser-security-indicator {
@@ -94,7 +116,7 @@
   height: 26px;
   border: 1px solid var(--border);
   border-radius: 999px;
-  background: var(--background);
+  background: var(--surface);
   color: var(--muted-foreground);
   font-size: 11px;
   flex-shrink: 0;
@@ -110,11 +132,20 @@
 
 .browser-url-input {
   height: 26px;
-  background-color: var(--background);
+  background-color: var(--surface);
   color: var(--foreground);
   border: 1px solid var(--border);
+  border-radius: 6px;
   font-family: ui-monospace, "SF Mono", "Fira Code", monospace;
   font-size: 11px;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.browser-url-input:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
 @keyframes browser-loading {
@@ -136,9 +167,11 @@
 
 .browser-loading-bar {
   height: 2px;
-  background-color: var(--accent);
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
   animation: browser-loading 1.5s ease-in-out infinite;
 }
+
+/* ─── Permission Prompt ──────────────────────────────────────────────── */
 
 .browser-permission-prompt {
   display: flex;
@@ -146,8 +179,8 @@
   justify-content: space-between;
   gap: 16px;
   padding: 12px 14px;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--card));
+  border-bottom: 1px solid var(--border);
+  background: var(--background-deep);
   position: relative;
   z-index: 2;
 }
@@ -171,7 +204,7 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--accent) 60%, var(--foreground));
+  color: var(--accent);
 }
 
 .browser-permission-actions,
@@ -182,6 +215,8 @@
   flex-wrap: wrap;
 }
 
+/* ─── Failure Surface ────────────────────────────────────────────────── */
+
 .browser-failure-surface {
   position: absolute;
   inset: 0;
@@ -189,23 +224,17 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background:
-    radial-gradient(
-      circle at top,
-      color-mix(in srgb, var(--warning) 10%, transparent),
-      transparent 45%
-    ),
-    var(--background);
+  background: var(--background);
   z-index: 1;
 }
 
 .browser-failure-card {
   width: min(420px, 100%);
   padding: 24px;
-  border: 1px solid color-mix(in srgb, var(--warning) 25%, var(--border));
-  border-radius: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
   background: var(--card);
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--overlay-shadow);
 }
 
 .browser-failure-card h2 {
@@ -236,6 +265,8 @@
   }
 }
 
+/* ─── Import Panel ───────────────────────────────────────────────────── */
+
 .browser-import-panel {
   display: flex;
   flex-direction: column;
@@ -244,7 +275,7 @@
 .browser-import-card {
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--background);
+  background: var(--card);
   overflow: hidden;
 }
 
@@ -311,13 +342,14 @@
   cursor: pointer;
   transition:
     background-color 120ms ease,
-    color 120ms ease;
+    color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .browser-import-segmented-option[data-active="true"] {
-  background: var(--background);
+  background: var(--card);
   color: var(--foreground);
-  box-shadow: inset 0 0 0 1px var(--border-faint);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 .browser-import-select {
@@ -325,10 +357,18 @@
   height: 32px;
   padding: 0 10px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--background);
+  border-radius: 6px;
+  background: var(--surface);
   color: var(--foreground);
   outline: none;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.browser-import-select:focus {
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px var(--accent-muted);
 }
 
 .browser-import-note {
@@ -338,15 +378,15 @@
   gap: 12px;
   padding: 12px 14px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  border-radius: 8px;
+  background: var(--surface);
   color: var(--foreground-muted);
   font-size: 12px;
 }
 
 .browser-import-note[data-variant="warning"] {
   border-color: color-mix(in srgb, var(--warning) 30%, var(--border));
-  background: color-mix(in srgb, var(--warning) 8%, var(--background));
+  background: color-mix(in srgb, var(--warning) 6%, var(--surface));
   color: var(--foreground);
 }
 
@@ -361,11 +401,11 @@
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: 8px;
   font-size: 12px;
   border: 1px solid var(--border);
   color: var(--foreground-muted);
-  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  background: var(--surface);
 }
 
 .browser-import-status[data-status="success"] {

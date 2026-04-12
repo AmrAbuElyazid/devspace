@@ -24,7 +24,9 @@ function ToastItem({ id, message, variant }: { id: string; message: string; vari
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 shadow-lg",
+        "flex items-center gap-2.5 rounded-lg border border-[var(--border)] px-3.5 py-3",
+        "bg-[var(--popover)]",
+        "shadow-[var(--overlay-shadow)]",
         "border-l-[3px] text-[13px]",
         "animate-slide-in",
         variantStyles[variant],
@@ -34,7 +36,7 @@ function ToastItem({ id, message, variant }: { id: string; message: string; vari
       <span className="flex-1 text-[var(--card-foreground)]">{message}</span>
       <button
         onClick={() => removeToast(id)}
-        className="shrink-0 rounded p-0.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+        className="shrink-0 rounded-md p-0.5 text-[var(--muted-foreground)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] transition-colors duration-100"
       >
         <X className="h-3.5 w-3.5" />
       </button>

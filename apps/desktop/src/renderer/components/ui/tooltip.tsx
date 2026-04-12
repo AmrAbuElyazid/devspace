@@ -18,15 +18,17 @@ export function Tooltip({ content, children, side = "bottom", shortcut }: Toolti
           <TooltipPrimitive.Positioner side={side} sideOffset={6}>
             <TooltipPrimitive.Popup
               className={cn(
-                "z-50 rounded-md bg-foreground px-2 py-1 text-[11px] text-background",
-                "shadow-md",
-                "transition-all duration-150",
+                "z-50 rounded-md px-2.5 py-1 text-[11px]",
+                "bg-popover text-popover-foreground",
+                "border border-border",
+                "shadow-[var(--overlay-shadow)]",
+                "transition-all duration-100",
                 "data-[starting-style]:opacity-0 data-[starting-style]:scale-95",
                 "data-[ending-style]:opacity-0 data-[ending-style]:scale-95",
               )}
             >
               <span>{content}</span>
-              {shortcut && <span className="ml-1.5 text-[10px] opacity-60">{shortcut}</span>}
+              {shortcut && <span className="ml-1.5 text-[10px] opacity-55">{shortcut}</span>}
             </TooltipPrimitive.Popup>
           </TooltipPrimitive.Positioner>
         </TooltipPrimitive.Portal>

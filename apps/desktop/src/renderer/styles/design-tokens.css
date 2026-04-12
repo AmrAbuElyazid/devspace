@@ -31,89 +31,140 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-sidebar-bg: var(--sidebar-bg);
+  --color-brand: var(--brand);
+  --color-highlight: var(--highlight);
+
+  /* Floating-layer tokens (dialogs, tooltips, toasts, popovers) */
+  --color-overlay-bg: var(--overlay-bg);
+  --color-overlay-border: var(--overlay-border);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
-  --color-brand: var(--brand);
-  --color-highlight: var(--highlight);
 }
 
 /* ─── Design Tokens ──────────────────────────────────────────────────── */
 
+/*
+ * ACCENT COLOR — To change the app's accent, update the six --accent-*,
+ * --primary-*, and --ring values in BOTH :root (light) and :root.dark (dark)
+ * blocks below. Every accent reference in the entire app flows through
+ * these variables — nothing else needs to change.
+ */
+
 :root {
   color-scheme: light;
-  --radius: 0.375rem;
+  --radius: 0.5rem;
 
+  /* Base — solid, opaque */
   --background: #ffffff;
-  --background-deep: #f5f5f4;
-  --surface: #f0f0ee;
-  --surface-hover: rgba(0, 0, 0, 0.04);
+  --background-deep: #f4f4f5;
+  --foreground: #18181b;
+  --foreground-muted: rgba(0, 0, 0, 0.6);
+  --foreground-faint: rgba(0, 0, 0, 0.3);
+
+  /* Surfaces — solid */
+  --surface: #f4f4f5;
+  --surface-hover: rgba(0, 0, 0, 0.05);
+
+  /* Semantic */
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --primary: #facc15;
+  --primary-foreground: #1a1a1a;
+  --secondary: #e4e4e7;
+  --secondary-foreground: #18181b;
+  --muted: #e4e4e7;
+  --muted-foreground: rgba(0, 0, 0, 0.55);
+
+  /* Accent — yellow (change these 3 + primary + ring to re-theme) */
   --accent: #facc15;
   --accent-muted: rgba(250, 204, 21, 0.1);
   --accent-border: rgba(202, 138, 4, 0.25);
-  --foreground: rgba(0, 0, 0, 0.87);
-  --foreground-muted: rgba(0, 0, 0, 0.45);
-  --foreground-faint: rgba(0, 0, 0, 0.2);
-  --border: rgba(0, 0, 0, 0.06);
-  --border-faint: rgba(0, 0, 0, 0.03);
+
+  /* Status */
   --destructive: #ef4444;
   --destructive-foreground: #b91c1c;
+  --info: #3b82f6;
   --success: #16a34a;
   --warning: #f59e0b;
-  --info: #3b82f6;
-  --ring: #ca8a04;
-  --input: rgba(0, 0, 0, 0.06);
-  --sidebar-bg: #f5f5f4;
-  --card: #ffffff;
-  --card-foreground: rgba(0, 0, 0, 0.87);
-  --popover: #ffffff;
-  --popover-foreground: rgba(0, 0, 0, 0.87);
-  --primary: #facc15;
-  --primary-foreground: #1a1a1a;
-  --secondary: #e8e8e5;
-  --secondary-foreground: rgba(0, 0, 0, 0.87);
-  --muted: #e8e8e5;
-  --muted-foreground: rgba(0, 0, 0, 0.45);
 
+  /* Borders */
+  --border: rgba(0, 0, 0, 0.08);
+  --border-faint: rgba(0, 0, 0, 0.04);
+  --input: rgba(0, 0, 0, 0.06);
+  --ring: #ca8a04;
+
+  /* Sidebar — solid */
+  --sidebar-bg: #f4f4f5;
+
+  /* Floating layers (dialogs, tooltips, popovers) */
+  --overlay-bg: rgba(255, 255, 255, 0.92);
+  --overlay-border: rgba(0, 0, 0, 0.08);
+  --overlay-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
+
+  /* Utility */
   --highlight: oklch(0.75 0.1 70);
   --brand: oklch(0.623 0.214 259.815);
 }
 
 :root.dark {
   color-scheme: dark;
-  --background: #161619;
-  --background-deep: #111114;
-  --surface: #1c1c20;
-  --surface-hover: rgba(255, 255, 255, 0.05);
+
+  /* Base — solid, opaque */
+  --background: #18181b;
+  --background-deep: #09090b;
+  --foreground: rgba(255, 255, 255, 0.92);
+  --foreground-muted: rgba(255, 255, 255, 0.6);
+  --foreground-faint: rgba(255, 255, 255, 0.32);
+
+  /* Surfaces — solid */
+  --surface: #27272a;
+  --surface-hover: rgba(255, 255, 255, 0.06);
+
+  /* Semantic */
+  --card: #27272a;
+  --card-foreground: rgba(255, 255, 255, 0.92);
+  --popover: #27272a;
+  --popover-foreground: rgba(255, 255, 255, 0.92);
+  --primary: #facc15;
+  --primary-foreground: #1a1a1a;
+  --secondary: #3f3f46;
+  --secondary-foreground: rgba(255, 255, 255, 0.92);
+  --muted: #3f3f46;
+  --muted-foreground: rgba(255, 255, 255, 0.55);
+
+  /* Accent — yellow (change these 3 + primary + ring to re-theme) */
   --accent: #facc15;
   --accent-muted: rgba(250, 204, 21, 0.08);
   --accent-border: rgba(250, 204, 21, 0.15);
-  --foreground: rgba(255, 255, 255, 0.9);
-  --foreground-muted: rgba(255, 255, 255, 0.45);
-  --foreground-faint: rgba(255, 255, 255, 0.22);
-  --border: rgba(255, 255, 255, 0.07);
-  --border-faint: rgba(255, 255, 255, 0.04);
+
+  /* Status */
   --destructive: #ef4444;
   --destructive-foreground: #f87171;
+  --info: #60a5fa;
   --success: #4ade80;
   --warning: #fbbf24;
-  --info: #60a5fa;
-  --ring: #facc15;
+
+  /* Borders */
+  --border: rgba(255, 255, 255, 0.08);
+  --border-faint: rgba(255, 255, 255, 0.04);
   --input: rgba(255, 255, 255, 0.07);
-  --sidebar-bg: #18181c;
-  --card: #1c1c20;
-  --card-foreground: rgba(255, 255, 255, 0.9);
-  --popover: #1c1c20;
-  --popover-foreground: rgba(255, 255, 255, 0.9);
-  --primary: #facc15;
-  --primary-foreground: #1a1a1a;
-  --secondary: #222226;
-  --secondary-foreground: rgba(255, 255, 255, 0.9);
-  --muted: #222226;
-  --muted-foreground: rgba(255, 255, 255, 0.45);
+  --ring: #facc15;
+
+  /* Sidebar — solid */
+  --sidebar-bg: #18181b;
+
+  /* Floating layers */
+  --overlay-bg: rgba(39, 39, 42, 0.96);
+  --overlay-border: rgba(255, 255, 255, 0.08);
+  --overlay-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+
+  /* Utility */
   --highlight: oklch(0.45 0.08 70);
   --brand: oklch(0.707 0.165 254.624);
 }

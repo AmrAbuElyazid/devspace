@@ -10,7 +10,8 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+    font-family:
+      -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
     font-size: 13px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
@@ -31,18 +32,18 @@
     font-family: ui-monospace, "SF Mono", "Fira Code", monospace;
   }
 
-  /* Drag and drop feedback */
+  /* ── Drag and drop feedback ─────────────────────────────────────────── */
+
   .drag-overlay-workspace,
   .drag-overlay-tab,
   .drag-overlay-folder {
-    background: var(--surface-hover);
-    border: 1px solid var(--accent);
-    border-radius: 6px;
-    padding: 6px 12px;
+    background: var(--popover);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 14px;
     font-size: 13px;
     color: var(--foreground);
-    opacity: 0.9;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: var(--overlay-shadow);
     pointer-events: none;
     white-space: nowrap;
   }
@@ -54,19 +55,18 @@
   }
 
   .sidebar-item-drag-over-folder {
-    background: rgba(250, 204, 21, 0.1) !important;
-    border-radius: 6px;
+    background: var(--accent-muted) !important;
+    border-radius: 8px;
   }
 
   .ws-item-tab-drop {
-    background: rgba(250, 204, 21, 0.1);
-    outline: 1px solid rgba(250, 204, 21, 0.4);
-    border-radius: 4px;
+    background: var(--accent-muted);
+    outline: 1px solid var(--accent-border);
+    border-radius: 6px;
   }
 
-  /* ── Insertion line indicators ─────────────────────────────────────── */
+  /* ── Insertion line indicators ────────────────────────────────────────── */
 
-  /* Sidebar: horizontal line at top or bottom edge of item */
   .sidebar-insert-before::before {
     content: "";
     position: absolute;
@@ -102,9 +102,9 @@
 
   .pane-drop-zone-half {
     position: absolute;
-    background: rgba(250, 204, 21, 0.08);
-    border: 1px solid rgba(250, 204, 21, 0.3);
-    transition: opacity 0.1s ease;
+    background: var(--accent-muted);
+    border: 1px solid var(--accent-border);
+    transition: opacity 0.15s ease;
   }
 
   .pane-drop-zone-half.left {
@@ -112,7 +112,7 @@
     left: 0;
     bottom: 0;
     width: 50%;
-    border-right: 2px solid rgba(250, 204, 21, 0.5);
+    border-right: 2px solid var(--accent);
   }
 
   .pane-drop-zone-half.right {
@@ -120,7 +120,7 @@
     right: 0;
     bottom: 0;
     width: 50%;
-    border-left: 2px solid rgba(250, 204, 21, 0.5);
+    border-left: 2px solid var(--accent);
   }
 
   .pane-drop-zone-half.top {
@@ -128,7 +128,7 @@
     left: 0;
     right: 0;
     height: 50%;
-    border-bottom: 2px solid rgba(250, 204, 21, 0.5);
+    border-bottom: 2px solid var(--accent);
   }
 
   .pane-drop-zone-half.bottom {
@@ -136,7 +136,7 @@
     left: 0;
     right: 0;
     height: 50%;
-    border-top: 2px solid rgba(250, 204, 21, 0.5);
+    border-top: 2px solid var(--accent);
   }
 
   [data-dragging="true"] {

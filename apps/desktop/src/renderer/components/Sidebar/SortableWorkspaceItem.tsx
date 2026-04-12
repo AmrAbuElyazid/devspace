@@ -5,6 +5,7 @@ import { useWorkspaceStore } from "../../store/workspace-store";
 import { useActiveDrag } from "../../hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
 import { InlineRenameInput } from "../ui/InlineRenameInput";
+import { paneTypeIcons } from "../../lib/pane-type-meta";
 import type { HeldModifier } from "../../hooks/useModifierHeld";
 import type { SidebarContainer } from "../../types/dnd";
 
@@ -46,6 +47,20 @@ export function SortableWorkspaceItem({
     (s) => s.workspaceSidebarMetadataByWorkspaceId[workspaceId] ?? "",
   );
   const canDelete = useWorkspaceStore((s) => s.workspaces.length > 1);
+
+  // Focused pane type — shows a colored icon next to the workspace name
+  const focusedPaneType = useWorkspaceStore((s) => {
+    const ws = s.workspaces.find((w) => w.id === workspaceId);
+    if (!ws?.focusedGroupId) return null;
+    const group = s.paneGroups[ws.focusedGroupId];
+    if (!group?.activeTabId) return null;
+    const tab = group.tabs.find((t) => t.id === group.activeTabId);
+    if (!tab) return null;
+    const pane = s.panes[tab.paneId];
+    return pane?.type ?? null;
+  });
+
+  const PaneIcon = focusedPaneType ? (paneTypeIcons[focusedPaneType] ?? null) : null;
 
   // Compute shortcut hint from workspace index
   const shortcutHint = useWorkspaceStore((s) => {
@@ -140,6 +155,7 @@ export function SortableWorkspaceItem({
     >
       <div className="ws-item-content">
         <div className="ws-item-row">
+          {PaneIcon && <PaneIcon size={13} className="ws-pane-icon" />}
           {isEditing ? (
             <InlineRenameInput
               initialValue={name}

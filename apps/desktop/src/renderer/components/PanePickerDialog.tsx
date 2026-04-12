@@ -142,7 +142,7 @@ function PanePickerDialogInner({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "rgba(0, 0, 0, 0.45)",
+        backgroundColor: "rgba(0, 0, 0, 0.4)",
       }}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
@@ -154,11 +154,11 @@ function PanePickerDialogInner({
       <div
         style={{
           width: 280,
-          backgroundColor: "var(--surface)",
+          backgroundColor: "var(--popover)",
           border: "1px solid var(--border)",
           borderRadius: 10,
           padding: "6px 0",
-          boxShadow: "0 8px 32px rgba(0, 0, 0, 0.4)",
+          boxShadow: "var(--overlay-shadow)",
         }}
       >
         {options.map((opt, i) => {
@@ -178,21 +178,30 @@ function PanePickerDialogInner({
               style={{
                 display: "flex",
                 alignItems: "center",
-                width: "100%",
-                padding: "8px 14px",
+                width: "calc(100% - 8px)",
+                margin: "0 4px",
+                padding: "8px 12px",
                 gap: 10,
                 border: "none",
-                background: isHighlighted ? "rgba(59, 130, 246, 0.12)" : "transparent",
+                borderRadius: 8,
+                background: isHighlighted ? "var(--accent-muted)" : "transparent",
                 color: "var(--foreground)",
                 cursor: "pointer",
                 fontSize: 13,
                 fontFamily: "inherit",
                 textAlign: "left",
-                transition: "background 0.1s ease",
+                transition: "background 0.12s cubic-bezier(0.32, 0.72, 0, 1)",
                 outline: "none",
               }}
             >
-              <Icon size={14} style={{ flexShrink: 0, color: "var(--foreground-muted)" }} />
+              <Icon
+                size={14}
+                style={{
+                  flexShrink: 0,
+                  color: isHighlighted ? "var(--accent)" : "var(--foreground-muted)",
+                  transition: "color 0.12s ease",
+                }}
+              />
 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div>{opt.label}</div>
@@ -217,7 +226,7 @@ function PanePickerDialogInner({
                   fontSize: 11,
                   color: "var(--foreground-faint)",
                   flexShrink: 0,
-                  fontFamily: "inherit",
+                  fontFamily: "ui-monospace, 'SF Mono', monospace",
                 }}
               >
                 {opt.shortcut}

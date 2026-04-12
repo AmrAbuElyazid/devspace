@@ -67,7 +67,7 @@ export default function SettingsPage() {
   return (
     <div
       className="fixed inset-0 z-50 overflow-y-auto"
-      style={{ background: "var(--surface)" }}
+      style={{ background: "var(--background)" }}
       role="dialog"
       aria-modal="true"
     >
@@ -75,7 +75,7 @@ export default function SettingsPage() {
       <div
         className="sticky top-0 z-10 flex items-center justify-between py-4 pr-6"
         style={{
-          background: "var(--surface)",
+          background: "var(--background)",
           borderBottom: "1px solid var(--border)",
           paddingLeft: isFullScreen ? 12 : 88,
         }}
@@ -197,7 +197,7 @@ export default function SettingsPage() {
           </SettingRow>
         </section>
 
-        {/* Keyboard Shortcuts */}
+        {/* Browser */}
         <section>
           <SectionTitle>Browser</SectionTitle>
           <BrowserImportPanel />
@@ -298,10 +298,10 @@ function ShortcutSettingsSection() {
         <SectionTitle>Keyboard Shortcuts</SectionTitle>
         {hasAnyOverrides && (
           <button
-            className="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded"
+            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-lg transition-colors duration-150"
             style={{
               color: "var(--muted-foreground)",
-              background: "var(--surface-hover)",
+              background: "var(--surface)",
             }}
             onClick={handleResetAll}
           >
@@ -315,12 +315,20 @@ function ShortcutSettingsSection() {
       <input
         type="text"
         placeholder="Filter shortcuts..."
-        className="w-full mb-4 px-3 py-1.5 text-sm rounded-md"
+        className="w-full mb-4 px-3.5 py-2 text-sm rounded-lg transition-all duration-200"
         style={{
-          background: "var(--background)",
-          border: "1px solid var(--border)",
+          background: "var(--surface)",
+          border: "1px solid var(--border-faint)",
           color: "var(--foreground)",
           outline: "none",
+        }}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = "var(--accent-border)";
+          e.currentTarget.style.boxShadow = "0 0 0 3px var(--accent-muted)";
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = "var(--border-faint)";
+          e.currentTarget.style.boxShadow = "none";
         }}
         value={filter}
         onChange={(e) => setFilter(e.target.value)}
@@ -348,7 +356,10 @@ function ShortcutSettingsSection() {
             </h3>
             <div
               className="rounded-lg overflow-hidden"
-              style={{ border: "1px solid var(--border)" }}
+              style={{
+                border: "1px solid var(--border)",
+                background: "var(--card)",
+              }}
             >
               {filteredDefs.map((def, i) => {
                 const current = resolveShortcut(def.action, overridesMap);
@@ -358,9 +369,8 @@ function ShortcutSettingsSection() {
                 return (
                   <div
                     key={def.action}
-                    className="flex items-center justify-between px-4 py-2"
+                    className="flex items-center justify-between px-4 py-2.5"
                     style={{
-                      background: "var(--background)",
                       borderBottom:
                         i < filteredDefs.length - 1 || numberedBase
                           ? "1px solid var(--border-faint)"
@@ -381,18 +391,15 @@ function ShortcutSettingsSection() {
                 );
               })}
 
-              {/* Numbered shortcut summary row (e.g. "Select Workspace 1...9 ⌘1...9") */}
+              {/* Numbered shortcut summary row */}
               {numberedBase &&
                 (!filterLower || `select ${cat.id.slice(0, -1)} 1-9`.includes(filterLower)) && (
-                  <div
-                    className="flex items-center justify-between px-4 py-2"
-                    style={{ background: "var(--background)" }}
-                  >
+                  <div className="flex items-center justify-between px-4 py-2.5">
                     <span className="text-sm" style={{ color: "var(--foreground-muted)" }}>
                       Select {cat.id === "workspaces" ? "Workspace" : "Tab"} 1...9
                     </span>
                     <span
-                      className="text-[10px] font-medium px-2 py-0.5 rounded"
+                      className="text-[10px] font-medium px-2 py-0.5 rounded-md"
                       style={{
                         color: "var(--foreground)",
                         background: "var(--surface)",
@@ -446,16 +453,20 @@ function SegmentedControl<T extends string | number>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="flex gap-0.5 rounded-md p-0.5" style={{ background: "var(--background)" }}>
+    <div
+      className="flex gap-0.5 rounded-lg p-0.5"
+      style={{ background: "var(--surface)", border: "1px solid var(--border-faint)" }}
+    >
       {options.map((opt) => (
         <button
           key={String(opt.value)}
           onClick={() => onChange(opt.value)}
-          className="px-3 py-1 text-xs rounded transition-colors"
+          className="px-3 py-1 text-xs rounded-md transition-all duration-150"
           style={{
-            background: value === opt.value ? "var(--surface-hover)" : "transparent",
+            background: value === opt.value ? "var(--card)" : "transparent",
             color: value === opt.value ? "var(--foreground)" : "var(--foreground-muted)",
             fontWeight: value === opt.value ? 500 : 400,
+            boxShadow: value === opt.value ? "0 1px 2px rgba(0,0,0,0.06)" : "none",
           }}
         >
           {opt.label}
@@ -513,12 +524,16 @@ function NumberInput({
       min={min}
       max={max}
       step={step}
-      className="w-20 h-7 px-2 text-xs rounded outline-none"
+      className="w-20 h-7 px-2 text-xs rounded-lg outline-none transition-all duration-200"
       style={{
-        background: "var(--background)",
-        border: "1px solid var(--border)",
+        background: "var(--surface)",
+        border: "1px solid var(--border-faint)",
         color: "var(--foreground)",
-        fontFamily: "monospace",
+        fontFamily: "ui-monospace, 'SF Mono', monospace",
+      }}
+      onFocus={(e) => {
+        e.currentTarget.style.borderColor = "var(--accent-border)";
+        e.currentTarget.style.boxShadow = "0 0 0 3px var(--accent-muted)";
       }}
     />
   );
@@ -560,12 +575,16 @@ function TextInput({
         }
       }}
       placeholder={placeholder}
-      className={`${className ?? "w-40"} h-7 px-2 text-xs rounded outline-none`}
+      className={`${className ?? "w-40"} h-7 px-2 text-xs rounded-lg outline-none transition-all duration-200`}
       style={{
-        background: "var(--background)",
-        border: "1px solid var(--border)",
+        background: "var(--surface)",
+        border: "1px solid var(--border-faint)",
         color: "var(--foreground)",
-        fontFamily: "monospace",
+        fontFamily: "ui-monospace, 'SF Mono', monospace",
+      }}
+      onFocus={(e) => {
+        e.currentTarget.style.borderColor = "var(--accent-border)";
+        e.currentTarget.style.boxShadow = "0 0 0 3px var(--accent-muted)";
       }}
     />
   );
@@ -575,12 +594,16 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (value: boo
   return (
     <button
       onClick={() => onChange(!checked)}
-      className="relative w-9 h-5 rounded-full transition-colors"
-      style={{ background: checked ? "var(--accent)" : "var(--border)" }}
+      className="relative w-9 h-5 rounded-full transition-all duration-200"
+      style={{
+        background: checked ? "var(--accent)" : "var(--border)",
+      }}
     >
       <div
-        className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform"
-        style={{ transform: checked ? "translateX(18px)" : "translateX(2px)" }}
+        className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200"
+        style={{
+          transform: checked ? "translateX(18px)" : "translateX(2px)",
+        }}
       />
     </button>
   );
