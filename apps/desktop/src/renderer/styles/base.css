@@ -102,41 +102,38 @@
 
   .pane-drop-zone-half {
     position: absolute;
-    background: var(--accent-muted);
-    border: 1px solid var(--accent-border);
-    transition: opacity 0.15s ease;
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    border: 1.5px solid color-mix(in srgb, var(--accent) 18%, transparent);
+    border-radius: 8px;
+    transition: opacity 150ms ease;
   }
 
   .pane-drop-zone-half.left {
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: 50%;
-    border-right: 2px solid var(--accent);
+    top: 4px;
+    left: 4px;
+    bottom: 4px;
+    width: calc(50% - 6px);
   }
 
   .pane-drop-zone-half.right {
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 50%;
-    border-left: 2px solid var(--accent);
+    top: 4px;
+    right: 4px;
+    bottom: 4px;
+    width: calc(50% - 6px);
   }
 
   .pane-drop-zone-half.top {
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 50%;
-    border-bottom: 2px solid var(--accent);
+    top: 4px;
+    left: 4px;
+    right: 4px;
+    height: calc(50% - 6px);
   }
 
   .pane-drop-zone-half.bottom {
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 50%;
-    border-top: 2px solid var(--accent);
+    bottom: 4px;
+    left: 4px;
+    right: 4px;
+    height: calc(50% - 6px);
   }
 
   [data-dragging="true"] {
