@@ -93,6 +93,24 @@ test("shows an error state when note loading fails", async () => {
   expect(container.textContent).toContain("Failed to load note");
 });
 
+test("reconciles the pane title from loaded markdown content", async () => {
+  installMockWindowApi({
+    notes: {
+      read: vi.fn(async () => "# Loaded title\n\nBody copy"),
+    },
+  });
+
+  const { default: NotePane } = await import("./NotePane");
+
+  await act(async () => {
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} />);
+  });
+  await flushEffects();
+
+  expect(notePaneMocks.initialValues.at(-1)).toBe("# Loaded title\n\nBody copy");
+  expect(notePaneMocks.updatePaneTitle).toHaveBeenCalledWith("pane-1", "Loaded title");
+});
+
 test("surfaces serialization failures without saving corrupted content", async () => {
   const api = installMockWindowApi();
   const { default: NotePane } = await import("./NotePane");
@@ -145,4 +163,49 @@ test("flushes pending note edits synchronously before unload", async () => {
 
   expect(api.notes.saveSync).toHaveBeenCalledWith("note-1", "# Saved");
   expect(api.notes.save).not.toHaveBeenCalled();
+});
+
+test("surfaces synchronous flush failures when the app is hidden", async () => {
+  const api = installMockWindowApi({
+    notes: {
+      saveSync: vi.fn(() => ({ error: "disk full" })),
+    },
+  });
+  const { default: NotePane } = await import("./NotePane");
+
+  const originalVisibilityState = Object.getOwnPropertyDescriptor(document, "visibilityState");
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    value: "hidden",
+  });
+
+  await act(async () => {
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} />);
+  });
+  await flushEffects();
+
+  await act(async () => {
+    notePaneMocks.onChange?.({
+      editor: {} as NoteEditorChangeContext["editor"],
+      markdown: "# Unsaved",
+      serializationError: null,
+      value: [{ type: "p", children: [{ text: "Unsaved" }] }],
+    });
+  });
+
+  await act(async () => {
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+
+  expect(api.notes.saveSync).toHaveBeenCalledWith("note-1", "# Unsaved");
+  expect(container.textContent).toContain("Save failed: disk full");
+
+  if (originalVisibilityState) {
+    Object.defineProperty(document, "visibilityState", originalVisibilityState);
+  } else {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      value: "visible",
+    });
+  }
 });

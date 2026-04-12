@@ -23,6 +23,31 @@ const DEFAULT_VALUE: NoteEditorValue = [
   },
 ];
 
+const pendingNoteSaveErrors = new Map<string, string>();
+
+function extractTitleFromMarkdown(markdown: string): string | null {
+  const lines = markdown.split(/\r?\n/);
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    const plain = trimmed
+      .replace(/^#{1,6}\s+/, "")
+      .replace(/^[-*+]\s+/, "")
+      .replace(/^\d+[.)]\s+/, "")
+      .replace(/^\[[ xX]\]\s+/, "")
+      .replace(/[*_`~]/g, "")
+      .trim();
+
+    if (plain) {
+      return plain.slice(0, 40);
+    }
+  }
+
+  return null;
+}
+
 export default function NotePane({ paneId, config }: NotePaneProps) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialValue, setInitialValue] = useState<NoteEditorValue | string>(DEFAULT_VALUE);
@@ -35,14 +60,27 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
   const lastTitle = useRef<string>("Note");
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
 
-  const handleSaveResult = useCallback((result: void | { error: string }) => {
-    if (result && typeof result === "object" && "error" in result) {
-      console.error("[NotePane] Save failed:", result.error);
-      setSaveError(result.error);
-    } else {
-      setSaveError(null);
-    }
-  }, []);
+  const handleSaveResult = useCallback(
+    (result: void | { error: string }, options?: { allowStateUpdate?: boolean }) => {
+      const allowStateUpdate = options?.allowStateUpdate ?? true;
+
+      if (result && typeof result === "object" && "error" in result) {
+        console.error("[NotePane] Save failed:", result.error);
+        pendingNoteSaveErrors.set(config.noteId, result.error);
+
+        if (allowStateUpdate) {
+          setSaveError(result.error);
+        }
+        return;
+      }
+
+      pendingNoteSaveErrors.delete(config.noteId);
+      if (allowStateUpdate) {
+        setSaveError(null);
+      }
+    },
+    [config.noteId],
+  );
 
   /** Persist note to disk as markdown. */
   const saveNow = useCallback(async () => {
@@ -91,7 +129,7 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
     latestMarkdown.current = null;
     lastTitle.current = "Note";
     setInitialValue(DEFAULT_VALUE);
-    setSaveError(null);
+    setSaveError(pendingNoteSaveErrors.get(config.noteId) ?? null);
     setLoadState("loading");
 
     async function load() {
@@ -99,6 +137,11 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
         const raw = await window.api.notes.read(config.noteId);
         if (cancelled) return;
         if (raw && raw.trim().length > 0) {
+          const title = extractTitleFromMarkdown(raw);
+          if (title) {
+            lastTitle.current = title;
+            updatePaneTitle(paneId, title);
+          }
           // raw is markdown — we'll deserialize it in the NoteEditor via the
           // MarkdownPlugin's value initializer
           setInitialValue(raw);
@@ -113,11 +156,11 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
     return () => {
       cancelled = true;
     };
-  }, [config.noteId]);
+  }, [config.noteId, paneId, updatePaneTitle]);
 
   // Flush pending save on unmount + save on visibility change (app closing/hiding)
   useEffect(() => {
-    const flushSave = () => {
+    const flushSave = (options?: { allowStateUpdate?: boolean }) => {
       if (saveTimer.current) {
         clearTimeout(saveTimer.current);
         saveTimer.current = null;
@@ -129,26 +172,28 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
       }
 
       const result = window.api.notes.saveSync(config.noteId, md);
-      if (result && typeof result === "object" && "error" in result) {
-        console.error("[NotePane] Save failed:", result.error);
-      }
+      handleSaveResult(result, options);
     };
 
     const handleVisibility = () => {
       if (document.visibilityState === "hidden") {
-        flushSave();
+        flushSave({ allowStateUpdate: true });
       }
     };
 
+    const handleBeforeUnload = () => {
+      flushSave({ allowStateUpdate: false });
+    };
+
     document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("beforeunload", flushSave);
+    window.addEventListener("beforeunload", handleBeforeUnload);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("beforeunload", flushSave);
-      flushSave();
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+      flushSave({ allowStateUpdate: false });
     };
-  }, [config.noteId]);
+  }, [config.noteId, handleSaveResult]);
 
   const handleChange = useCallback(
     ({ value, editor, markdown, serializationError }: NoteEditorChangeContext) => {

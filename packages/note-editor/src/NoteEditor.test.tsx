@@ -187,7 +187,7 @@ test("surfaces serialization failures without corrupting persisted markdown", as
   });
 });
 
-test("focuses the editor when clicking the blank editor surface", async () => {
+test("preserves the existing selection when clicking the blank editor surface", async () => {
   vi.useFakeTimers();
   const select = vi.fn();
   const focus = vi.fn();
@@ -195,6 +195,49 @@ test("focuses the editor when clicking the blank editor surface", async () => {
     api: {
       end: vi.fn(() => ({ path: [0, 0], offset: 0 })),
     },
+    selection: { anchor: { path: [0, 0], offset: 1 }, focus: { path: [0, 0], offset: 1 } },
+    tf: {
+      focus,
+      select,
+    },
+    getApi: vi.fn(() => ({
+      markdown: {
+        serialize: vi.fn(() => ""),
+      },
+    })),
+  };
+  noteEditorMocks.usePlateEditor.mockReturnValue(mockEditor);
+
+  await act(async () => {
+    root?.render(<NoteEditor initialValue={[]} onChange={vi.fn()} />);
+  });
+
+  const target = document.createElement("div");
+
+  await act(async () => {
+    noteEditorMocks.editorProps.onMouseDown?.({
+      currentTarget: target,
+      target,
+    });
+    vi.runAllTimers();
+  });
+
+  expect(mockEditor.api.end).not.toHaveBeenCalled();
+  expect(select).not.toHaveBeenCalled();
+  expect(focus).toHaveBeenCalledTimes(1);
+
+  vi.useRealTimers();
+});
+
+test("falls back to the document end when no selection exists", async () => {
+  vi.useFakeTimers();
+  const select = vi.fn();
+  const focus = vi.fn();
+  const mockEditor = {
+    api: {
+      end: vi.fn(() => ({ path: [0, 0], offset: 0 })),
+    },
+    selection: null,
     tf: {
       focus,
       select,

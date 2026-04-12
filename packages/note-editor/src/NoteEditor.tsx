@@ -66,11 +66,16 @@ export function NoteEditor({ initialValue, onChange }: NoteEditorProps) {
       }
 
       requestAnimationFrame(() => {
+        editor.tf.focus();
+
+        if (editor.selection) {
+          return;
+        }
+
         const end = editor.api.end([]);
         if (end) {
           editor.tf.select(end);
         }
-        editor.tf.focus();
       });
     },
     [editor],
