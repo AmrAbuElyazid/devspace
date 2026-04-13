@@ -126,7 +126,7 @@ Mixed-workspace Electron stress pass (builds the app, then cycles terminal/brows
 bun run --cwd apps/desktop test:e2e:stress
 ```
 
-Hidden-terminal retention pass (builds the app, creates multiple terminal tabs, switches away to verify inactive-workspace terminal eviction, then destroys the workspace while printing memory and lifecycle snapshots):
+Hidden-terminal retention pass (builds the app, creates multiple terminal tabs, switches away to verify inactive-workspace terminal retention, then destroys the workspace while printing memory and lifecycle snapshots):
 
 ```bash
 bun run --cwd apps/desktop test:e2e:hidden-retention

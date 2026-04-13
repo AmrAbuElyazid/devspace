@@ -29,7 +29,7 @@ function summarizeWorkingSetByType(
 }
 
 test.describe("Stress: hidden terminal retention", () => {
-  test("evicts inactive-workspace terminal surfaces on workspace switch", async () => {
+  test("retains inactive-workspace terminal surfaces until the workspace closes", async () => {
     const { app, page } = await launchApp();
 
     try {
@@ -123,12 +123,8 @@ test.describe("Stress: hidden terminal retention", () => {
         getOperationCount(afterCreate, "terminal.createSurface") -
         getOperationCount(baseline, "terminal.createSurface") +
         1;
-      const destroyedDuringCreate =
-        getOperationCount(afterCreate, "terminal.destroySurface") -
-        getOperationCount(baseline, "terminal.destroySurface");
 
       expect(createdDuringScenario).toBe(TERMINAL_COUNT);
-      expect(destroyedDuringCreate).toBe(0);
       expect(getOperationCount(afterCreate, "terminal.setVisibleSurfaces")).toBeGreaterThanOrEqual(
         TERMINAL_COUNT,
       );
@@ -148,13 +144,13 @@ test.describe("Stress: hidden terminal retention", () => {
 
       const afterHide = await getPerformanceSnapshot(page);
       const afterHideNativeViews = await getNativeViewSnapshot(page);
-      const destroyedWhileHidden =
+      const destroyedOnWorkspaceSwitch =
         getOperationCount(afterHide, "terminal.destroySurface") -
-        getOperationCount(baseline, "terminal.destroySurface");
-      const retainedHiddenSurfaces = TERMINAL_COUNT - destroyedWhileHidden;
+        getOperationCount(afterCreate, "terminal.destroySurface");
+      const retainedHiddenSurfaces = TERMINAL_COUNT - destroyedOnWorkspaceSwitch;
 
-      expect(destroyedWhileHidden).toBe(TERMINAL_COUNT);
-      expect(retainedHiddenSurfaces).toBe(0);
+      expect(destroyedOnWorkspaceSwitch).toBe(0);
+      expect(retainedHiddenSurfaces).toBe(TERMINAL_COUNT);
       expect(afterHideNativeViews.visible.total).toBeLessThanOrEqual(1);
 
       await page.evaluate((workspaceId) => {
@@ -171,17 +167,19 @@ test.describe("Stress: hidden terminal retention", () => {
 
       const afterDestroy = await getPerformanceSnapshot(page);
       const afterDestroyNativeViews = await getNativeViewSnapshot(page);
-
-      expect(
+      const destroyedOnWorkspaceRemoval =
         getOperationCount(afterDestroy, "terminal.destroySurface") -
-          getOperationCount(baseline, "terminal.destroySurface"),
-      ).toBe(TERMINAL_COUNT);
+        getOperationCount(afterHide, "terminal.destroySurface");
+
+      expect(destroyedOnWorkspaceRemoval).toBe(TERMINAL_COUNT);
 
       console.log(
         JSON.stringify(
           {
             terminalCount: TERMINAL_COUNT,
             retainedHiddenSurfaces,
+            destroyedOnWorkspaceSwitch,
+            destroyedOnWorkspaceRemoval,
             memory: {
               baselineRss: baseline.main.process.memory.rss,
               afterCreateRss: afterCreate.main.process.memory.rss,

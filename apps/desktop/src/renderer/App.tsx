@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, memo } from "react";
+import { createContext, useContext, useEffect, memo } from "react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { useWorkspaceStore } from "./store/workspace-store";
 import { useSettingsStore } from "./store/settings-store";
@@ -16,7 +16,6 @@ import { PanePickerDialog } from "./components/PanePickerDialog";
 import { ToastViewport } from "./components/ui/toast";
 import { FolderClosed } from "lucide-react";
 import { findFolder } from "./lib/sidebar-tree";
-import { destroyTrackedTerminalSurfaces } from "./lib/terminal-surface-session";
 
 /** Context for which modifier key is currently held (for shortcut hint badges). */
 const ModifierHeldContext = createContext<HeldModifier>(null);
@@ -62,7 +61,6 @@ export default function App() {
   const settingsOpen = useSettingsStore((s) => s.settingsOpen);
   const sidebarOpen = useSettingsStore((s) => s.sidebarOpen);
   const keepVscodeServerRunning = useSettingsStore((s) => s.keepVscodeServerRunning);
-  const previousActiveWorkspaceIdRef = useRef<string | null>(null);
 
   const dnd = useDndOrchestrator();
   const activeDrag = useActiveDrag();
@@ -99,27 +97,6 @@ export default function App() {
     window.api.window.setSidebarOpen(sidebarOpen);
   }, [sidebarOpen]);
 
-  useEffect(() => {
-    const previousWorkspaceId = previousActiveWorkspaceIdRef.current;
-    previousActiveWorkspaceIdRef.current = activeWorkspaceId;
-
-    if (!previousWorkspaceId || previousWorkspaceId === activeWorkspaceId) {
-      return;
-    }
-
-    const state = useWorkspaceStore.getState();
-    const hiddenWorkspaceTerminalPaneIds = Object.entries(state.paneOwnersByPaneId)
-      .filter(
-        ([paneId, owner]) =>
-          owner.workspaceId === previousWorkspaceId && state.panes[paneId]?.type === "terminal",
-      )
-      .map(([paneId]) => paneId);
-
-    destroyTrackedTerminalSurfaces(hiddenWorkspaceTerminalPaneIds, (paneId) => {
-      void window.api.terminal.destroy(paneId);
-    });
-  }, [activeWorkspaceId]);
-
   // ── Layout ───────────────────────────────────────────────────────────
   return (
     <ModifierHeldContext.Provider value={modifierHeld}>
@@ -137,8 +114,8 @@ export default function App() {
           <div className="app-main">
             <div className="app-content">
               {/* Only mount the active workspace layer so hidden work scales with
-                what is visible. Terminal surfaces in inactive workspaces are
-                retired on workspace switch to keep retention bounded. */}
+                what is visible. Native panes survive workspace switches via the
+                per-pane session tracking in their own components. */}
               {activeWorkspaceId ? (
                 <WorkspaceLayer
                   key={activeWorkspaceId}
