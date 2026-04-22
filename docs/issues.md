@@ -6,7 +6,77 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 
 ## Open
 
-No currently open tactical issues are tracked here.
+### 1. Embedded VS Code Shortcuts Still Get Stolen
+
+- Status: open
+- Priority: high
+- Type: editor usability regression
+- Summary: embedded VS Code panes still lose common editor shortcuts like copy, paste, and save even though Devspace is supposed to yield normal command/control shortcuts back to VS Code.
+- Notes: current shortcut ownership code says this should already be fixed, so treat this as a regression against the existing editor shortcut handoff rather than a net-new integration gap.
+- Relevant files: `apps/desktop/src/main/browser/browser-web-shortcuts.ts`, `apps/desktop/src/main/browser/browser-pane-webcontents-events.ts`, `apps/desktop/src/main/ipc/terminal-editor.ts`
+
+### 2. Embedded VS Code Auto-Saves Immediately And Never Shows Dirty State
+
+- Status: open
+- Priority: high
+- Type: editor integration investigation
+- Summary: embedded VS Code panes appear to save immediately while editing and do not show the normal dirty indicator in the title.
+- Notes: Devspace does not appear to set `files.autoSave` itself, so the leading hypothesis is persisted VS Code-side settings or profile state inside the embedded editor environment rather than explicit Devspace save wiring. This still needs real reproduction and confirmation.
+- Relevant files: `.vscode/settings.json`, `apps/desktop/src/renderer/components/EditorPane.tsx`, `apps/desktop/src/main/vscode-server.ts`
+
+### 3. Browser Pane Does Not Reliably Regain Native Focus On Click
+
+- Status: open
+- Priority: high
+- Type: browser/native focus bug
+- Summary: selecting or clicking an already-visible browser pane can update renderer focus state without restoring native keyboard focus into the underlying browser view.
+- Notes: browser/editor/t3code panes currently auto-focus when they first become visible, but not when focus later moves between split groups or tabs while the native view is already mounted.
+- Relevant files: `apps/desktop/src/renderer/components/browser/useBrowserPaneController.ts`, `apps/desktop/src/renderer/components/EditorPane.tsx`, `apps/desktop/src/renderer/components/T3CodePane.tsx`, `apps/desktop/src/renderer/components/PaneGroupContainer.tsx`, `apps/desktop/src/renderer/components/GroupTabBar.tsx`
+
+### 4. Browser Auto-Refresh Still Steals Focus
+
+- Status: open
+- Priority: high
+- Type: browser usability regression
+- Summary: browser pane reloads and localhost auto-refreshes can still steal focus away from the pane the user is actively working in.
+- Notes: current main-process focus propagation includes pointer-gating intended to prevent this, so if the bug is still reproducible it should be treated as a regression against that earlier fix and covered with stronger integration testing.
+- Relevant files: `apps/desktop/src/main/browser/browser-pane-webcontents-events.ts`, `apps/desktop/src/renderer/hooks/useBrowserBridge.ts`, `apps/desktop/src/main/browser/__tests__/browser-pane-manager.test.ts`
+
+### 5. Terminal Sometimes Needs A Re-Focus Resize To Recover Correct Size
+
+- Status: open
+- Priority: high
+- Type: terminal/native-view bug
+- Summary: terminal apps can end up with a stale size after focus churn, and focusing back into the pane does not reliably re-apply the correct size until the window or split is manually resized.
+- Notes: the practical requirement here is to force a reliable terminal resize/reflow when focus returns so TUIs and full-screen terminal apps recover immediately instead of waiting for a later layout event.
+- Relevant files: `apps/desktop/src/renderer/components/TerminalPane.tsx`, `apps/desktop/src/renderer/hooks/useNativeView.ts`, `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/hooks/app-shortcut-actions.ts`
+
+### 6. Tab Reorder Drag Still Feels Unreliable
+
+- Status: open
+- Priority: medium
+- Type: interaction regression
+- Summary: tab reordering still does not feel reliable in practice even though the earlier reorder-index and insertion-marker stabilization work landed.
+- Notes: the remaining issue is likely around focus or native-view interference during drag start and drag-over, not the basic destination-index calculation itself.
+- Relevant files: `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/lib/dnd/handlers/tab-reorder.ts`, `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`
+
+### 7. New Notes Should Auto-Focus And Avoid The Blank-Page Effect
+
+- Status: open
+- Priority: medium
+- Type: notes UX polish
+- Summary: creating a new note should put the caret into the editor immediately and make the empty state feel intentional instead of blank.
+- Notes: the note editor already has a `Start writing...` placeholder plugin, but note panes do not currently participate in the native pane focus flow and the editor only focuses on click.
+- Relevant files: `apps/desktop/src/renderer/components/PaneGroupContent.tsx`, `apps/desktop/src/renderer/components/note/NotePane.tsx`, `packages/note-editor/src/NoteEditor.tsx`, `packages/note-editor/src/plugins/block-placeholder-kit.tsx`
+
+### 8. Ghostty Terminals Do Not Fully Track Devspace Dark/Light Mode
+
+- Status: open
+- Priority: medium
+- Type: terminal theme integration bug
+- Summary: native Ghostty terminal panes do not reliably pick up Devspace dark/light mode state.
+- Notes: Devspace theme handling is currently renderer-only, and Ghostty's native appearance sync likely misses the initial surface-attachment path. Explicit Devspace `dark` and `light` mode also are not currently plumbed into native terminal theme state.
+- Relevant files: `apps/desktop/src/renderer/hooks/useTheme.ts`, `apps/desktop/src/renderer/store/settings-store.ts`, `packages/ghostty-electron/native/ghostty_bridge.mm`
 
 ## Completed
 
