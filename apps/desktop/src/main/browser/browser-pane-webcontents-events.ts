@@ -16,6 +16,10 @@ type WebContentsEventEmitter = {
   on: (event: string, listener: (...args: unknown[]) => void) => void;
 };
 
+type FocusableWebContents = {
+  isFocused?: () => boolean;
+};
+
 type FoundInPageResult = {
   activeMatchOrdinal?: number;
   matches?: number;
@@ -73,7 +77,8 @@ export function registerBrowserPaneWebContentsListeners({
 }: BrowserPaneWebContentsListenerDeps): void {
   let lastPointerDownAt = 0;
   const webContents = pane.view.webContents as Electron.WebContents &
-    Partial<WebContentsEventEmitter>;
+    Partial<WebContentsEventEmitter> &
+    FocusableWebContents;
   const setWindowOpenHandler = (
     webContents as {
       setWindowOpenHandler?: (
@@ -118,6 +123,11 @@ export function registerBrowserPaneWebContentsListeners({
         ? mouseInput.type
         : undefined;
     if (type === "mouseDown") {
+      if (typeof webContents.isFocused === "function" && webContents.isFocused()) {
+        lastPointerDownAt = 0;
+        return;
+      }
+
       lastPointerDownAt = Date.now();
     }
   });
@@ -132,6 +142,7 @@ export function registerBrowserPaneWebContentsListeners({
   });
 
   webContents.on("blur", () => {
+    lastPointerDownAt = 0;
     sendToRenderer("window:nativeModifierChanged", null);
   });
 

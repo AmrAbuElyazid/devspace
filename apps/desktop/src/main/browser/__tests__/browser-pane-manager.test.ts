@@ -225,6 +225,67 @@ test("focus events without a preceding pointer interaction are ignored", () => {
   expect(rendererMessages).toEqual([]);
 });
 
+test("clicks inside an already focused webcontents do not arm a later focus sync", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          isFocused: () => true,
+          loadURL: () => Promise.resolve(),
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload });
+    },
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  rendererMessages.length = 0;
+
+  listeners.get("before-mouse-event")?.({}, { type: "mouseDown" });
+  listeners.get("focus")?.();
+
+  expect(rendererMessages).toEqual([]);
+});
+
+test("blur clears pending pointer-driven focus forwarding", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          isFocused: () => false,
+          loadURL: () => Promise.resolve(),
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload });
+    },
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  rendererMessages.length = 0;
+
+  listeners.get("before-mouse-event")?.({}, { type: "mouseDown" });
+  listeners.get("blur")?.();
+  listeners.get("focus")?.();
+
+  expect(rendererMessages).toEqual([{ channel: "window:nativeModifierChanged", payload: null }]);
+});
+
 test("before-input-event routes app-owned shortcuts and modifier hints from webcontents", () => {
   const listeners = new Map<string, (...args: unknown[]) => void>();
   const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
