@@ -6,23 +6,7 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 
 ## Open
 
-### 1. Browser Pane Does Not Reliably Regain Native Focus When Selected Indirectly
-
-- Status: open
-- Priority: high
-- Type: browser/native focus bug
-- Summary: switching to an already-mounted browser/editor/t3code pane through tab selection or split-group focus can still leave the native web contents without keyboard focus even when the workspace/tab state is correct.
-- Notes: pane-content clicks now correctly sync pane activation and active tab state after `93530e7`, so any remaining repro here should be treated as a native first-responder restoration problem on tab/group selection rather than a pane/tab desync.
-- Relevant files: `apps/desktop/src/renderer/components/browser/useBrowserPaneController.ts`, `apps/desktop/src/renderer/components/EditorPane.tsx`, `apps/desktop/src/renderer/components/T3CodePane.tsx`, `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/lib/native-pane-focus.ts`
-
-### 2. Tab Reorder Drag Still Feels Unreliable
-
-- Status: open
-- Priority: medium
-- Type: interaction regression
-- Summary: tab reordering still does not feel reliable in practice even though the earlier reorder-index and insertion-marker stabilization work landed.
-- Notes: the remaining issue is likely around focus or native-view interference during drag start and drag-over, not the basic destination-index calculation itself.
-- Relevant files: `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/lib/dnd/handlers/tab-reorder.ts`, `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`
+- None currently tracked.
 
 ## Completed
 
@@ -201,3 +185,23 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Relevant files: `apps/desktop/src/renderer/components/EditorPane.tsx`, `apps/desktop/src/renderer/hooks/useBrowserBridge.ts`, `apps/desktop/src/renderer/store/slices/group-tabs.ts`
 - Commit: `42df45f` `fix: surface editor dirty state in compact VC tabs`
 - User follow-up: disable or adjust `files.autoSave` in the embedded VS Code user settings/profile when manual-save behavior is desired.
+
+### 19. Browser Pane Did Not Reliably Regain Native Focus When Selected Indirectly
+
+- Status: fixed
+- Priority: high
+- Type: browser/native focus bug
+- Resolution: after the pane activation and native focus sync hardening landed, this repro is no longer observed in testing. The remaining code paths around tab/group selection, native-pane focus restoration, and webcontents focus handoff do not currently show an obvious gap worth additional product hardening.
+- Relevant files: `apps/desktop/src/renderer/components/browser/useBrowserPaneController.ts`, `apps/desktop/src/renderer/components/EditorPane.tsx`, `apps/desktop/src/renderer/components/T3CodePane.tsx`, `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/lib/native-pane-focus.ts`
+- Commit: `93530e7` `fix: keep pane activation synced with native focus`
+
+### 20. Tab Reorder Drag Felt Unreliable After Native-Focus Interference
+
+- Status: fixed
+- Priority: medium
+- Type: interaction regression
+- Resolution: the existing reorder-index and insertion-marker stabilization work remains in place, and after the native pane activation/focus fixes landed the remaining unreliable drag repro is no longer observed. Review of the current tab drag, collision filtering, and native-view hiding paths did not reveal an obvious additional hardening change to make right now.
+- Relevant files: `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/lib/dnd/handlers/tab-reorder.ts`, `apps/desktop/src/renderer/store/native-view-store.ts`, `apps/desktop/src/renderer/hooks/useDndOrchestrator.ts`
+- Commits:
+  - `341b245` `fix: stabilize drag interactions`
+  - `93530e7` `fix: keep pane activation synced with native focus`
