@@ -3,7 +3,11 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { BrowserContextMenuRequest, BrowserPermissionRequest } from "../../shared/browser";
+import type {
+  BrowserContextMenuRequest,
+  BrowserPermissionRequest,
+  BrowserRuntimeState,
+} from "../../shared/browser";
 import { installMockWindowApi } from "../test-utils/mock-window-api";
 import { useBrowserBridge } from "./useBrowserBridge";
 
@@ -17,12 +21,16 @@ const browserBridgeMocks = vi.hoisted(() => ({
   updateBrowserPaneZoom: vi.fn(),
   openBrowserInGroup: vi.fn(),
   syncWorkspaceFocusForPane: vi.fn(),
+  stateChangeHandler: null as null | ((state: BrowserRuntimeState) => void),
   contextMenuRequestHandler: null as
     | null
     | ((request: BrowserContextMenuRequest) => void | Promise<void>),
   permissionRequestHandler: null as null | ((request: BrowserPermissionRequest) => void),
   focusedHandler: null as null | ((paneId: string) => void),
-  onStateChange: vi.fn(() => () => {}),
+  onStateChange: vi.fn((callback: (state: BrowserRuntimeState) => void) => {
+    browserBridgeMocks.stateChangeHandler = callback;
+    return () => {};
+  }),
   onFocused: vi.fn((callback: (paneId: string) => void) => {
     browserBridgeMocks.focusedHandler = callback;
     return () => {};
@@ -135,6 +143,7 @@ beforeEach(async () => {
   browserBridgeMocks.updateBrowserPaneZoom.mockReset();
   browserBridgeMocks.openBrowserInGroup.mockReset();
   browserBridgeMocks.syncWorkspaceFocusForPane.mockReset();
+  browserBridgeMocks.stateChangeHandler = null;
   browserBridgeMocks.contextMenuRequestHandler = null;
   browserBridgeMocks.permissionRequestHandler = null;
   browserBridgeMocks.focusedHandler = null;
@@ -151,6 +160,17 @@ beforeEach(async () => {
   browserBridgeMocks.contextMenuShow.mockReset();
   browserBridgeMocks.findWorkspaceIdForPane.mockReset();
   browserBridgeMocks.findWorkspaceIdForPane.mockReturnValue("workspace-1");
+  browserBridgeMocks.workspaceState = {
+    workspaces: [
+      {
+        id: "workspace-1",
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+      },
+    ],
+    paneGroups: {},
+    panes: {},
+  };
 
   installMockWindowApi({
     browser: {
@@ -296,4 +316,115 @@ test("queues permission requests without denying an earlier pane", async () => {
     permissionType: "camera",
     requestToken: "token-1",
   });
+});
+
+test("syncs managed editor pane titles from VS Code runtime state", async () => {
+  browserBridgeMocks.workspaceState.panes = {
+    "pane-1": {
+      id: "pane-1",
+      type: "editor",
+      title: "VC: project",
+      config: { folderPath: "/tmp/project" },
+    },
+  };
+
+  expect(browserBridgeMocks.stateChangeHandler).toBeTypeOf("function");
+  const handler = browserBridgeMocks.stateChangeHandler;
+  if (!handler) {
+    throw new Error("expected useBrowserBridge to register a state change handler");
+  }
+
+  await act(async () => {
+    handler({
+      paneId: "pane-1",
+      url: "http://127.0.0.1:18562/devspace-vscode?tkn=secret&folder=%2Ftmp%2Fproject",
+      title: "● README.md - project - Visual Studio Code",
+      faviconUrl: null,
+      isLoading: false,
+      canGoBack: false,
+      canGoForward: false,
+      isSecure: false,
+      securityLabel: null,
+      currentZoom: 1,
+      find: null,
+      failure: null,
+    });
+  });
+
+  expect(browserBridgeMocks.updatePaneTitle).toHaveBeenCalledWith(
+    "pane-1",
+    "VC: ● README.md - project",
+  );
+});
+
+test("does not overwrite custom editor pane titles", async () => {
+  browserBridgeMocks.workspaceState.panes = {
+    "pane-1": {
+      id: "pane-1",
+      type: "editor",
+      title: "Pinned docs",
+      config: { folderPath: "/tmp/project" },
+    },
+  };
+
+  expect(browserBridgeMocks.stateChangeHandler).toBeTypeOf("function");
+  const handler = browserBridgeMocks.stateChangeHandler;
+  if (!handler) {
+    throw new Error("expected useBrowserBridge to register a state change handler");
+  }
+
+  await act(async () => {
+    handler({
+      paneId: "pane-1",
+      url: "http://127.0.0.1:18562/devspace-vscode?tkn=secret&folder=%2Ftmp%2Fproject",
+      title: "● README.md - project - Visual Studio Code",
+      faviconUrl: null,
+      isLoading: false,
+      canGoBack: false,
+      canGoForward: false,
+      isSecure: false,
+      securityLabel: null,
+      currentZoom: 1,
+      find: null,
+      failure: null,
+    });
+  });
+
+  expect(browserBridgeMocks.updatePaneTitle).not.toHaveBeenCalled();
+});
+
+test("keeps the default folder title when VS Code reports only its product name", async () => {
+  browserBridgeMocks.workspaceState.panes = {
+    "pane-1": {
+      id: "pane-1",
+      type: "editor",
+      title: "VC: project",
+      config: { folderPath: "/tmp/project" },
+    },
+  };
+
+  expect(browserBridgeMocks.stateChangeHandler).toBeTypeOf("function");
+  const handler = browserBridgeMocks.stateChangeHandler;
+  if (!handler) {
+    throw new Error("expected useBrowserBridge to register a state change handler");
+  }
+
+  await act(async () => {
+    handler({
+      paneId: "pane-1",
+      url: "http://127.0.0.1:18562/devspace-vscode?tkn=secret&folder=%2Ftmp%2Fproject",
+      title: "Visual Studio Code",
+      faviconUrl: null,
+      isLoading: false,
+      canGoBack: false,
+      canGoForward: false,
+      isSecure: false,
+      securityLabel: null,
+      currentZoom: 1,
+      find: null,
+      failure: null,
+    });
+  });
+
+  expect(browserBridgeMocks.updatePaneTitle).not.toHaveBeenCalled();
 });

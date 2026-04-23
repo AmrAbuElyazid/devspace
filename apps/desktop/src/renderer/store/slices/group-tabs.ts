@@ -322,7 +322,7 @@ export function createGroupTabsSlice(
       const pane: Pane = {
         id: nanoid(),
         type: "editor",
-        title: `VS Code: ${folderName}`,
+        title: `VC: ${folderName}`,
         config: { folderPath },
       };
       const appendedState = appendPaneToGroupState({

@@ -141,7 +141,7 @@ export default function EditorPane({ paneId, config, isFocused }: EditorPaneProp
       startedEditors.add(paneId);
       if (stateFolderPath) {
         const folderName = stateFolderPath.split("/").pop() || stateFolderPath;
-        updatePaneTitle(paneId, `VS Code: ${folderName}`);
+        updatePaneTitle(paneId, `VC: ${folderName}`);
         updatePaneConfig(paneId, { folderPath: stateFolderPath });
       } else {
         updatePaneTitle(paneId, "VS Code");

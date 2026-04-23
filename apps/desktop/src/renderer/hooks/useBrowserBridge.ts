@@ -11,6 +11,40 @@ import { extractEditorFolderFromUrl } from "../lib/editor-url";
 import { syncWorkspaceFocusForPane } from "../lib/native-pane-focus";
 import type { BrowserBridgeListeners, BrowserBridgeUnsubscribe } from "../../shared/types";
 
+const VSCODE_WEB_TITLE_SUFFIX = " - Visual Studio Code";
+const VSCODE_WEB_PRODUCT_TITLE = "Visual Studio Code";
+
+function getDefaultEditorPaneTitle(folderPath?: string): string {
+  if (!folderPath) {
+    return "VS Code";
+  }
+
+  const folderName = folderPath.split("/").pop() || folderPath;
+  return `VC: ${folderName}`;
+}
+
+function getManagedEditorPaneTitle(
+  currentTitle: string,
+  folderPath: string | undefined,
+  runtimeTitle: string,
+): string | null {
+  if (currentTitle !== "VS Code" && !currentTitle.startsWith("VC:")) {
+    return null;
+  }
+
+  const defaultTitle = getDefaultEditorPaneTitle(folderPath);
+  const trimmedRuntimeTitle = runtimeTitle.trim();
+  const normalizedRuntimeTitle = trimmedRuntimeTitle.endsWith(VSCODE_WEB_TITLE_SUFFIX)
+    ? trimmedRuntimeTitle.slice(0, -VSCODE_WEB_TITLE_SUFFIX.length).trim()
+    : trimmedRuntimeTitle;
+  const nextTitle =
+    normalizedRuntimeTitle.length > 0 && normalizedRuntimeTitle !== VSCODE_WEB_PRODUCT_TITLE
+      ? `VC: ${normalizedRuntimeTitle}`
+      : defaultTitle;
+
+  return nextTitle === currentTitle ? null : nextTitle;
+}
+
 function subscribeToBrowserEvents(listeners: BrowserBridgeListeners): BrowserBridgeUnsubscribe {
   const disposers: BrowserBridgeUnsubscribe[] = [];
 
@@ -65,6 +99,20 @@ export function useBrowserBridge(): void {
             updateBrowserPaneZoom(paneId, zoom);
           },
         });
+
+        const pane = useWorkspaceStore.getState().panes[state.paneId];
+        if (pane?.type !== "editor") {
+          return;
+        }
+
+        const nextTitle = getManagedEditorPaneTitle(
+          pane.title,
+          pane.config.folderPath,
+          state.title,
+        );
+        if (nextTitle) {
+          updatePaneTitle(state.paneId, nextTitle);
+        }
       },
       onFocused: (paneId) => {
         syncWorkspaceFocusForPane(paneId);
@@ -168,7 +216,7 @@ export function useBrowserBridge(): void {
             void window.api.browser.navigate(request.paneId, request.url);
             const folderName = folderPath.split("/").pop() || folderPath;
             updatePaneConfig(request.paneId, { folderPath });
-            updatePaneTitle(request.paneId, `VS Code: ${folderName}`);
+            updatePaneTitle(request.paneId, `VC: ${folderName}`);
             return;
           }
         }
