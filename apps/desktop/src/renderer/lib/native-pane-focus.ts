@@ -32,14 +32,25 @@ export function hasEditableRendererFocus(): boolean {
 
 function getWorkspaceGroupForPane(
   paneId: string,
-): { workspace: Workspace; group: PaneGroup } | null {
+): { workspace: Workspace; group: PaneGroup; tabId: string } | null {
   const state = useWorkspaceStore.getState();
+
+  const owner = state.paneOwnersByPaneId[paneId];
+  if (owner) {
+    const workspace = state.workspaces.find((candidate) => candidate.id === owner.workspaceId);
+    const group = state.paneGroups[owner.groupId];
+    const tab = group?.tabs.find((candidate) => candidate.paneId === paneId);
+    if (workspace && group && tab) {
+      return { workspace, group, tabId: tab.id };
+    }
+  }
 
   for (const workspace of state.workspaces) {
     for (const groupId of collectGroupIds(workspace.root)) {
       const group = state.paneGroups[groupId];
-      if (group?.tabs.some((tab) => tab.paneId === paneId)) {
-        return { workspace, group };
+      const tab = group?.tabs.find((candidate) => candidate.paneId === paneId);
+      if (group && tab) {
+        return { workspace, group, tabId: tab.id };
       }
     }
   }
@@ -149,6 +160,9 @@ export function syncWorkspaceFocusForPane(paneId: string): void {
   }
   if (result.workspace.focusedGroupId !== result.group.id) {
     state.setFocusedGroup(result.workspace.id, result.group.id);
+  }
+  if (result.group.activeTabId !== result.tabId) {
+    state.setActiveGroupTab(result.workspace.id, result.group.id, result.tabId);
   }
 }
 

@@ -12,6 +12,7 @@ import {
 import { useDroppable } from "@dnd-kit/core";
 
 import { paneTypeIcons, paneTypeLabels } from "../lib/pane-type-meta";
+import { syncWorkspaceFocusForPane } from "../lib/native-pane-focus";
 import { useWorkspaceStore } from "../store/workspace-store";
 import type {
   BrowserConfig,
@@ -236,8 +237,17 @@ const TabLayer = memo(function TabLayer({
   const pane = useWorkspaceStore((s) => s.panes[tab.paneId]);
   if (!pane) return null;
 
+  const handleActivate = useCallback(() => {
+    syncWorkspaceFocusForPane(tab.paneId);
+  }, [tab.paneId]);
+
   return (
-    <div className="pane-tab-layer" data-active>
+    <div
+      className="pane-tab-layer"
+      data-active
+      onMouseDownCapture={handleActivate}
+      onFocusCapture={handleActivate}
+    >
       <PaneContent
         paneId={tab.paneId}
         paneType={pane.type}

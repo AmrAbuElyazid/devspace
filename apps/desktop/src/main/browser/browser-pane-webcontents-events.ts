@@ -169,6 +169,7 @@ export function registerBrowserPaneWebContentsListeners({
     if (type === "mouseDown") {
       if (typeof webContents.isFocused === "function" && webContents.isFocused()) {
         lastPointerDownAt = 0;
+        sendToRenderer("browser:focused", pane.runtimeState.paneId);
         return;
       }
 

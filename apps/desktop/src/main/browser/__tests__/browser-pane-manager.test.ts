@@ -225,7 +225,7 @@ test("focus events without a preceding pointer interaction are ignored", () => {
   expect(rendererMessages).toEqual([]);
 });
 
-test("clicks inside an already focused webcontents do not arm a later focus sync", () => {
+test("clicks inside an already focused webcontents immediately sync pane focus", () => {
   const listeners = new Map<string, (...args: unknown[]) => void>();
   const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
   const manager = new BrowserPaneManager({
@@ -252,7 +252,7 @@ test("clicks inside an already focused webcontents do not arm a later focus sync
   listeners.get("before-mouse-event")?.({}, { type: "mouseDown" });
   listeners.get("focus")?.();
 
-  expect(rendererMessages).toEqual([]);
+  expect(rendererMessages).toEqual([{ channel: "browser:focused", payload: "pane-1" }]);
 });
 
 test("blur clears pending pointer-driven focus forwarding", () => {

@@ -70,6 +70,19 @@ GhosttyAppState g_state;
     ghostty_surface_refresh(self.surface);
 }
 
+- (void)notifySurfaceFocused {
+    if (!self.tabId || !g_state.surfaceFocusedCallback) {
+        return;
+    }
+
+    std::string sid = [self.tabId UTF8String];
+    g_state.surfaceFocusedCallback.NonBlockingCall(
+        [sid](Napi::Env env, Napi::Function fn) {
+            fn.Call({ Napi::String::New(env, sid) });
+        }
+    );
+}
+
 - (BOOL)acceptsFirstResponder { return YES; }
 
 - (BOOL)becomeFirstResponder {
@@ -82,14 +95,7 @@ GhosttyAppState g_state;
         }
         // Notify JS that this surface received focus so the renderer
         // can update focusedGroupId for correct shortcut dispatch.
-        if (self.tabId && g_state.surfaceFocusedCallback) {
-            std::string sid = [self.tabId UTF8String];
-            g_state.surfaceFocusedCallback.NonBlockingCall(
-                [sid](Napi::Env env, Napi::Function fn) {
-                    fn.Call({ Napi::String::New(env, sid) });
-                }
-            );
-        }
+        [self notifySurfaceFocused];
     }
 
     [self refreshSurfaceLayoutAfterFocus];
@@ -843,6 +849,9 @@ static void resetModifierStateForFocusLoss() {
 
 - (void)mouseDown:(NSEvent*)event {
     if (!self.surface) return;
+    if (self.lastFocusState) {
+        [self notifySurfaceFocused];
+    }
     NSPoint pos = [self convertPoint:event.locationInWindow fromView:nil];
     ghostty_surface_mouse_pos(self.surface, pos.x, self.frame.size.height - pos.y,
                                translateMods(event.modifierFlags));
@@ -858,6 +867,9 @@ static void resetModifierStateForFocusLoss() {
 
 - (void)rightMouseDown:(NSEvent*)event {
     if (!self.surface) return;
+    if (self.lastFocusState) {
+        [self notifySurfaceFocused];
+    }
     if (ghostty_surface_mouse_captured(self.surface)) {
         NSPoint pos = [self convertPoint:event.locationInWindow fromView:nil];
         ghostty_surface_mouse_pos(self.surface, pos.x, self.frame.size.height - pos.y,

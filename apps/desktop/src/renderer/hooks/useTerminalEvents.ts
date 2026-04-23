@@ -3,12 +3,12 @@ import { useWorkspaceStore } from "../store/workspace-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useTerminalStore } from "../store/terminal-store";
 import { markTerminalSurfaceDestroyed } from "../lib/terminal-surface-session";
-import { focusActiveNativePane } from "../lib/native-pane-focus";
+import { focusActiveNativePane, syncWorkspaceFocusForPane } from "../lib/native-pane-focus";
 
 /**
  * Manages terminal-related IPC event subscriptions:
  * - CWD change tracking (for new-tab directory inheritance)
- * - Focus tracking (sync focusedGroupId when native terminal view is clicked)
+ * - Focus tracking (sync workspace, group, and active tab when a native terminal is clicked)
  * - Window focus restoration (re-focus terminal after window regains focus)
  */
 export function useTerminalEvents(): void {
@@ -42,18 +42,12 @@ export function useTerminalEvents(): void {
     });
   }, []);
 
-  // When a native GhosttyView receives focus (user clicks on a terminal pane),
-  // update focusedGroupId so keyboard shortcuts operate on the correct group.
+  // When a native GhosttyView receives focus (or is clicked while already
+  // focused), activate the owning pane so tab/group state stays aligned with
+  // the native first responder.
   useEffect(() => {
     return window.api.terminal.onFocused((surfaceId) => {
-      const state = useWorkspaceStore.getState();
-      const owner = state.paneOwnersByPaneId[surfaceId];
-      if (!owner || owner.workspaceId !== state.activeWorkspaceId) return;
-
-      const ws = state.workspaces.find((w) => w.id === owner.workspaceId);
-      if (ws && ws.focusedGroupId !== owner.groupId) {
-        state.setFocusedGroup(ws.id, owner.groupId);
-      }
+      syncWorkspaceFocusForPane(surfaceId);
     });
   }, []);
 
