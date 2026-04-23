@@ -3,6 +3,7 @@ import type { DevspaceBridge } from "../../shared/types";
 
 const invokeCalls: unknown[][] = [];
 const syncCalls: unknown[][] = [];
+const sendCalls: unknown[][] = [];
 const listenerRegistrations: Array<["on" | "removeListener", string]> = [];
 const listenerCallbacks = new Map<string, (...args: unknown[]) => void>();
 let exposedBridge: DevspaceBridge | undefined;
@@ -23,7 +24,9 @@ vi.mock("../electron-bridge", () => ({
         syncCalls.push(args);
         return undefined;
       },
-      send: (..._args: unknown[]) => {},
+      send: (...args: unknown[]) => {
+        sendCalls.push(args);
+      },
       on: (channel: string, listener: (...args: unknown[]) => void) => {
         listenerRegistrations.push(["on", channel]);
         listenerCallbacks.set(channel, listener);
@@ -48,6 +51,7 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
 
   await bridge.app.getPerformanceSnapshot();
   await bridge.app.resetPerformanceCounters();
+  bridge.window.setThemeMode("dark");
   await bridge.window.isFullScreen();
   await bridge.editor.isAvailable("code-insiders");
   await bridge.editor.getCliStatus("code-insiders");
@@ -169,4 +173,6 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
       },
     ],
   ]);
+
+  expect(sendCalls).toEqual([["window:setThemeMode", "dark"]]);
 });

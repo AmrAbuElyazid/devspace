@@ -10,6 +10,7 @@ import type { NoteEditorChangeContext } from "@devspace/note-editor";
 
 const notePaneMocks = vi.hoisted(() => ({
   onChange: undefined as ((ctx: NoteEditorChangeContext) => void) | undefined,
+  autoFocusValues: [] as boolean[],
   initialValues: [] as Array<unknown>,
   updatePaneTitle: vi.fn(),
   extractNoteTitle: vi.fn((value: Array<{ children?: Array<{ text?: string }> }>) => {
@@ -23,12 +24,15 @@ const notePaneMocks = vi.hoisted(() => ({
 
 vi.mock("@devspace/note-editor", () => ({
   NoteEditor: ({
+    autoFocus,
     initialValue,
     onChange,
   }: {
+    autoFocus?: boolean;
     initialValue: unknown;
     onChange: (ctx: NoteEditorChangeContext) => void;
   }) => {
+    notePaneMocks.autoFocusValues.push(autoFocus === true);
     notePaneMocks.initialValues.push(initialValue);
     notePaneMocks.onChange = onChange;
     return <div data-testid="note-editor" />;
@@ -57,6 +61,7 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
   notePaneMocks.onChange = undefined;
+  notePaneMocks.autoFocusValues = [];
   notePaneMocks.initialValues = [];
   notePaneMocks.updatePaneTitle.mockReset();
   notePaneMocks.extractNoteTitle.mockClear();
@@ -86,7 +91,7 @@ test("shows an error state when note loading fails", async () => {
   const { default: NotePane } = await import("./NotePane");
 
   await act(async () => {
-    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} />);
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
   });
   await flushEffects();
 
@@ -103,7 +108,7 @@ test("reconciles the pane title from loaded markdown content", async () => {
   const { default: NotePane } = await import("./NotePane");
 
   await act(async () => {
-    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} />);
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
   });
   await flushEffects();
 
@@ -116,7 +121,7 @@ test("surfaces serialization failures without saving corrupted content", async (
   const { default: NotePane } = await import("./NotePane");
 
   await act(async () => {
-    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} />);
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
   });
   await flushEffects();
 
@@ -144,7 +149,7 @@ test("flushes pending note edits synchronously before unload", async () => {
   const { default: NotePane } = await import("./NotePane");
 
   await act(async () => {
-    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} />);
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
   });
   await flushEffects();
 
@@ -180,7 +185,7 @@ test("surfaces synchronous flush failures when the app is hidden", async () => {
   });
 
   await act(async () => {
-    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} />);
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
   });
   await flushEffects();
 
@@ -208,4 +213,21 @@ test("surfaces synchronous flush failures when the app is hidden", async () => {
       value: "visible",
     });
   }
+});
+
+test("passes focus state through to the note editor", async () => {
+  installMockWindowApi();
+  const { default: NotePane } = await import("./NotePane");
+
+  await act(async () => {
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={false} />);
+  });
+  await flushEffects();
+
+  await act(async () => {
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
+  });
+
+  expect(notePaneMocks.autoFocusValues).toContain(false);
+  expect(notePaneMocks.autoFocusValues).toContain(true);
 });

@@ -1,4 +1,4 @@
-import { useCallback, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, type MouseEvent } from "react";
 import type { Value } from "platejs";
 import { MarkdownPlugin } from "@platejs/markdown";
 import { type PlateEditor, Plate, usePlateEditor } from "platejs/react";
@@ -17,12 +17,27 @@ export interface NoteEditorChangeContext {
 export type NoteEditorValue = Value;
 
 export interface NoteEditorProps {
+  autoFocus?: boolean;
   initialValue: Value | string;
   onChange: (ctx: NoteEditorChangeContext) => void;
 }
 
-export function NoteEditor({ initialValue, onChange }: NoteEditorProps) {
+function focusEditorAtCurrentSelectionOrEnd(editor: PlateEditor): void {
+  editor.tf.focus();
+
+  if (editor.selection) {
+    return;
+  }
+
+  const end = editor.api.end([]);
+  if (end) {
+    editor.tf.select(end);
+  }
+}
+
+export function NoteEditor({ autoFocus = false, initialValue, onChange }: NoteEditorProps) {
   const plugins = createNoteEditorPlugins();
+  const wasAutoFocusRef = useRef(false);
 
   const editor = usePlateEditor({
     plugins,
@@ -66,20 +81,23 @@ export function NoteEditor({ initialValue, onChange }: NoteEditorProps) {
       }
 
       requestAnimationFrame(() => {
-        editor.tf.focus();
-
-        if (editor.selection) {
-          return;
-        }
-
-        const end = editor.api.end([]);
-        if (end) {
-          editor.tf.select(end);
-        }
+        focusEditorAtCurrentSelectionOrEnd(editor);
       });
     },
     [editor],
   );
+
+  useEffect(() => {
+    const shouldAutoFocus = autoFocus && !wasAutoFocusRef.current;
+    wasAutoFocusRef.current = autoFocus;
+    if (!shouldAutoFocus) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      focusEditorAtCurrentSelectionOrEnd(editor);
+    });
+  }, [autoFocus, editor]);
 
   return (
     <TooltipProvider>

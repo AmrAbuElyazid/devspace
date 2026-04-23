@@ -77,6 +77,10 @@ beforeEach(() => {
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
+  globalThis.requestAnimationFrame = vi.fn((callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
   noteEditorMocks.usePlateEditor.mockReset();
   noteEditorMocks.createNoteEditorPlugins.mockClear();
   noteEditorMocks.tooltipProviderCalls = 0;
@@ -269,4 +273,39 @@ test("falls back to the document end when no selection exists", async () => {
   expect(focus).toHaveBeenCalledTimes(1);
 
   vi.useRealTimers();
+});
+
+test("auto-focuses when the editor becomes focused", async () => {
+  const select = vi.fn();
+  const focus = vi.fn();
+  const mockEditor = {
+    api: {
+      end: vi.fn(() => ({ path: [0, 0], offset: 0 })),
+    },
+    selection: null,
+    tf: {
+      focus,
+      select,
+    },
+    getApi: vi.fn(() => ({
+      markdown: {
+        serialize: vi.fn(() => ""),
+      },
+    })),
+  };
+  noteEditorMocks.usePlateEditor.mockReturnValue(mockEditor);
+
+  await act(async () => {
+    root?.render(<NoteEditor autoFocus={false} initialValue={[]} onChange={vi.fn()} />);
+  });
+
+  expect(focus).not.toHaveBeenCalled();
+
+  await act(async () => {
+    root?.render(<NoteEditor autoFocus={true} initialValue={[]} onChange={vi.fn()} />);
+  });
+
+  expect(mockEditor.api.end).toHaveBeenCalledWith([]);
+  expect(select).toHaveBeenCalledWith({ path: [0, 0], offset: 0 });
+  expect(focus).toHaveBeenCalledTimes(1);
 });

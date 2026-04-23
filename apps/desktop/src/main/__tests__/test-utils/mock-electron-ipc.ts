@@ -7,6 +7,7 @@ type ElectronIpcMockOverrides = {
   dialog?: Record<string, unknown>;
   shell?: Record<string, unknown>;
   menu?: Record<string, unknown>;
+  nativeTheme?: Record<string, unknown>;
 };
 
 function BrowserWindowMock() {}
@@ -41,6 +42,7 @@ export function createElectronIpcMock(
       openExternal: (_url?: string) => {},
       ...overrides.shell,
     },
+    nativeTheme: overrides.nativeTheme ?? { themeSource: "system" },
     Menu: {
       buildFromTemplate: () => ({ popup: () => {} }),
       ...overrides.menu,

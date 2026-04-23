@@ -12,6 +12,7 @@ import { useWorkspaceStore } from "../../store/workspace-store";
 interface NotePaneProps {
   paneId: string;
   config: NoteConfig;
+  isFocused: boolean;
 }
 
 type LoadState = "loading" | "ready" | "error";
@@ -48,7 +49,7 @@ function extractTitleFromMarkdown(markdown: string): string | null {
   return null;
 }
 
-export default function NotePane({ paneId, config }: NotePaneProps) {
+export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [initialValue, setInitialValue] = useState<NoteEditorValue | string>(DEFAULT_VALUE);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -243,7 +244,7 @@ export default function NotePane({ paneId, config }: NotePaneProps) {
   return (
     <div className="note-pane">
       {saveError && <div className="note-save-error">Save failed: {saveError}</div>}
-      <NoteEditor initialValue={initialValue} onChange={handleChange} />
+      <NoteEditor autoFocus={isFocused} initialValue={initialValue} onChange={handleChange} />
     </div>
   );
 }

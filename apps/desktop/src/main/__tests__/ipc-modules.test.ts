@@ -30,6 +30,7 @@ let nextOpenDialogResult: { canceled: boolean; filePaths: string[] } = {
 let builtMenuTemplate: Array<{ label?: string; type?: string; click?: () => void }> = [];
 let lastPopupOptions: Record<string, unknown> | undefined;
 let terminalCreateError: Error | undefined;
+const nativeThemeMock = { themeSource: "system" };
 
 vi.mock("electron", () =>
   createElectronIpcMock(handlers, {
@@ -41,6 +42,7 @@ vi.mock("electron", () =>
         shellCalls.push(url);
       },
     },
+    nativeTheme: nativeThemeMock,
     menu: {
       buildFromTemplate: (
         template: Array<{ label?: string; type?: string; click?: () => void }>,
@@ -580,6 +582,12 @@ test("system IPC forwards window actions and native window events", async () => 
   await emitToChannel("window:close", {});
   await emitToChannel("window:setSidebarOpen", {}, false);
   await emitToChannel("window:setSidebarOpen", {}, true);
+  await emitToChannel("window:setThemeMode", {}, "dark");
+  expect(nativeThemeMock.themeSource).toBe("dark");
+  await emitToChannel("window:setThemeMode", {}, "light");
+  expect(nativeThemeMock.themeSource).toBe("light");
+  await emitToChannel("window:setThemeMode", {}, "system");
+  expect(nativeThemeMock.themeSource).toBe("system");
 
   mainWindowEventHandlers.get("maximize")?.();
   mainWindowEventHandlers.get("unmaximize")?.();

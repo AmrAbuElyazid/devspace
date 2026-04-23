@@ -75,6 +75,7 @@ export interface DevspaceBridge {
     close: () => void;
     focusContent: () => void;
     setSidebarOpen: (open: boolean) => void;
+    setThemeMode: (themeMode: "system" | "dark" | "light") => void;
     isMaximized: () => Promise<boolean>;
     isFullScreen: () => Promise<boolean>;
     onMaximizeChange: (callback: (maximized: boolean) => void) => () => void;

@@ -194,7 +194,11 @@ const PaneContent = memo(function PaneContent({
               </div>
             }
           >
-            <NotePane paneId={paneId} config={(paneConfig as NoteConfig) ?? { noteId: "" }} />
+            <NotePane
+              paneId={paneId}
+              config={(paneConfig as NoteConfig) ?? { noteId: "" }}
+              isFocused={isFocused}
+            />
           </Suspense>
         </NotePaneErrorBoundary>
       );

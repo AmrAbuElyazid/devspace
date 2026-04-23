@@ -1810,6 +1810,7 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
     }
 
     view.surface = surface;
+    [view viewDidChangeEffectiveAppearance];
 
     NSNumber* screenNum = [g_state.window.screen deviceDescription][@"NSScreenNumber"];
     if (screenNum) {

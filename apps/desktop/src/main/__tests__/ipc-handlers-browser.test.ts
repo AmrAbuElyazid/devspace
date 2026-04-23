@@ -7,8 +7,13 @@ const browserImportCalls: unknown[][] = [];
 const editorCalls: unknown[][] = [];
 const mainWindowCalls: unknown[][] = [];
 const browserSessionCalls: unknown[][] = [];
+const nativeThemeMock = { themeSource: "system" };
 
-vi.mock("electron", () => createElectronIpcMock(handlers));
+vi.mock("electron", () =>
+  createElectronIpcMock(handlers, {
+    nativeTheme: nativeThemeMock,
+  }),
+);
 
 const { registerIpcHandlers } = await import("../ipc-handlers");
 
@@ -273,6 +278,18 @@ test("window isFullScreen IPC returns the native fullscreen state", async () => 
   const result = await handlers.get("window:isFullScreen")?.({});
 
   expect(result).toBe(false);
+});
+
+test("window setThemeMode IPC updates Electron nativeTheme", async () => {
+  await handlers.get("window:setThemeMode")?.({}, "dark");
+  expect(nativeThemeMock.themeSource).toBe("dark");
+  await handlers.get("window:setThemeMode")?.({}, "light");
+  expect(nativeThemeMock.themeSource).toBe("light");
+  await handlers.get("window:setThemeMode")?.({}, "system");
+  expect(nativeThemeMock.themeSource).toBe("system");
+  await handlers.get("window:setThemeMode")?.({}, "invalid");
+
+  expect(nativeThemeMock.themeSource).toBe("system");
 });
 
 test("app performance IPC returns a snapshot and supports reset", async () => {

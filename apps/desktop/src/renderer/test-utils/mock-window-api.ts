@@ -80,6 +80,7 @@ function createDefaultWindowApi(): DevspaceBridge {
       close: vi.fn(),
       focusContent: vi.fn(),
       setSidebarOpen: vi.fn(),
+      setThemeMode: vi.fn(),
       isMaximized: vi.fn(async () => false),
       isFullScreen: vi.fn(async () => false),
       onMaximizeChange: vi.fn(() => unsubscribe),

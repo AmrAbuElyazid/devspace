@@ -1,4 +1,4 @@
-import { app, dialog, Menu, shell } from "electron";
+import { app, dialog, Menu, nativeTheme, shell } from "electron";
 import { execFileSync } from "child_process";
 import {
   existsSync,
@@ -59,6 +59,14 @@ export function registerSystemIpc(mainWindow: BrowserWindow): void {
   safeOn("window:setSidebarOpen", (_event, open: unknown) => {
     if (typeof open !== "boolean") return;
     mainWindow.setWindowButtonPosition(getTrafficLightPosition(open));
+  });
+
+  safeOn("window:setThemeMode", (_event, themeMode: unknown) => {
+    if (themeMode !== "system" && themeMode !== "dark" && themeMode !== "light") {
+      return;
+    }
+
+    nativeTheme.themeSource = themeMode;
   });
 
   safeHandle("window:isMaximized", () => {

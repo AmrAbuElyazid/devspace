@@ -139,6 +139,7 @@ const bridge: DevspaceBridge = {
     close: () => ipcRenderer.send("window:close"),
     focusContent: () => ipcRenderer.send("window:focusContent"),
     setSidebarOpen: (open) => ipcRenderer.send("window:setSidebarOpen", open),
+    setThemeMode: (themeMode) => ipcRenderer.send("window:setThemeMode", themeMode),
     isMaximized: () => ipcRenderer.invoke("window:isMaximized"),
     isFullScreen: () => ipcRenderer.invoke("window:isFullScreen"),
     onMaximizeChange: (callback) => {

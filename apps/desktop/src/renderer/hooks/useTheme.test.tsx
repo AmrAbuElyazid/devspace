@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useTheme } from "./useTheme";
 import { useSettingsStore } from "../store/settings-store";
+import { installMockWindowApi } from "../test-utils/mock-window-api";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -39,6 +40,7 @@ beforeEach(() => {
     },
   })) as typeof window.matchMedia;
 
+  installMockWindowApi();
   useSettingsStore.setState({ themeMode: "system" });
 });
 
@@ -62,6 +64,7 @@ test("system mode follows the OS preference and reacts to changes", async () => 
   });
 
   expect(document.documentElement.classList.contains("dark")).toBe(true);
+  expect(window.api.window.setThemeMode).toHaveBeenCalledWith("system");
 
   await act(async () => {
     prefersDark = false;
@@ -85,6 +88,7 @@ test("explicit dark and light modes override the OS preference", async () => {
   });
 
   expect(document.documentElement.classList.contains("dark")).toBe(true);
+  expect(window.api.window.setThemeMode).toHaveBeenLastCalledWith("dark");
 
   await act(async () => {
     prefersDark = true;
@@ -100,4 +104,5 @@ test("explicit dark and light modes override the OS preference", async () => {
   });
 
   expect(document.documentElement.classList.contains("dark")).toBe(false);
+  expect(window.api.window.setThemeMode).toHaveBeenLastCalledWith("light");
 });

@@ -9,7 +9,7 @@ export const BlockPlaceholderKit = [
       className:
         "before:pointer-events-none before:absolute before:select-none before:text-[var(--foreground-muted)] before:content-[attr(placeholder)]",
       placeholders: {
-        [KEYS.p]: "Start writing...",
+        [KEYS.p]: "Start writing",
       },
       query: ({ path }) => path.length === 1,
     },
