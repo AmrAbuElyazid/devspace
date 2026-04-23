@@ -6,16 +6,7 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 
 ## Open
 
-### 1. Embedded VS Code Auto-Saves Immediately And Never Shows Dirty State
-
-- Status: open
-- Priority: high
-- Type: editor integration investigation
-- Summary: embedded VS Code panes appear to save immediately while editing and do not show the normal dirty indicator in the title.
-- Notes: Devspace does not appear to set `files.autoSave` itself, so the leading hypothesis is persisted VS Code-side settings or profile state inside the embedded editor environment rather than explicit Devspace save wiring. This still needs real reproduction and confirmation.
-- Relevant files: `.vscode/settings.json`, `apps/desktop/src/renderer/components/EditorPane.tsx`, `apps/desktop/src/main/vscode-server.ts`
-
-### 2. Browser Pane Does Not Reliably Regain Native Focus When Selected Indirectly
+### 1. Browser Pane Does Not Reliably Regain Native Focus When Selected Indirectly
 
 - Status: open
 - Priority: high
@@ -24,7 +15,7 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Notes: pane-content clicks now correctly sync pane activation and active tab state after `93530e7`, so any remaining repro here should be treated as a native first-responder restoration problem on tab/group selection rather than a pane/tab desync.
 - Relevant files: `apps/desktop/src/renderer/components/browser/useBrowserPaneController.ts`, `apps/desktop/src/renderer/components/EditorPane.tsx`, `apps/desktop/src/renderer/components/T3CodePane.tsx`, `apps/desktop/src/renderer/components/GroupTabBar.tsx`, `apps/desktop/src/renderer/lib/native-pane-focus.ts`
 
-### 3. Tab Reorder Drag Still Feels Unreliable
+### 2. Tab Reorder Drag Still Feels Unreliable
 
 - Status: open
 - Priority: medium
@@ -200,3 +191,13 @@ Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larg
 - Resolution: pane activation now syncs the active workspace, focused group, and active tab from a single pane-id-based path. Native browser/editor and terminal panes also re-emit activation when clicked while already focused, so clicking pane content can no longer leave the tab strip highlighting a different pane.
 - Relevant files: `apps/desktop/src/renderer/lib/native-pane-focus.ts`, `apps/desktop/src/renderer/components/PaneGroupContent.tsx`, `apps/desktop/src/renderer/hooks/useTerminalEvents.ts`, `apps/desktop/src/main/browser/browser-pane-webcontents-events.ts`, `packages/ghostty-electron/native/ghostty_bridge.mm`
 - Commit: `93530e7` `fix: keep pane activation synced with native focus`
+
+### 18. Embedded VS Code Auto-Saves Immediately And Never Shows Dirty State
+
+- Status: fixed
+- Priority: high
+- Type: editor integration investigation
+- Resolution: the apparent missing dirty state was partly a Devspace tab-title sync gap, which is now fixed by mirroring managed editor tab titles from VS Code's runtime page title. The actual immediate-save behavior turned out to be the embedded editor's own persisted VS Code user setting rather than Devspace forcing saves.
+- Relevant files: `apps/desktop/src/renderer/components/EditorPane.tsx`, `apps/desktop/src/renderer/hooks/useBrowserBridge.ts`, `apps/desktop/src/renderer/store/slices/group-tabs.ts`
+- Commit: `42df45f` `fix: surface editor dirty state in compact VC tabs`
+- User follow-up: disable or adjust `files.autoSave` in the embedded VS Code user settings/profile when manual-save behavior is desired.
