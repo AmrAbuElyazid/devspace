@@ -126,7 +126,7 @@ beforeEach(() => {
     },
   });
 
-  useNativeViewStore.setState({ dragHidesViews: false });
+  useNativeViewStore.setState({ dragHidesViews: false, temporarilyHiddenPaneId: null });
 });
 
 afterEach(async () => {
@@ -181,6 +181,28 @@ test("keeps the placeholder hidden when native views remain visible", async () =
 
   expect(container.innerHTML).not.toContain("pane-drag-placeholder");
   expect(container.innerHTML).toContain('data-testid="terminal-pane-1"');
+});
+
+test("renders a leader placeholder when the active native pane is temporarily hidden", async () => {
+  useNativeViewStore.setState({ temporarilyHiddenPaneId: "pane-1" });
+
+  await act(async () => {
+    root?.render(
+      renderWithDragState(
+        emptyDragContextValue,
+        <PaneGroupContainer
+          groupId="group-1"
+          workspaceId="workspace-1"
+          sidebarOpen={false}
+          dndEnabled={true}
+        />,
+      ),
+    );
+  });
+
+  expect(container.innerHTML).toContain("pane-hidden-placeholder");
+  expect(container.textContent).toContain("Terminal One");
+  expect(container.textContent).toContain("Leader active");
 });
 
 test("mounts only the active tab layer for the focused group", async () => {

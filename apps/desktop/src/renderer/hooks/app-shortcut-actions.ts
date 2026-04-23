@@ -7,7 +7,84 @@ import {
   getActiveFocusedWebViewPane,
   getSplitShortcutTargetGroupId,
 } from "../lib/browser-shortcuts";
-import { focusActiveNativePane } from "../lib/native-pane-focus";
+import {
+  focusActiveNativePane,
+  getFocusedActiveNativePane,
+  releaseNativeFocus,
+} from "../lib/native-pane-focus";
+import { useNativeViewStore } from "../store/native-view-store";
+
+let leaderCapturePaneId: string | null = null;
+let leaderCaptureRestoreTimer: number | null = null;
+
+function isLeaderCaptureActive(): boolean {
+  return leaderCapturePaneId !== null;
+}
+
+function clearLeaderCaptureRestoreTimer(): void {
+  if (leaderCaptureRestoreTimer === null) {
+    return;
+  }
+
+  window.clearTimeout(leaderCaptureRestoreTimer);
+  leaderCaptureRestoreTimer = null;
+}
+
+function endLeaderCapture(refocusNativePane: boolean): void {
+  if (!isLeaderCaptureActive()) {
+    return;
+  }
+
+  clearLeaderCaptureRestoreTimer();
+  leaderCapturePaneId = null;
+  useNativeViewStore.getState().setTemporarilyHiddenPaneId(null);
+  if (refocusNativePane) {
+    queueMicrotask(() => {
+      focusActiveNativePane();
+    });
+  }
+}
+
+function activateLeaderCapture(): void {
+  if (useSettingsStore.getState().isOverlayActive()) {
+    return;
+  }
+
+  const pane = getFocusedActiveNativePane();
+  if (!pane) {
+    return;
+  }
+
+  leaderCapturePaneId = pane.id;
+  useNativeViewStore.getState().setTemporarilyHiddenPaneId(pane.id);
+  releaseNativeFocus();
+}
+
+function toggleLeaderCapture(): void {
+  if (isLeaderCaptureActive()) {
+    endLeaderCapture(true);
+    return;
+  }
+
+  activateLeaderCapture();
+}
+
+function scheduleLeaderCaptureRestore(): void {
+  if (!isLeaderCaptureActive() || leaderCaptureRestoreTimer !== null) {
+    return;
+  }
+
+  leaderCaptureRestoreTimer = window.setTimeout(() => {
+    leaderCaptureRestoreTimer = null;
+    endLeaderCapture(true);
+  }, 0);
+}
+
+export function resetAppShortcutCaptureState(): void {
+  clearLeaderCaptureRestoreTimer();
+  leaderCapturePaneId = null;
+  useNativeViewStore.getState().setTemporarilyHiddenPaneId(null);
+}
 
 function clampZoom(zoom: number): number {
   return Math.min(3, Math.max(0.25, Number(zoom.toFixed(2))));
@@ -82,18 +159,22 @@ function closeSettingsIfNeeded(channel: string): void {
   if (
     settings.settingsOpen &&
     channel !== "app:toggle-settings" &&
+    channel !== "app:leader" &&
     channel !== "app:close-window"
   ) {
     settings.setSettingsOpen(false);
   }
 }
 
-export function dispatchAppShortcutAction(channel: string, ...args: unknown[]): void {
+function dispatchShortcutAction(channel: string, ...args: unknown[]): void {
   const settings = useSettingsStore.getState();
 
   closeSettingsIfNeeded(channel);
 
   switch (channel) {
+    case "app:leader":
+      toggleLeaderCapture();
+      break;
     case "app:toggle-sidebar":
       settings.toggleSidebar();
       break;
@@ -360,7 +441,35 @@ export function dispatchAppShortcutAction(channel: string, ...args: unknown[]): 
   }
 }
 
+export function dispatchAppShortcutAction(channel: string, ...args: unknown[]): void {
+  if (channel !== "app:leader" && isLeaderCaptureActive()) {
+    endLeaderCapture(false);
+    dispatchShortcutAction(channel, ...args);
+    queueMicrotask(() => {
+      focusActiveNativePane();
+    });
+    return;
+  }
+
+  dispatchShortcutAction(channel, ...args);
+}
+
 export function handleAppShortcutKeyDown(event: KeyboardEvent): void {
+  if (isLeaderCaptureActive()) {
+    if (["Shift", "Control", "Alt", "Meta", "CapsLock"].includes(event.key)) {
+      return;
+    }
+
+    if (event.key === "Escape") {
+      endLeaderCapture(true);
+      event.preventDefault();
+      return;
+    }
+
+    scheduleLeaderCaptureRestore();
+    return;
+  }
+
   if (event.key !== "Escape") {
     return;
   }

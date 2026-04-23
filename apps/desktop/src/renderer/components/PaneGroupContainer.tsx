@@ -34,6 +34,7 @@ export default memo(function PaneGroupContainer({
   const dropIntent = useDropIntent();
   const isFocused = focusedGroupId === groupId;
   const dragHidesViews = useNativeViewStore((s) => s.dragHidesViews);
+  const temporarilyHiddenPaneId = useNativeViewStore((s) => s.temporarilyHiddenPaneId);
   const hasDragOverlay =
     activeDrag?.type === "group-tab" || activeDrag?.type === "sidebar-workspace";
   const previewSide =
@@ -79,6 +80,7 @@ export default memo(function PaneGroupContainer({
         hasDragOverlay={hasDragOverlay}
         isFocused={isFocused}
         previewSide={previewSide}
+        temporarilyHiddenPaneId={temporarilyHiddenPaneId}
         workspaceId={workspaceId}
       />
     </div>

@@ -46,6 +46,7 @@ beforeEach(() => {
     visibleTerminals: [],
     visibleBrowsers: [],
     dragHidesViews: false,
+    temporarilyHiddenPaneId: null,
   });
   setNativeViewElement("terminal-1", null);
   setNativeViewElement("browser-1", null);
@@ -392,4 +393,55 @@ test("settings overlay subscription skips unrelated setting updates", () => {
   useSettingsStore.getState().updateSetting("fontSize", 14);
 
   expect(reconcile).not.toHaveBeenCalled();
+});
+
+test("temporarily hiding a native pane only suppresses that active pane", () => {
+  useWorkspaceStore.setState({
+    activeWorkspaceId: "workspace-1",
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Workspace",
+        root: {
+          type: "branch",
+          direction: "horizontal",
+          children: [
+            { type: "leaf", groupId: "group-1" },
+            { type: "leaf", groupId: "group-2" },
+          ],
+          sizes: [0.5, 0.5],
+        },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: Date.now(),
+      },
+    ],
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "browser-1" }],
+      },
+      "group-2": {
+        id: "group-2",
+        activeTabId: "tab-2",
+        tabs: [{ id: "tab-2", paneId: "terminal-1" }],
+      },
+    },
+  });
+
+  useNativeViewStore.setState({
+    views: {
+      "browser-1": "browser",
+      "terminal-1": "terminal",
+    },
+  });
+
+  useNativeViewStore.getState().reconcile();
+  useNativeViewStore.getState().setTemporarilyHiddenPaneId("browser-1");
+
+  expect(useNativeViewStore.getState().visibleBrowsers).toEqual([]);
+  expect(useNativeViewStore.getState().visibleTerminals).toEqual(["terminal-1"]);
+  expect(window.api.browser.setVisiblePanes).toHaveBeenLastCalledWith([]);
+  expect(window.api.terminal.setVisibleSurfaces).toHaveBeenLastCalledWith(["terminal-1"]);
 });

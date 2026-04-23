@@ -1,4 +1,4 @@
-import { test, expect } from "vitest";
+import { test, expect, vi } from "vitest";
 import type { Session } from "electron";
 import { BROWSER_PARTITION, BrowserSessionManager } from "../browser-session-manager";
 
@@ -476,6 +476,57 @@ test("allow-for-session still passes permission checks without webContents when 
 
   expect(
     registeredHandler?.(null as never, "notifications", "https://camera.example", {} as never),
+  ).toBe(true);
+});
+
+test("trusted local origins auto-allow clipboard permissions without prompting", () => {
+  let registeredHandler: PermissionCheckHandler | undefined;
+  let registeredRequestHandler: PermissionRequestHandler | undefined;
+  const requestBrowserPermission = vi.fn();
+
+  const manager = new BrowserSessionManager({
+    fromPartition: () =>
+      ({
+        setPermissionCheckHandler: (handler: PermissionCheckHandler) => {
+          registeredHandler = handler;
+        },
+        setPermissionRequestHandler: (handler: PermissionRequestHandler) => {
+          registeredRequestHandler = handler;
+        },
+        setCertificateVerifyProc: () => {},
+      }) as never,
+  });
+
+  manager.registerTrustedLocalOrigin("http://127.0.0.1:18562/workbench");
+  manager.installHandlers({
+    resolvePaneIdForWebContents: (webContentsId) => (webContentsId === 12 ? "pane-12" : undefined),
+    reportCertificateError: () => {},
+    requestBrowserPermission,
+    appModule: { on: () => undefined },
+    log: () => {},
+  });
+
+  let allowed: boolean | undefined;
+  registeredRequestHandler?.(
+    {
+      id: 12,
+      getURL: () => "http://127.0.0.1:18562/workbench",
+    } as never,
+    "clipboard-read",
+    (nextAllowed) => {
+      allowed = nextAllowed;
+    },
+    {
+      requestingUrl: "http://127.0.0.1:18562/workbench",
+    } as never,
+  );
+
+  expect(allowed).toBe(true);
+  expect(requestBrowserPermission).not.toHaveBeenCalled();
+  expect(
+    registeredHandler?.({ id: 12 } as never, "clipboard-read", "http://127.0.0.1:18562", {
+      requestingUrl: "http://127.0.0.1:18562/workbench",
+    } as never),
   ).toBe(true);
 });
 

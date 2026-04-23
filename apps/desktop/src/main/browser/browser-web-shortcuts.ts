@@ -25,6 +25,7 @@ const SHIFTED_SYMBOL_KEY_MAP: Record<string, string> = {
 };
 
 const NON_EDITOR_GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS = new Set<ShortcutAction>([
+  "leader",
   "toggle-sidebar",
   "toggle-settings",
   "close-window",
@@ -71,7 +72,7 @@ const NON_EDITOR_GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS = new Set<ShortcutAction>([
   "open-browser",
 ]);
 
-const EDITOR_GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS = new Set<ShortcutAction>(["close-window"]);
+const EDITOR_GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS = new Set<ShortcutAction>(["leader"]);
 
 const BROWSER_ONLY_SHORTCUT_ACTIONS = new Set<ShortcutAction>([
   "browser-focus-url",
@@ -182,10 +183,14 @@ export function shouldIgnoreMenuShortcuts(
   kind: BrowserPaneKind,
   input: Pick<WebContentsInputEvent, "meta" | "control">,
 ): boolean {
+  if (kind === "editor") {
+    return true;
+  }
+
   const hasNativeModifier = input.meta === true || input.control === true;
   if (!hasNativeModifier) {
     return false;
   }
 
-  return kind === "editor";
+  return false;
 }

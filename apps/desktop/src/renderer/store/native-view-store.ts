@@ -67,10 +67,13 @@ interface NativeViewState {
   visibleBrowsers: string[];
   /** When true, all native views are hidden (e.g. during a group-tab drag). */
   dragHidesViews: boolean;
+  /** Temporarily suppress a single active native pane without hiding the workspace. */
+  temporarilyHiddenPaneId: string | null;
 
   register: (id: string, type: NativeViewType) => void;
   unregister: (id: string) => void;
   setDragHidesViews: (active: boolean) => void;
+  setTemporarilyHiddenPaneId: (paneId: string | null) => void;
   reconcile: () => void;
 }
 
@@ -438,6 +441,7 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
   visibleTerminals: [],
   visibleBrowsers: [],
   dragHidesViews: false,
+  temporarilyHiddenPaneId: null,
 
   register(id, type) {
     const { views } = get();
@@ -465,11 +469,18 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
     get().reconcile();
   },
 
+  setTemporarilyHiddenPaneId(paneId) {
+    if (get().temporarilyHiddenPaneId === paneId) return;
+    set({ temporarilyHiddenPaneId: paneId });
+    get().reconcile();
+  },
+
   reconcile() {
     const startedAt = performance.now();
     try {
       nativeViewProfilingCounters.reconcileCalls++;
-      const { views, visibleTerminals, visibleBrowsers, dragHidesViews } = get();
+      const { views, visibleTerminals, visibleBrowsers, dragHidesViews, temporarilyHiddenPaneId } =
+        get();
       const wsState = useWorkspaceStore.getState();
       const overlayActive = useSettingsStore.getState().isOverlayActive();
       const shouldShowAny = !overlayActive && !dragHidesViews;
@@ -486,6 +497,7 @@ export const useNativeViewStore = create<NativeViewState>()((set, get) => ({
             if (!group) continue;
             const activeTab = group.tabs.find((t) => t.id === group.activeTabId);
             if (!activeTab) continue;
+            if (activeTab.paneId === temporarilyHiddenPaneId) continue;
             const viewType = views[activeTab.paneId];
             if (viewType === "terminal") {
               desiredTerminals.push(activeTab.paneId);

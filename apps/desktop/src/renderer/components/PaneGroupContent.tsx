@@ -95,6 +95,21 @@ function DragPlaceholder({ pane }: { pane: Pane }): ReactElement {
   );
 }
 
+function LeaderPlaceholder({ pane }: { pane: Pane }): ReactElement {
+  const Icon = paneTypeIcons[pane.type];
+  const label = pane.title || paneTypeLabels[pane.type] || pane.type;
+
+  return (
+    <div className="pane-drag-placeholder pane-hidden-placeholder">
+      {Icon && <Icon size={24} />}
+      <span>{label}</span>
+      <span className="pane-hidden-placeholder-message">
+        Leader active. Enter a Devspace shortcut.
+      </span>
+    </div>
+  );
+}
+
 function PaneContentDropZone({
   groupId,
   workspaceId,
@@ -210,11 +225,13 @@ const TabLayer = memo(function TabLayer({
   workspaceId,
   isFocused,
   showDragPlaceholder,
+  showLeaderPlaceholder,
 }: {
   tab: PaneGroupTab;
   workspaceId: string;
   isFocused: boolean;
   showDragPlaceholder: boolean;
+  showLeaderPlaceholder: boolean;
 }): ReactElement | null {
   const pane = useWorkspaceStore((s) => s.panes[tab.paneId]);
   if (!pane) return null;
@@ -228,7 +245,8 @@ const TabLayer = memo(function TabLayer({
         workspaceId={workspaceId}
         isFocused={isFocused}
       />
-      {showDragPlaceholder && <DragPlaceholder pane={pane} />}
+      {showDragPlaceholder ? <DragPlaceholder pane={pane} /> : null}
+      {!showDragPlaceholder && showLeaderPlaceholder ? <LeaderPlaceholder pane={pane} /> : null}
     </div>
   );
 });
@@ -241,6 +259,7 @@ interface PaneGroupContentProps {
   hasDragOverlay: boolean;
   isFocused: boolean;
   previewSide: "left" | "right" | "top" | "bottom" | null;
+  temporarilyHiddenPaneId: string | null;
   workspaceId: string;
 }
 
@@ -252,6 +271,7 @@ export default memo(function PaneGroupContent({
   hasDragOverlay,
   isFocused,
   previewSide,
+  temporarilyHiddenPaneId,
   workspaceId,
 }: PaneGroupContentProps): ReactElement {
   return (
@@ -271,6 +291,7 @@ export default memo(function PaneGroupContent({
           workspaceId={workspaceId}
           isFocused={isFocused}
           showDragPlaceholder={dragHidesViews && hasDragOverlay}
+          showLeaderPlaceholder={temporarilyHiddenPaneId === activeTab.paneId}
         />
       ) : null}
     </div>

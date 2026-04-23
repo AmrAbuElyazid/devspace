@@ -37,6 +37,7 @@ export type ShortcutCategory = "general" | "workspaces" | "tabs" | "panes" | "te
 /** All bindable actions. */
 export type ShortcutAction =
   // General
+  | "leader"
   | "toggle-sidebar"
   | "toggle-settings"
   | "close-window"
@@ -146,6 +147,14 @@ function ctrl(key: string): StoredShortcut {
 
 export const DEFAULT_SHORTCUTS: readonly ShortcutDefinition[] = [
   // ── General ──────────────────────────────────────────────────────────
+  {
+    action: "leader",
+    label: "Leader",
+    category: "general",
+    defaultShortcut: cmd("k"),
+    ipcChannel: "app:leader",
+    menuGroup: "App",
+  },
   {
     action: "toggle-sidebar",
     label: "Toggle Sidebar",

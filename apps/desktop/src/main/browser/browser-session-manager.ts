@@ -59,6 +59,12 @@ type PermissionRequestDetails = {
 
 type SessionPermissionGrantKey = `${BrowserPermissionType}|${string}`;
 
+const TRUSTED_LOCAL_AUTOGRANT_PERMISSIONS = new Set<BrowserPermissionType>([
+  "clipboard-read",
+  "clipboard-sanitized-write",
+  "deprecated-sync-clipboard-read",
+]);
+
 function mapPermissionType(
   permission: string,
   details: PermissionRequestDetails,
@@ -226,6 +232,18 @@ export class BrowserSessionManager {
     this.trustedLocalOrigins.set(origin, currentCount - 1);
   }
 
+  private isTrustedLocalPermissionAutoGranted(
+    permissionType: BrowserPermissionType | null,
+    origin: string | null,
+  ): boolean {
+    return (
+      permissionType !== null &&
+      origin !== null &&
+      TRUSTED_LOCAL_AUTOGRANT_PERMISSIONS.has(permissionType) &&
+      this.trustedLocalOrigins.has(origin)
+    );
+  }
+
   /**
    * One-time setup for session-level handlers.  These are installed lazily
    * on first `getSession()` call rather than eagerly at app startup.
@@ -318,6 +336,10 @@ export class BrowserSessionManager {
         return true;
       }
 
+      if (this.isTrustedLocalPermissionAutoGranted(permissionType, origin)) {
+        return true;
+      }
+
       if (!webContents) {
         log("[browser] missing webContents for permission request; denying by default", {
           permission,
@@ -381,7 +403,17 @@ export class BrowserSessionManager {
         );
 
         if (!permissionType || !origin || !deps?.requestBrowserPermission) {
+          if (this.isTrustedLocalPermissionAutoGranted(permissionType, origin)) {
+            callback(true);
+            return;
+          }
+
           callback(false);
+          return;
+        }
+
+        if (this.isTrustedLocalPermissionAutoGranted(permissionType, origin)) {
+          callback(true);
           return;
         }
 

@@ -1,6 +1,7 @@
 import { collectGroupIds, useWorkspaceStore } from "../store/workspace-store";
 import { useBrowserStore } from "../store/browser-store";
 import { recordNativeFocusRequest } from "../store/native-view-store";
+import { useNativeViewStore } from "../store/native-view-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useTerminalStore } from "../store/terminal-store";
 import type { Pane, PaneGroup, Workspace } from "../types/workspace";
@@ -66,6 +67,24 @@ function getFocusedActivePaneContext(): ActivePaneContext | null {
   return { workspace, group, pane };
 }
 
+export function getFocusedActiveNativePane(): Pane | null {
+  const context = getFocusedActivePaneContext();
+  if (!context) {
+    return null;
+  }
+
+  if (
+    context.pane.type !== "terminal" &&
+    context.pane.type !== "browser" &&
+    context.pane.type !== "editor" &&
+    context.pane.type !== "t3code"
+  ) {
+    return null;
+  }
+
+  return context.pane;
+}
+
 export function focusTerminalNativePane(paneId: string): void {
   recordNativeFocusRequest("terminal");
   void window.api.terminal.focus(paneId);
@@ -92,30 +111,32 @@ export function focusActiveNativePane(): void {
     return;
   }
 
+  if (useNativeViewStore.getState().temporarilyHiddenPaneId) {
+    return;
+  }
+
   if (hasEditableRendererFocus()) {
     return;
   }
 
-  const context = getFocusedActivePaneContext();
-  if (!context) return;
+  const pane = getFocusedActiveNativePane();
+  if (!pane) return;
 
   if (
-    context.pane.type === "terminal" &&
-    (useTerminalStore.getState().findBarOpenByPaneId[context.pane.id] ?? false)
+    pane.type === "terminal" &&
+    (useTerminalStore.getState().findBarOpenByPaneId[pane.id] ?? false)
   ) {
     return;
   }
 
   if (
-    (context.pane.type === "browser" ||
-      context.pane.type === "editor" ||
-      context.pane.type === "t3code") &&
-    (useBrowserStore.getState().findBarOpenByPaneId[context.pane.id] ?? false)
+    (pane.type === "browser" || pane.type === "editor" || pane.type === "t3code") &&
+    (useBrowserStore.getState().findBarOpenByPaneId[pane.id] ?? false)
   ) {
     return;
   }
 
-  focusPane(context.pane);
+  focusPane(pane);
 }
 
 export function syncWorkspaceFocusForPane(paneId: string): void {

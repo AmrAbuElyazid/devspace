@@ -388,7 +388,78 @@ test("browser-only shortcuts are not intercepted for editor webcontents", () => 
   expect(setIgnoreMenuShortcuts).toHaveBeenCalledWith(true);
 });
 
-test("editor panes still intercept the explicit close-window shortcut", () => {
+test("editor focus enables menu-shortcut yielding until blur", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const setIgnoreMenuShortcuts = vi.fn();
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          setIgnoreMenuShortcuts,
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  });
+
+  manager.createPane("pane-1", "https://example.com", "editor");
+
+  listeners.get("focus")?.();
+  listeners.get("blur")?.();
+
+  expect(setIgnoreMenuShortcuts).toHaveBeenNthCalledWith(1, true);
+  expect(setIgnoreMenuShortcuts).toHaveBeenNthCalledWith(2, false);
+});
+
+test("editor panes still intercept the explicit leader shortcut", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const preventDefault = vi.fn();
+  const setIgnoreMenuShortcuts = vi.fn();
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          setIgnoreMenuShortcuts,
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload });
+    },
+    getAppShortcutBindings: () => [
+      {
+        action: "leader",
+        channel: "app:leader",
+        shortcut: { key: "k", command: true, shift: false, option: false, control: false },
+      },
+    ],
+  });
+
+  manager.createPane("pane-1", "https://example.com", "editor");
+  rendererMessages.length = 0;
+
+  listeners.get("before-input-event")?.(
+    { preventDefault },
+    { type: "keyDown", key: "k", meta: true, control: false, shift: false, alt: false },
+  );
+
+  expect(preventDefault).toHaveBeenCalledTimes(1);
+  expect(setIgnoreMenuShortcuts).toHaveBeenCalledWith(true);
+  expect(rendererMessages).toContainEqual({ channel: "app:leader", payload: undefined });
+});
+
+test("editor panes no longer intercept close-window shortcuts", () => {
   const listeners = new Map<string, (...args: unknown[]) => void>();
   const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
   const preventDefault = vi.fn();
@@ -426,9 +497,103 @@ test("editor panes still intercept the explicit close-window shortcut", () => {
     { type: "keyDown", key: "w", meta: true, control: true, shift: false, alt: false },
   );
 
-  expect(preventDefault).toHaveBeenCalledTimes(1);
+  expect(preventDefault).not.toHaveBeenCalled();
   expect(setIgnoreMenuShortcuts).toHaveBeenCalledWith(true);
-  expect(rendererMessages).toContainEqual({ channel: "app:close-window", payload: undefined });
+  expect(rendererMessages).toEqual([
+    { channel: "window:nativeModifierChanged", payload: "command" },
+  ]);
+});
+
+test("editor panes route standard copy and paste shortcuts to the native webcontents", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const preventDefault = vi.fn();
+  const setIgnoreMenuShortcuts = vi.fn();
+  const copy = vi.fn();
+  const paste = vi.fn();
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          setIgnoreMenuShortcuts,
+          copy,
+          paste,
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload });
+    },
+    getAppShortcutBindings: () => [],
+  });
+
+  manager.createPane("pane-1", "https://example.com", "editor");
+  rendererMessages.length = 0;
+
+  listeners.get("before-input-event")?.(
+    { preventDefault },
+    { type: "keyDown", key: "c", meta: true, control: false, shift: false, alt: false },
+  );
+  listeners.get("before-input-event")?.(
+    { preventDefault },
+    { type: "keyDown", key: "v", meta: true, control: false, shift: false, alt: false },
+  );
+
+  expect(copy).toHaveBeenCalledTimes(1);
+  expect(paste).toHaveBeenCalledTimes(1);
+  expect(preventDefault).toHaveBeenCalledTimes(2);
+  expect(setIgnoreMenuShortcuts).toHaveBeenCalledWith(true);
+  expect(rendererMessages).toEqual([
+    { channel: "window:nativeModifierChanged", payload: "command" },
+    { channel: "window:nativeModifierChanged", payload: "command" },
+  ]);
+});
+
+test("editor panes leave select-all shortcuts to VS Code", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const preventDefault = vi.fn();
+  const setIgnoreMenuShortcuts = vi.fn();
+  const selectAll = vi.fn();
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          setIgnoreMenuShortcuts,
+          selectAll,
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel, payload) => {
+      rendererMessages.push({ channel, payload });
+    },
+    getAppShortcutBindings: () => [],
+  });
+
+  manager.createPane("pane-1", "https://example.com", "editor");
+  rendererMessages.length = 0;
+
+  listeners.get("before-input-event")?.(
+    { preventDefault },
+    { type: "keyDown", key: "a", meta: true, control: false, shift: false, alt: false },
+  );
+
+  expect(selectAll).not.toHaveBeenCalled();
+  expect(preventDefault).not.toHaveBeenCalled();
+  expect(setIgnoreMenuShortcuts).toHaveBeenCalledWith(true);
+  expect(rendererMessages).toEqual([
+    { channel: "window:nativeModifierChanged", payload: "command" },
+  ]);
 });
 
 test("shifted symbol shortcuts still match their base shortcut keys", () => {

@@ -11,6 +11,7 @@ import type {
   BrowserRuntimePatch,
   BrowserShortcutBinding,
 } from "./browser-types";
+import type { StoredShortcut } from "../../shared/shortcuts";
 
 type WebContentsEventEmitter = {
   on: (event: string, listener: (...args: unknown[]) => void) => void;
@@ -26,6 +27,44 @@ type FoundInPageResult = {
 };
 
 const POINTER_DRIVEN_FOCUS_WINDOW_MS = 1_000;
+
+type EditableWebContents = {
+  copy?: () => void;
+  paste?: () => void;
+  cut?: () => void;
+  selectAll?: () => void;
+};
+
+function handleEditorNativeEditShortcut(
+  webContents: EditableWebContents,
+  shortcut: StoredShortcut,
+): boolean {
+  if (shortcut.option || (shortcut.command && shortcut.control)) {
+    return false;
+  }
+
+  const hasPrimaryModifier = shortcut.command || shortcut.control;
+  if (!hasPrimaryModifier) {
+    return false;
+  }
+
+  if (!shortcut.shift && shortcut.key === "c" && typeof webContents.copy === "function") {
+    webContents.copy();
+    return true;
+  }
+
+  if (!shortcut.shift && shortcut.key === "v" && typeof webContents.paste === "function") {
+    webContents.paste();
+    return true;
+  }
+
+  if (!shortcut.shift && shortcut.key === "x" && typeof webContents.cut === "function") {
+    webContents.cut();
+    return true;
+  }
+
+  return false;
+}
 
 function normalizeContextMenuText(value: unknown): string | null {
   if (typeof value !== "string") {
@@ -79,6 +118,11 @@ export function registerBrowserPaneWebContentsListeners({
   const webContents = pane.view.webContents as Electron.WebContents &
     Partial<WebContentsEventEmitter> &
     FocusableWebContents;
+  const setIgnoreMenuShortcuts = (
+    webContents as {
+      setIgnoreMenuShortcuts?: (ignore: boolean) => void;
+    }
+  ).setIgnoreMenuShortcuts;
   const setWindowOpenHandler = (
     webContents as {
       setWindowOpenHandler?: (
@@ -133,6 +177,13 @@ export function registerBrowserPaneWebContentsListeners({
   });
 
   webContents.on("focus", () => {
+    if (typeof setIgnoreMenuShortcuts === "function") {
+      setIgnoreMenuShortcuts.call(
+        webContents,
+        shouldIgnoreMenuShortcuts(pane.kind, { meta: false, control: false }),
+      );
+    }
+
     if (Date.now() - lastPointerDownAt > POINTER_DRIVEN_FOCUS_WINDOW_MS) {
       return;
     }
@@ -143,18 +194,15 @@ export function registerBrowserPaneWebContentsListeners({
 
   webContents.on("blur", () => {
     lastPointerDownAt = 0;
+    if (typeof setIgnoreMenuShortcuts === "function") {
+      setIgnoreMenuShortcuts.call(webContents, false);
+    }
     sendToRenderer("window:nativeModifierChanged", null);
   });
 
   webContents.on(
     "before-input-event",
     (event: unknown, input: Parameters<typeof toStoredShortcut>[0]) => {
-      const setIgnoreMenuShortcuts = (
-        webContents as {
-          setIgnoreMenuShortcuts?: (ignore: boolean) => void;
-        }
-      ).setIgnoreMenuShortcuts;
-
       const shortcut = toStoredShortcut(input);
       sendToRenderer("window:nativeModifierChanged", resolveNativeModifier(input, shortcut));
 
@@ -167,6 +215,13 @@ export function registerBrowserPaneWebContentsListeners({
 
       const binding = findShortcutBinding(getAppShortcutBindings?.(), pane.kind, shortcut);
       if (!binding) {
+        if (pane.kind === "editor" && handleEditorNativeEditShortcut(webContents, shortcut)) {
+          const preventDefault = (event as { preventDefault?: () => void }).preventDefault;
+          if (typeof preventDefault === "function") {
+            preventDefault.call(event);
+          }
+        }
+
         if (typeof setIgnoreMenuShortcuts === "function") {
           setIgnoreMenuShortcuts.call(webContents, shouldIgnoreMenuShortcuts(pane.kind, input));
         }
