@@ -1,5 +1,5 @@
 import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
-import { useSettingsStore } from "../store/settings-store";
+import { DEFAULT_LEADER_TIMEOUT_MS, useSettingsStore } from "../store/settings-store";
 import { useBrowserStore } from "../store/browser-store";
 import { useTerminalStore } from "../store/terminal-store";
 import {
@@ -17,6 +17,9 @@ import { useNativeViewStore } from "../store/native-view-store";
 let leaderCapturePaneId: string | null = null;
 let leaderCaptureRestoreTimer: number | null = null;
 
+const MIN_LEADER_TIMEOUT_MS = 250;
+const MAX_LEADER_TIMEOUT_MS = 10_000;
+
 function isLeaderCaptureActive(): boolean {
   return leaderCapturePaneId !== null;
 }
@@ -28,6 +31,27 @@ function clearLeaderCaptureRestoreTimer(): void {
 
   window.clearTimeout(leaderCaptureRestoreTimer);
   leaderCaptureRestoreTimer = null;
+}
+
+function getLeaderCaptureTimeoutMs(): number {
+  const timeoutMs = useSettingsStore.getState().leaderTimeoutMs;
+  if (!Number.isFinite(timeoutMs)) {
+    return DEFAULT_LEADER_TIMEOUT_MS;
+  }
+
+  return Math.max(MIN_LEADER_TIMEOUT_MS, Math.min(MAX_LEADER_TIMEOUT_MS, Math.round(timeoutMs)));
+}
+
+function restartLeaderCaptureRestoreTimer(): void {
+  if (!isLeaderCaptureActive()) {
+    return;
+  }
+
+  clearLeaderCaptureRestoreTimer();
+  leaderCaptureRestoreTimer = window.setTimeout(() => {
+    leaderCaptureRestoreTimer = null;
+    endLeaderCapture(true);
+  }, getLeaderCaptureTimeoutMs());
 }
 
 function endLeaderCapture(refocusNativePane: boolean): void {
@@ -58,6 +82,7 @@ function activateLeaderCapture(): void {
   leaderCapturePaneId = pane.id;
   useNativeViewStore.getState().setTemporarilyHiddenPaneId(pane.id);
   releaseNativeFocus();
+  restartLeaderCaptureRestoreTimer();
 }
 
 function toggleLeaderCapture(): void {
@@ -67,17 +92,6 @@ function toggleLeaderCapture(): void {
   }
 
   activateLeaderCapture();
-}
-
-function scheduleLeaderCaptureRestore(): void {
-  if (!isLeaderCaptureActive() || leaderCaptureRestoreTimer !== null) {
-    return;
-  }
-
-  leaderCaptureRestoreTimer = window.setTimeout(() => {
-    leaderCaptureRestoreTimer = null;
-    endLeaderCapture(true);
-  }, 0);
 }
 
 export function resetAppShortcutCaptureState(): void {
@@ -466,7 +480,7 @@ export function handleAppShortcutKeyDown(event: KeyboardEvent): void {
       return;
     }
 
-    scheduleLeaderCaptureRestore();
+    restartLeaderCaptureRestoreTimer();
     return;
   }
 

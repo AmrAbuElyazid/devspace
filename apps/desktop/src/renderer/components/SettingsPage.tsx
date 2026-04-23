@@ -136,7 +136,7 @@ export default function SettingsPage() {
 // ── Sections ──────────────────────────────────────────────────────────────────
 
 function GeneralSection() {
-  const { showShortcutHintsOnModifierPress, updateSetting } = useSettingsStore();
+  const { showShortcutHintsOnModifierPress, leaderTimeoutMs, updateSetting } = useSettingsStore();
 
   return (
     <section>
@@ -149,6 +149,23 @@ function GeneralSection() {
           checked={showShortcutHintsOnModifierPress}
           onChange={(value) => updateSetting("showShortcutHintsOnModifierPress", value)}
         />
+      </SettingRow>
+      <SettingRow label="Leader timeout (ms)">
+        <div className="flex flex-col items-end gap-1">
+          <NumberInput
+            value={leaderTimeoutMs}
+            onChange={(value) => updateSetting("leaderTimeoutMs", value)}
+            min={250}
+            max={10000}
+            step={250}
+          />
+          <span
+            className="text-[11px] text-right max-w-[280px]"
+            style={{ color: "var(--muted-foreground)" }}
+          >
+            How long leader mode waits for a Devspace shortcut before restoring the pane.
+          </span>
+        </div>
       </SettingRow>
     </section>
   );

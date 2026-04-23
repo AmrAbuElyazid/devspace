@@ -38,6 +38,7 @@ beforeEach(() => {
     themeMode: "system",
     fontSize: 13,
     showShortcutHintsOnModifierPress: true,
+    leaderTimeoutMs: 2000,
     vscodeCliPath: "",
     defaultShell: "",
     terminalScrollback: 5000,
@@ -115,6 +116,29 @@ test("does not persist number settings until the value is committed", async () =
   });
 
   expect(useSettingsStore.getState().fontSize).toBe(18);
+});
+
+test("persists the leader timeout only after the value is committed", async () => {
+  await act(async () => {
+    root?.render(<SettingsPage />);
+  });
+
+  const input = container.querySelector('input[type="number"]') as HTMLInputElement;
+  expect(input).toBeTruthy();
+  expect(input.value).toBe("2000");
+
+  await act(async () => {
+    setInputValue?.call(input, "2500");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  expect(useSettingsStore.getState().leaderTimeoutMs).toBe(2000);
+
+  await act(async () => {
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+
+  expect(useSettingsStore.getState().leaderTimeoutMs).toBe(2500);
 });
 
 test("does not persist text settings until the value is committed", async () => {

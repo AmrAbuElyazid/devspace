@@ -65,6 +65,7 @@ beforeEach(() => {
     settingsOpen: true,
     sidebarOpen: true,
     overlayCount: 0,
+    leaderTimeoutMs: 2000,
   });
 
   useNativeViewStore.setState({
@@ -129,6 +130,9 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  resetAppShortcutCaptureState();
+  vi.useRealTimers();
+
   if (root) {
     await act(async () => {
       root?.unmount();
@@ -204,6 +208,68 @@ test("escape cancels leader capture and restores native focus", async () => {
 
   await act(async () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await Promise.resolve();
+  });
+
+  expect(useNativeViewStore.getState().temporarilyHiddenPaneId).toBeNull();
+  expect(window.api.browser.setFocus).toHaveBeenCalledWith("browser-1");
+});
+
+test("leader capture restores the native pane after the configured idle timeout", async () => {
+  vi.useFakeTimers();
+  useSettingsStore.setState({ settingsOpen: false, leaderTimeoutMs: 2000 });
+
+  await act(async () => {
+    root?.render(<ShortcutProbe />);
+  });
+
+  await act(async () => {
+    actionHandler?.("app:leader");
+  });
+
+  expect(useNativeViewStore.getState().temporarilyHiddenPaneId).toBe("browser-1");
+
+  await act(async () => {
+    vi.advanceTimersByTime(1999);
+  });
+
+  expect(useNativeViewStore.getState().temporarilyHiddenPaneId).toBe("browser-1");
+
+  await act(async () => {
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
+  });
+
+  expect(useNativeViewStore.getState().temporarilyHiddenPaneId).toBeNull();
+  expect(window.api.browser.setFocus).toHaveBeenCalledWith("browser-1");
+});
+
+test("leader capture keeps the pane hidden until the full timeout after a non-shortcut key", async () => {
+  vi.useFakeTimers();
+  useSettingsStore.setState({ settingsOpen: false, leaderTimeoutMs: 2000 });
+
+  await act(async () => {
+    root?.render(<ShortcutProbe />);
+  });
+
+  await act(async () => {
+    actionHandler?.("app:leader");
+  });
+
+  await act(async () => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "x" }));
+  });
+
+  expect(useNativeViewStore.getState().temporarilyHiddenPaneId).toBe("browser-1");
+
+  await act(async () => {
+    vi.advanceTimersByTime(1999);
+  });
+
+  expect(useNativeViewStore.getState().temporarilyHiddenPaneId).toBe("browser-1");
+
+  await act(async () => {
+    vi.advanceTimersByTime(1);
     await Promise.resolve();
   });
 

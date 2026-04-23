@@ -7,6 +7,8 @@ import type { PaneType, SplitDirection } from "../types/workspace";
 export type DefaultPaneType = PaneType | "picker";
 type ThemeMode = "system" | "dark" | "light";
 
+export const DEFAULT_LEADER_TIMEOUT_MS = 2_000;
+
 /** Context for the pane picker dialog — describes what action triggered it. */
 export interface PanePickerContext {
   action: "new-tab" | "new-workspace" | "split";
@@ -22,6 +24,7 @@ interface SettingsState {
   sidebarOpen: boolean;
   settingsOpen: boolean;
   showShortcutHintsOnModifierPress: boolean;
+  leaderTimeoutMs: number;
   fontSize: number;
   themeMode: ThemeMode;
   vscodeCliPath: string;
@@ -59,6 +62,7 @@ export const useSettingsStore = create<SettingsState>()(
       sidebarOpen: true,
       settingsOpen: false,
       showShortcutHintsOnModifierPress: true,
+      leaderTimeoutMs: DEFAULT_LEADER_TIMEOUT_MS,
       fontSize: 13,
       themeMode: "system" as const,
       vscodeCliPath: "",
@@ -139,6 +143,9 @@ export const useSettingsStore = create<SettingsState>()(
         if (typeof s.showShortcutHintsOnModifierPress !== "boolean") {
           s.showShortcutHintsOnModifierPress = true;
         }
+        if (typeof s.leaderTimeoutMs !== "number" || !Number.isFinite(s.leaderTimeoutMs)) {
+          s.leaderTimeoutMs = DEFAULT_LEADER_TIMEOUT_MS;
+        }
         if (s.themeMode !== "system" && s.themeMode !== "dark" && s.themeMode !== "light") {
           s.themeMode = "system";
         }
@@ -147,7 +154,7 @@ export const useSettingsStore = create<SettingsState>()(
         }
         return s;
       },
-      version: 4,
+      version: 5,
     },
   ),
 );

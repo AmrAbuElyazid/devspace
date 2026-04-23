@@ -6,6 +6,7 @@ function resetSettingsStore(): void {
     sidebarOpen: true,
     settingsOpen: false,
     showShortcutHintsOnModifierPress: true,
+    leaderTimeoutMs: 2000,
     fontSize: 13,
     themeMode: "system",
     vscodeCliPath: "",
@@ -50,6 +51,14 @@ test("showShortcutHintsOnModifierPress updates when toggled", () => {
   useSettingsStore.getState().updateSetting("showShortcutHintsOnModifierPress", false);
 
   expect(useSettingsStore.getState().showShortcutHintsOnModifierPress).toBe(false);
+});
+
+test("leaderTimeoutMs defaults to 2000 and can be updated", () => {
+  expect(useSettingsStore.getState().leaderTimeoutMs).toBe(2000);
+
+  useSettingsStore.getState().updateSetting("leaderTimeoutMs", 2500);
+
+  expect(useSettingsStore.getState().leaderTimeoutMs).toBe(2500);
 });
 
 test("vscodeCliPath defaults to empty and can be updated", () => {
