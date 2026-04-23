@@ -27,6 +27,7 @@ type T3CodeState =
 export default function T3CodePane({ paneId, isFocused }: T3CodePaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const wasVisibleRef = useRef(false);
+  const wasFocusedRef = useRef(false);
 
   const [state, setState] = useState<T3CodeState>(() => {
     if (startedInstances.has(paneId)) {
@@ -46,15 +47,15 @@ export default function T3CodePane({ paneId, isFocused }: T3CodePaneProps): Reac
 
   useEffect(() => {
     const wasVisible = wasVisibleRef.current;
+    const wasFocused = wasFocusedRef.current;
     wasVisibleRef.current = isVisible;
+    wasFocusedRef.current = isFocused;
 
-    if (
-      !isVisible ||
-      wasVisible ||
-      state.status !== "running" ||
-      hasEditableRendererFocus() ||
-      !isFocused
-    ) {
+    if (!isVisible || state.status !== "running" || hasEditableRendererFocus() || !isFocused) {
+      return;
+    }
+
+    if (wasVisible && wasFocused) {
       return;
     }
 

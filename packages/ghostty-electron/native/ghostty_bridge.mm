@@ -58,6 +58,18 @@ GhosttyAppState g_state;
     return self;
 }
 
+- (void)refreshSurfaceLayoutAfterFocus {
+    if (!self.surface) return;
+
+    // Some TUIs only recover from stale rows/cols after a real layout pass.
+    // Re-run layout whenever the terminal regains first responder so focus
+    // churn does not leave the surface stuck at an old size until the next
+    // manual window resize.
+    [self setNeedsLayout:YES];
+    [self layoutSubtreeIfNeeded];
+    ghostty_surface_refresh(self.surface);
+}
+
 - (BOOL)acceptsFirstResponder { return YES; }
 
 - (BOOL)becomeFirstResponder {
@@ -79,6 +91,8 @@ GhosttyAppState g_state;
             );
         }
     }
+
+    [self refreshSurfaceLayoutAfterFocus];
     return YES;
 }
 

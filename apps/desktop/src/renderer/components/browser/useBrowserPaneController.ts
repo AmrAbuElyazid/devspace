@@ -55,6 +55,7 @@ export function useBrowserPaneController({
   const [inputUrl, setInputUrl] = useState(initialUrl);
   const failure = runtimeState?.failure ?? null;
   const wasVisibleRef = useRef(false);
+  const wasFocusedRef = useRef(false);
   const activePermissionRequest =
     pendingPermissionRequest?.paneId === paneId ? pendingPermissionRequest : null;
 
@@ -148,16 +149,21 @@ export function useBrowserPaneController({
 
   useEffect(() => {
     const wasVisible = wasVisibleRef.current;
+    const wasFocused = wasFocusedRef.current;
     wasVisibleRef.current = isVisible;
+    wasFocusedRef.current = isFocused;
 
     if (
       !isVisible ||
-      wasVisible ||
       failure !== null ||
       isFindBarOpen ||
       hasEditableRendererFocus() ||
       !isFocused
     ) {
+      return;
+    }
+
+    if (wasVisible && wasFocused) {
       return;
     }
 

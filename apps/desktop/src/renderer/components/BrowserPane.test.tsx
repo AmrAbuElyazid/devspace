@@ -319,6 +319,35 @@ test("focuses the native browser view when it becomes visible", async () => {
   expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
 });
 
+test("focuses the native browser view when an already-visible pane becomes focused", async () => {
+  await act(async () => {
+    root?.render(
+      <BrowserPane
+        paneId="pane-1"
+        workspaceId="workspace-1"
+        config={{ url: "https://example.com/" }}
+        isFocused={false}
+      />,
+    );
+  });
+
+  expect(browserPaneMocks.browserSetFocus).not.toHaveBeenCalled();
+
+  await act(async () => {
+    root?.render(
+      <BrowserPane
+        paneId="pane-1"
+        workspaceId="workspace-1"
+        config={{ url: "https://example.com/" }}
+        isFocused={true}
+      />,
+    );
+  });
+
+  expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledTimes(1);
+  expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
+});
+
 test("does not focus the native browser view when its group is not focused", async () => {
   await act(async () => {
     root?.render(

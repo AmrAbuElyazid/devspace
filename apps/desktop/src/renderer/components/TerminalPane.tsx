@@ -25,6 +25,8 @@ export default function TerminalPane({
   const placeholderRef = useRef<HTMLDivElement>(null);
   const createAttemptRef = useRef(0);
   const unmountedRef = useRef(false);
+  const wasVisibleRef = useRef(false);
+  const wasFocusedRef = useRef(false);
   const isFindBarOpen = useTerminalStore((s) => s.findBarOpenByPaneId[paneId] ?? false);
   const findBarFocusToken = useTerminalStore((s) => s.findBarFocusTokenByPaneId[paneId] ?? 0);
   const searchState = useTerminalStore((s) => s.searchStateByPaneId[paneId]);
@@ -89,11 +91,18 @@ export default function TerminalPane({
     enabled: surfaceReady && createError === null,
   });
 
-  // Auto-focus when this pane becomes visible AND is the focused pane,
-  // but NOT when the find bar is open (keyboard focus belongs to the input).
+  // Auto-focus on meaningful focus transitions only. Re-running focus on every
+  // render adds unnecessary first-responder churn and can make stale terminal
+  // sizing harder to reason about.
   useEffect(() => {
+    const wasVisible = wasVisibleRef.current;
+    const wasFocused = wasFocusedRef.current;
+    wasVisibleRef.current = isVisible;
+    wasFocusedRef.current = isFocused;
+
     if (createError || !hasCreatedTerminalSurface(paneId) || !isVisible || !isFocused) return;
     if (isFindBarOpen) return;
+    if (wasVisible && wasFocused) return;
     focusTerminalNativePane(paneId);
   }, [createError, isVisible, isFocused, paneId, isFindBarOpen]);
 

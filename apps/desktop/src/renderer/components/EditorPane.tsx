@@ -32,6 +32,7 @@ type EditorState =
 export default function EditorPane({ paneId, config, isFocused }: EditorPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const wasVisibleRef = useRef(false);
+  const wasFocusedRef = useRef(false);
   const previousCliPathRef = useRef<string | null>(null);
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig);
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
@@ -102,15 +103,15 @@ export default function EditorPane({ paneId, config, isFocused }: EditorPaneProp
 
   useEffect(() => {
     const wasVisible = wasVisibleRef.current;
+    const wasFocused = wasFocusedRef.current;
     wasVisibleRef.current = isVisible;
+    wasFocusedRef.current = isFocused;
 
-    if (
-      !isVisible ||
-      wasVisible ||
-      stateStatus !== "running" ||
-      hasEditableRendererFocus() ||
-      !isFocused
-    ) {
+    if (!isVisible || stateStatus !== "running" || hasEditableRendererFocus() || !isFocused) {
+      return;
+    }
+
+    if (wasVisible && wasFocused) {
       return;
     }
 

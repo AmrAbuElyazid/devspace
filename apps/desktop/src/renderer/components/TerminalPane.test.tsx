@@ -134,6 +134,22 @@ test("creates the terminal surface once and focuses visible focused panes", asyn
   });
 
   expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledTimes(1);
+  expect(terminalPaneMocks.terminalFocus).toHaveBeenCalledTimes(1);
+});
+
+test("focuses the terminal when an already-visible pane becomes focused", async () => {
+  await act(async () => {
+    root?.render(<TerminalPane paneId="pane-1" config={{}} isFocused={false} />);
+  });
+
+  expect(terminalPaneMocks.terminalFocus).not.toHaveBeenCalled();
+
+  await act(async () => {
+    root?.render(<TerminalPane paneId="pane-1" config={{}} isFocused={true} />);
+  });
+
+  expect(terminalPaneMocks.terminalFocus).toHaveBeenCalledTimes(1);
+  expect(terminalPaneMocks.terminalFocus).toHaveBeenCalledWith("pane-1");
 });
 
 test("does not focus visible terminals when the group is not focused", async () => {
