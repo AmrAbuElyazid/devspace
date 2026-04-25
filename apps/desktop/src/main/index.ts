@@ -16,6 +16,7 @@ import { BrowserImportService } from "./browser/browser-import-service";
 import { installWindowZoomReset } from "./window-zoom";
 import { getTrafficLightPosition } from "./window-chrome";
 import { installDynamicAppMenu } from "./app-menu";
+import { AppUpdater } from "./app-updater";
 import { IS_DEV, CLI_PORT, EDITOR_PARTITION } from "./dev-mode";
 import { ShortcutStore } from "./shortcut-store";
 
@@ -82,6 +83,10 @@ const terminalManager = new TerminalManager();
 let vscodeServerManager: VscodeServerManager;
 let t3codeServerManager: T3CodeServerManager;
 let shortcutStore: ShortcutStore | null = null;
+const appUpdater = new AppUpdater({
+  isDevelopment: IS_DEV,
+  getWindow: () => getMainWindow(),
+});
 const browserSessionManager = new BrowserSessionManager();
 const editorSessionManager = new BrowserSessionManager(undefined, EDITOR_PARTITION, {
   persistSessionCookies: false,
@@ -181,6 +186,7 @@ function createWindow(): void {
     browserImportService,
     editorSessionManager,
     browserSessionManager,
+    appUpdater,
   );
   installWindowZoomReset(window.webContents);
 
@@ -235,7 +241,8 @@ app.whenReady().then(() => {
   // ── Dynamic application menu ──────────────────────────────────────────
   // Built from the shortcut registry so accelerators stay in sync with
   // user customizations. Rebuilt whenever shortcuts change.
-  installDynamicAppMenu(activeShortcutStore, terminalManager);
+  installDynamicAppMenu(activeShortcutStore, terminalManager, appUpdater);
+  appUpdater.start();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {

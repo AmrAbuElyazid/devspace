@@ -87,6 +87,11 @@ Current outputs include:
 - matching blockmaps for updater use
 - `latest-mac.yml` for macOS auto-update metadata
 
+Packaged builds also embed `app-update.yml` inside the app bundle. Right now:
+
+- production packaging is aligned with GitHub Releases metadata
+- local/private updater testing can override the feed with `DEVSPACE_UPDATE_FEED_URL`
+
 The release command fails if notarization credentials are missing or if
 Electron Builder cannot code sign the app.
 
@@ -98,8 +103,15 @@ spctl --assess --type exec --verbose "apps/desktop/release/mac-arm64/Devspace.ap
 xcrun stapler validate apps/desktop/release/Devspace-*.dmg
 ```
 
-The generated `latest-mac.yml` is ready to publish once the public update feed
-and release hosting path are finalized.
+For local/private updater testing against a generic feed, point the packaged app
+at a hosted `latest-mac.yml` with:
+
+```sh
+DEVSPACE_UPDATE_FEED_URL=https://example.com/devspace-updates bun run dist
+```
+
+Once the repo is public, packaged builds can use the embedded GitHub provider
+metadata instead of the override feed.
 
 ## Promote A Local Build Into /Applications
 

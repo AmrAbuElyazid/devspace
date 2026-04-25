@@ -12,6 +12,7 @@ import {
 import { mkdir, readFile, readdir, rename, rm, writeFile } from "fs/promises";
 import { join } from "path";
 import type { BrowserWindow } from "electron";
+import type { AppUpdaterLike } from "../app-updater";
 import { resolveDevelopmentPath } from "../dev-paths";
 import {
   getMainProcessPerformanceSnapshot,
@@ -35,7 +36,7 @@ function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
   );
 }
 
-export function registerSystemIpc(mainWindow: BrowserWindow): void {
+export function registerSystemIpc(mainWindow: BrowserWindow, appUpdater?: AppUpdaterLike): void {
   safeOn("window:minimize", () => {
     mainWindow.minimize();
   });
@@ -83,6 +84,22 @@ export function registerSystemIpc(mainWindow: BrowserWindow): void {
 
   safeHandle("app:resetPerformanceCounters", () => {
     resetMainProcessPerformanceCounters();
+  });
+
+  safeHandle("app:getUpdateState", () => {
+    return appUpdater?.getState() ?? null;
+  });
+
+  safeHandle("app:checkForUpdates", () => {
+    return appUpdater?.checkForUpdates("manual") ?? false;
+  });
+
+  safeHandle("app:installUpdate", () => {
+    return appUpdater?.quitAndInstall() ?? false;
+  });
+
+  appUpdater?.onStateChange((state) => {
+    mainWindow.webContents.send("app:updateStateChanged", state);
   });
 
   mainWindow.on("maximize", () => {

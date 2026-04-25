@@ -1,4 +1,4 @@
-import type { DevspaceBridge } from "../shared/types";
+import type { AppUpdateState, DevspaceBridge } from "../shared/types";
 import { DEFAULT_SHORTCUTS } from "../shared/shortcuts";
 import { getElectronBridge } from "./electron-bridge";
 
@@ -26,6 +26,18 @@ const bridge: DevspaceBridge = {
     },
     getPerformanceSnapshot: () => ipcRenderer.invoke("app:getPerformanceSnapshot"),
     resetPerformanceCounters: () => ipcRenderer.invoke("app:resetPerformanceCounters"),
+    getUpdateState: () => ipcRenderer.invoke("app:getUpdateState"),
+    checkForUpdates: () => ipcRenderer.invoke("app:checkForUpdates"),
+    installUpdate: () => ipcRenderer.invoke("app:installUpdate"),
+    onUpdateStateChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: AppUpdateState): void => {
+        callback(state);
+      };
+      ipcRenderer.on("app:updateStateChanged", listener);
+      return () => {
+        ipcRenderer.removeListener("app:updateStateChanged", listener);
+      };
+    },
   },
 
   terminal: {

@@ -5,6 +5,7 @@ import type { T3CodeServerManager } from "./t3code-server";
 import type { BrowserPaneController } from "./browser/browser-types";
 import type { BrowserImportService } from "./browser/browser-import-service";
 import type { BrowserSessionManager } from "./browser/browser-session-manager";
+import type { AppUpdaterLike } from "./app-updater";
 import { registerBrowserIpc } from "./ipc/browser";
 import { registerSystemIpc } from "./ipc/system";
 import { registerTerminalAndEditorIpc } from "./ipc/terminal-editor";
@@ -19,6 +20,7 @@ export function registerIpcHandlers(
   browserImportService?: BrowserImportService,
   editorSessionManager?: BrowserSessionManager,
   browserSessionManager?: BrowserSessionManager,
+  appUpdater?: AppUpdaterLike,
 ): void {
   registerTerminalAndEditorIpc(
     mainWindow,
@@ -29,7 +31,7 @@ export function registerIpcHandlers(
     editorSessionManager,
     browserSessionManager,
   );
-  registerSystemIpc(mainWindow);
+  registerSystemIpc(mainWindow, appUpdater);
   registerBrowserIpc(mainWindow, browserPaneManager, browserImportService);
   registerWorkspaceStateIpc();
 }

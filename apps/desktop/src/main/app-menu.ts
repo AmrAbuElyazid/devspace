@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu } from "electron";
+import type { AppUpdaterLike } from "./app-updater";
 import {
   DEFAULT_SHORTCUTS,
   getAllNativeBridgeShortcuts,
@@ -55,12 +56,34 @@ function menuItemsForGroup(
   });
 }
 
-function buildAppMenu(overrides: ReadonlyMap<ShortcutAction, StoredShortcut>): void {
+function buildAppMenu(
+  overrides: ReadonlyMap<ShortcutAction, StoredShortcut>,
+  appUpdater: AppUpdaterLike,
+): void {
+  const updateState = appUpdater.getState();
+  const updateMenuItem: MenuItem =
+    updateState.status === "downloaded"
+      ? {
+          label: `Restart to Update to ${updateState.availableVersion ?? "Latest"}`,
+          click: () => {
+            void appUpdater.quitAndInstall();
+          },
+        }
+      : {
+          label: "Check for Updates...",
+          enabled: updateState.enabled && updateState.status !== "checking",
+          click: () => {
+            void appUpdater.checkForUpdates("manual");
+          },
+        };
+
   const menuTemplate: MenuItem[] = [
     {
       label: app.name,
       submenu: [
         { role: "about" },
+        { type: "separator" },
+        updateMenuItem,
         { type: "separator" },
         ...menuItemsForGroup("App", overrides),
         { type: "separator" },
@@ -120,9 +143,10 @@ function syncNativeBridgeShortcuts(
 export function installDynamicAppMenu(
   shortcutStore: ShortcutStoreLike,
   terminalManager: NativeShortcutBridgeLike,
+  appUpdater: AppUpdaterLike,
 ): void {
   const rebuild = (): void => {
-    buildAppMenu(shortcutStore.getAllOverrides());
+    buildAppMenu(shortcutStore.getAllOverrides(), appUpdater);
     syncNativeBridgeShortcuts(shortcutStore, terminalManager);
   };
 
@@ -133,5 +157,9 @@ export function installDynamicAppMenu(
     for (const window of BrowserWindow.getAllWindows()) {
       window.webContents.send("shortcuts:changed");
     }
+  });
+
+  appUpdater.onStateChange(() => {
+    rebuild();
   });
 }

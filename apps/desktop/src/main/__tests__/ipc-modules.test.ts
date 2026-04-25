@@ -316,6 +316,24 @@ const browserSessionManagerMock = {
   },
 };
 
+const appUpdaterMock = {
+  getState: () => ({
+    enabled: true,
+    status: "idle" as const,
+    currentVersion: "0.1.0",
+    availableVersion: null,
+    checkedAt: null,
+    downloadPercent: null,
+    message: null,
+    disabledReason: null,
+  }),
+  checkForUpdates: async () => true,
+  quitAndInstall: async () => true,
+  onStateChange: (_callback: (state: unknown) => void) => {
+    return () => {};
+  },
+};
+
 registerTerminalAndEditorIpc(
   mainWindowMock as never,
   terminalManagerMock as never,
@@ -330,7 +348,7 @@ registerBrowserIpc(
   browserPaneManagerMock as never,
   browserImportServiceMock as never,
 );
-registerSystemIpc(mainWindowMock as never);
+registerSystemIpc(mainWindowMock as never, appUpdaterMock as never);
 
 function callHandler(channel: string, ...args: unknown[]) {
   return callRegisteredHandler(handlers, channel, ...args);
@@ -609,6 +627,25 @@ test("system IPC forwards window actions and native window events", async () => 
     ["window:fullScreenChange", true],
     ["window:fullScreenChange", false],
   ]);
+});
+
+test("system updater IPC exposes update state and actions", async () => {
+  const state = await callHandler("app:getUpdateState");
+  const checked = await callHandler("app:checkForUpdates");
+  const installed = await callHandler("app:installUpdate");
+
+  expect(state).toEqual({
+    enabled: true,
+    status: "idle",
+    currentVersion: "0.1.0",
+    availableVersion: null,
+    checkedAt: null,
+    downloadPercent: null,
+    message: null,
+    disabledReason: null,
+  });
+  expect(checked).toBe(true);
+  expect(installed).toBe(true);
 });
 
 test("system IPC only opens allowlisted external URLs", async () => {

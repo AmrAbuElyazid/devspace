@@ -51,6 +51,9 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
 
   await bridge.app.getPerformanceSnapshot();
   await bridge.app.resetPerformanceCounters();
+  await bridge.app.getUpdateState();
+  await bridge.app.checkForUpdates();
+  await bridge.app.installUpdate();
   bridge.window.setThemeMode("dark");
   await bridge.window.isFullScreen();
   await bridge.editor.isAvailable("code-insiders");
@@ -92,6 +95,7 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   });
   const unsubscribeFullScreen = bridge.window.onFullScreenChange(() => {});
   const unsubscribeNativeModifier = bridge.window.onNativeModifierChanged(() => {});
+  const unsubscribeUpdateState = bridge.app.onUpdateStateChanged(() => {});
   const unsubscribeState = bridge.browser.onStateChange(() => {});
   const unsubscribeFocused = bridge.browser.onFocused(() => {});
   const unsubscribePermission = bridge.browser.onPermissionRequest(() => {});
@@ -99,6 +103,7 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   const unsubscribeOpenInNewTab = bridge.browser.onOpenInNewTabRequest(() => {});
   unsubscribeFullScreen();
   unsubscribeNativeModifier();
+  unsubscribeUpdateState();
   unsubscribeState();
   unsubscribeFocused();
   unsubscribePermission();
@@ -108,6 +113,9 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   expect(invokeCalls).toEqual([
     ["app:getPerformanceSnapshot"],
     ["app:resetPerformanceCounters"],
+    ["app:getUpdateState"],
+    ["app:checkForUpdates"],
+    ["app:installUpdate"],
     ["window:isFullScreen"],
     ["editor:isAvailable", "code-insiders"],
     ["editor:getCliStatus", "code-insiders"],
@@ -145,6 +153,7 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   expect(listenerRegistrations).toEqual([
     ["on", "window:fullScreenChange"],
     ["on", "window:nativeModifierChanged"],
+    ["on", "app:updateStateChanged"],
     ["on", "browser:stateChanged"],
     ["on", "browser:focused"],
     ["on", "browser:permissionRequested"],
@@ -152,6 +161,7 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
     ["on", "browser:openInNewTabRequested"],
     ["removeListener", "window:fullScreenChange"],
     ["removeListener", "window:nativeModifierChanged"],
+    ["removeListener", "app:updateStateChanged"],
     ["removeListener", "browser:stateChanged"],
     ["removeListener", "browser:focused"],
     ["removeListener", "browser:permissionRequested"],

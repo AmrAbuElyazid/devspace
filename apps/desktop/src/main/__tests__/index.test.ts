@@ -62,6 +62,22 @@ async function loadIndexModule(options: LoadIndexOptions = {}) {
   const syncShellEnvironment = vi.fn();
   const registerIpcHandlers = vi.fn();
   const installWindowZoomReset = vi.fn();
+  const appUpdater = {
+    start: vi.fn(),
+    getState: vi.fn(() => ({
+      enabled: false,
+      status: "disabled" as const,
+      currentVersion: "0.1.0",
+      availableVersion: null,
+      checkedAt: null,
+      downloadPercent: null,
+      message: null,
+      disabledReason: "Automatic updates are only available in packaged production builds.",
+    })),
+    checkForUpdates: vi.fn(async () => false),
+    quitAndInstall: vi.fn(async () => false),
+    onStateChange: vi.fn(() => () => {}),
+  };
   const terminalManager = {
     init: vi.fn(),
     setReservedShortcuts: vi.fn(),
@@ -95,6 +111,14 @@ async function loadIndexModule(options: LoadIndexOptions = {}) {
     init = terminalManager.init;
     setReservedShortcuts = terminalManager.setReservedShortcuts;
     destroyAll = terminalManager.destroyAll;
+  }
+
+  class AppUpdaterMock {
+    start = appUpdater.start;
+    getState = appUpdater.getState;
+    checkForUpdates = appUpdater.checkForUpdates;
+    quitAndInstall = appUpdater.quitAndInstall;
+    onStateChange = appUpdater.onStateChange;
   }
 
   class VscodeServerManagerMock {
@@ -217,6 +241,9 @@ async function loadIndexModule(options: LoadIndexOptions = {}) {
   vi.doMock("../terminal-manager", () => ({
     TerminalManager: TerminalManagerMock,
   }));
+  vi.doMock("../app-updater", () => ({
+    AppUpdater: AppUpdaterMock,
+  }));
   vi.doMock("../vscode-server", () => ({
     VscodeServerManager: VscodeServerManagerMock,
   }));
@@ -265,6 +292,7 @@ async function loadIndexModule(options: LoadIndexOptions = {}) {
   return {
     app,
     appHandlers,
+    appUpdater,
     browserSessionManager,
     browserPaneManager,
     browserImportService,
@@ -352,6 +380,7 @@ describe("main/index", () => {
     expect(ctx.terminalManager.init).toHaveBeenCalledWith(mainWindow);
     expect(ctx.registerIpcHandlers).toHaveBeenCalledTimes(1);
     expect(ctx.installWindowZoomReset).toHaveBeenCalledWith(mainWindow.webContents);
+    expect(ctx.appUpdater.start).toHaveBeenCalledTimes(1);
     expect(ctx.terminalManager.setReservedShortcuts).toHaveBeenCalledWith(["CmdOrCtrl+1"]);
     expect(ctx.setApplicationMenu).toHaveBeenCalledTimes(1);
 

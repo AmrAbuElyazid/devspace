@@ -32,6 +32,27 @@ export interface TerminalCreateOptions {
 
 export type TerminalCreateResult = { ok: true } | { error: string };
 
+export type AppUpdateStatus =
+  | "disabled"
+  | "idle"
+  | "checking"
+  | "available"
+  | "downloading"
+  | "downloaded"
+  | "up-to-date"
+  | "error";
+
+export interface AppUpdateState {
+  enabled: boolean;
+  status: AppUpdateStatus;
+  currentVersion: string;
+  availableVersion: string | null;
+  checkedAt: string | null;
+  downloadPercent: number | null;
+  message: string | null;
+  disabledReason: string | null;
+}
+
 export type EditorCliStatus =
   | {
       path: string;
@@ -49,6 +70,10 @@ export interface DevspaceBridge {
     onAction: (callback: (channel: string, ...args: unknown[]) => void) => () => void;
     getPerformanceSnapshot: () => Promise<MainProcessPerformanceSnapshot>;
     resetPerformanceCounters: () => Promise<void>;
+    getUpdateState: () => Promise<AppUpdateState>;
+    checkForUpdates: () => Promise<boolean>;
+    installUpdate: () => Promise<boolean>;
+    onUpdateStateChanged: (callback: (state: AppUpdateState) => void) => () => void;
   };
   terminal: {
     create: (surfaceId: string, options?: TerminalCreateOptions) => Promise<TerminalCreateResult>;

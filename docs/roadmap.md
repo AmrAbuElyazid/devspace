@@ -21,6 +21,7 @@ roadmap assumed:
 - unit/integration coverage is broad, and Playwright Electron coverage exists locally
 - Devspace now has a working local macOS `Developer ID Application` signing and notarization flow that produces a signed DMG from `bun run dist`
 - the desktop release config now emits macOS `dmg` and `zip` artifacts plus `latest-mac.yml` updater metadata
+- the updater runtime is now wired through main/preload/renderer/menu, with a local generic-feed override for private testing and packaged GitHub provider metadata for the future public release path
 
 The main remaining work is concentrated in:
 
@@ -38,7 +39,7 @@ Browser` as the practical fallback for those flows.
 ## Important Findings
 
 - The repo does not have to be public to ship a production app outside the Mac App Store.
-- Public end-user auto-updates should not depend on the current private GitHub source repo.
+- Public end-user auto-updates can use GitHub Releases directly once the repo is public.
 - The paused updater spike in `./.worktrees/electron-updater` contains useful runtime and UI work, but its packaging and publishing assumptions are not production-ready as-is.
 - `ghostty-electron` is documented like a future public OSS package, but it is not yet publish-ready.
 - The old roadmap is partially stale in a few areas because issue templates, a macOS native CI job, and signed/notarized local release builds now already exist.
@@ -75,17 +76,16 @@ directly affect production quality, release confidence, or OSS readiness.
 
 ### Distribution Model
 
-- Keep the source repository private if desired.
-- Publish release artifacts to a public binary host.
-- Prefer `electron-updater` with a `generic` provider over GitHub provider for end-user updates.
-- Treat GitHub Releases as optional human-facing downloads, not as the primary update backend, unless a separate public release repository is introduced.
+- The source repository can stay private during development, but the planned production path now assumes a public repo.
+- Use `electron-updater` with the GitHub provider for the production release path once the repo is public.
+- Use `DEVSPACE_UPDATE_FEED_URL` with a generic feed for local/private packaged-app testing before the public release path is live.
+- Treat a separate binary host as optional unless release volume or branding needs justify moving off GitHub later.
 
-### Why The Generic Provider Is Preferred
+### Why The Local Generic Override Still Matters
 
-- It avoids runtime GitHub authentication on user machines.
-- It decouples binary distribution from source repository visibility.
-- It works cleanly with a future `downloads.devspace.app` style endpoint.
-- It avoids making the private source repo part of the user update path.
+- It lets packaged builds test update checks before the source repo is public.
+- It avoids needing GitHub auth on developer machines during private testing.
+- It gives a clean fallback if you later move release artifacts off GitHub.
 
 ### Packaging Changes Needed
 
@@ -96,10 +96,9 @@ directly affect production quality, release confidence, or OSS readiness.
 
 ### Updater Runtime Changes Needed
 
-- Port the useful client/runtime work from `./.worktrees/electron-updater` onto current `main`.
-- Reuse the updater state machine, polling, manual check, download progress, and install prompt behaviors.
-- Reconnect update state through `main`, `preload`, `shared`, and renderer surfaces on top of the current codebase rather than cherry-picking the spike wholesale.
-- Integrate the update UI into the current Settings layout and app menu.
+- Harden the updater runtime now that it is wired through `main`, `preload`, `shared`, renderer Settings UI, and the app menu.
+- Validate both feed modes: generic override for private/local testing and packaged GitHub provider metadata for the future public release path.
+- Test the download/install path only from packaged builds.
 
 ### Release Automation Changes Needed
 
@@ -107,7 +106,7 @@ directly affect production quality, release confidence, or OSS readiness.
 - Import signing credentials in CI.
 - Provide Apple notarization credentials in CI.
 - Build signed and notarized macOS artifacts on macOS runners.
-- Upload update metadata and release artifacts to the chosen public host.
+- Publish update metadata and release artifacts to GitHub Releases.
 - Validate the produced artifacts with `codesign`, `spctl`, and `stapler`.
 
 ### Versioning Policy
@@ -236,7 +235,7 @@ following are true:
 ## Immediate Next Steps
 
 1. Tighten this roadmap so any remaining stale wording is removed as work lands.
-2. Decide the public binary host and update feed model.
-3. Publish the generated update metadata and release artifacts to the chosen public feed.
-4. Port the updater runtime from the paused spike onto current `main`.
-5. Build the macOS release workflow and smoke-test the full update path.
+2. Publish the generated update metadata and release artifacts to GitHub Releases.
+3. Build the macOS release workflow and smoke-test the full update path.
+4. Validate a real packaged upgrade path from one shipped version to the next.
+5. Add app icon assets and wire icon configuration into the desktop build.

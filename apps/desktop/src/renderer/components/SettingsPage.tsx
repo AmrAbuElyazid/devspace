@@ -14,7 +14,7 @@ import { useSettingsStore } from "../store/settings-store";
 import { Button } from "./ui/button";
 import { ShortcutRecorder } from "./ui/shortcut-recorder";
 import BrowserImportPanel from "./browser/BrowserImportPanel";
-import type { EditorCliStatus } from "../../shared/types";
+import type { AppUpdateState, EditorCliStatus } from "../../shared/types";
 import {
   SHORTCUT_CATEGORIES,
   getVisibleShortcutsForCategory,
@@ -35,6 +35,8 @@ const NAV_ITEMS: Array<{ id: SettingsSection; label: string; icon: typeof Settin
   { id: "browser", label: "Browser", icon: Globe },
   { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
 ];
+
+const RELEASES_URL = "https://github.com/AmrAbuElyazid/devspace/releases";
 
 export default function SettingsPage() {
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -143,6 +145,9 @@ function GeneralSection() {
       <SectionTitle>General</SectionTitle>
       <SettingRow label="Shell command">
         <InstallCliButton />
+      </SettingRow>
+      <SettingRow label="Version & updates">
+        <UpdatesPanel />
       </SettingRow>
       <SettingRow label="Show shortcut hints on modifier press">
         <Toggle
@@ -303,6 +308,121 @@ function BrowserSection() {
       <BrowserImportPanel />
     </section>
   );
+}
+
+function UpdatesPanel() {
+  const [state, setState] = useState<AppUpdateState | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void window.api.app.getUpdateState().then((nextState) => {
+      if (!cancelled) {
+        setState(nextState);
+      }
+    });
+
+    const unsubscribe = window.api.app.onUpdateStateChanged((nextState) => {
+      setState(nextState);
+    });
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, []);
+
+  const checkForUpdates = useCallback(() => {
+    void window.api.app.checkForUpdates();
+  }, []);
+
+  const installUpdate = useCallback(() => {
+    void window.api.app.installUpdate();
+  }, []);
+
+  return (
+    <div className="flex flex-col items-end gap-1.5 text-right max-w-sm">
+      <span className="text-xs break-all" style={{ color: "var(--foreground)" }}>
+        {state?.currentVersion ?? "Loading version..."}
+      </span>
+      <span className="text-[11px]" style={{ color: getUpdateStatusColor(state) }}>
+        {formatUpdateStatus(state)}
+      </span>
+      {state?.checkedAt ? (
+        <span className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+          Last checked {new Date(state.checkedAt).toLocaleString()}
+        </span>
+      ) : null}
+      <div className="flex flex-wrap justify-end gap-2 pt-1">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={checkForUpdates}
+          disabled={
+            !state?.enabled || state.status === "checking" || state.status === "downloading"
+          }
+        >
+          {state?.status === "checking" ? "Checking..." : "Check for Updates"}
+        </Button>
+        {state?.status === "downloaded" ? (
+          <Button size="sm" onClick={installUpdate}>
+            Restart to Update
+          </Button>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => window.api.shell.openExternal(RELEASES_URL)}
+        >
+          View Releases
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function getUpdateStatusColor(state: AppUpdateState | null): string {
+  if (!state) {
+    return "var(--muted-foreground)";
+  }
+  if (state.status === "error") {
+    return "var(--destructive)";
+  }
+  if (state.status === "downloaded") {
+    return "var(--accent)";
+  }
+  return "var(--muted-foreground)";
+}
+
+function formatUpdateStatus(state: AppUpdateState | null): string {
+  if (!state) {
+    return "Checking update availability...";
+  }
+
+  if (state.message) {
+    return state.message;
+  }
+
+  switch (state.status) {
+    case "disabled":
+      return state.disabledReason ?? "Automatic updates are unavailable.";
+    case "idle":
+      return "Automatic update checks are enabled.";
+    case "checking":
+      return "Checking for updates...";
+    case "available":
+      return `Update ${state.availableVersion ?? "available"} found. Downloading...`;
+    case "downloading":
+      return `Downloading update${
+        state.downloadPercent === null ? "..." : ` (${Math.round(state.downloadPercent)}%)...`
+      }`;
+    case "downloaded":
+      return `Update ${state.availableVersion ?? ""} is ready to install.`.trim();
+    case "up-to-date":
+      return "You're up to date.";
+    case "error":
+      return "Update check failed.";
+  }
 }
 
 // ── Keyboard Shortcuts Section ────────────────────────────────────────────────
