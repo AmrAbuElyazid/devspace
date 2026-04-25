@@ -182,6 +182,11 @@ If the bundle is missing, it downloads the pinned release asset described by
 `libghostty-bundle.json` and verifies the extracted contents before linking the
 native addon.
 
+The bundle manifest records both the pinned upstream Ghostty tag and the
+default GitHub repository used to host the prebuilt archive. Third-party and
+preserved upstream notices for the bundled files live in
+[`THIRD_PARTY_NOTICES.md`](./THIRD_PARTY_NOTICES.md).
+
 For local forks or private mirrors, you can override the download URL with:
 
 ```sh
@@ -207,6 +212,10 @@ bun run bundle-libghostty
 
 This clones the pinned Ghostty tag, rebuilds `libghostty`, refreshes the
 checksum manifest, and packages the publishable release bundle.
+
+When the Ghostty pin changes, also review `libghostty-bundle.json` and
+`THIRD_PARTY_NOTICES.md` so the recorded provenance and preserved notices stay
+aligned with the published bundle.
 
 The matching GitHub Actions workflow is:
 

@@ -44,20 +44,20 @@ Browser` as the practical fallback for those flows.
 
 ## Roadmap Audit
 
-| Legacy roadmap item | Status | Notes |
-| --- | --- | --- |
-| Document and validate the hardened embedded VS Code flow | Partially done, still active | The hardened flow is implemented in code and covered by tests. Remaining work is final validation guidance and clearer docs. |
-| Document localhost/editor trust posture | Partially done, still active | `README.md` and `SECURITY.md` already cover much of this. Remaining work is consolidation and better user-facing wording. |
-| Document browser privacy persistence | Partially done, still active | Current docs and code already describe persistent cookies, plaintext history storage, and editor URL exclusions. A dedicated privacy/storage section would make this easier to audit. |
-| Clarify package and desktop distribution posture | Still active, high priority | One of the most important remaining items for both release readiness and OSS readiness. |
-| Add third-party notice/license attribution for bundled Ghostty assets | Partially done, still active | `packages/ghostty-electron/THIRD_PARTY_NOTICES.md` exists, but bundled asset provenance and redistribution comfort still need a final pass. |
-| Break up remaining maintainability hotspots | Still active | `apps/desktop/src/main/index.ts` and a few preload/renderer seams still carry integration risk. |
-| Reduce preload contract drift risk | Still active, more important now | Auto-update work will expand the bridge, so this risk grows if not managed deliberately. |
-| Reduce test-environment coupling and warning noise | Still active | The suite is broad and green, but warning noise and a few environment-sensitive paths remain. |
-| Add a macOS native smoke lane to CI | Partially stale, still active | A macOS native CI job already exists. The unfinished part is packaged-app and Playwright Electron smoke coverage in CI. |
-| Continue performance hardening | Still active, lower than release/OSS work | Useful product maturity work, but not a first blocker for public release or OSS launch. |
-| Improve `ghostty-electron` package maturity | Still active, high priority if the package will be public | Publishable artifacts, packaging strategy, and stronger native-addon confidence are still open. |
-| Add lightweight OSS collaboration scaffolding | Partially stale | Issue templates already exist. Remaining gaps are a PR template and `CODEOWNERS`. |
+| Legacy roadmap item                                                   | Status                                                    | Notes                                                                                                                                                                                  |
+| --------------------------------------------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Document and validate the hardened embedded VS Code flow              | Partially done, still active                              | The hardened flow is implemented in code and covered by tests. Remaining work is final validation guidance and clearer docs.                                                           |
+| Document localhost/editor trust posture                               | Partially done, still active                              | `README.md` and `SECURITY.md` already cover much of this. Remaining work is consolidation and better user-facing wording.                                                              |
+| Document browser privacy persistence                                  | Partially done, still active                              | Current docs and code already describe persistent cookies, plaintext history storage, and editor URL exclusions. A dedicated privacy/storage section would make this easier to audit.  |
+| Clarify package and desktop distribution posture                      | Still active, high priority                               | One of the most important remaining items for both release readiness and OSS readiness.                                                                                                |
+| Add third-party notice/license attribution for bundled Ghostty assets | Done, keep maintained when the pin changes                | `packages/ghostty-electron/THIRD_PARTY_NOTICES.md` now documents the pinned upstream source, the release bundle provenance, preserved GPLv3 notices, and Devspace-owned wrapper files. |
+| Break up remaining maintainability hotspots                           | Still active                                              | `apps/desktop/src/main/index.ts` and a few preload/renderer seams still carry integration risk.                                                                                        |
+| Reduce preload contract drift risk                                    | Still active, more important now                          | Auto-update work will expand the bridge, so this risk grows if not managed deliberately.                                                                                               |
+| Reduce test-environment coupling and warning noise                    | Still active                                              | The suite is broad and green, but warning noise and a few environment-sensitive paths remain.                                                                                          |
+| Add a macOS native smoke lane to CI                                   | Partially stale, still active                             | A macOS native CI job already exists. The unfinished part is packaged-app and Playwright Electron smoke coverage in CI.                                                                |
+| Continue performance hardening                                        | Still active, lower than release/OSS work                 | Useful product maturity work, but not a first blocker for public release or OSS launch.                                                                                                |
+| Improve `ghostty-electron` package maturity                           | Still active, high priority if the package will be public | Publishable artifacts, packaging strategy, and stronger native-addon confidence are still open.                                                                                        |
+| Add lightweight OSS collaboration scaffolding                         | Partially stale                                           | Issue templates already exist. Remaining gaps are a PR template and `CODEOWNERS`.                                                                                                      |
 
 ## High Priority Next
 
@@ -65,10 +65,10 @@ These items should remain at the top of the execution queue because they
 directly affect production quality, release confidence, or OSS readiness.
 
 1. Clarify the package and desktop distribution posture.
-2. Finalize bundled Ghostty attribution and provenance review.
-3. Extend the existing macOS CI lane with packaged-app smoke coverage.
-4. Reduce preload contract drift risk before adding updater APIs.
-5. Decide whether `ghostty-electron` is actually becoming a public package now or remains monorepo-internal for the near term.
+2. Extend the existing macOS CI lane with packaged-app smoke coverage.
+3. Reduce preload contract drift risk before adding updater APIs.
+4. Decide whether `ghostty-electron` is actually becoming a public package now or remains monorepo-internal for the near term.
+5. Add missing desktop metadata and icon configuration for public release artifacts.
 
 ## Production And Auto-Update Plan
 
@@ -128,9 +128,9 @@ directly affect production quality, release confidence, or OSS readiness.
 
 ### Must-Fix Before Making The Repo Public
 
-- Fix stale ownership/provenance links that still point to `anomalyco/devspace` in `packages/ghostty-electron/package.json` and `packages/ghostty-electron/libghostty-bundle.json`.
+- Keep ownership and provenance links current across package metadata, especially `packages/ghostty-electron/package.json` and `packages/ghostty-electron/libghostty-bundle.json`.
 - Decide the intended public story for `ghostty-electron`.
-- Confirm that bundled Ghostty assets and preserved upstream notices are documented to a standard you are comfortable redistributing publicly.
+- Keep bundled Ghostty asset provenance and preserved upstream notices aligned whenever the pinned dependency bundle changes.
 - Add missing public-facing desktop package metadata and icon configuration.
 
 ### Strongly Recommended Before Making The Repo Public
@@ -172,11 +172,11 @@ If the public-package-now path is chosen:
 
 ### Phase 1: Documentation And Provenance Cleanup
 
-- Fix stale repository references.
+- Verify repository references and package provenance metadata stay current.
 - Rewrite stale roadmap items so they reflect current reality.
 - Tighten `docs/release-process.md` to describe the current signed/notarized flow and the next release-hosting steps.
 - Add a maintainer-facing release checklist.
-- Review and finalize Ghostty bundled asset notices and provenance wording.
+- Keep Ghostty bundled asset notices and provenance wording aligned with future bundle updates.
 
 ### Phase 2: Production Packaging Maturity
 
@@ -234,9 +234,8 @@ following are true:
 
 ## Immediate Next Steps
 
-1. Fix stale `anomalyco/devspace` references and other provenance mismatches.
-2. Tighten this roadmap so any remaining stale wording is removed as work lands.
-3. Decide the public binary host and update feed model.
-4. Add `zip` output and update metadata to the desktop release build.
-5. Port the updater runtime from the paused spike onto current `main`.
-6. Build the macOS release workflow and smoke-test the full update path.
+1. Tighten this roadmap so any remaining stale wording is removed as work lands.
+2. Decide the public binary host and update feed model.
+3. Add `zip` output and update metadata to the desktop release build.
+4. Port the updater runtime from the paused spike onto current `main`.
+5. Build the macOS release workflow and smoke-test the full update path.

@@ -1,7 +1,9 @@
 {
   "schemaVersion": 1,
   "ghosttyTag": "v1.3.1",
-  "repository": "anomalyco/devspace",
+  "sourceRepository": "ghostty-org/ghostty",
+  "sourceLicense": "MIT",
+  "releaseRepository": "AmrAbuElyazid/devspace",
   "platform": "darwin",
   "arch": "arm64",
   "releaseTag": "ghostty-deps-v1.3.1",

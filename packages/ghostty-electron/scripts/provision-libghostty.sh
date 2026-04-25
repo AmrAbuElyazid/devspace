@@ -37,7 +37,7 @@ bundle_repository() {
     fi
   fi
 
-  node -p 'const manifest=require(process.argv[1]); manifest.repository' "$MANIFEST_FILE"
+  node -p 'const manifest=require(process.argv[1]); manifest.releaseRepository' "$MANIFEST_FILE"
 }
 
 asset_url() {

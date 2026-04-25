@@ -48,6 +48,14 @@ That workflow rebuilds the pinned bundle on macOS, verifies the committed
 checksum manifest, and uploads the release asset referenced by
 `packages/ghostty-electron/libghostty-bundle.json`.
 
+Before publishing an updated Ghostty bundle, also review:
+
+- `packages/ghostty-electron/libghostty-bundle.json`
+- `packages/ghostty-electron/THIRD_PARTY_NOTICES.md`
+
+Make sure the pinned upstream tag, default release repository, and preserved
+upstream notice paths still match the bundle contents you are redistributing.
+
 ## Build A Signed macOS DMG
 
 For a public macOS release, the app must be signed with a `Developer ID
