@@ -20,6 +20,7 @@ roadmap assumed:
 - embedded VS Code now uses fixed-port listener ownership checks, isolated dev/build data, isolated editor Chromium sessions, and a default-off background server lifecycle
 - unit/integration coverage is broad, and Playwright Electron coverage exists locally
 - Devspace now has a working local macOS `Developer ID Application` signing and notarization flow that produces a signed DMG from `bun run dist`
+- the desktop release config now emits macOS `dmg` and `zip` artifacts plus `latest-mac.yml` updater metadata
 
 The main remaining work is concentrated in:
 
@@ -68,7 +69,7 @@ directly affect production quality, release confidence, or OSS readiness.
 2. Extend the existing macOS CI lane with packaged-app smoke coverage.
 3. Reduce preload contract drift risk before adding updater APIs.
 4. Decide whether `ghostty-electron` is actually becoming a public package now or remains monorepo-internal for the near term.
-5. Add missing desktop metadata and icon configuration for public release artifacts.
+5. Add app icon configuration for public release artifacts.
 
 ## Production And Auto-Update Plan
 
@@ -89,9 +90,9 @@ directly affect production quality, release confidence, or OSS readiness.
 ### Packaging Changes Needed
 
 - Keep the current signing, hardened runtime, entitlements, and notarization flow from `apps/desktop/package.json` and `apps/desktop/build/dist-mac-release.sh`.
-- Add macOS `zip` output alongside `dmg` so Electron Builder generates the metadata required for macOS auto-updates.
+- Keep emitting macOS `dmg`, `zip`, blockmaps, and `latest-mac.yml` from the desktop release build.
 - Publish `*.dmg`, `*.zip`, `*.blockmap`, and `latest-mac.yml`.
-- Add missing desktop metadata such as `description`, `author`, `repository`, `homepage`, `bugs`, and app icon configuration.
+- Keep desktop package metadata current and add app icon configuration.
 
 ### Updater Runtime Changes Needed
 
@@ -131,7 +132,7 @@ directly affect production quality, release confidence, or OSS readiness.
 - Keep ownership and provenance links current across package metadata, especially `packages/ghostty-electron/package.json` and `packages/ghostty-electron/libghostty-bundle.json`.
 - Decide the intended public story for `ghostty-electron`.
 - Keep bundled Ghostty asset provenance and preserved upstream notices aligned whenever the pinned dependency bundle changes.
-- Add missing public-facing desktop package metadata and icon configuration.
+- Add public-facing desktop app icon configuration.
 
 ### Strongly Recommended Before Making The Repo Public
 
@@ -180,8 +181,8 @@ If the public-package-now path is chosen:
 
 ### Phase 2: Production Packaging Maturity
 
-- Add desktop metadata and icon configuration.
-- Add `zip` output and update metadata generation.
+- Add desktop app icon configuration.
+- Publish the generated update metadata and release artifacts to the chosen public feed.
 - Define the public binary host and update feed URL structure.
 - Decide the release versioning workflow.
 
@@ -236,6 +237,6 @@ following are true:
 
 1. Tighten this roadmap so any remaining stale wording is removed as work lands.
 2. Decide the public binary host and update feed model.
-3. Add `zip` output and update metadata to the desktop release build.
+3. Publish the generated update metadata and release artifacts to the chosen public feed.
 4. Port the updater runtime from the paused spike onto current `main`.
 5. Build the macOS release workflow and smoke-test the full update path.

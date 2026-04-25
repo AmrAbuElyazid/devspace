@@ -56,7 +56,7 @@ Before publishing an updated Ghostty bundle, also review:
 Make sure the pinned upstream tag, default release repository, and preserved
 upstream notice paths still match the bundle contents you are redistributing.
 
-## Build A Signed macOS DMG
+## Build Signed macOS Release Artifacts
 
 For a public macOS release, the app must be signed with a `Developer ID
 Application` certificate and notarized by Apple.
@@ -76,10 +76,19 @@ Then run from the repo root:
 bun run dist
 ```
 
-This produces a signed macOS arm64 DMG in `apps/desktop/release/` using the
-Electron Builder config in `apps/desktop/package.json`. The release command
-fails if notarization credentials are missing or if Electron Builder cannot
-code sign the app.
+This produces signed macOS arm64 release artifacts in
+`apps/desktop/release/` using the Electron Builder config in
+`apps/desktop/package.json`.
+
+Current outputs include:
+
+- `Devspace-<version>-arm64.dmg`
+- `Devspace-<version>-arm64.zip`
+- matching blockmaps for updater use
+- `latest-mac.yml` for macOS auto-update metadata
+
+The release command fails if notarization credentials are missing or if
+Electron Builder cannot code sign the app.
 
 After the build completes, validate the signed artifacts:
 
@@ -88,6 +97,9 @@ codesign --verify --deep --strict --verbose=2 "apps/desktop/release/mac-arm64/De
 spctl --assess --type exec --verbose "apps/desktop/release/mac-arm64/Devspace.app"
 xcrun stapler validate apps/desktop/release/Devspace-*.dmg
 ```
+
+The generated `latest-mac.yml` is ready to publish once the public update feed
+and release hosting path are finalized.
 
 ## Promote A Local Build Into /Applications
 

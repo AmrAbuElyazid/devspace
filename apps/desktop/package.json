@@ -2,6 +2,17 @@
   "name": "@devspace/desktop",
   "version": "0.1.0",
   "private": true,
+  "description": "Devspace desktop app with embedded terminal, browser, and editor panes",
+  "homepage": "https://github.com/AmrAbuElyazid/devspace",
+  "bugs": {
+    "url": "https://github.com/AmrAbuElyazid/devspace/issues"
+  },
+  "author": "Amr Mohamed",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AmrAbuElyazid/devspace.git",
+    "directory": "apps/desktop"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
@@ -57,12 +68,16 @@
   "build": {
     "appId": "com.devspace.app",
     "productName": "Devspace",
+    "artifactName": "Devspace-${version}-${arch}.${ext}",
     "asar": true,
     "asarUnpack": [
       "../../packages/ghostty-electron/native/build/Release/*.node"
     ],
     "mac": {
-      "target": "dmg",
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "category": "public.app-category.developer-tools",
       "hardenedRuntime": true,
       "notarize": true,
