@@ -71,6 +71,7 @@
     "appId": "com.devspace.app",
     "productName": "Devspace",
     "artifactName": "Devspace-${version}-${arch}.${ext}",
+    "icon": "build/icon.icns",
     "asar": true,
     "asarUnpack": [
       "../../packages/ghostty-electron/native/build/Release/*.node"
