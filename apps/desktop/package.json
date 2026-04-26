@@ -22,6 +22,7 @@
     "rebuild-native": "bun run --cwd ../../packages/ghostty-electron rebuild-native",
     "dist": "bash ./build/dist-mac-release.sh",
     "dist:dir": "bun run build && bun run rebuild-native && bunx electron-builder --mac --arm64 --dir --publish never",
+    "test:e2e:packaged": "bunx playwright test --config e2e/playwright.config.ts e2e/packaged-smoke.spec.ts",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -88,6 +89,14 @@
     "directories": {
       "output": "release"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "AmrAbuElyazid",
+        "repo": "devspace",
+        "releaseType": "release"
+      }
+    ],
     "files": [
       "out/**/*",
       "../../packages/ghostty-electron/native/build/Release/ghostty_bridge.node"

@@ -4,6 +4,12 @@ import { join } from "path";
 
 const PROJECT_ROOT = join(__dirname, "../..");
 
+interface LaunchAppOptions {
+  executablePath?: string;
+  extraArgs?: string[];
+  env?: NodeJS.ProcessEnv;
+}
+
 /**
  * Launch the Devspace Electron app for E2E testing.
  *
@@ -12,13 +18,25 @@ const PROJECT_ROOT = join(__dirname, "../..");
 export async function launchApp(): Promise<{
   app: ElectronApplication;
   page: Page;
+}>;
+export async function launchApp(options: LaunchAppOptions): Promise<{
+  app: ElectronApplication;
+  page: Page;
+}>;
+export async function launchApp(options: LaunchAppOptions = {}): Promise<{
+  app: ElectronApplication;
+  page: Page;
 }> {
+  const executablePath = options.executablePath?.trim();
   const app = await electron.launch({
-    args: [join(PROJECT_ROOT, "out/main/index.js")],
+    ...(executablePath
+      ? { executablePath, args: options.extraArgs ?? [] }
+      : { args: [join(PROJECT_ROOT, "out/main/index.js"), ...(options.extraArgs ?? [])] }),
     cwd: PROJECT_ROOT,
     env: {
       ...process.env,
-      NODE_ENV: "development",
+      NODE_ENV: executablePath ? "production" : "development",
+      ...options.env,
     },
   });
 

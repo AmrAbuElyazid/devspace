@@ -22,6 +22,7 @@ roadmap assumed:
 - Devspace now has a working local macOS `Developer ID Application` signing and notarization flow that produces a signed DMG from `bun run dist`
 - the desktop release config now emits macOS `dmg` and `zip` artifacts plus `latest-mac.yml` updater metadata
 - the updater runtime is now wired through main/preload/renderer/menu, with a local generic-feed override for private testing and packaged GitHub provider metadata for the future public release path
+- the repo now has a tagged macOS release workflow that verifies, signs, notarizes, smoke-tests, and publishes desktop artifacts to GitHub Releases once the required secrets are configured
 
 The main remaining work is concentrated in:
 
@@ -43,6 +44,7 @@ Browser` as the practical fallback for those flows.
 - The paused updater spike in `./.worktrees/electron-updater` contains useful runtime and UI work, but its packaging and publishing assumptions are not production-ready as-is.
 - `ghostty-electron` is documented like a future public OSS package, but it is not yet publish-ready.
 - The old roadmap is partially stale in a few areas because issue templates, a macOS native CI job, and signed/notarized local release builds now already exist.
+- The remaining release blockers are now mostly operational: GitHub release secrets, a first real tagged release run, a verified upgrade path across shipped versions, and app icon assets.
 
 ## Roadmap Audit
 
@@ -108,6 +110,7 @@ directly affect production quality, release confidence, or OSS readiness.
 - Build signed and notarized macOS artifacts on macOS runners.
 - Publish update metadata and release artifacts to GitHub Releases.
 - Validate the produced artifacts with `codesign`, `spctl`, and `stapler`.
+- Smoke-test the packaged app in CI before publishing.
 
 ### Versioning Policy
 
@@ -235,7 +238,7 @@ following are true:
 ## Immediate Next Steps
 
 1. Tighten this roadmap so any remaining stale wording is removed as work lands.
-2. Publish the generated update metadata and release artifacts to GitHub Releases.
-3. Build the macOS release workflow and smoke-test the full update path.
-4. Validate a real packaged upgrade path from one shipped version to the next.
-5. Add app icon assets and wire icon configuration into the desktop build.
+2. Configure the GitHub release secrets and run the first tagged desktop release.
+3. Validate a real packaged upgrade path from one shipped version to the next.
+4. Add app icon assets and wire icon configuration into the desktop build.
+5. Extend CI coverage beyond release smoke tests where deeper packaged-app scenarios are worth automating.

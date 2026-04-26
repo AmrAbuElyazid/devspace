@@ -113,6 +113,33 @@ DEVSPACE_UPDATE_FEED_URL=https://example.com/devspace-updates bun run dist
 Once the repo is public, packaged builds can use the embedded GitHub provider
 metadata instead of the override feed.
 
+## CI Release Workflow
+
+The repo now includes `.github/workflows/release-desktop.yml` for tagged macOS
+desktop releases.
+
+Workflow expectations:
+
+- trigger it from a tag like `v0.1.0`
+- keep `apps/desktop/package.json` version aligned with the tag version
+- add a matching `CHANGELOG.md` section before tagging
+
+Required GitHub secrets:
+
+- `CSC_LINK`
+- `CSC_KEY_PASSWORD`
+- `APPLE_ID`
+- `APPLE_APP_SPECIFIC_PASSWORD`
+- `APPLE_TEAM_ID`
+
+The workflow:
+
+- runs `fmt:check`, `typecheck`, `lint`, `knip`, and `test`
+- builds signed and notarized desktop artifacts on `macos-14`
+- validates the signed app and stapled DMG
+- smoke-tests the packaged app with Playwright
+- publishes `dmg`, `zip`, blockmaps, and `latest-mac.yml` to GitHub Releases
+
 ## Promote A Local Build Into /Applications
 
 For local day-to-day use, the repo includes a helper script:

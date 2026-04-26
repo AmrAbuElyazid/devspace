@@ -1,0 +1,154 @@
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-desktop:
+    name: Build And Publish Desktop Release
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release metadata
+        id: release_meta
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release workflow requires a semver tag like v0.1.0" >&2
+            exit 1
+          fi
+
+          if [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.8
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify desktop version matches tag
+        shell: bash
+        run: |
+          package_version="$(node -p "require('./apps/desktop/package.json').version")"
+          if [[ "$package_version" != "${{ steps.release_meta.outputs.version }}" ]]; then
+            echo "apps/desktop/package.json version $package_version does not match tag ${{ steps.release_meta.outputs.tag }}" >&2
+            exit 1
+          fi
+
+      - name: Verify changelog contains tagged release section
+        shell: bash
+        run: |
+          version="${{ steps.release_meta.outputs.version }}"
+          if ! grep -q "^## v${version} - " CHANGELOG.md; then
+            echo "CHANGELOG.md is missing a section for v${version}" >&2
+            exit 1
+          fi
+
+      - name: Check formatting
+        run: bun run fmt:check
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Check for unused code
+        run: bun run knip
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Restore pinned Ghostty dependency bundle
+        uses: actions/cache@v4
+        with:
+          path: packages/ghostty-electron/deps/libghostty
+          key: ${{ runner.os }}-libghostty-${{ hashFiles('packages/ghostty-electron/libghostty-bundle.json', 'packages/ghostty-electron/libghostty-files.sha256') }}
+
+      - name: Build signed and notarized desktop artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bun run dist
+
+      - name: Verify signed artifacts
+        run: |
+          codesign --verify --deep --strict --verbose=2 "apps/desktop/release/mac-arm64/Devspace.app"
+          spctl --assess --type exec --verbose "apps/desktop/release/mac-arm64/Devspace.app"
+          xcrun stapler validate apps/desktop/release/Devspace-*.dmg
+          test -f apps/desktop/release/latest-mac.yml
+
+      - name: Run packaged app smoke test
+        env:
+          DEVSPACE_E2E_PACKAGED_EXECUTABLE: ${{ github.workspace }}/apps/desktop/release/mac-arm64/Devspace.app/Contents/MacOS/Devspace
+          DEVSPACE_DISABLE_AUTO_UPDATE: "1"
+          DEVSPACE_DISABLE_SINGLE_INSTANCE_LOCK: "1"
+        run: bun run --cwd apps/desktop test:e2e:packaged
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.release_meta.outputs.tag }}
+          VERSION: ${{ steps.release_meta.outputs.version }}
+          PRERELEASE: ${{ steps.release_meta.outputs.prerelease }}
+        shell: bash
+        run: |
+          files=(
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml
+          )
+
+          if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" "${files[@]}" --clobber
+            exit 0
+          fi
+
+          prerelease_flag=()
+          if [[ "$PRERELEASE" == "true" ]]; then
+            prerelease_flag+=(--prerelease)
+          fi
+
+          gh release create "$TAG_NAME" "${files[@]}" \
+            --title "Devspace v$VERSION" \
+            --target "$GITHUB_SHA" \
+            --generate-notes \
+            "${prerelease_flag[@]}"

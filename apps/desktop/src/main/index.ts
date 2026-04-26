@@ -25,7 +25,12 @@ import { ShortcutStore } from "./shortcut-store";
 // which would lose existing user data (shortcuts, browser history, etc.).
 app.setName("devspace");
 
-if (IS_DEV) {
+const overriddenUserDataPath = process.env.DEVSPACE_USER_DATA_PATH?.trim();
+
+if (overriddenUserDataPath) {
+  app.setPath("userData", overriddenUserDataPath);
+  app.setPath("sessionData", join(overriddenUserDataPath, "session-data"));
+} else if (IS_DEV) {
   const devUserDataPath = join(app.getPath("appData"), "devspace-dev");
   app.setPath("userData", devUserDataPath);
   app.setPath("sessionData", join(devUserDataPath, "session-data"));
@@ -64,7 +69,7 @@ const cliHttpServer = createCliHttpServer({
 // Single-instance lock (production only)
 // ---------------------------------------------------------------------------
 
-if (!IS_DEV) {
+if (!IS_DEV && process.env.DEVSPACE_DISABLE_SINGLE_INSTANCE_LOCK !== "1") {
   const gotLock = app.requestSingleInstanceLock();
   if (!gotLock) {
     app.quit();
