@@ -14,6 +14,7 @@ import { findSidebarNode } from "../../lib/sidebar-tree";
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
 import { SidebarProvider, type SidebarContextValue } from "./SidebarContext";
 import { QuickLaunchGrid } from "./QuickLaunchGrid";
+import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import type { ContextMenuItem } from "../../../shared/types";
 import type { SidebarContainer } from "../../types/dnd";
 
@@ -472,8 +473,9 @@ export default function Sidebar() {
           variant="destructive"
         />
 
-        {/* Footer — settings only */}
+        {/* Footer — updater CTA + settings */}
         <div className="sidebar-footer">
+          <SidebarUpdateButton />
           <button
             type="button"
             className="sidebar-footer-settings no-drag"

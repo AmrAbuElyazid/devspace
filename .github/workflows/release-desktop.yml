@@ -137,7 +137,33 @@ jobs:
             apps/desktop/release/latest*.yml
           )
 
+          release_notes_file="$(mktemp)"
+          awk -v tag="$TAG_NAME" '
+            BEGIN {
+              in_section = 0
+              header = "^## " tag " - "
+            }
+            $0 ~ header {
+              in_section = 1
+              next
+            }
+            in_section && /^## / {
+              exit
+            }
+            in_section {
+              print
+            }
+          ' CHANGELOG.md > "$release_notes_file"
+
+          if [[ ! -s "$release_notes_file" ]]; then
+            echo "Missing changelog notes for $TAG_NAME" >&2
+            exit 1
+          fi
+
           if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+            gh release edit "$TAG_NAME" \
+              --title "Devspace v$VERSION" \
+              --notes-file "$release_notes_file"
             gh release upload "$TAG_NAME" "${files[@]}" --clobber
             exit 0
           fi
@@ -150,5 +176,5 @@ jobs:
           gh release create "$TAG_NAME" "${files[@]}" \
             --title "Devspace v$VERSION" \
             --target "$GITHUB_SHA" \
-            --generate-notes \
+            --notes-file "$release_notes_file" \
             "${prerelease_flag[@]}"

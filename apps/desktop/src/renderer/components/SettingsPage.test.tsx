@@ -170,3 +170,54 @@ test("does not persist text settings until the value is committed", async () => 
 
   expect(useSettingsStore.getState().defaultShell).toBe("/bin/zsh");
 });
+
+test("shows a friendly private-release updater message and wraps the status text", async () => {
+  const privateReleaseMessage =
+    "Automatic updates aren't available for private GitHub releases in this build. Use View Releases to download the latest version manually.";
+
+  installMockWindowApi({
+    window: {
+      isFullScreen: vi.fn(async () => false),
+      onFullScreenChange: vi.fn(() => () => {}),
+    },
+    editor: {
+      getCliStatus: vi.fn(async () => ({
+        path: "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+        source: "bundle" as const,
+      })),
+    },
+    app: {
+      getUpdateState: vi.fn(async () => ({
+        enabled: false,
+        status: "disabled" as const,
+        currentVersion: "0.1.0",
+        availableVersion: null,
+        checkedAt: "2026-04-26T05:30:00.000Z",
+        downloadPercent: null,
+        message: null,
+        disabledReason: privateReleaseMessage,
+      })),
+      onUpdateStateChanged: vi.fn(() => () => {}),
+    },
+  });
+
+  await act(async () => {
+    root?.render(<SettingsPage />);
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(container.textContent).toContain(privateReleaseMessage);
+
+  const checkButton = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent === "Check for Updates",
+  );
+  expect(checkButton?.hasAttribute("disabled")).toBe(true);
+
+  const statusText = Array.from(container.querySelectorAll("span")).find(
+    (span) => span.textContent === privateReleaseMessage,
+  );
+  expect(statusText?.className).toContain("break-words");
+  expect(statusText?.style.overflowWrap).toBe("anywhere");
+});

@@ -2,10 +2,12 @@ import { app, dialog, type BrowserWindow, type MessageBoxOptions } from "electro
 import { autoUpdater } from "electron-updater";
 import { existsSync } from "fs";
 import { join } from "path";
-import type { AppUpdateState } from "../shared/types";
+import type { AppUpdateState, AppUpdateStatus } from "../shared/types";
 
 const AUTO_UPDATE_STARTUP_DELAY_MS = 15_000;
 const AUTO_UPDATE_POLL_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const PRIVATE_GITHUB_RELEASES_UNSUPPORTED_MESSAGE =
+  "Automatic updates aren't available for private GitHub releases in this build. Use View Releases to download the latest version manually.";
 
 type UpdateCheckReason = "startup" | "poll" | "manual";
 
@@ -76,6 +78,29 @@ function formatErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isPrivateGitHubFeedAuthError(message: string): boolean {
+  const normalizedMessage = message.toLowerCase();
+  return (
+    normalizedMessage.includes("authentication token is correct") ||
+    normalizedMessage.includes("actual status maybe not reported, but 404")
+  );
+}
+
+function parseMockUpdateStatus(value: string | undefined): AppUpdateStatus | null {
+  switch (value?.trim()) {
+    case "available":
+      return "available";
+    case "downloading":
+      return "downloading";
+    case "downloaded":
+      return "downloaded";
+    case "up-to-date":
+      return "up-to-date";
+    default:
+      return null;
+  }
+}
+
 export class AppUpdater implements AppUpdaterLike {
   private readonly appApi;
   private readonly updater;
@@ -125,6 +150,12 @@ export class AppUpdater implements AppUpdaterLike {
     this.started = true;
 
     if (!this.state.enabled) {
+      return;
+    }
+
+    const mockState = this.createMockState();
+    if (mockState) {
+      this.setState(mockState);
       return;
     }
 
@@ -183,16 +214,20 @@ export class AppUpdater implements AppUpdaterLike {
       void this.promptToInstall(info.version);
     });
     this.updater.on("error", (error: unknown) => {
-      const message = formatErrorMessage(error);
-      const nextStatus = this.state.availableVersion ? "available" : "error";
-      this.setState({
-        ...this.state,
-        status: nextStatus,
-        checkedAt: this.now(),
-        downloadPercent: null,
-        message,
-      });
-      console.error(`[updater] ${message}`);
+      const rawMessage = formatErrorMessage(error);
+      if (isPrivateGitHubFeedAuthError(rawMessage)) {
+        this.setState(this.createDisabledState(PRIVATE_GITHUB_RELEASES_UNSUPPORTED_MESSAGE));
+      } else {
+        const nextStatus = this.state.availableVersion ? "available" : "error";
+        this.setState({
+          ...this.state,
+          status: nextStatus,
+          checkedAt: this.now(),
+          downloadPercent: null,
+          message: rawMessage,
+        });
+      }
+      console.error(`[updater] ${rawMessage}`);
     });
 
     this.startupTimer = this.setTimeoutFn(() => {
@@ -212,6 +247,16 @@ export class AppUpdater implements AppUpdaterLike {
   }
 
   async checkForUpdates(reason: UpdateCheckReason = "manual"): Promise<boolean> {
+    const mockState = this.createMockState();
+    if (mockState) {
+      this.setState({
+        ...mockState,
+        checkedAt: this.now(),
+      });
+      console.info(`[updater] Mock update check (${reason}) -> ${mockState.status}`);
+      return true;
+    }
+
     if (!this.state.enabled || this.checkInFlight) {
       return false;
     }
@@ -233,15 +278,19 @@ export class AppUpdater implements AppUpdaterLike {
       await this.updater.checkForUpdates();
       return true;
     } catch (error) {
-      const message = formatErrorMessage(error);
-      this.setState({
-        ...this.state,
-        status: "error",
-        checkedAt: this.now(),
-        downloadPercent: null,
-        message,
-      });
-      console.error(`[updater] Failed to check for updates: ${message}`);
+      const rawMessage = formatErrorMessage(error);
+      if (isPrivateGitHubFeedAuthError(rawMessage)) {
+        this.setState(this.createDisabledState(PRIVATE_GITHUB_RELEASES_UNSUPPORTED_MESSAGE));
+      } else {
+        this.setState({
+          ...this.state,
+          status: "error",
+          checkedAt: this.now(),
+          downloadPercent: null,
+          message: rawMessage,
+        });
+      }
+      console.error(`[updater] Failed to check for updates: ${rawMessage}`);
       return false;
     } finally {
       this.checkInFlight = false;
@@ -249,6 +298,10 @@ export class AppUpdater implements AppUpdaterLike {
   }
 
   async quitAndInstall(): Promise<boolean> {
+    if (this.createMockState()) {
+      return this.state.enabled && this.state.status === "downloaded";
+    }
+
     if (!this.state.enabled || this.state.status !== "downloaded") {
       return false;
     }
@@ -266,6 +319,11 @@ export class AppUpdater implements AppUpdaterLike {
   }
 
   private createInitialState(): AppUpdateState {
+    const mockState = this.createMockState();
+    if (mockState) {
+      return mockState;
+    }
+
     const disabledReason = this.resolveDisabledReason();
     return {
       enabled: disabledReason === null,
@@ -282,6 +340,12 @@ export class AppUpdater implements AppUpdaterLike {
   private resolveDisabledReason(): string | null {
     if (this.env.DEVSPACE_DISABLE_AUTO_UPDATE === "1") {
       return "Automatic updates are disabled by DEVSPACE_DISABLE_AUTO_UPDATE.";
+    }
+    if (this.createMockState()) {
+      return null;
+    }
+    if (this.env.DEVSPACE_ENABLE_AUTO_UPDATE_IN_DEV === "1") {
+      return null;
     }
     if (this.isDevelopment || !this.appApi.isPackaged) {
       return "Automatic updates are only available in packaged production builds.";
@@ -303,6 +367,50 @@ export class AppUpdater implements AppUpdaterLike {
       return false;
     }
     return this.fileExists(join(this.resourcesPath, "app-update.yml"));
+  }
+
+  private createMockState(): AppUpdateState | null {
+    const mockStatus = parseMockUpdateStatus(this.env.DEVSPACE_MOCK_UPDATE_STATE);
+    if (!mockStatus) {
+      return null;
+    }
+
+    const mockVersion = this.env.DEVSPACE_MOCK_UPDATE_VERSION?.trim() || "0.1.1";
+    const mockPercentValue = Number(this.env.DEVSPACE_MOCK_UPDATE_PERCENT);
+    const mockPercent = Number.isFinite(mockPercentValue)
+      ? Math.max(0, Math.min(100, mockPercentValue))
+      : 42;
+
+    return {
+      enabled: true,
+      status: mockStatus,
+      currentVersion: this.appApi.getVersion(),
+      availableVersion: mockStatus === "up-to-date" ? null : mockVersion,
+      checkedAt: this.now(),
+      downloadPercent:
+        mockStatus === "downloading"
+          ? mockPercent
+          : mockStatus === "downloaded"
+            ? 100
+            : mockStatus === "available"
+              ? 0
+              : null,
+      message: null,
+      disabledReason: null,
+    };
+  }
+
+  private createDisabledState(disabledReason: string): AppUpdateState {
+    return {
+      ...this.state,
+      enabled: false,
+      status: "disabled",
+      availableVersion: null,
+      checkedAt: this.now(),
+      downloadPercent: null,
+      message: null,
+      disabledReason,
+    };
   }
 
   private setState(nextState: AppUpdateState): void {

@@ -11,6 +11,7 @@ import {
   Keyboard,
 } from "lucide-react";
 import { useSettingsStore } from "../store/settings-store";
+import { useAppUpdateState } from "../hooks/useAppUpdateState";
 import { Button } from "./ui/button";
 import { ShortcutRecorder } from "./ui/shortcut-recorder";
 import BrowserImportPanel from "./browser/BrowserImportPanel";
@@ -311,26 +312,7 @@ function BrowserSection() {
 }
 
 function UpdatesPanel() {
-  const [state, setState] = useState<AppUpdateState | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void window.api.app.getUpdateState().then((nextState) => {
-      if (!cancelled) {
-        setState(nextState);
-      }
-    });
-
-    const unsubscribe = window.api.app.onUpdateStateChanged((nextState) => {
-      setState(nextState);
-    });
-
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, []);
+  const state = useAppUpdateState();
 
   const checkForUpdates = useCallback(() => {
     void window.api.app.checkForUpdates();
@@ -341,19 +323,22 @@ function UpdatesPanel() {
   }, []);
 
   return (
-    <div className="flex flex-col items-end gap-1.5 text-right max-w-sm">
-      <span className="text-xs break-all" style={{ color: "var(--foreground)" }}>
+    <div className="flex w-full max-w-sm min-w-0 flex-col items-end gap-1.5 text-right">
+      <span className="w-full text-xs break-all" style={{ color: "var(--foreground)" }}>
         {state?.currentVersion ?? "Loading version..."}
       </span>
-      <span className="text-[11px]" style={{ color: getUpdateStatusColor(state) }}>
+      <span
+        className="w-full whitespace-normal break-words text-[11px]"
+        style={{ color: getUpdateStatusColor(state), overflowWrap: "anywhere" }}
+      >
         {formatUpdateStatus(state)}
       </span>
       {state?.checkedAt ? (
-        <span className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+        <span className="w-full text-[11px]" style={{ color: "var(--muted-foreground)" }}>
           Last checked {new Date(state.checkedAt).toLocaleString()}
         </span>
       ) : null}
-      <div className="flex flex-wrap justify-end gap-2 pt-1">
+      <div className="flex w-full flex-wrap justify-end gap-2 pt-1">
         <Button
           variant="outline"
           size="sm"
@@ -639,13 +624,13 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function SettingRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div
-      className="flex items-center justify-between py-2.5"
+      className="flex items-center justify-between gap-4 py-2.5"
       style={{ borderBottom: "1px solid var(--border-faint)" }}
     >
-      <span className="text-[13px]" style={{ color: "var(--foreground-muted)" }}>
+      <span className="flex-shrink-0 text-[13px]" style={{ color: "var(--foreground-muted)" }}>
         {label}
       </span>
-      {children}
+      <div className="flex min-w-0 flex-1 justify-end">{children}</div>
     </div>
   );
 }

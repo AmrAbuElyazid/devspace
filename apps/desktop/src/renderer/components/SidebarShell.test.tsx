@@ -254,6 +254,44 @@ test("drops the reserved traffic-light gutter when the native window is fullscre
   expect(header?.getAttribute("data-fullscreen")).toBe("true");
 });
 
+test("renders a restart-to-update pill above settings when an update is downloaded", async () => {
+  const installUpdate = vi.fn(async () => true);
+  installMockWindowApi({
+    app: {
+      getUpdateState: vi.fn(async () => ({
+        enabled: true,
+        status: "downloaded" as const,
+        currentVersion: "0.1.0",
+        availableVersion: "0.1.1",
+        checkedAt: "2026-04-26T05:00:00.000Z",
+        downloadPercent: 100,
+        message: null,
+        disabledReason: null,
+      })),
+      installUpdate,
+      onUpdateStateChanged: vi.fn(() => () => {}),
+    },
+  });
+
+  await act(async () => {
+    root?.render(<Sidebar />);
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+
+  expect(container.textContent).toContain("Restart to Update");
+
+  const button = container.querySelector(".sidebar-update-button") as HTMLButtonElement;
+  expect(button).toBeTruthy();
+
+  await act(async () => {
+    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+
+  expect(installUpdate).toHaveBeenCalledTimes(1);
+});
+
 test("only persists sidebar width when resize ends", async () => {
   await act(async () => {
     root?.render(<Sidebar />);

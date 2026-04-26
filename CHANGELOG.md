@@ -6,6 +6,18 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.1.1 - 2026-04-26
+
+### Summary
+
+- Improve the desktop update experience after the first release by adding clearer updater UI states, changelog-driven release publishing, and a safe manual-download fallback for private GitHub releases.
+
+### Highlights
+
+- Added a sidebar update button above Settings, plus shared renderer update state wiring and mock update states for testing updater UI flows in development.
+- Fixed release publishing reruns to reuse the existing GitHub release and publish notes directly from `CHANGELOG.md`.
+- Replaced the raw private GitHub updater auth error with a user-facing manual-download message and fixed long update messages to wrap cleanly in Settings.
+
 ## v0.1.0 - 2026-04-26
 
 ### Summary

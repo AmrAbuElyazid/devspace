@@ -7,7 +7,15 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": [
+        "DEVSPACE_DISABLE_AUTO_UPDATE",
+        "DEVSPACE_ENABLE_AUTO_UPDATE_IN_DEV",
+        "DEVSPACE_MOCK_UPDATE_PERCENT",
+        "DEVSPACE_MOCK_UPDATE_STATE",
+        "DEVSPACE_MOCK_UPDATE_VERSION",
+        "DEVSPACE_UPDATE_FEED_URL"
+      ]
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],
