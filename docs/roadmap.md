@@ -106,7 +106,7 @@ directly affect production quality, release confidence, or OSS readiness.
 
 - Add a dedicated desktop release workflow under `.github/workflows/`.
 - Import signing credentials in CI.
-- Provide Apple notarization credentials in CI.
+- Provide App Store Connect API key notarization credentials in CI.
 - Build signed and notarized macOS artifacts on macOS runners.
 - Publish update metadata and release artifacts to GitHub Releases.
 - Validate the produced artifacts with `codesign`, `spctl`, and `stapler`.

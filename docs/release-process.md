@@ -65,10 +65,35 @@ Before running the release build:
 
 - make the signing certificate available in Keychain or via `CSC_LINK` and
   `CSC_KEY_PASSWORD`
-- provide one supported Apple notarization credential set:
-  - `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
-  - `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`
-  - `APPLE_KEYCHAIN`, `APPLE_KEYCHAIN_PROFILE`
+- provide Apple notarization credentials with one of these setups:
+  - preferred: `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER`
+  - optional local fallback: `APPLE_KEYCHAIN`, `APPLE_KEYCHAIN_PROFILE`
+
+For local API-key notarization:
+
+- create an App Store Connect API key
+- download `AuthKey_<key-id>.p8`
+- set:
+  - `APPLE_API_KEY` to either the path to that `.p8` file or the raw key text
+  - `APPLE_API_KEY_ID` to the key id
+  - `APPLE_API_ISSUER` to the issuer id
+- if your `Developer ID Application` certificate is already installed in Keychain,
+  local `bun run dist` does not need `CSC_LINK` or `CSC_KEY_PASSWORD`
+
+Example local setup:
+
+```sh
+export APPLE_API_KEY="$HOME/.config/devspace/AuthKey_ABC123XYZ.p8"
+export APPLE_API_KEY_ID="ABC123XYZ"
+export APPLE_API_ISSUER="00000000-0000-0000-0000-000000000000"
+```
+
+If the certificate is not already available in Keychain, also set:
+
+```sh
+export CSC_LINK="$(base64 -i /path/to/developer-id-application.p12)"
+export CSC_KEY_PASSWORD="your-p12-export-password"
+```
 
 Then run from the repo root:
 
@@ -128,9 +153,17 @@ Required GitHub secrets:
 
 - `CSC_LINK`
 - `CSC_KEY_PASSWORD`
-- `APPLE_ID`
-- `APPLE_APP_SPECIFIC_PASSWORD`
-- `APPLE_TEAM_ID`
+- `APPLE_API_KEY`
+- `APPLE_API_KEY_ID`
+- `APPLE_API_ISSUER`
+
+GitHub secret values:
+
+- `CSC_LINK`: base64-encoded `.p12` for the `Developer ID Application` certificate
+- `CSC_KEY_PASSWORD`: the `.p12` export password
+- `APPLE_API_KEY`: raw contents of `AuthKey_<key-id>.p8`
+- `APPLE_API_KEY_ID`: App Store Connect API key id
+- `APPLE_API_ISSUER`: App Store Connect issuer id
 
 The workflow:
 
