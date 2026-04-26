@@ -6,6 +6,18 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.1.0 - 2026-04-26
+
+### Summary
+
+- Ship the first public-ready macOS desktop release path with signed and notarized artifacts, GitHub Releases publishing, and packaged auto-update wiring.
+
+### Highlights
+
+- Added the packaged desktop updater flow, GitHub provider metadata, and updater UI wiring through main, preload, renderer, and menu.
+- Added a tagged macOS release workflow that verifies the repo, builds signed/notarized artifacts, smoke-tests the packaged app, and publishes release assets.
+- Finalized release packaging basics including DMG and ZIP outputs, release metadata, and the desktop app icon.
+
 ## Format
 
 For each release, add a new section at the top using this shape:
