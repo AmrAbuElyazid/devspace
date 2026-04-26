@@ -65,6 +65,9 @@ Start the app in development:
 bun run dev
 ```
 
+On a fresh clone, the first `bun run dev` automatically rebuilds the Ghostty
+native addon if it is missing.
+
 Run the main verification gate:
 
 ```sh
@@ -81,7 +84,7 @@ Generate a desktop coverage report:
 bun run test:coverage
 ```
 
-When native Ghostty code changes, rebuild the addon:
+When native Ghostty code changes, rebuild the addon explicitly:
 
 ```sh
 bun run rebuild-native

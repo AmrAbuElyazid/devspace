@@ -24,6 +24,9 @@ Run the app:
 bun run dev
 ```
 
+On a fresh clone, the first `bun run dev` automatically rebuilds the Ghostty
+native addon if it is missing.
+
 If the native Ghostty bridge changes:
 
 ```sh

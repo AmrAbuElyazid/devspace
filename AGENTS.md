@@ -56,8 +56,10 @@ bunx vitest run -t "test name substring"                    # filter by name
 
 ### Native addon
 
-The Ghostty bridge requires a compiled native addon. After a fresh clone
-or when native code changes:
+The Ghostty bridge requires a compiled native addon. The first `bun run dev`
+now rebuilds it automatically if it is missing. Run this explicitly after
+a fresh clone when you want to prepare the repo ahead of time, or whenever
+native code changes:
 
 ```sh
 bun run rebuild-native
