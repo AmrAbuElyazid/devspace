@@ -43,3 +43,14 @@ fi
 bun run build
 bun run rebuild-native
 bunx electron-builder --mac --arm64 --publish never -c.forceCodeSigning=true
+
+app_bundle="release/mac-arm64/Devspace.app"
+if [[ -d "$app_bundle" ]]; then
+  xcrun stapler staple "$app_bundle"
+fi
+
+for dmg_path in release/*.dmg; do
+  if [[ -f "$dmg_path" ]]; then
+    xcrun stapler staple "$dmg_path"
+  fi
+done

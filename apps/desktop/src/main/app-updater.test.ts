@@ -78,6 +78,7 @@ describe("AppUpdater", () => {
         dialog: {
           showMessageBox,
         },
+        platform: "darwin",
         resourcesPath: "/Applications/Devspace.app/Contents/Resources",
         existsSync: () => true,
         setTimeout: () => createTimerHandle(),
@@ -133,6 +134,7 @@ describe("AppUpdater", () => {
         dialog: {
           showMessageBox,
         },
+        platform: "darwin",
         resourcesPath: "/Applications/Devspace.app/Contents/Resources",
         existsSync: () => true,
         setTimeout: () => createTimerHandle(),
@@ -165,6 +167,7 @@ describe("AppUpdater", () => {
           isPackaged: true,
         },
         updater: updater as never,
+        platform: "darwin",
         resourcesPath: "/Applications/Devspace.app/Contents/Resources",
         existsSync: () => true,
         setTimeout: () => createTimerHandle(),
