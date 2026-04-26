@@ -21,6 +21,24 @@ fi
 has_api_key_auth=false
 has_keychain_profile_auth=false
 
+notary_submit() {
+  local artifact_path="$1"
+
+  if [[ "$has_api_key_auth" == true ]]; then
+    xcrun notarytool submit "$artifact_path" \
+      --key "$APPLE_API_KEY" \
+      --key-id "$APPLE_API_KEY_ID" \
+      --issuer "$APPLE_API_ISSUER" \
+      --wait
+    return
+  fi
+
+  xcrun notarytool submit "$artifact_path" \
+    --keychain-profile "$APPLE_KEYCHAIN_PROFILE" \
+    --keychain "$APPLE_KEYCHAIN" \
+    --wait
+}
+
 if [[ -n "${APPLE_API_KEY:-}" && -n "${APPLE_API_KEY_ID:-}" && -n "${APPLE_API_ISSUER:-}" ]]; then
   has_api_key_auth=true
 fi
@@ -51,6 +69,7 @@ fi
 
 for dmg_path in release/*.dmg; do
   if [[ -f "$dmg_path" ]]; then
+    notary_submit "$dmg_path"
     xcrun stapler staple "$dmg_path"
   fi
 done
