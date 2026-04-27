@@ -10,6 +10,9 @@ items as they land instead of preserving history here.
 - The normal repo gate is green with Node 22: `fmt:check`, `lint`, `typecheck`,
   `knip`, and `test`.
 - Signed/notarized macOS packaging and tagged GitHub release automation exist.
+- The first Electron IPC trust-boundary pass has landed: dev renderer URLs are
+  local/dev-only, IPC senders are checked against the trusted main window, and
+  native view bounds plus terminal env/cwd inputs are constrained.
 - The real public release path still needs configured secrets, a tagged release
   run, and an upgrade test from one shipped version to the next.
 - `ghostty-electron` is public source for transparency and experimentation, but
@@ -17,23 +20,17 @@ items as they land instead of preserving history here.
 
 ## Public OSS Blockers
 
-1. Harden Electron renderer trust boundaries.
-   - Gate `ELECTRON_RENDERER_URL` to development and trusted local origins only.
-   - Add centralized IPC sender/origin validation in `safeHandle` and `safeOn`.
-   - Add regression tests for untrusted sender rejection.
-2. Harden privileged IPC inputs.
+1. Finish privileged IPC input hardening.
    - Constrain VS Code CLI process launch inputs.
-   - Validate terminal `cwd` and `envVars` shape, size, and allowed names.
-   - Reject invalid native/browser bounds such as `NaN`, `Infinity`, negative,
-     or extreme values.
    - Add size limits for synchronous note/workspace persistence payloads.
-3. Fix highest-risk native/package issues in `ghostty-electron`.
+   - Improve workspace-state validation depth for nested graph consistency,
+     counts, string lengths, and numeric ranges.
+2. Fix highest-risk native/package issues in `ghostty-electron`.
    - Review manual Objective-C ownership and release retained/allocated objects.
-   - Make libghostty bundle extraction safe before verification.
    - Decide and document policy for terminal-driven clipboard and open-URL
      actions.
    - Keep the package clearly documented as experimental and workspace-only.
-4. Add missing collaboration scaffolding.
+3. Add missing collaboration scaffolding.
    - Add a PR template.
    - Add `CODEOWNERS`.
 
@@ -52,8 +49,6 @@ items as they land instead of preserving history here.
 - Reduce test warning/log noise so green public CI reads cleanly.
 - Decide whether packaged-app Playwright smoke tests should run in regular PR CI
   or only release CI.
-- Improve workspace-state validation depth before persisted data grows more
-  complex.
 - Split maintainability hotspots when touching them next: `native-view-store`,
   `SettingsPage`, app shortcut actions, and pane/server lifecycle registries.
 - Keep browser/editor trust and privacy docs aligned with behavior: localhost

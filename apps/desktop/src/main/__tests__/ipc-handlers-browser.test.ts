@@ -18,7 +18,7 @@ vi.mock("electron", () =>
 const { registerIpcHandlers } = await import("../ipc-handlers");
 
 const mainWindowMock = {
-  webContents: { send: (..._args: unknown[]) => {} },
+  webContents: { id: 17, getZoomFactor: () => 1, send: (..._args: unknown[]) => {} },
   contentView: {
     children: [
       {
@@ -180,15 +180,29 @@ test("browser navigate IPC rejects unsupported URL schemes", async () => {
 test("browser setBounds translates renderer viewport bounds into contentView coordinates", async () => {
   controllerCalls.length = 0;
 
-  await handlers.get("browser:setBounds")?.(
-    { sender: { id: 17, getZoomFactor: () => 1 } },
-    "pane-1",
-    { x: 100, y: 200, width: 640, height: 480 },
-  );
+  await handlers.get("browser:setBounds")?.({ sender: mainWindowMock.webContents }, "pane-1", {
+    x: 100,
+    y: 200,
+    width: 640,
+    height: 480,
+  });
 
   expect(controllerCalls).toEqual([
     ["setBounds", "pane-1", { x: 124, y: 244, width: 640, height: 480 }],
   ]);
+});
+
+test("browser setBounds rejects invalid numeric bounds", async () => {
+  controllerCalls.length = 0;
+
+  await handlers.get("browser:setBounds")?.({ sender: mainWindowMock.webContents }, "pane-1", {
+    x: 100,
+    y: 200,
+    width: Number.POSITIVE_INFINITY,
+    height: 480,
+  });
+
+  expect(controllerCalls).toEqual([]);
 });
 
 test("browser import IPC forwards supported import modes", async () => {

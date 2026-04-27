@@ -6,6 +6,14 @@ import path from "path";
 const SAFARI_FULL_DISK_ACCESS_SETTINGS_URL =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles";
 const SAFE_BROWSER_URL = "about:blank";
+const MAX_NATIVE_BOUNDS_VALUE = 100_000;
+
+type NativeViewBounds = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
 
 function isPathWithinRoot(candidatePath: string, rootPath: string): boolean {
   const relative = path.relative(rootPath, candidatePath);
@@ -68,6 +76,30 @@ export function getSafeBrowserUrl(rawUrl: unknown): string | null {
 
   if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") return null;
   return parsedUrl.toString();
+}
+
+export function parseNativeViewBounds(rawBounds: unknown): NativeViewBounds | null {
+  if (typeof rawBounds !== "object" || rawBounds === null) return null;
+  const bounds = rawBounds as Partial<NativeViewBounds>;
+  const values = [bounds.x, bounds.y, bounds.width, bounds.height];
+  if (!values.every((value) => typeof value === "number" && Number.isFinite(value))) return null;
+  if (
+    Math.abs(bounds.x!) > MAX_NATIVE_BOUNDS_VALUE ||
+    Math.abs(bounds.y!) > MAX_NATIVE_BOUNDS_VALUE
+  ) {
+    return null;
+  }
+  if (bounds.width! < 0 || bounds.height! < 0) return null;
+  if (bounds.width! > MAX_NATIVE_BOUNDS_VALUE || bounds.height! > MAX_NATIVE_BOUNDS_VALUE) {
+    return null;
+  }
+
+  return {
+    x: bounds.x!,
+    y: bounds.y!,
+    width: bounds.width!,
+    height: bounds.height!,
+  };
 }
 
 export async function validateFilePath(

@@ -2,7 +2,12 @@ import { mkdtemp, mkdir, realpath, symlink, writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import path from "path";
 import { describe, expect, test } from "vitest";
-import { getSafeBrowserUrl, getSafeExternalUrl, validateFilePath } from "../validation";
+import {
+  getSafeBrowserUrl,
+  getSafeExternalUrl,
+  parseNativeViewBounds,
+  validateFilePath,
+} from "../validation";
 
 async function createValidationFixture(): Promise<{ rootDir: string; allowedRoot: string }> {
   const rootDir = await mkdtemp(path.join(tmpdir(), "devspace-validation-"));
@@ -37,6 +42,24 @@ describe("getSafeBrowserUrl", () => {
     expect(getSafeBrowserUrl("javascript:alert(1)")).toBe(null);
     expect(getSafeBrowserUrl("mailto:test@example.com")).toBe(null);
     expect(getSafeBrowserUrl("data:text/html,hello")).toBe(null);
+  });
+});
+
+describe("parseNativeViewBounds", () => {
+  test("accepts finite viewport bounds", () => {
+    expect(parseNativeViewBounds({ x: -10, y: 20, width: 300, height: 0 })).toEqual({
+      x: -10,
+      y: 20,
+      width: 300,
+      height: 0,
+    });
+  });
+
+  test("rejects non-finite, negative-size, and extreme bounds", () => {
+    expect(parseNativeViewBounds({ x: NaN, y: 0, width: 300, height: 200 })).toBe(null);
+    expect(parseNativeViewBounds({ x: 0, y: Infinity, width: 300, height: 200 })).toBe(null);
+    expect(parseNativeViewBounds({ x: 0, y: 0, width: -1, height: 200 })).toBe(null);
+    expect(parseNativeViewBounds({ x: 0, y: 0, width: 100_001, height: 200 })).toBe(null);
   });
 });
 

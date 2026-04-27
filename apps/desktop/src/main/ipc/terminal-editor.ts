@@ -4,7 +4,34 @@ import type { BrowserSessionManager } from "../browser/browser-session-manager";
 import { safeHandle, safeOn } from "./shared";
 import type { T3CodeServerManager } from "../t3code-server";
 import type { TerminalManager } from "../terminal-manager";
+import { parseNativeViewBounds } from "../validation";
 import type { VscodeServerManager } from "../vscode-server";
+
+const MAX_TERMINAL_ENV_VARS = 100;
+const MAX_TERMINAL_ENV_KEY_LENGTH = 128;
+const MAX_TERMINAL_ENV_VALUE_LENGTH = 8192;
+const MAX_TERMINAL_CWD_LENGTH = 4096;
+const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+function parseTerminalCwd(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  if (value.length === 0 || value.length > MAX_TERMINAL_CWD_LENGTH) return undefined;
+  return value;
+}
+
+function parseTerminalEnvVars(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const envVars: Record<string, string> = {};
+  for (const [key, rawValue] of Object.entries(value as Record<string, unknown>)) {
+    if (Object.keys(envVars).length >= MAX_TERMINAL_ENV_VARS) break;
+    if (key.length === 0 || key.length > MAX_TERMINAL_ENV_KEY_LENGTH) continue;
+    if (!ENV_KEY_PATTERN.test(key)) continue;
+    if (typeof rawValue !== "string" || rawValue.length > MAX_TERMINAL_ENV_VALUE_LENGTH) continue;
+    envVars[key] = rawValue;
+  }
+
+  return Object.keys(envVars).length > 0 ? envVars : undefined;
+}
 
 export function registerTerminalAndEditorIpc(
   mainWindow: BrowserWindow,
@@ -25,17 +52,8 @@ export function registerTerminalAndEditorIpc(
     if (typeof surfaceId !== "string") return;
     const opts =
       typeof options === "object" && options !== null ? (options as Record<string, unknown>) : {};
-    const cwd = typeof opts["cwd"] === "string" ? opts["cwd"] : undefined;
-
-    let envVars: Record<string, string> | undefined;
-    if (typeof opts["envVars"] === "object" && opts["envVars"] !== null) {
-      const raw = opts["envVars"] as Record<string, unknown>;
-      envVars = {};
-      for (const [key, value] of Object.entries(raw)) {
-        if (typeof value === "string") envVars[key] = value;
-      }
-      if (Object.keys(envVars).length === 0) envVars = undefined;
-    }
+    const cwd = parseTerminalCwd(opts["cwd"]);
+    const envVars = parseTerminalEnvVars(opts["envVars"]);
 
     const createOpts: { cwd?: string; envVars?: Record<string, string> } = {};
     if (cwd) createOpts.cwd = cwd;
@@ -91,23 +109,11 @@ export function registerTerminalAndEditorIpc(
   });
 
   safeOn("terminal:setBounds", (_event, surfaceId: unknown, bounds: unknown) => {
-    if (typeof surfaceId !== "string" || typeof bounds !== "object" || bounds === null) return;
-    const nextBounds = bounds as Partial<{ x: number; y: number; width: number; height: number }>;
-    if (
-      typeof nextBounds.x !== "number" ||
-      typeof nextBounds.y !== "number" ||
-      typeof nextBounds.width !== "number" ||
-      typeof nextBounds.height !== "number"
-    ) {
-      return;
-    }
+    if (typeof surfaceId !== "string") return;
+    const nextBounds = parseNativeViewBounds(bounds);
+    if (!nextBounds) return;
 
-    terminalManager.setBounds(surfaceId, {
-      x: nextBounds.x,
-      y: nextBounds.y,
-      width: nextBounds.width,
-      height: nextBounds.height,
-    });
+    terminalManager.setBounds(surfaceId, nextBounds);
   });
 
   const editorPaneSessions = new Map<string, { folder: string | undefined; url: string }>();

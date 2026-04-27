@@ -14,7 +14,7 @@ import {
   findHostViewBounds,
   translateRendererBoundsToContentBounds,
 } from "../browser/browser-view-bounds";
-import { getSafeBrowserUrl } from "../validation";
+import { getSafeBrowserUrl, parseNativeViewBounds } from "../validation";
 import { safeHandle, safeOn } from "./shared";
 
 function parseBrowserImportMode(mode: unknown): BrowserImportMode | null {
@@ -103,16 +103,9 @@ export function registerBrowserIpc(
   });
 
   safeOn("browser:setBounds", (event, paneId: unknown, bounds: unknown) => {
-    if (typeof paneId !== "string" || typeof bounds !== "object" || bounds === null) return;
-    const nextBounds = bounds as Partial<BrowserBounds>;
-    if (
-      typeof nextBounds.x !== "number" ||
-      typeof nextBounds.y !== "number" ||
-      typeof nextBounds.width !== "number" ||
-      typeof nextBounds.height !== "number"
-    ) {
-      return;
-    }
+    if (typeof paneId !== "string") return;
+    const nextBounds = parseNativeViewBounds(bounds);
+    if (!nextBounds) return;
 
     const rendererHostBounds = findHostViewBounds(mainWindow.contentView, event.sender.id);
     const translatedBounds = translateRendererBoundsToContentBounds(

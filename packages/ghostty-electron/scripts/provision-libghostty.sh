@@ -56,8 +56,54 @@ verify_bundle() {
   bash "$SCRIPT_DIR/verify-libghostty.sh"
 }
 
+validate_archive() {
+  local archive_path expected_paths archive_paths raw_path normalized_path
+
+  archive_path="$1"
+  expected_paths="$2"
+  archive_paths="$3"
+
+  awk '{print $2}' "$PROJECT_DIR/libghostty-files.sha256" | sort > "$expected_paths"
+  : > "$archive_paths"
+
+  while IFS= read -r raw_path; do
+    normalized_path="${raw_path#./}"
+    normalized_path="${normalized_path%/}"
+
+    if [ -z "$normalized_path" ]; then
+      continue
+    fi
+
+    case "$normalized_path" in
+      /*|*../*|../*|*/..|..)
+        echo "Unsafe path in libghostty bundle: $raw_path" >&2
+        return 1
+        ;;
+      libghostty/*)
+        ;;
+      *)
+        echo "Unexpected path in libghostty bundle: $raw_path" >&2
+        return 1
+        ;;
+    esac
+
+    if [[ "$raw_path" == */ ]]; then
+      continue
+    fi
+
+    printf '%s\n' "$normalized_path" >> "$archive_paths"
+  done < <(tar -tzf "$archive_path")
+
+  sort -u -o "$archive_paths" "$archive_paths"
+  if ! cmp -s "$expected_paths" "$archive_paths"; then
+    echo "libghostty bundle file list does not match checksum manifest" >&2
+    diff -u "$expected_paths" "$archive_paths" >&2 || true
+    return 1
+  fi
+}
+
 download_bundle() {
-  local tmp_dir bundle_url asset_name archive_path release_tag repository
+  local tmp_dir bundle_url asset_name archive_path release_tag repository expected_paths archive_paths
 
   bundle_url="$(asset_url)"
   asset_name="$(node -p "const manifest=require(process.argv[1]); manifest.assetName" "$MANIFEST_FILE")"
@@ -65,6 +111,8 @@ download_bundle() {
   repository="$(bundle_repository)"
   tmp_dir="$(mktemp -d)"
   archive_path="$tmp_dir/$asset_name"
+  expected_paths="$tmp_dir/expected-files.txt"
+  archive_paths="$tmp_dir/archive-files.txt"
 
   cleanup() {
     rm -rf "$tmp_dir"
@@ -78,6 +126,8 @@ download_bundle() {
     echo "Downloading libghostty bundle from $bundle_url"
     curl --fail --location --silent --show-error "$bundle_url" --output "$archive_path"
   fi
+
+  validate_archive "$archive_path" "$expected_paths" "$archive_paths"
 
   rm -rf "$DEPS_DIR"
   mkdir -p "$DEPS_PARENT_DIR"

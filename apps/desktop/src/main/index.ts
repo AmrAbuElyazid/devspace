@@ -97,6 +97,20 @@ const editorSessionManager = new BrowserSessionManager(undefined, EDITOR_PARTITI
   persistSessionCookies: false,
 });
 
+function getTrustedDevRendererUrl(): string | null {
+  const rendererUrl = process.env.ELECTRON_RENDERER_URL?.trim();
+  if (!rendererUrl || !IS_DEV) return null;
+
+  try {
+    const url = new URL(rendererUrl);
+    const isLocalHost = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    const isHttp = url.protocol === "http:" || url.protocol === "https:";
+    return isLocalHost && isHttp ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
 // Global error handlers
 process.on("uncaughtException", (error) => {
   console.error("[main] Uncaught exception:", error);
@@ -209,8 +223,9 @@ function createWindow(): void {
   // Store reference for single-instance lock handler
   mainWindow = window;
 
-  if (process.env.ELECTRON_RENDERER_URL) {
-    window.loadURL(process.env.ELECTRON_RENDERER_URL);
+  const trustedDevRendererUrl = getTrustedDevRendererUrl();
+  if (trustedDevRendererUrl) {
+    window.loadURL(trustedDevRendererUrl);
   } else {
     window.loadFile(join(__dirname, "../renderer/index.html"));
   }

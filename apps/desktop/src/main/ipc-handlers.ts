@@ -10,6 +10,7 @@ import { registerBrowserIpc } from "./ipc/browser";
 import { registerSystemIpc } from "./ipc/system";
 import { registerTerminalAndEditorIpc } from "./ipc/terminal-editor";
 import { registerWorkspaceStateIpc } from "./ipc/workspace-state";
+import { trustIpcWebContents, untrustIpcWebContents } from "./ipc/shared";
 
 export function registerIpcHandlers(
   mainWindow: BrowserWindow,
@@ -22,6 +23,11 @@ export function registerIpcHandlers(
   browserSessionManager?: BrowserSessionManager,
   appUpdater?: AppUpdaterLike,
 ): void {
+  trustIpcWebContents(mainWindow.webContents);
+  mainWindow.on("closed", () => {
+    untrustIpcWebContents(mainWindow.webContents);
+  });
+
   registerTerminalAndEditorIpc(
     mainWindow,
     terminalManager,

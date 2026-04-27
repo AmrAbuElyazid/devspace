@@ -398,6 +398,12 @@ test("terminal IPC sanitizes inputs and forwards lifecycle actions", async () =>
 
   emitToChannel("terminal:setVisibleSurfaces", {}, ["surface-1", 42, "surface-2"]);
   emitToChannel("terminal:setBounds", {}, "surface-1", { x: 10, y: 20, width: 300, height: 180 });
+  emitToChannel("terminal:setBounds", {}, "surface-1", {
+    x: Number.NaN,
+    y: 20,
+    width: 300,
+    height: 180,
+  });
   emitToChannel("terminal:focus", {}, "surface-1");
   await callHandler("terminal:show", "surface-1");
   await callHandler("terminal:hide", "surface-1");

@@ -7,6 +7,7 @@ type Deferred = {
 
 type LoadIndexOptions = {
   isDev?: boolean;
+  rendererUrl?: string;
   vscodeStopAll?: () => Promise<void>;
   t3codeStopAll?: () => Promise<void>;
 };
@@ -46,7 +47,11 @@ async function loadIndexModule(options: LoadIndexOptions = {}) {
   const originalNodeEnv = process.env.NODE_ENV;
   const originalRendererUrl = process.env.ELECTRON_RENDERER_URL;
   process.env.NODE_ENV = options.isDev ? "development" : "test";
-  delete process.env.ELECTRON_RENDERER_URL;
+  if (options.rendererUrl) {
+    process.env.ELECTRON_RENDERER_URL = options.rendererUrl;
+  } else {
+    delete process.env.ELECTRON_RENDERER_URL;
+  }
 
   const appHandlers = new Map<string, (...args: unknown[]) => void>();
   const windowInstances: MockWindow[] = [];
@@ -399,6 +404,49 @@ describe("main/index", () => {
     ctx.windowInstances.length = 0;
     activateHandler?.();
     expect(ctx.windowInstances).toHaveLength(1);
+
+    ctx.restoreEnvironment();
+  });
+
+  it("loads trusted local renderer URLs only in development", async () => {
+    const ctx = await loadIndexModule({
+      isDev: true,
+      rendererUrl: "http://localhost:5173",
+    });
+
+    const mainWindow = ctx.windowInstances[0];
+    expect(mainWindow?.loadURL).toHaveBeenCalledWith("http://localhost:5173/");
+    expect(mainWindow?.loadFile).not.toHaveBeenCalled();
+
+    ctx.restoreEnvironment();
+  });
+
+  it("ignores renderer URL overrides outside development", async () => {
+    const ctx = await loadIndexModule({
+      isDev: false,
+      rendererUrl: "http://localhost:5173",
+    });
+
+    const mainWindow = ctx.windowInstances[0];
+    expect(mainWindow?.loadURL).not.toHaveBeenCalled();
+    expect(mainWindow?.loadFile).toHaveBeenCalledWith(
+      expect.stringContaining("renderer/index.html"),
+    );
+
+    ctx.restoreEnvironment();
+  });
+
+  it("ignores non-local renderer URL overrides in development", async () => {
+    const ctx = await loadIndexModule({
+      isDev: true,
+      rendererUrl: "https://example.com",
+    });
+
+    const mainWindow = ctx.windowInstances[0];
+    expect(mainWindow?.loadURL).not.toHaveBeenCalled();
+    expect(mainWindow?.loadFile).toHaveBeenCalledWith(
+      expect.stringContaining("renderer/index.html"),
+    );
 
     ctx.restoreEnvironment();
   });
