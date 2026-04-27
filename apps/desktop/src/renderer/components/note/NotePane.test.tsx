@@ -48,6 +48,7 @@ vi.mock("../../store/workspace-store", () => ({
 
 let container: HTMLDivElement;
 let root: Root | null;
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
 async function flushEffects(): Promise<void> {
   await act(async () => {
@@ -57,6 +58,7 @@ async function flushEffects(): Promise<void> {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -77,6 +79,7 @@ afterEach(async () => {
   vi.runOnlyPendingTimers();
   vi.useRealTimers();
   container.remove();
+  consoleErrorSpy.mockRestore();
 });
 
 test("shows an error state when note loading fails", async () => {

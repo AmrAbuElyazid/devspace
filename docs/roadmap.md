@@ -21,6 +21,8 @@ items as they land instead of preserving history here.
   remaining clipboard side-effect policy is documented as experimental.
 - Basic collaboration scaffolding exists: issue templates, PR template,
   `CODEOWNERS`, contributing guide, security policy, and code of conduct.
+- Intentional test warning/log noise has been suppressed at test boundaries so
+  green local and CI test runs are easier to scan.
 - GitHub and Apple signing/notarization secrets are configured, and private
   releases already exist for `0.1.0` and `0.1.1`.
 - The first public-era release is expected to be `0.2.0`, with an update test
@@ -46,7 +48,6 @@ items as they land instead of preserving history here.
 
 ## Important Follow-Ups
 
-- Reduce test warning/log noise so green public CI reads cleanly.
 - Keep packaged-app Playwright smoke tests in release CI only unless PR feedback
   needs change.
 - Split maintainability hotspots when touching them next: `native-view-store`,

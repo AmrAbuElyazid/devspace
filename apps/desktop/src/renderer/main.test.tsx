@@ -32,6 +32,7 @@ vi.mock("./App", () => ({
 }));
 
 afterEach(() => {
+  vi.restoreAllMocks();
   document.body.innerHTML = '<div id="root"></div>';
   mainBootstrapMocks.initializeWorkspaceStore.mockReset();
   mainBootstrapMocks.initializeWorkspaceStore.mockResolvedValue(undefined);
@@ -41,6 +42,7 @@ afterEach(() => {
 });
 
 test("bootstrap falls back to defaults when workspace initialization fails", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
   document.body.innerHTML = '<div id="root"></div>';
   mainBootstrapMocks.initializeWorkspaceStore.mockRejectedValueOnce(new Error("db failed"));
 

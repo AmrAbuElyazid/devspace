@@ -19,3 +19,12 @@ if (typeof globalThis.localStorage === "undefined") {
     key: (index: number) => [...store.keys()][index] ?? null,
   };
 }
+
+const originalEmitWarning = process.emitWarning.bind(process);
+process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
+  const message = typeof warning === "string" ? warning : warning.message;
+  if (message.includes("SQLite is an experimental feature")) {
+    return;
+  }
+  return originalEmitWarning(warning as string, ...(args as [string?, string?, string?]));
+}) as typeof process.emitWarning;

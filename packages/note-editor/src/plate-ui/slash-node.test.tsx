@@ -75,8 +75,13 @@ vi.mock("./inline-combobox", () => ({
 
 let container: HTMLDivElement;
 let root: Root | null;
+let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    if (typeof args[0] === "string" && args[0].includes('unique "key" prop')) return;
+    console.warn(...args);
+  });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -95,6 +100,7 @@ afterEach(async () => {
     });
   }
   container.remove();
+  consoleErrorSpy.mockRestore();
 });
 
 test("slash menu block actions dispatch through the editor helpers", async () => {

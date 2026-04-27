@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 const childProcessMocks = vi.hoisted(() => ({
   execFileSync: vi.fn(),
@@ -55,6 +55,19 @@ vi.mock("os", () => ({ homedir: () => "/Users/test" }));
 vi.mock("./dev-mode", () => ({ VSCODE_PORT: 18562, DATA_DIR_SUFFIX: "" }));
 
 import { resolveVscodeCli, VscodeServerManager } from "./vscode-server";
+
+let consoleLogSpy: ReturnType<typeof vi.spyOn>;
+let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+  consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  consoleLogSpy.mockRestore();
+  consoleWarnSpy.mockRestore();
+});
 
 function createMockChildProcess() {
   const listeners = new Map<string, (...args: unknown[]) => void>();

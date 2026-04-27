@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppUpdater } from "./app-updater";
 
 function createFakeUpdater() {
@@ -30,6 +30,16 @@ function createTimerHandle() {
 }
 
 describe("AppUpdater", () => {
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("disables updates in unpackaged development builds", async () => {
     const updater = createFakeUpdater();
     const appUpdater = new AppUpdater({

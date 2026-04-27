@@ -1,4 +1,4 @@
-import { test, expect, vi } from "vitest";
+import { afterEach, beforeEach, test, expect, vi } from "vitest";
 import type { Session } from "electron";
 import { BROWSER_PARTITION, BrowserSessionManager } from "../browser-session-manager";
 
@@ -13,6 +13,14 @@ type CertificateErrorListener = (
   certificate: unknown,
   callback: (isTrusted: boolean) => void,
 ) => void;
+
+beforeEach(() => {
+  vi.spyOn(console, "log").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 test("uses a dedicated persistent browser partition", () => {
   expect(BROWSER_PARTITION).toBe("persist:devspace-global-browser");
