@@ -101,7 +101,7 @@ Terminal throughput notes live in [`BENCHMARKS.md`](./BENCHMARKS.md).
 
 The active improvement plan lives in:
 
-- [`docs/roadmap/roadmap.md`](./docs/roadmap/roadmap.md)
+- [`docs/roadmap.md`](./docs/roadmap.md)
 
 ## Release Notes
 

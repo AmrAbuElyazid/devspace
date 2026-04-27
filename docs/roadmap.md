@@ -4,8 +4,7 @@
 strategically unfinished across product posture, release maturity, auto-update,
 and open-source readiness.
 
-This file replaces the older split between `docs/roadmap/roadmap.md` and
-`docs/release-and-oss-readiness.md`.
+This file replaces the older split roadmap and release-readiness drafts.
 
 ## Current State
 
@@ -23,6 +22,7 @@ roadmap assumed:
 - the desktop release config now emits macOS `dmg` and `zip` artifacts plus `latest-mac.yml` updater metadata
 - the updater runtime is now wired through main/preload/renderer/menu, with a local generic-feed override for private testing and packaged GitHub provider metadata for the future public release path
 - the repo now has a tagged macOS release workflow that verifies, signs, notarizes, smoke-tests, and publishes desktop artifacts to GitHub Releases once the required secrets are configured
+- public-facing desktop app icons are configured for packaged macOS builds
 
 The main remaining work is concentrated in:
 
@@ -44,7 +44,7 @@ Browser` as the practical fallback for those flows.
 - The paused updater spike in `./.worktrees/electron-updater` contains useful runtime and UI work, but its packaging and publishing assumptions are not production-ready as-is.
 - `ghostty-electron` is documented like a future public OSS package, but it is not yet publish-ready.
 - The old roadmap is partially stale in a few areas because issue templates, a macOS native CI job, and signed/notarized local release builds now already exist.
-- The remaining release blockers are now mostly operational: GitHub release secrets, a first real tagged release run, a verified upgrade path across shipped versions, and app icon assets.
+- The remaining release blockers are now mostly operational: GitHub release secrets, a first real tagged release run, and a verified upgrade path across shipped versions.
 
 ## Roadmap Audit
 
@@ -53,12 +53,12 @@ Browser` as the practical fallback for those flows.
 | Document and validate the hardened embedded VS Code flow              | Partially done, still active                              | The hardened flow is implemented in code and covered by tests. Remaining work is final validation guidance and clearer docs.                                                           |
 | Document localhost/editor trust posture                               | Partially done, still active                              | `README.md` and `SECURITY.md` already cover much of this. Remaining work is consolidation and better user-facing wording.                                                              |
 | Document browser privacy persistence                                  | Partially done, still active                              | Current docs and code already describe persistent cookies, plaintext history storage, and editor URL exclusions. A dedicated privacy/storage section would make this easier to audit.  |
-| Clarify package and desktop distribution posture                      | Still active, high priority                               | One of the most important remaining items for both release readiness and OSS readiness.                                                                                                |
+| Clarify package and desktop distribution posture                      | Mostly done, keep maintained                              | Desktop release docs are much closer. `ghostty-electron` is documented as public source, experimental, workspace-consumed, and not an npm package yet.                                 |
 | Add third-party notice/license attribution for bundled Ghostty assets | Done, keep maintained when the pin changes                | `packages/ghostty-electron/THIRD_PARTY_NOTICES.md` now documents the pinned upstream source, the release bundle provenance, preserved GPLv3 notices, and Devspace-owned wrapper files. |
 | Break up remaining maintainability hotspots                           | Still active                                              | `apps/desktop/src/main/index.ts` and a few preload/renderer seams still carry integration risk.                                                                                        |
 | Reduce preload contract drift risk                                    | Still active, more important now                          | Auto-update work will expand the bridge, so this risk grows if not managed deliberately.                                                                                               |
 | Reduce test-environment coupling and warning noise                    | Still active                                              | The suite is broad and green, but warning noise and a few environment-sensitive paths remain.                                                                                          |
-| Add a macOS native smoke lane to CI                                   | Partially stale, still active                             | A macOS native CI job already exists. The unfinished part is packaged-app and Playwright Electron smoke coverage in CI.                                                                |
+| Add a macOS native smoke lane to CI                                   | Done for release workflow, still useful for broader CI    | Native CI exists, and tagged release builds run packaged Playwright smoke coverage. Broader packaged-app smoke coverage on regular PR CI remains optional follow-up.                   |
 | Continue performance hardening                                        | Still active, lower than release/OSS work                 | Useful product maturity work, but not a first blocker for public release or OSS launch.                                                                                                |
 | Improve `ghostty-electron` package maturity                           | Still active, high priority if the package will be public | Publishable artifacts, packaging strategy, and stronger native-addon confidence are still open.                                                                                        |
 | Add lightweight OSS collaboration scaffolding                         | Partially stale                                           | Issue templates already exist. Remaining gaps are a PR template and `CODEOWNERS`.                                                                                                      |
@@ -68,11 +68,10 @@ Browser` as the practical fallback for those flows.
 These items should remain at the top of the execution queue because they
 directly affect production quality, release confidence, or OSS readiness.
 
-1. Clarify the package and desktop distribution posture.
-2. Extend the existing macOS CI lane with packaged-app smoke coverage.
-3. Reduce preload contract drift risk before adding updater APIs.
-4. Decide whether `ghostty-electron` is actually becoming a public package now or remains monorepo-internal for the near term.
-5. Add app icon configuration for public release artifacts.
+1. Validate the first real tagged desktop release and updater path with configured GitHub and Apple secrets.
+2. Reduce preload contract drift risk as updater and privileged APIs evolve.
+3. Decide whether broader packaged-app smoke coverage belongs in regular PR CI or only release CI.
+4. Keep `ghostty-electron` package docs aligned with its public-source, experimental, workspace-only status.
 
 ## Production And Auto-Update Plan
 
@@ -104,13 +103,12 @@ directly affect production quality, release confidence, or OSS readiness.
 
 ### Release Automation Changes Needed
 
-- Add a dedicated desktop release workflow under `.github/workflows/`.
-- Import signing credentials in CI.
-- Provide App Store Connect API key notarization credentials in CI.
-- Build signed and notarized macOS artifacts on macOS runners.
-- Publish update metadata and release artifacts to GitHub Releases.
-- Validate the produced artifacts with `codesign`, `spctl`, and `stapler`.
-- Smoke-test the packaged app in CI before publishing.
+- Keep the existing tagged desktop release workflow healthy.
+- Keep signing and notarization secrets configured in CI.
+- Continue building signed and notarized macOS artifacts on macOS runners.
+- Continue publishing update metadata and release artifacts to GitHub Releases.
+- Continue validating produced artifacts with `codesign`, `spctl`, and `stapler`.
+- Continue smoke-testing the packaged app in release CI before publishing.
 
 ### Versioning Policy
 
@@ -132,9 +130,9 @@ directly affect production quality, release confidence, or OSS readiness.
 ### Must-Fix Before Making The Repo Public
 
 - Keep ownership and provenance links current across package metadata, especially `packages/ghostty-electron/package.json` and `packages/ghostty-electron/libghostty-bundle.json`.
-- Decide the intended public story for `ghostty-electron`.
+- Keep the intended public story for `ghostty-electron` explicit: public source, experimental, workspace-consumed, and not npm-published yet.
 - Keep bundled Ghostty asset provenance and preserved upstream notices aligned whenever the pinned dependency bundle changes.
-- Add public-facing desktop app icon configuration.
+- Keep public-facing desktop app icon assets and build configuration current.
 
 ### Strongly Recommended Before Making The Repo Public
 
@@ -151,11 +149,11 @@ Choose one of these paths explicitly:
 1. Internal-for-now path.
 2. Public-package-now path.
 
-If the internal-for-now path is chosen:
+If the repo-internal-for-now path is chosen:
 
 - keep the package in the monorepo
-- keep `private` or treat it as intentionally not published
-- document that the package is experimental and not yet distributed independently
+- document that the package is public source, experimental, consumed via workspace protocol, and not yet distributed independently
+- avoid implying npm install support until there is a real publishable artifact and native-addon install strategy
 
 If the public-package-now path is chosen:
 
@@ -183,24 +181,21 @@ If the public-package-now path is chosen:
 
 ### Phase 2: Production Packaging Maturity
 
-- Add desktop app icon configuration.
 - Publish the generated update metadata and release artifacts to the chosen public feed.
 - Define the public binary host and update feed URL structure.
 - Decide the release versioning workflow.
 
-### Phase 3: Auto-Update Implementation
+### Phase 3: Auto-Update Validation
 
-- Port updater runtime code from the spike onto current `main`.
-- Add update IPC, preload, shared types, menu integration, and Settings UI.
 - Test the updater in packaged builds only.
 - Validate end-to-end upgrade flow from one shipped version to the next.
 
 ### Phase 4: CI And Release Automation
 
-- Add desktop release workflow.
-- Add macOS packaged-app smoke coverage.
-- Publish artifacts and update metadata automatically.
-- Verify signed and notarized artifacts in CI.
+- Keep the desktop release workflow passing.
+- Decide whether to add macOS packaged-app smoke coverage outside release CI.
+- Keep artifact and update metadata publishing covered by release CI.
+- Keep signed and notarized artifact verification covered by release CI.
 
 ### Phase 5: OSS Launch Polish
 
@@ -240,5 +235,5 @@ following are true:
 1. Tighten this roadmap so any remaining stale wording is removed as work lands.
 2. Configure the GitHub release secrets and run the first tagged desktop release.
 3. Validate a real packaged upgrade path from one shipped version to the next.
-4. Add app icon assets and wire icon configuration into the desktop build.
+4. Keep the public-but-workspace-only `ghostty-electron` package posture clear as the package evolves.
 5. Extend CI coverage beyond release smoke tests where deeper packaged-app scenarios are worth automating.

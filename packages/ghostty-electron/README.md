@@ -8,6 +8,9 @@ within an Electron `BrowserWindow`.
 
 > **Status**: In active development and used by the Devspace desktop app.
 > macOS arm64 only. API may still change.
+> Public source is provided for transparency and experimentation, but this
+> package is currently consumed as a repo workspace package only. It is not
+> published to npm and is not supported as a standalone dependency yet.
 
 ## Requirements
 
@@ -16,9 +19,10 @@ within an Electron `BrowserWindow`.
 - node-gyp build toolchain (Xcode Command Line Tools)
 - pinned `libghostty` bundle metadata from this repo
 
-## Installation
+## Workspace Usage
 
-Within a monorepo using workspace protocol:
+Within this repo, or another monorepo intentionally using the workspace
+protocol:
 
 ```json
 {
@@ -244,7 +248,7 @@ scripts/
   verify-libghostty.sh  Verify libghostty contents against repo checksums
 ```
 
-## Known limitations and TODO
+## Known Limitations
 
 - **macOS only** -- The native bridge uses Cocoa, Metal, and
   Objective-C++. No Windows/Linux support yet.

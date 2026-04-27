@@ -2,7 +2,7 @@
 
 **Purpose:** Track tactical bugs, polish items, and smaller feature requests reported by real users.
 
-Keep this separate from `docs/roadmap/roadmap.md`. If an issue grows into a larger architectural effort or an actively planned product milestone, move or mirror it into the roadmap.
+Keep this separate from `docs/roadmap.md`. If an issue grows into a larger architectural effort or an actively planned product milestone, move or mirror it into the roadmap.
 
 ## Open
 

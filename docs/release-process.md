@@ -233,5 +233,4 @@ After tagging a release:
 
 ## Future Improvements
 
-- artifact publishing from CI
 - clearer versioning policy for `ghostty-electron`

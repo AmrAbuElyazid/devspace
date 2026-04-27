@@ -7,7 +7,7 @@ Thanks for your interest in contributing to Devspace.
 The project is moving quickly. Before investing in a large change:
 
 - open an issue or discussion for major features or refactors
-- check the roadmap in `docs/roadmap/`
+- check the roadmap in `docs/roadmap.md`
 - prefer small, focused changes over broad rewrites
 
 ## Development Setup
@@ -52,7 +52,7 @@ bun run test
 
 - Use `bun run test`, not `bun test`
 - Use `bun run test:coverage` from the repo root when you want a coverage report for `apps/desktop`
-- Tests are primarily in `apps/desktop/`
+- Tests live across `apps/desktop/` and package workspaces
 - Prefer adding targeted tests for behavior changes when the code path is testable
 
 ## Style
