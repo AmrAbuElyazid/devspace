@@ -22,6 +22,8 @@ import { getSafeExternalUrl } from "../validation";
 import { getTrafficLightPosition } from "../window-chrome";
 import { safeHandle, safeOn } from "./shared";
 
+const MAX_NOTE_CONTENT_BYTES = 5 * 1024 * 1024;
+
 /** Escape a string for embedding in an AppleScript double-quoted literal. */
 function escapeAppleScriptString(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
@@ -34,6 +36,10 @@ function isMissingFileError(error: unknown): error is NodeJS.ErrnoException {
     "code" in error &&
     (error as NodeJS.ErrnoException).code === "ENOENT"
   );
+}
+
+function isNoteContentTooLarge(content: string): boolean {
+  return Buffer.byteLength(content, "utf8") > MAX_NOTE_CONTENT_BYTES;
 }
 
 export function registerSystemIpc(mainWindow: BrowserWindow, appUpdater?: AppUpdaterLike): void {
@@ -236,6 +242,9 @@ export function registerSystemIpc(mainWindow: BrowserWindow, appUpdater?: AppUpd
     if (typeof content !== "string") {
       return { error: "Content must be a string" };
     }
+    if (isNoteContentTooLarge(content)) {
+      return { error: "Content is too large" };
+    }
 
     return saveNote(noteId, content, nextNoteSaveVersion(noteId));
   });
@@ -247,6 +256,10 @@ export function registerSystemIpc(mainWindow: BrowserWindow, appUpdater?: AppUpd
     }
     if (typeof content !== "string") {
       event.returnValue = { error: "Content must be a string" };
+      return;
+    }
+    if (isNoteContentTooLarge(content)) {
+      event.returnValue = { error: "Content is too large" };
       return;
     }
 

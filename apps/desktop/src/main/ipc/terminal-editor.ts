@@ -1,4 +1,5 @@
 import type { BrowserWindow } from "electron";
+import path from "path";
 import type { BrowserPaneController } from "../browser/browser-types";
 import type { BrowserSessionManager } from "../browser/browser-session-manager";
 import { safeHandle, safeOn } from "./shared";
@@ -11,7 +12,9 @@ const MAX_TERMINAL_ENV_VARS = 100;
 const MAX_TERMINAL_ENV_KEY_LENGTH = 128;
 const MAX_TERMINAL_ENV_VALUE_LENGTH = 8192;
 const MAX_TERMINAL_CWD_LENGTH = 4096;
+const MAX_EDITOR_CLI_LENGTH = 4096;
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const ALLOWED_EDITOR_CLI_COMMANDS = new Set(["code", "code-insiders"]);
 
 function parseTerminalCwd(value: unknown): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -31,6 +34,20 @@ function parseTerminalEnvVars(value: unknown): Record<string, string> | undefine
   }
 
   return Object.keys(envVars).length > 0 ? envVars : undefined;
+}
+
+function parseConfiguredEditorCli(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_EDITOR_CLI_LENGTH) return undefined;
+  if (trimmed.includes("\0")) return undefined;
+
+  if (!trimmed.includes("/") && !trimmed.startsWith(".")) {
+    return ALLOWED_EDITOR_CLI_COMMANDS.has(trimmed) ? trimmed : undefined;
+  }
+
+  if (!path.isAbsolute(trimmed)) return undefined;
+  return ALLOWED_EDITOR_CLI_COMMANDS.has(path.basename(trimmed)) ? trimmed : undefined;
 }
 
 export function registerTerminalAndEditorIpc(
@@ -120,15 +137,11 @@ export function registerTerminalAndEditorIpc(
   const t3codePaneUrls = new Map<string, string>();
 
   safeHandle("editor:isAvailable", (_event, configuredCli: unknown) => {
-    return vscodeServerManager.isAvailable(
-      typeof configuredCli === "string" ? configuredCli : undefined,
-    );
+    return vscodeServerManager.isAvailable(parseConfiguredEditorCli(configuredCli));
   });
 
   safeHandle("editor:getCliStatus", (_event, configuredCli: unknown) => {
-    return vscodeServerManager.getCliStatus(
-      typeof configuredCli === "string" ? configuredCli : undefined,
-    );
+    return vscodeServerManager.getCliStatus(parseConfiguredEditorCli(configuredCli));
   });
 
   safeHandle(
@@ -139,7 +152,7 @@ export function registerTerminalAndEditorIpc(
       }
 
       const folder = typeof folderPath === "string" ? folderPath : undefined;
-      const preferredCli = typeof configuredCli === "string" ? configuredCli : undefined;
+      const preferredCli = parseConfiguredEditorCli(configuredCli);
       try {
         const { url } = await vscodeServerManager.start(folder, preferredCli);
         const existingSession = editorPaneSessions.get(paneId);

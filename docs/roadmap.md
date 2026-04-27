@@ -13,6 +13,9 @@ items as they land instead of preserving history here.
 - The first Electron IPC trust-boundary pass has landed: dev renderer URLs are
   local/dev-only, IPC senders are checked against the trusted main window, and
   native view bounds plus terminal env/cwd inputs are constrained.
+- Privileged IPC input hardening now also covers VS Code CLI launch input,
+  note/workspace persistence payload size, and deeper persisted workspace graph
+  validation.
 - The real public release path still needs configured secrets, a tagged release
   run, and an upgrade test from one shipped version to the next.
 - `ghostty-electron` is public source for transparency and experimentation, but
@@ -20,17 +23,12 @@ items as they land instead of preserving history here.
 
 ## Public OSS Blockers
 
-1. Finish privileged IPC input hardening.
-   - Constrain VS Code CLI process launch inputs.
-   - Add size limits for synchronous note/workspace persistence payloads.
-   - Improve workspace-state validation depth for nested graph consistency,
-     counts, string lengths, and numeric ranges.
-2. Fix highest-risk native/package issues in `ghostty-electron`.
+1. Fix highest-risk native/package issues in `ghostty-electron`.
    - Review manual Objective-C ownership and release retained/allocated objects.
    - Decide and document policy for terminal-driven clipboard and open-URL
      actions.
    - Keep the package clearly documented as experimental and workspace-only.
-3. Add missing collaboration scaffolding.
+2. Add missing collaboration scaffolding.
    - Add a PR template.
    - Add `CODEOWNERS`.
 

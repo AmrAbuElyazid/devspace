@@ -235,6 +235,12 @@ describe("notes:saveSync", () => {
       error: "Content must be a string",
     });
   });
+
+  test("rejects oversized content", () => {
+    expect(callHandler("notes:saveSync", "sync-test", "x".repeat(5 * 1024 * 1024 + 1))).toEqual({
+      error: "Content is too large",
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

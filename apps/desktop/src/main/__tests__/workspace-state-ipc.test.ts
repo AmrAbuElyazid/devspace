@@ -73,6 +73,70 @@ test("workspaceState async save rejects invalid payloads", async () => {
   ).rejects.toThrow("Invalid workspace state");
 });
 
+test("workspaceState async save rejects graph-inconsistent payloads", async () => {
+  const snapshot = {
+    activeWorkspaceId: "missing-workspace",
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Workspace 1",
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: 1,
+      },
+    ],
+    panes: {
+      "pane-1": { id: "pane-1", title: "Terminal", type: "terminal", config: {} },
+    },
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "pane-1" }],
+      },
+    },
+    pinnedSidebarNodes: [],
+    sidebarTree: [],
+  };
+
+  await expect(callRegisteredHandler(handlers, "workspaceState:save", snapshot)).rejects.toThrow(
+    "Invalid workspace state",
+  );
+});
+
+test("workspaceState async save rejects oversized payloads", async () => {
+  const snapshot = {
+    activeWorkspaceId: "workspace-1",
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "x".repeat(5 * 1024 * 1024),
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: 1,
+      },
+    ],
+    panes: {
+      "pane-1": { id: "pane-1", title: "Terminal", type: "terminal", config: {} },
+    },
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "pane-1" }],
+      },
+    },
+    pinnedSidebarNodes: [],
+    sidebarTree: [],
+  };
+
+  await expect(callRegisteredHandler(handlers, "workspaceState:save", snapshot)).rejects.toThrow(
+    "Invalid workspace state",
+  );
+});
+
 test("workspaceState sync save reports invalid payloads without writing", () => {
   const handler = handlers.get("workspaceState:saveSync");
   if (!handler) {

@@ -334,6 +334,19 @@ test("editor CLI status IPC returns the resolved CLI status", async () => {
   expect(editorCalls).toEqual([["getCliStatus", "code-insiders"]]);
 });
 
+test("editor CLI IPC ignores unsupported commands", async () => {
+  editorCalls.length = 0;
+
+  await handlers.get("editor:getCliStatus")?.({}, "open");
+  await handlers.get("editor:start")?.({}, "pane-unsupported", "/tmp/project", "../relative/code");
+  await handlers.get("editor:stop")?.({}, "pane-unsupported");
+
+  expect(editorCalls).toEqual([
+    ["getCliStatus", undefined],
+    ["start", "/tmp/project", undefined],
+  ]);
+});
+
 test("editor start and stop track trusted local origins for shared-session CORS", async () => {
   editorCalls.length = 0;
   browserSessionCalls.length = 0;
