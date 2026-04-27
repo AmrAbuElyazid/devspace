@@ -5,6 +5,7 @@
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 #include <cstdlib>
+#include <cstring>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -181,6 +182,13 @@ GhosttyAppState g_state;
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    if (_trackingArea) {
+        [self removeTrackingArea:_trackingArea];
+    }
+    [_tabId release];
+    [_trackingArea release];
+    [_keyTextAccumulator release];
+    [_markedTextValue release];
     [super dealloc];
 }
 
@@ -814,7 +822,7 @@ static void resetModifierStateForFocusLoss() {
     self.imeSelectedRange = newSelectedRange;
     if (self.surface) {
         const char* cstr = [text UTF8String];
-        ghostty_surface_preedit(self.surface, cstr, text.length);
+        ghostty_surface_preedit(self.surface, cstr, strlen(cstr));
     }
 }
 
@@ -1295,7 +1303,12 @@ static bool action_cb(ghostty_app_t app, ghostty_target_s target, ghostty_action
                 NSString* urlStr = [[NSString alloc] initWithBytes:url
                     length:action.action.open_url.len encoding:NSUTF8StringEncoding];
                 if (urlStr) {
-                    [[NSWorkspace sharedWorkspace] openURL:[NSURL URLWithString:urlStr]];
+                    NSURL* parsedUrl = [NSURL URLWithString:urlStr];
+                    NSString* scheme = [[parsedUrl scheme] lowercaseString];
+                    if ([scheme isEqualToString:@"http"] || [scheme isEqualToString:@"https"]) {
+                        [[NSWorkspace sharedWorkspace] openURL:parsedUrl];
+                    }
+                    [urlStr release];
                 }
             }
             return true;
@@ -1788,6 +1801,7 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
     view.wantVisible = g_state.desiredVisibleSurfaceIds.count(surfaceId) > 0 ? YES : NO;
     [view setHidden:YES]; // Caller will show when ready
     [contentView addSubview:view];
+    [view release];
 
     // Configure surface using the factory function
     ghostty_surface_config_s surface_cfg = ghostty_surface_config_new();

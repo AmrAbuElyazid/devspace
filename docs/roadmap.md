@@ -16,6 +16,9 @@ items as they land instead of preserving history here.
 - Privileged IPC input hardening now also covers VS Code CLI launch input,
   note/workspace persistence payload size, and deeper persisted workspace graph
   validation.
+- `ghostty-electron` native ownership was tightened for obvious retained view
+  objects, terminal open-url actions are limited to `http`/`https`, and the
+  remaining clipboard side-effect policy is documented as experimental.
 - The real public release path still needs configured secrets, a tagged release
   run, and an upgrade test from one shipped version to the next.
 - `ghostty-electron` is public source for transparency and experimentation, but
@@ -23,10 +26,10 @@ items as they land instead of preserving history here.
 
 ## Public OSS Blockers
 
-1. Fix highest-risk native/package issues in `ghostty-electron`.
-   - Review manual Objective-C ownership and release retained/allocated objects.
-   - Decide and document policy for terminal-driven clipboard and open-URL
-     actions.
+1. Finish `ghostty-electron` standalone-readiness decisions.
+   - Decide whether clipboard reads/writes need host-app confirmation before any
+     standalone package path.
+   - Keep native lifecycle/manual-ownership review active as the bridge evolves.
    - Keep the package clearly documented as experimental and workspace-only.
 2. Add missing collaboration scaffolding.
    - Add a PR template.

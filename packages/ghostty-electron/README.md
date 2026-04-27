@@ -263,6 +263,11 @@ scripts/
 - **Native addon path is manual** -- Consumers must provide the absolute
   path to `ghostty_bridge.node`. A `node-gyp-build` or `prebuild-install`
   pattern would improve this.
+- **Terminal escape-sequence side effects need host-app policy** -- Clipboard
+  reads/writes are currently completed without a separate confirmation UI.
+  Terminal-driven open-url actions are constrained to `http` and `https`, but
+  hosts should still decide whether to add user confirmation or app-level
+  routing before treating this package as standalone-ready.
 - **Single window** -- One `GhosttyTerminal` instance per
   `BrowserWindow`. Multi-window support requires multiple instances.
 
