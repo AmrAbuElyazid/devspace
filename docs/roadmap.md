@@ -19,37 +19,36 @@ items as they land instead of preserving history here.
 - `ghostty-electron` native ownership was tightened for obvious retained view
   objects, terminal open-url actions are limited to `http`/`https`, and the
   remaining clipboard side-effect policy is documented as experimental.
-- The real public release path still needs configured secrets, a tagged release
-  run, and an upgrade test from one shipped version to the next.
+- Basic collaboration scaffolding exists: issue templates, PR template,
+  `CODEOWNERS`, contributing guide, security policy, and code of conduct.
+- GitHub and Apple signing/notarization secrets are configured, and private
+  releases already exist for `0.1.0` and `0.1.1`.
+- The first public-era release is expected to be `0.2.0`, with an update test
+  from `0.1.1` to `0.2.0` once the repository is public.
 - `ghostty-electron` is public source for transparency and experimentation, but
   it is workspace-consumed only and not an npm package yet.
 
 ## Public OSS Blockers
 
-1. Finish `ghostty-electron` standalone-readiness decisions.
-   - Decide whether clipboard reads/writes need host-app confirmation before any
-     standalone package path.
-   - Keep native lifecycle/manual-ownership review active as the bridge evolves.
-   - Keep the package clearly documented as experimental and workspace-only.
-2. Add missing collaboration scaffolding.
-   - Add a PR template.
-   - Add `CODEOWNERS`.
+1. Keep `ghostty-electron` clearly documented as experimental and workspace-only
+   until a standalone package path exists.
+2. Keep native lifecycle/manual-ownership review active as the bridge evolves.
+3. Keep collaboration scaffolding current as project ownership and review paths
+   evolve.
 
 ## Release Blockers
 
-1. Configure GitHub and Apple signing/notarization secrets.
-2. Run the first real tagged release from `main`.
-3. Verify the signed DMG on a clean machine after Gatekeeper checks.
-4. Validate update from one shipped version to the next using the real public
-   feed.
-5. Confirm native Ghostty resources, shell integration assets, and bundled
+1. Run the first public tagged release from `main`, likely `v0.2.0`.
+2. Verify the signed DMG on a clean machine after Gatekeeper checks.
+3. Validate update from `0.1.1` to `0.2.0` using the real public feed.
+4. Confirm native Ghostty resources, shell integration assets, and bundled
    binaries load in the packaged app.
 
 ## Important Follow-Ups
 
 - Reduce test warning/log noise so green public CI reads cleanly.
-- Decide whether packaged-app Playwright smoke tests should run in regular PR CI
-  or only release CI.
+- Keep packaged-app Playwright smoke tests in release CI only unless PR feedback
+  needs change.
 - Split maintainability hotspots when touching them next: `native-view-store`,
   `SettingsPage`, app shortcut actions, and pane/server lifecycle registries.
 - Keep browser/editor trust and privacy docs aligned with behavior: localhost
@@ -60,6 +59,8 @@ items as they land instead of preserving history here.
 
 - Do not publish `ghostty-electron` to npm until it has built artifacts, a native
   addon install strategy, and a clearer public API/support policy.
+- Clipboard reads/writes in `ghostty-electron` do not need a separate
+  confirmation UI for Devspace's current embedded use.
 - Do not publish `@devspace/note-editor` as a standalone package unless product
   goals change.
 - Treat browser-pane passkey/WebAuthn limitations on macOS as upstream-constrained;
@@ -74,7 +75,7 @@ The repo is ready to make public when:
 - Electron IPC and renderer-origin trust boundaries are intentionally hardened
 - `ghostty-electron` native/package risks above are resolved or explicitly
   documented as experimental limitations
-- contributor scaffolding is in place
+- contributor scaffolding is in place and points at current maintainers
 - the full repo gate passes on CI
 
 The desktop app is ready for public distribution when:
