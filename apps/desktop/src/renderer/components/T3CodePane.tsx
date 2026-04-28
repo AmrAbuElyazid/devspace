@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
-import { focusBrowserNativePane, hasEditableRendererFocus } from "../lib/native-pane-focus";
-import { useNativeView } from "../hooks/useNativeView";
-import { Button } from "./ui/button";
-import type { ReactElement } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactElement } from "react";
+import { AlertCircle } from "lucide-react";
 
-// Module-level tracking to survive React remounts (same pattern as EditorPane)
+import { focusBrowserNativePane, hasEditableRendererFocus } from "@/lib/native-pane-focus";
+import { useNativeView } from "@/hooks/useNativeView";
+
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+
 const startedInstances = new Set<string>();
 
-/** Call when a T3 Code pane is destroyed externally. */
 export function markT3CodeDestroyed(paneId: string): void {
   startedInstances.delete(paneId);
 }
@@ -29,15 +29,10 @@ export default function T3CodePane({ paneId, isFocused }: T3CodePaneProps): Reac
   const wasVisibleRef = useRef(false);
   const wasFocusedRef = useRef(false);
 
-  const [state, setState] = useState<T3CodeState>(() => {
-    if (startedInstances.has(paneId)) {
-      return { status: "running" };
-    }
-    return { status: "starting" };
-  });
+  const [state, setState] = useState<T3CodeState>(() =>
+    startedInstances.has(paneId) ? { status: "running" } : { status: "starting" },
+  );
 
-  // Centralized native view management — only register once the
-  // WebContentsView actually exists (status === "running").
   const { isVisible } = useNativeView({
     id: paneId,
     type: "browser",
@@ -50,49 +45,36 @@ export default function T3CodePane({ paneId, isFocused }: T3CodePaneProps): Reac
     const wasFocused = wasFocusedRef.current;
     wasVisibleRef.current = isVisible;
     wasFocusedRef.current = isFocused;
-
     if (!isVisible || state.status !== "running" || hasEditableRendererFocus() || !isFocused) {
       return;
     }
-
-    if (wasVisible && wasFocused) {
-      return;
-    }
-
+    if (wasVisible && wasFocused) return;
     focusBrowserNativePane(paneId);
   }, [isFocused, isVisible, paneId, state.status]);
 
-  // Start the T3 Code server immediately on mount
   useEffect(() => {
     if (state.status !== "starting") return;
     if (startedInstances.has(paneId)) {
       setState({ status: "running" });
       return;
     }
-
     let cancelled = false;
-
     void (async () => {
-      // Check availability first
       const available = await window.api.t3code.isAvailable();
       if (cancelled) return;
       if (!available) {
         setState({ status: "unavailable" });
         return;
       }
-
       const result = await window.api.t3code.start(paneId);
       if (cancelled) return;
-
       if ("error" in result) {
         setState({ status: "error", message: result.error });
         return;
       }
-
       startedInstances.add(paneId);
       setState({ status: "running" });
     })();
-
     return () => {
       cancelled = true;
     };
@@ -104,56 +86,74 @@ export default function T3CodePane({ paneId, isFocused }: T3CodePaneProps): Reac
 
   if (state.status === "unavailable") {
     return (
-      <div
-        className="h-full w-full flex flex-col items-center justify-center gap-4"
-        style={{ backgroundColor: "var(--background)" }}
-      >
-        <AlertCircle size={48} style={{ color: "var(--destructive)", opacity: 0.6 }} />
-        <p className="text-sm text-center max-w-xs" style={{ color: "var(--muted-foreground)" }}>
-          T3 Code CLI not found. Install it with{" "}
-          <code className="px-1 py-0.5 rounded text-xs" style={{ background: "var(--surface)" }}>
+      <PaneStatusCard eyebrow="T3 Code unavailable" title="CLI not found" tone="warning">
+        <p className="text-[12px] text-muted-foreground leading-relaxed">
+          Install the T3 Code CLI with{" "}
+          <code className="px-1.5 py-0.5 rounded bg-surface font-mono text-[10.5px] text-foreground">
             npm install -g t3
           </code>
+          .
         </p>
-      </div>
+      </PaneStatusCard>
     );
   }
 
   if (state.status === "error") {
     return (
-      <div
-        className="h-full w-full flex flex-col items-center justify-center gap-4"
-        style={{ backgroundColor: "var(--background)" }}
-      >
-        <AlertCircle size={48} style={{ color: "var(--destructive)", opacity: 0.6 }} />
-        <p className="text-sm text-center max-w-xs" style={{ color: "var(--muted-foreground)" }}>
+      <PaneStatusCard eyebrow="T3 Code error" title="Failed to start" tone="error">
+        <p className="text-[12px] text-muted-foreground leading-relaxed self-stretch">
           {state.message}
         </p>
-        <Button onClick={handleRetry}>Retry</Button>
-      </div>
+        <Button size="sm" onClick={handleRetry}>
+          Retry
+        </Button>
+      </PaneStatusCard>
     );
   }
 
   if (state.status === "starting") {
     return (
-      <div
-        className="h-full w-full flex flex-col items-center justify-center gap-3"
-        style={{ backgroundColor: "var(--background)" }}
-      >
-        <Loader2 size={24} className="animate-spin" style={{ color: "var(--muted-foreground)" }} />
-        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-          Starting T3 Code...
-        </p>
+      <div className="h-full w-full flex flex-col items-center justify-center gap-2 bg-background">
+        <Spinner className="size-4 text-muted-foreground" />
+        <p className="text-[11.5px] font-mono text-muted-foreground">starting t3 code…</p>
       </div>
     );
   }
 
-  // Running state — native view placeholder
   return (
     <div
       ref={placeholderRef}
-      className="browser-native-view-slot"
-      data-native-view-hidden={!isVisible ? "true" : undefined}
+      className="absolute inset-0 bg-background data-[hidden=true]:invisible"
+      data-hidden={!isVisible ? "true" : undefined}
     />
+  );
+}
+
+function PaneStatusCard({
+  eyebrow,
+  title,
+  tone,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  tone: "warning" | "error";
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="h-full w-full flex items-center justify-center p-6 bg-background">
+      <div className="flex flex-col items-start gap-3 max-w-md p-5 rounded-lg bg-card border border-border shadow-[var(--overlay-shadow)]">
+        <div
+          className={`inline-flex items-center gap-1.5 text-[9.5px] font-mono uppercase tracking-[0.12em] ${
+            tone === "error" ? "text-destructive" : "text-status-warning"
+          }`}
+        >
+          <AlertCircle size={11} />
+          {eyebrow}
+        </div>
+        <div className="text-[14px] font-medium text-foreground leading-snug">{title}</div>
+        {children}
+      </div>
+    </div>
   );
 }

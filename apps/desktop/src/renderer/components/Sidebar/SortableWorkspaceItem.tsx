@@ -1,13 +1,17 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { X } from "lucide-react";
-import { useWorkspaceStore } from "../../store/workspace-store";
-import { useActiveDrag } from "../../hooks/useDndOrchestrator";
-import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
-import { InlineRenameInput } from "../ui/InlineRenameInput";
-import { paneTypeIcons } from "../../lib/pane-type-meta";
-import type { HeldModifier } from "../../hooks/useModifierHeld";
-import type { SidebarContainer } from "../../types/dnd";
+
+import { useWorkspaceStore } from "@/store/workspace-store";
+import { useActiveDrag } from "@/hooks/useDndOrchestrator";
+import { useInsertionIndicator } from "@/hooks/useInsertionIndicator";
+import { paneTypeIcons } from "@/lib/pane-type-meta";
+import type { HeldModifier } from "@/hooks/useModifierHeld";
+import type { SidebarContainer } from "@/types/dnd";
+import { cn } from "@/lib/utils";
+
+import { InlineRenameInput } from "@/components/ui/inline-rename-input";
+import { Kbd } from "@/components/ui/kbd";
 
 interface SortableWorkspaceItemProps {
   workspaceId: string;
@@ -40,15 +44,12 @@ export function SortableWorkspaceItem({
   onContextMenu,
   onDelete,
 }: SortableWorkspaceItemProps) {
-  // Each workspace item reads its own data from the store so that
-  // title/CWD/pane changes in OTHER workspaces don't cascade here.
   const name = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.name ?? "");
   const metadata = useWorkspaceStore(
     (s) => s.workspaceSidebarMetadataByWorkspaceId[workspaceId] ?? "",
   );
   const canDelete = useWorkspaceStore((s) => s.workspaces.length > 1);
 
-  // Focused pane type — shows a colored icon next to the workspace name
   const focusedPaneType = useWorkspaceStore((s) => {
     const ws = s.workspaces.find((w) => w.id === workspaceId);
     if (!ws?.focusedGroupId) return null;
@@ -62,7 +63,6 @@ export function SortableWorkspaceItem({
 
   const PaneIcon = focusedPaneType ? (paneTypeIcons[focusedPaneType] ?? null) : null;
 
-  // Compute shortcut hint from workspace index
   const shortcutHint = useWorkspaceStore((s) => {
     if (modifierHeld !== "command") return null;
     const idx = s.workspaces.findIndex((w) => w.id === workspaceId);
@@ -71,6 +71,7 @@ export function SortableWorkspaceItem({
     if (idx === s.workspaces.length - 1) return "⌘9";
     return null;
   });
+
   const activeDrag = useActiveDrag();
   const mergedRef = useRef<HTMLDivElement | null>(null);
 
@@ -99,7 +100,6 @@ export function SortableWorkspaceItem({
     [setSortableRef],
   );
 
-  // Insertion line indicator — items stay in place, line shows where drop will go
   const isSidebarDrag =
     activeDrag?.type === "sidebar-workspace" || activeDrag?.type === "sidebar-folder";
   const insertPosition = useInsertionIndicator(
@@ -109,7 +109,6 @@ export function SortableWorkspaceItem({
     "vertical",
   );
 
-  // Insertion line for tab drags (edge zones only — center zone stays as tab drop target)
   const isTabDrag = activeDrag?.type === "group-tab";
   const tabInsertPosition = useInsertionIndicator(
     isOver && !isDragging && !!isTabDrag && activeDrag.workspaceId !== workspaceId,
@@ -126,25 +125,23 @@ export function SortableWorkspaceItem({
     activeDrag.workspaceId !== workspaceId &&
     tabInsertPosition === null;
 
-  const style = {
-    marginLeft: depth * 16,
-    opacity: isDragging ? 0.4 : undefined,
-  };
-
-  const effectiveInsertPosition = insertPosition ?? tabInsertPosition;
+  const effectiveInsert = insertPosition ?? tabInsertPosition;
   const insertClass =
-    effectiveInsertPosition === "before"
-      ? "sidebar-insert-before"
-      : effectiveInsertPosition === "after"
-        ? "sidebar-insert-after"
+    effectiveInsert === "before"
+      ? "insert-before"
+      : effectiveInsert === "after"
+        ? "insert-after"
         : "";
 
   return (
     <div
       ref={setRef}
-      style={style}
+      style={{
+        marginLeft: depth * 14,
+        opacity: isDragging ? 0.4 : undefined,
+      }}
       data-sortable-id={`ws-${workspaceId}`}
-      className={`ws-item no-drag ${isActive ? "ws-item-active" : ""} ${insertClass} ${isTabDropTarget ? "ws-item-tab-drop" : ""}`}
+      data-active={isActive || undefined}
       onClick={() => {
         if (!isEditing) onSelect();
       }}
@@ -152,41 +149,84 @@ export function SortableWorkspaceItem({
       onContextMenu={onContextMenu}
       {...attributes}
       {...listeners}
+      className={cn(
+        "no-drag relative group/ws flex items-center gap-2.5 h-9 pl-2.5 pr-1.5 rounded-md cursor-default select-none",
+        "text-[12.5px] text-foreground/80",
+        "transition-[background-color,color] duration-100",
+        "hover:bg-hover hover:text-foreground",
+        // Active state: clean elevated surface (no muddy yellow tint) +
+        // bright 3px brand bar on the left edge.
+        isActive &&
+          "bg-surface text-foreground hover:bg-surface " +
+            "before:content-[''] before:absolute before:left-0 before:top-[7px] before:bottom-[7px] before:w-[3px] before:bg-brand before:rounded-r-[2px] " +
+            "before:shadow-[0_0_8px_var(--brand)]",
+        isTabDropTarget && "drop-into-folder",
+        insertClass,
+      )}
     >
-      <div className="ws-item-content">
-        <div className="ws-item-row">
-          {PaneIcon && <PaneIcon size={13} className="ws-pane-icon" />}
-          {isEditing ? (
-            <InlineRenameInput
-              initialValue={name}
-              onCommit={(newName) => {
-                onRename(newName);
-                onStopEditing();
-              }}
-              onCancel={onStopEditing}
-              className="text-[13px]"
-            />
-          ) : (
-            <span className="flex-1 truncate">{name}</span>
-          )}
-        </div>
-        {!isEditing && metadata && <div className="ws-meta">{metadata}</div>}
+      {/* Pane icon — sits in a small subtle "chip" so the row reads as
+          structured. Active state pops the chip background to brand-soft. */}
+      <div
+        className={cn(
+          "shrink-0 inline-flex items-center justify-center size-[22px] rounded-[5px]",
+          "transition-colors",
+          isActive
+            ? "bg-brand-soft text-brand"
+            : "bg-surface/50 text-muted-foreground/85 group-hover/ws:text-foreground",
+        )}
+      >
+        {PaneIcon ? <PaneIcon width={13} height={13} /> : <span className="size-[13px]" />}
       </div>
-      {shortcutHint && <span className="ws-shortcut-hint">{shortcutHint}</span>}
-      {canDelete && !isEditing && !shortcutHint && (
+
+      <div className="flex-1 min-w-0 flex flex-col gap-px">
+        {isEditing ? (
+          <InlineRenameInput
+            initialValue={name}
+            onCommit={(newName) => {
+              onRename(newName);
+              onStopEditing();
+            }}
+            onCancel={onStopEditing}
+            className={cn("text-[12.5px]", isActive ? "font-medium" : "")}
+            aria-label="Rename workspace"
+          />
+        ) : (
+          <span
+            className={cn("truncate leading-tight", isActive ? "text-foreground font-medium" : "")}
+          >
+            {name}
+          </span>
+        )}
+        {!isEditing && metadata ? (
+          <span className="truncate leading-none text-[10px] font-mono text-muted-foreground/55">
+            {metadata}
+          </span>
+        ) : null}
+      </div>
+
+      {shortcutHint ? (
+        <Kbd className="animate-hint shrink-0 h-[18px] min-w-[18px] px-1.5 text-[9.5px] font-mono">
+          {shortcutHint}
+        </Kbd>
+      ) : canDelete && !isEditing ? (
         <button
           type="button"
-          className="ws-delete"
           aria-label="Delete workspace"
           title="Delete workspace"
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
+          className={cn(
+            "shrink-0 inline-flex items-center justify-center size-5 rounded-sm",
+            "text-muted-foreground/55 opacity-0 group-hover/ws:opacity-100",
+            "hover:text-destructive hover:bg-destructive/10",
+            "transition-[opacity,color,background-color]",
+          )}
         >
-          <X size={12} />
+          <X size={11} strokeWidth={2.4} />
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

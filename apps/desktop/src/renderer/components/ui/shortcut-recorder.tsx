@@ -1,25 +1,35 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from "react";
 import { RotateCcw } from "lucide-react";
+
 import {
   fromKeyboardEvent,
   shortcutsEqual,
   toDisplayString,
   type StoredShortcut,
 } from "../../../shared/shortcuts";
+import { cn } from "@/lib/utils";
 
 interface ShortcutRecorderProps {
-  /** The currently active shortcut. */
-  current: StoredShortcut;
-  /** The factory default shortcut for this action. */
-  defaultShortcut: StoredShortcut;
-  /** Called when the user records a new shortcut. */
-  onRecord: (shortcut: StoredShortcut) => void;
-  /** Called when the user resets to default. */
+  /** Currently bound combination, or null for "unset". */
+  current: StoredShortcut | null;
+  /** Default value used to compute the reset state. */
+  defaultShortcut: StoredShortcut | null;
+  /** Called with a new combo, or null to unbind. */
+  onRecord: (next: StoredShortcut | null) => void;
+  /** Called when the reset button is pressed. */
   onReset: () => void;
-  /** Optional conflict text (e.g. "Conflicts with Toggle Sidebar"). */
-  conflict?: string | undefined;
+  /** Optional conflict description shown as destructive tone. */
+  conflict?: string;
 }
 
+/**
+ * Click-to-record keyboard shortcut field. Stays a normal-looking pill until
+ * activated; once recording, it pulses, captures the next valid combo, and
+ * commits.
+ *
+ * The recorder uses the shared `fromKeyboardEvent` parser so all platforms
+ * see the same StoredShortcut shape.
+ */
 export function ShortcutRecorder({
   current,
   defaultShortcut,
@@ -27,83 +37,97 @@ export function ShortcutRecorder({
   onReset,
   conflict,
 }: ShortcutRecorderProps) {
-  const [isRecording, setIsRecording] = useState(false);
+  const [recording, setRecording] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  const isCustom = !shortcutsEqual(current, defaultShortcut);
-
-  const startRecording = useCallback(() => {
-    setIsRecording(true);
-  }, []);
-
-  const stopRecording = useCallback(() => {
-    setIsRecording(false);
-  }, []);
-
-  // Global keydown listener for recording
+  // Auto-blur once we stop recording so the next key press doesn't re-trigger.
   useEffect(() => {
-    if (!isRecording) return;
+    if (!recording) buttonRef.current?.blur();
+  }, [recording]);
 
-    const handler = (e: KeyboardEvent): void => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      // Escape cancels recording
-      if (e.key === "Escape") {
-        stopRecording();
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>) => {
+      if (!recording) return;
+      // Allow Escape to cancel without committing.
+      if (
+        event.key === "Escape" &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        setRecording(false);
         return;
       }
-
-      const shortcut = fromKeyboardEvent(e);
-      if (!shortcut) return; // bare modifier press
-
-      // Must have at least one modifier (prevent bare letter shortcuts)
-      if (!shortcut.command && !shortcut.control && !shortcut.option && !shortcut.shift) {
+      // Backspace clears the binding.
+      if (
+        event.key === "Backspace" &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey
+      ) {
+        event.preventDefault();
+        setRecording(false);
+        onRecord(null);
         return;
       }
+      const next = fromKeyboardEvent(event);
+      if (!next) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setRecording(false);
+      onRecord(next);
+    },
+    [recording, onRecord],
+  );
 
-      onRecord(shortcut);
-      stopRecording();
-    };
+  const isDefault =
+    !current && !defaultShortcut
+      ? true
+      : current && defaultShortcut
+        ? shortcutsEqual(current, defaultShortcut)
+        : false;
 
-    // Click outside cancels recording
-    const clickHandler = (e: MouseEvent): void => {
-      if (buttonRef.current && !buttonRef.current.contains(e.target as Node)) {
-        stopRecording();
-      }
-    };
-
-    window.addEventListener("keydown", handler, true);
-    window.addEventListener("mousedown", clickHandler, true);
-    return () => {
-      window.removeEventListener("keydown", handler, true);
-      window.removeEventListener("mousedown", clickHandler, true);
-    };
-  }, [isRecording, onRecord, stopRecording]);
+  const display = recording ? "Recording…" : current ? toDisplayString(current) : "Unset";
 
   return (
     <div className="flex items-center gap-1.5">
       <button
         ref={buttonRef}
-        className={`shortcut-recorder-btn ${isRecording ? "recording" : ""} ${conflict ? "has-conflict" : ""}`}
-        onClick={isRecording ? stopRecording : startRecording}
-        title={conflict ?? (isRecording ? "Press a shortcut, Escape to cancel" : "Click to record")}
-      >
-        {isRecording ? (
-          <span className="text-[10px] opacity-70">Press shortcut...</span>
-        ) : (
-          <span className="text-[10px] font-medium">{toDisplayString(current)}</span>
+        type="button"
+        onClick={() => setRecording((r) => !r)}
+        onKeyDown={handleKeyDown}
+        title={conflict ?? (recording ? "Press a combination" : "Click to change")}
+        className={cn(
+          "inline-flex items-center justify-center min-w-[68px] h-6 px-2 rounded-md",
+          "bg-surface border border-border text-foreground",
+          "text-[11px] font-mono whitespace-nowrap",
+          "transition-colors outline-none",
+          "hover:border-border focus-visible:border-brand-edge focus-visible:ring-2 focus-visible:ring-brand-soft",
+          recording &&
+            "bg-brand-soft border-brand-edge text-foreground animate-[pulse-ring_1.5s_ease-in-out_infinite]",
+          conflict && !recording && "border-destructive/50 text-destructive",
         )}
+      >
+        {display}
       </button>
-      {isCustom && (
+      {!isDefault && !recording ? (
         <button
-          className="shortcut-reset-btn"
+          type="button"
           onClick={onReset}
-          title={`Reset to ${toDisplayString(defaultShortcut)}`}
+          aria-label="Reset to default"
+          title="Reset to default"
+          className={cn(
+            "inline-flex items-center justify-center size-5 rounded-sm",
+            "text-muted-foreground hover:text-foreground hover:bg-hover",
+            "transition-colors",
+          )}
         >
           <RotateCcw size={10} />
         </button>
-      )}
+      ) : null}
     </div>
   );
 }

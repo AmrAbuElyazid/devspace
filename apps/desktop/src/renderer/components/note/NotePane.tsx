@@ -227,23 +227,27 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
 
   if (loadState === "loading") {
     return (
-      <div className="note-pane note-pane-center">
-        <span>Loading note...</span>
+      <div className="note-pane h-full w-full flex items-center justify-center bg-background">
+        <span className="text-[11.5px] font-mono text-muted-foreground">loading note…</span>
       </div>
     );
   }
 
   if (loadState === "error") {
     return (
-      <div className="note-pane note-pane-center">
-        <span>Failed to load note</span>
+      <div className="note-pane h-full w-full flex items-center justify-center bg-background">
+        <span className="text-[12px] text-destructive">Failed to load note</span>
       </div>
     );
   }
 
   return (
-    <div className="note-pane">
-      {saveError && <div className="note-save-error">Save failed: {saveError}</div>}
+    <div className="note-pane h-full w-full flex flex-col bg-background">
+      {saveError && (
+        <div className="shrink-0 px-4 py-1.5 bg-destructive/10 text-destructive text-[11.5px] border-b border-destructive/20">
+          Save failed: {saveError}
+        </div>
+      )}
       <NoteEditor autoFocus={isFocused} initialValue={initialValue} onChange={handleChange} />
     </div>
   );

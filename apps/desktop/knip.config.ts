@@ -12,6 +12,8 @@ const config: KnipConfig = {
   ignoreDependencies: [
     "@tailwindcss/postcss", // used in postcss.config.mjs
     "tailwindcss", // peer dep of @tailwindcss/postcss, used via CSS
+    "tw-animate-css", // imported via globals.css `@import`
+    "cmdk", // peer dep of shadcn command.tsx (kept available even if not yet wired in)
   ],
   ignore: [
     "src/renderer/components/ui/**", // UI primitives are a component library with intentional public exports

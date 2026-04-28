@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckCircle2, ExternalLink, LoaderCircle, Trash2 } from "lucide-react";
+
 import type {
   BrowserImportMode,
   BrowserImportResult,
@@ -7,7 +8,17 @@ import type {
   BrowserProfileDescriptor,
   ClearBrowsingDataTarget,
 } from "../../../shared/browser";
-import { Button } from "../ui/button";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 
 type ImportState =
   | { status: "idle" }
@@ -55,7 +66,6 @@ export default function BrowserImportPanel() {
 
   useEffect(() => {
     let cancelled = false;
-
     if (!hasProfiles) {
       setProfiles([]);
       setSelectedProfilePath("");
@@ -64,19 +74,15 @@ export default function BrowserImportPanel() {
         cancelled = true;
       };
     }
-
     setProfilesStatus("loading");
     setProfilesMessage(null);
-
     void window.api.browser
       .listProfiles(browser)
       .then((result) => {
         if (cancelled) return;
         setProfiles(result);
         setSelectedProfilePath((current) => {
-          if (current && result.some((profile) => profile.path === current)) {
-            return current;
-          }
+          if (current && result.some((p) => p.path === current)) return current;
           return result[0]?.path ?? "";
         });
         setProfilesStatus("ready");
@@ -92,7 +98,6 @@ export default function BrowserImportPanel() {
             : `Failed to load ${browserLabel(browser)} profiles.`,
         );
       });
-
     return () => {
       cancelled = true;
     };
@@ -102,17 +107,13 @@ export default function BrowserImportPanel() {
   const hasProfile = selectedProfilePath.length > 0;
   const importDisabled = isImporting || (hasProfiles && !hasProfile);
   const selectedProfileName = useMemo(
-    () => profiles.find((profile) => profile.path === selectedProfilePath)?.name,
+    () => profiles.find((p) => p.path === selectedProfilePath)?.name,
     [profiles, selectedProfilePath],
   );
 
-  async function handleImport(mode: BrowserImportMode): Promise<void> {
-    if (importDisabled) {
-      return;
-    }
-
+  async function handleImport(mode: BrowserImportMode) {
+    if (importDisabled) return;
     setImportState({ status: "loading", browser, mode });
-
     try {
       const profilePath = hasProfiles ? selectedProfilePath : null;
       const result: BrowserImportResult = await window.api.browser.importBrowser(
@@ -120,7 +121,6 @@ export default function BrowserImportPanel() {
         profilePath,
         mode,
       );
-
       if (result.ok) {
         setImportState({
           status: "success",
@@ -128,7 +128,6 @@ export default function BrowserImportPanel() {
         });
         return;
       }
-
       setImportState({
         status: "error",
         code: result.code,
@@ -142,9 +141,8 @@ export default function BrowserImportPanel() {
     }
   }
 
-  async function handleClearData(target: ClearBrowsingDataTarget): Promise<void> {
+  async function handleClearData(target: ClearBrowsingDataTarget) {
     setClearState({ status: "loading" });
-
     try {
       const result = await window.api.browser.clearBrowsingData(target);
       if (result.ok) {
@@ -170,177 +168,146 @@ export default function BrowserImportPanel() {
   }
 
   return (
-    <div
-      className="browser-import-panel"
-      style={{ display: "flex", flexDirection: "column", gap: 24 }}
-    >
-      {/* ── Import Browsing Data ────────────────────────────────────────── */}
-      <div
-        style={{
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          background: "var(--card)",
-          padding: 16,
-        }}
-      >
-        <h3 className="text-[13px] font-medium mb-0.5" style={{ color: "var(--foreground)" }}>
-          Import Browsing Data
-        </h3>
-        <p className="text-[11px] mb-3" style={{ color: "var(--muted-foreground)" }}>
-          Import cookies, history, or both from another browser.
-        </p>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {/* Source + Profile row */}
-          <div style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span
-                className="text-[11px] font-medium"
-                style={{ color: "var(--foreground-faint)" }}
-              >
+    <div className="flex flex-col gap-4">
+      {/* Import Browsing Data */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-[13px]">Import browsing data</CardTitle>
+          <CardDescription className="text-[11.5px]">
+            Import cookies, history, or both from another browser.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1.5 min-w-[140px]">
+              <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
                 Source
-              </span>
-              <select
-                className="browser-import-select"
-                style={{ width: 140 }}
+              </Label>
+              <Select
                 value={browser}
-                onChange={(event) => setBrowser(event.target.value as BrowserImportSource)}
+                onValueChange={(v) => setBrowser(v as BrowserImportSource)}
                 disabled={isImporting}
               >
-                {browserOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="h-7 text-[12px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {browserOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             {hasProfiles && profiles.length > 0 ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                <span
-                  className="text-[11px] font-medium"
-                  style={{ color: "var(--foreground-faint)" }}
-                >
+              <div className="flex flex-col gap-1.5 min-w-[180px]">
+                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
                   Profile
-                </span>
-                <select
-                  className="browser-import-select"
-                  style={{ width: 180 }}
+                </Label>
+                <Select
                   value={selectedProfilePath}
-                  onChange={(event) => setSelectedProfilePath(event.target.value)}
+                  onValueChange={(v) => setSelectedProfilePath(v ?? "")}
                   disabled={profilesStatus === "loading" || isImporting}
                 >
-                  {profiles.map((profile) => (
-                    <option key={profile.path} value={profile.path}>
-                      {profile.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-7 text-[12px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {profiles.map((profile) => (
+                      <SelectItem key={profile.path} value={profile.path}>
+                        {profile.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             ) : null}
           </div>
 
-          {/* Profile status messages */}
           {hasProfiles && profiles.length === 0 ? (
-            <div className="text-[11px]" style={{ color: "var(--muted-foreground)" }}>
+            <p className="text-[11px] text-muted-foreground">
               {profilesStatus === "loading"
-                ? `Looking for ${browserLabel(browser)} profiles...`
+                ? `Looking for ${browserLabel(browser)} profiles…`
                 : profilesStatus === "error"
                   ? (profilesMessage ?? `Failed to load ${browserLabel(browser)} profiles.`)
                   : `No importable ${browserLabel(browser)} profiles were found.`}
-            </div>
+            </p>
           ) : null}
 
-          {/* Safari FDA warning */}
           {browser === "safari" ? (
             <div
-              className="flex items-center justify-between gap-3 text-[11px] px-3 py-2 rounded-md"
-              style={{
-                color: "var(--foreground-muted)",
-                background:
-                  importState.status === "error" &&
+              className={cn(
+                "flex items-center justify-between gap-3 px-3 py-2 rounded-md border text-[11.5px]",
+                importState.status === "error" &&
                   importState.code === "SAFARI_FULL_DISK_ACCESS_REQUIRED"
-                    ? "color-mix(in srgb, var(--warning) 8%, var(--surface))"
-                    : "var(--surface)",
-                border: "1px solid var(--border-faint)",
-              }}
+                  ? "bg-status-warning/10 border-status-warning/30 text-foreground"
+                  : "bg-surface border-hairline text-muted-foreground",
+              )}
             >
               <span>Safari may require Full Disk Access.</span>
               <Button
-                type="button"
                 size="xs"
                 variant="outline"
                 onClick={() => window.api.shell.openExternal(SAFARI_SETTINGS_URL)}
               >
-                <ExternalLink size={11} />
+                <ExternalLink size={11} data-icon="inline-start" />
                 Privacy Settings
               </Button>
             </div>
           ) : null}
 
-          {/* Import actions */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div className="flex flex-wrap gap-1.5">
             {importModeOptions.map((option) => {
-              const isCurrentAction =
+              const isCurrent =
                 importState.status === "loading" &&
                 importState.browser === browser &&
                 importState.mode === option.value;
               return (
                 <Button
                   key={option.value}
-                  type="button"
                   size="sm"
                   variant={option.value === "everything" ? "default" : "secondary"}
                   onClick={() => void handleImport(option.value)}
                   disabled={importDisabled}
                 >
-                  {isCurrentAction ? <LoaderCircle size={12} className="animate-spin" /> : null}
+                  {isCurrent ? (
+                    <LoaderCircle size={12} className="animate-spin" data-icon="inline-start" />
+                  ) : null}
                   {option.label}
                 </Button>
               );
             })}
           </div>
 
-          {/* Import status */}
           <StatusMessage state={importState} />
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* ── Clear Browsing Data ─────────────────────────────────────────── */}
-      <div
-        style={{
-          border: "1px solid var(--border)",
-          borderRadius: 8,
-          background: "var(--card)",
-          padding: 16,
-        }}
-      >
-        <h3 className="text-[13px] font-medium mb-0.5" style={{ color: "var(--foreground)" }}>
-          Clear Browsing Data
-        </h3>
-        <p className="text-[11px] mb-3" style={{ color: "var(--muted-foreground)" }}>
-          Remove stored data from the in-app browser session.
-        </p>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {/* Confirm banner */}
+      {/* Clear Browsing Data */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-[13px]">Clear browsing data</CardTitle>
+          <CardDescription className="text-[11.5px]">
+            Remove stored data from the in-app browser session.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
           {clearState.status === "confirm" ? (
             <div
-              className="flex items-center justify-between gap-3 text-[12px] px-3 py-2.5 rounded-md"
-              style={{
-                color: "var(--foreground)",
-                background: "color-mix(in srgb, var(--warning) 8%, var(--surface))",
-                border: "1px solid color-mix(in srgb, var(--warning) 20%, var(--border))",
-              }}
+              className={cn(
+                "flex items-center justify-between gap-3 px-3 py-2.5 rounded-md border",
+                "bg-status-warning/10 border-status-warning/30 text-[12px] text-foreground",
+              )}
             >
               <span>
                 Delete{" "}
                 {clearState.target === "everything" ? "all browsing data" : clearState.target}? This
                 cannot be undone.
               </span>
-              <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+              <div className="flex items-center gap-1.5 shrink-0">
                 <Button
-                  type="button"
                   size="xs"
                   variant="outline"
                   onClick={() => setClearState({ status: "idle" })}
@@ -348,98 +315,91 @@ export default function BrowserImportPanel() {
                   Cancel
                 </Button>
                 <Button
-                  type="button"
                   size="xs"
                   variant="destructive"
                   onClick={() => void handleClearData(clearState.target)}
                 >
-                  <Trash2 size={11} />
+                  <Trash2 size={11} data-icon="inline-start" />
                   Delete
                 </Button>
               </div>
             </div>
           ) : null}
 
-          {/* Clear actions */}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <div className="flex flex-wrap gap-1.5">
             <Button
-              type="button"
               size="sm"
               variant="secondary"
               disabled={clearState.status === "loading"}
               onClick={() => setClearState({ status: "confirm", target: "cookies" })}
             >
-              Clear Cookies
+              Clear cookies
             </Button>
             <Button
-              type="button"
               size="sm"
               variant="secondary"
               disabled={clearState.status === "loading"}
               onClick={() => setClearState({ status: "confirm", target: "history" })}
             >
-              Clear History
+              Clear history
             </Button>
             <Button
-              type="button"
               size="sm"
               variant="secondary"
               disabled={clearState.status === "loading"}
               onClick={() => setClearState({ status: "confirm", target: "cache" })}
             >
-              Clear Cache
+              Clear cache
             </Button>
             <Button
-              type="button"
               size="sm"
               variant="destructive"
               disabled={clearState.status === "loading"}
               onClick={() => setClearState({ status: "confirm", target: "everything" })}
             >
               {clearState.status === "loading" ? (
-                <LoaderCircle size={12} className="animate-spin" />
+                <LoaderCircle size={12} className="animate-spin" data-icon="inline-start" />
               ) : (
-                <Trash2 size={12} />
+                <Trash2 size={12} data-icon="inline-start" />
               )}
-              Clear Everything
+              Clear everything
             </Button>
           </div>
 
-          {/* Clear status */}
           {clearState.status === "success" || clearState.status === "error" ? (
             <StatusInline status={clearState.status} message={clearState.message} />
           ) : null}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
 function StatusMessage({ state }: { state: ImportState }) {
   if (state.status === "idle") return null;
-
   const statusType = state.status === "loading" ? "loading" : state.status;
   const message =
     state.status === "loading"
-      ? `Importing ${labelForMode(state.mode).toLowerCase()} from ${browserLabel(state.browser)}...`
+      ? `Importing ${labelForMode(state.mode).toLowerCase()} from ${browserLabel(state.browser)}…`
       : state.message;
-
   return <StatusInline status={statusType} message={message} />;
 }
 
 function StatusInline({ status, message }: { status: string; message: string }) {
   return (
     <div
-      className="flex items-center gap-2 text-[12px] py-1"
-      style={{ color: status === "error" ? "var(--destructive)" : "var(--foreground-muted)" }}
+      className={cn(
+        "flex items-center gap-2 text-[11.5px] py-0.5",
+        status === "error" ? "text-destructive" : "text-muted-foreground",
+      )}
     >
       {status === "loading" ? (
-        <LoaderCircle size={13} className="animate-spin flex-shrink-0" />
+        <LoaderCircle size={12} className="animate-spin flex-shrink-0" />
       ) : null}
-      {status === "success" ? <CheckCircle2 size={13} className="flex-shrink-0" /> : null}
-      {status === "error" ? <AlertCircle size={13} className="flex-shrink-0" /> : null}
+      {status === "success" ? (
+        <CheckCircle2 size={12} className="flex-shrink-0 text-status-success" />
+      ) : null}
+      {status === "error" ? <AlertCircle size={12} className="flex-shrink-0" /> : null}
       <span>{message}</span>
     </div>
   );
@@ -456,7 +416,7 @@ function browserLabel(browser: BrowserImportSource): string {
 }
 
 function labelForMode(mode: BrowserImportMode): string {
-  return importModeOptions.find((option) => option.value === mode)?.label ?? "Everything";
+  return importModeOptions.find((o) => o.value === mode)?.label ?? "Everything";
 }
 
 function buildSuccessMessage(
@@ -469,14 +429,8 @@ function buildSuccessMessage(
     ? `${browserLabel(browser)} (${selectedProfileName})`
     : browserLabel(browser);
   const details: string[] = [];
-
-  if (mode !== "history") {
-    details.push(`${result.importedCookies} cookies`);
-  }
-  if (mode !== "cookies") {
-    details.push(`${result.importedHistory} history entries`);
-  }
-
+  if (mode !== "history") details.push(`${result.importedCookies} cookies`);
+  if (mode !== "cookies") details.push(`${result.importedHistory} history entries`);
   return `Imported ${details.join(" and ")} from ${source}.`;
 }
 

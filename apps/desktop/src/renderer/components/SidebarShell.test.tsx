@@ -97,6 +97,13 @@ vi.mock("./ui/button", () => ({
 
 vi.mock("./ui/tooltip", () => ({
   Tooltip: ({ children }: { children: React.ReactNode }) => children,
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
+vi.mock("./ui/hint-tooltip", () => ({
+  HintTooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("./ui/scroll-area", () => ({
@@ -107,6 +114,10 @@ vi.mock("./ui/scroll-area", () => ({
 
 vi.mock("./ui/alert-dialog", () => ({
   AlertDialog: () => null,
+}));
+
+vi.mock("./ui/confirm-dialog", () => ({
+  ConfirmDialog: () => null,
 }));
 
 let container: HTMLDivElement;
@@ -250,8 +261,12 @@ test("drops the reserved traffic-light gutter when the native window is fullscre
     await Promise.resolve();
   });
 
-  const header = container.querySelector(".sidebar-header");
-  expect(header?.getAttribute("data-fullscreen")).toBe("true");
+  // The header is the first drag-region child of the sidebar; in fullscreen
+  // it drops the reserved 88px traffic-light gutter (pl-[88px] → pl-3).
+  const header = container.querySelector("aside .drag-region");
+  expect(header).toBeTruthy();
+  expect(header?.className).toContain("pl-3");
+  expect(header?.className).not.toContain("pl-[88px]");
 });
 
 test("renders a restart-to-update pill above settings when an update is downloaded", async () => {
@@ -280,13 +295,17 @@ test("renders a restart-to-update pill above settings when an update is download
     await Promise.resolve();
   });
 
-  expect(container.textContent).toContain("Restart to Update");
+  expect(container.textContent).toContain("Restart to update");
 
-  const button = container.querySelector(".sidebar-update-button") as HTMLButtonElement;
+  // The update pill renders as a button whose aria-label contains the
+  // tooltip-style status sentence.
+  const button = Array.from(container.querySelectorAll("button")).find((btn) =>
+    btn.getAttribute("aria-label")?.includes("downloaded"),
+  ) as HTMLButtonElement | undefined;
   expect(button).toBeTruthy();
 
   await act(async () => {
-    button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
 
   expect(installUpdate).toHaveBeenCalledTimes(1);
@@ -297,8 +316,10 @@ test("only persists sidebar width when resize ends", async () => {
     root?.render(<Sidebar />);
   });
 
-  const sidebar = container.querySelector(".sidebar") as HTMLDivElement;
-  const resizeHandle = container.querySelector(".sidebar-resize-handle") as HTMLDivElement;
+  const sidebar = container.querySelector("aside[data-state]") as HTMLElement;
+  const resizeHandle = container.querySelector(
+    '[role="separator"][aria-label="Resize sidebar"]',
+  ) as HTMLDivElement;
 
   expect(sidebar.style.width).toBe("240px");
   expect(useSettingsStore.getState().sidebarWidth).toBe(240);
@@ -376,10 +397,9 @@ test("routes the new workspace button through the pane picker when the default p
     root?.render(<Sidebar />);
   });
 
-  // Index 7: collapse(0), ql-terminal(1), ql-browser(2), ql-vscode(3),
-  // ql-t3code(4), ql-note(5), new-folder(6), new-workspace(7)
-  const buttons = container.querySelectorAll("button");
-  const newWorkspaceButton = buttons[7];
+  const newWorkspaceButton = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="New workspace"]',
+  );
   expect(newWorkspaceButton).toBeTruthy();
 
   await act(async () => {
@@ -398,10 +418,9 @@ test("routes the new workspace button directly to addWorkspace for concrete defa
     root?.render(<Sidebar />);
   });
 
-  // Index 7: collapse(0), ql-terminal(1), ql-browser(2), ql-vscode(3),
-  // ql-t3code(4), ql-note(5), new-folder(6), new-workspace(7)
-  const buttons = container.querySelectorAll("button");
-  const newWorkspaceButton = buttons[7];
+  const newWorkspaceButton = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="New workspace"]',
+  );
   expect(newWorkspaceButton).toBeTruthy();
 
   await act(async () => {

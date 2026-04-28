@@ -19,8 +19,10 @@ test("renders a draggable spacer for empty tab bar space", () => {
     </div>,
   );
 
-  expect(html).toContain("group-tabbar-drag-spacer");
+  // The empty space between tabs and the new-tab button is a draggable spacer
+  // (drag-region) so users can drag the window from the tab bar gap.
   expect(html).toContain("drag-region");
+  expect(html).toContain('title="Drag window"');
 });
 
 test("double clicking empty tab bar space toggles window zoom", () => {

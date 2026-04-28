@@ -7,9 +7,11 @@ import {
   type ReactElement,
 } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
-import { Button } from "../ui/button";
-import { Tooltip } from "../ui/tooltip";
-import { releaseNativeFocus } from "../../lib/native-pane-focus";
+
+import { releaseNativeFocus } from "@/lib/native-pane-focus";
+import { cn } from "@/lib/utils";
+
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 
 interface BrowserFindBarProps {
   paneId: string;
@@ -18,6 +20,35 @@ interface BrowserFindBarProps {
   totalMatches: number;
   focusToken: number;
   onClose: () => void;
+}
+
+function FindBarButton({
+  children,
+  onClick,
+  disabled,
+  ariaLabel,
+}: {
+  children: ReactElement;
+  onClick: () => void;
+  disabled?: boolean;
+  ariaLabel?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      className={cn(
+        "inline-flex items-center justify-center size-6 rounded-md shrink-0",
+        "text-muted-foreground hover:text-foreground hover:bg-hover",
+        "disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
+        "transition-colors",
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
 export default function BrowserFindBar({
@@ -31,9 +62,7 @@ export default function BrowserFindBar({
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState(query);
 
-  useEffect(() => {
-    setValue(query);
-  }, [query]);
+  useEffect(() => setValue(query), [query]);
 
   useEffect(() => {
     releaseNativeFocus();
@@ -49,7 +78,6 @@ export default function BrowserFindBar({
         void window.api.browser.stopFindInPage(paneId);
         return;
       }
-
       void window.api.browser.findInPage(paneId, nextQuery, { forward, findNext });
     },
     [paneId],
@@ -70,7 +98,6 @@ export default function BrowserFindBar({
         runFind(value, !event.shiftKey, true);
         return;
       }
-
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
@@ -80,46 +107,49 @@ export default function BrowserFindBar({
   );
 
   return (
-    <div className="browser-find-bar">
+    <div className="flex items-center gap-1.5 shrink-0 h-9 px-2 bg-rail border-b border-hairline relative z-[2]">
       <input
         ref={inputRef}
         type="text"
         value={value}
         onChange={(event) => handleChange(event.target.value)}
         onKeyDown={handleKeyDown}
-        className="browser-find-input"
         placeholder="Find in page"
+        className={cn(
+          "flex-1 min-w-0 h-6 px-2 rounded-md",
+          "bg-surface border border-border/70",
+          "text-[11px] text-foreground placeholder:text-muted-foreground/60",
+          "outline-none",
+          "focus:border-brand-edge focus:ring-2 focus:ring-brand-soft",
+          "transition-colors",
+        )}
       />
-      <div className="browser-find-count">
-        {totalMatches > 0 ? `${activeMatch} of ${totalMatches}` : "No matches"}
+      <div className="min-w-[68px] text-right text-[10.5px] font-mono text-muted-foreground tabular-nums">
+        {totalMatches > 0 ? `${activeMatch} / ${totalMatches}` : "no matches"}
       </div>
-      <Tooltip content="Previous result" shortcut="Shift+Enter">
-        <Button
-          variant="ghost"
-          size="icon-sm"
+      <HintTooltip content="Previous match" shortcut="Shift+Enter">
+        <FindBarButton
           onClick={() => runFind(value, false, true)}
-          className="browser-nav-btn"
           disabled={!value}
+          ariaLabel="Previous match"
         >
-          <ChevronUp size={14} />
-        </Button>
-      </Tooltip>
-      <Tooltip content="Next result" shortcut="Enter">
-        <Button
-          variant="ghost"
-          size="icon-sm"
+          <ChevronUp size={13} />
+        </FindBarButton>
+      </HintTooltip>
+      <HintTooltip content="Next match" shortcut="Enter">
+        <FindBarButton
           onClick={() => runFind(value, true, true)}
-          className="browser-nav-btn"
           disabled={!value}
+          ariaLabel="Next match"
         >
-          <ChevronDown size={14} />
-        </Button>
-      </Tooltip>
-      <Tooltip content="Close" shortcut="Esc">
-        <Button variant="ghost" size="icon-sm" onClick={onClose} className="browser-nav-btn">
-          <X size={14} />
-        </Button>
-      </Tooltip>
+          <ChevronDown size={13} />
+        </FindBarButton>
+      </HintTooltip>
+      <HintTooltip content="Close" shortcut="Esc">
+        <FindBarButton onClick={onClose} ariaLabel="Close find bar">
+          <X size={13} />
+        </FindBarButton>
+      </HintTooltip>
     </div>
   );
 }

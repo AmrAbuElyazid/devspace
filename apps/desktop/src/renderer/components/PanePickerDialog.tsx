@@ -1,9 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 
-import { useSettingsStore, type PanePickerContext } from "../store/settings-store";
-import { useWorkspaceStore } from "../store/workspace-store";
-import { paneTypeIcons, paneTypeLabels } from "../lib/pane-type-meta";
-import type { PaneType } from "../types/workspace";
+import { useSettingsStore, type PanePickerContext } from "@/store/settings-store";
+import { useWorkspaceStore } from "@/store/workspace-store";
+import { paneTypeIcons, paneTypeLabels } from "@/lib/pane-type-meta";
+import { releaseNativeFocus } from "@/lib/native-pane-focus";
+import type { PaneType } from "@/types/workspace";
+import { cn } from "@/lib/utils";
+
+import { Kbd } from "@/components/ui/kbd";
 
 const options: { type: PaneType; label: string; shortcut: string }[] = [
   { type: "terminal", label: paneTypeLabels.terminal, shortcut: "T" },
@@ -28,9 +32,7 @@ function formatCwd(cwd: string): string {
 export function PanePickerDialog() {
   const panePickerContext = useSettingsStore((s) => s.panePickerContext);
   const closePanePicker = useSettingsStore((s) => s.closePanePicker);
-
   if (!panePickerContext) return null;
-
   return <PanePickerDialogInner context={panePickerContext} onClose={closePanePicker} />;
 }
 
@@ -42,9 +44,6 @@ function PanePickerDialogInner({
   onClose: () => void;
 }) {
   const [highlighted, setHighlighted] = useState(0);
-
-  // Use refs so the window-level keydown handler always sees current values
-  // without needing to re-register the listener on every state change.
   const highlightedRef = useRef(highlighted);
   highlightedRef.current = highlighted;
   const onCloseRef = useRef(onClose);
@@ -64,7 +63,6 @@ function PanePickerDialogInner({
   const handleSelect = useCallback(
     (type: PaneType) => {
       const store = useWorkspaceStore.getState();
-
       switch (context.action) {
         case "new-tab":
           if (context.workspaceId && context.groupId) {
@@ -90,15 +88,11 @@ function PanePickerDialogInner({
     [context, onClose],
   );
 
-  // Stable ref for handleSelect so the window listener doesn't re-register.
   const handleSelectRef = useRef(handleSelect);
   handleSelectRef.current = handleSelect;
 
-  // Use a window-level keydown listener instead of relying on div focus.
-  // Native Ghostty terminal surfaces capture keyboard events at the OS level,
-  // so React onKeyDown on a <div> is unreliable. Window-level listeners fire
-  // once the native views have resigned first responder (handled by openPanePicker).
   useEffect(() => {
+    releaseNativeFocus();
     const handler = (e: KeyboardEvent): void => {
       const lower = e.key.toLowerCase();
       if (lower in shortcutMap) {
@@ -107,7 +101,6 @@ function PanePickerDialogInner({
         handleSelectRef.current(shortcutMap[lower]!);
         return;
       }
-
       switch (e.key) {
         case "ArrowDown":
           e.preventDefault();
@@ -127,23 +120,26 @@ function PanePickerDialogInner({
           break;
       }
     };
-
     window.addEventListener("keydown", handler, true);
     return () => window.removeEventListener("keydown", handler, true);
   }, []);
 
+  // Heading derived from the action context — the picker becomes self-explanatory.
+  const heading =
+    context.action === "new-tab"
+      ? "New tab"
+      : context.action === "new-workspace"
+        ? "New workspace"
+        : context.splitDirection === "horizontal"
+          ? "Split right"
+          : "Split down";
+
   return (
     <div
-      className="no-drag"
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 9999,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        backgroundColor: "rgba(0, 0, 0, 0.4)",
-      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Choose a pane type"
+      className="no-drag fixed inset-0 z-[9999] flex items-start justify-center pt-[18vh] bg-black/40"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           e.preventDefault();
@@ -152,88 +148,77 @@ function PanePickerDialogInner({
       }}
     >
       <div
-        style={{
-          width: 280,
-          backgroundColor: "var(--popover)",
-          border: "1px solid var(--border)",
-          borderRadius: 10,
-          padding: "6px 0",
-          boxShadow: "var(--overlay-shadow)",
-        }}
+        className={cn(
+          "w-[320px] max-w-[90vw] flex flex-col",
+          "bg-popover text-popover-foreground border border-border rounded-xl",
+          "shadow-[var(--overlay-shadow)] overflow-hidden",
+        )}
       >
-        {options.map((opt, i) => {
-          const Icon = paneTypeIcons[opt.type];
-          const isHighlighted = i === highlighted;
+        {/* Heading bar */}
+        <div className="flex items-center justify-between px-3.5 py-2 border-b border-hairline">
+          <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
+            {heading}
+          </span>
+          <Kbd className="h-4 min-w-4 px-1 text-[9px] font-mono">Esc</Kbd>
+        </div>
 
-          return (
-            <button
-              key={opt.type}
-              type="button"
-              className="no-drag"
-              onMouseEnter={() => setHighlighted(i)}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleSelect(opt.type);
-              }}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                width: "calc(100% - 8px)",
-                margin: "0 4px",
-                padding: "8px 12px",
-                gap: 10,
-                border: "none",
-                borderRadius: 8,
-                background: isHighlighted ? "var(--accent-muted)" : "transparent",
-                color: "var(--foreground)",
-                cursor: "pointer",
-                fontSize: 13,
-                fontFamily: "inherit",
-                textAlign: "left",
-                transition: "background 0.12s cubic-bezier(0.32, 0.72, 0, 1)",
-                outline: "none",
-              }}
-            >
-              <Icon
-                size={14}
-                style={{
-                  flexShrink: 0,
-                  color: isHighlighted ? "var(--accent)" : "var(--foreground-muted)",
-                  transition: "color 0.12s ease",
+        {/* Options */}
+        <div className="p-1.5 flex flex-col gap-px">
+          {options.map((opt, i) => {
+            const Icon = paneTypeIcons[opt.type];
+            const isHighlighted = i === highlighted;
+            const showCwd = opt.type === "terminal" && inheritedCwd;
+
+            return (
+              <button
+                key={opt.type}
+                type="button"
+                onMouseEnter={() => setHighlighted(i)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelect(opt.type);
                 }}
-              />
-
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div>{opt.label}</div>
-                {opt.type === "terminal" && inheritedCwd && (
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "var(--foreground-faint)",
-                      marginTop: 1,
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {formatCwd(inheritedCwd)}
-                  </div>
+                className={cn(
+                  "no-drag flex items-center gap-3 w-full px-2.5 py-2 rounded-lg text-left",
+                  "transition-colors duration-100",
+                  isHighlighted
+                    ? "bg-brand-soft text-foreground"
+                    : "text-foreground hover:bg-hover",
                 )}
-              </div>
-
-              <span
-                style={{
-                  fontSize: 11,
-                  color: "var(--foreground-faint)",
-                  flexShrink: 0,
-                  fontFamily: "ui-monospace, 'SF Mono', monospace",
-                }}
               >
-                {opt.shortcut}
-              </span>
-            </button>
-          );
-        })}
+                <Icon
+                  width={15}
+                  height={15}
+                  className={cn(
+                    "shrink-0 transition-colors",
+                    isHighlighted ? "text-brand" : "text-muted-foreground",
+                  )}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[12.5px] font-medium leading-tight">{opt.label}</div>
+                  {showCwd ? (
+                    <div className="text-[10.5px] font-mono text-muted-foreground/70 mt-0.5 truncate">
+                      {formatCwd(inheritedCwd!)}
+                    </div>
+                  ) : null}
+                </div>
+                <Kbd className="shrink-0 h-4 min-w-4 px-1 text-[9px] font-mono">{opt.shortcut}</Kbd>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Footer hints */}
+        <div className="flex items-center gap-3 px-3.5 py-1.5 border-t border-hairline text-[10px] font-mono text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            <Kbd className="h-3.5 min-w-3.5 px-1 text-[9px]">↑</Kbd>
+            <Kbd className="h-3.5 min-w-3.5 px-1 text-[9px]">↓</Kbd>
+            navigate
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Kbd className="h-3.5 px-1 text-[9px]">↵</Kbd> choose
+          </span>
+        </div>
       </div>
     </div>
   );

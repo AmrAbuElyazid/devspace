@@ -7,8 +7,9 @@ import {
   type ReactElement,
 } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
-import { Button } from "../ui/button";
-import { Tooltip } from "../ui/tooltip";
+
+import { cn } from "@/lib/utils";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 
 interface TerminalFindBarProps {
   paneId: string;
@@ -18,10 +19,39 @@ interface TerminalFindBarProps {
   onClose: () => void;
 }
 
+function FindBarButton({
+  children,
+  onClick,
+  disabled,
+  ariaLabel,
+}: {
+  children: ReactElement;
+  onClick: () => void;
+  disabled?: boolean;
+  ariaLabel?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      className={cn(
+        "inline-flex items-center justify-center size-6 rounded-md shrink-0",
+        "text-muted-foreground hover:text-foreground hover:bg-hover",
+        "disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
+        "transition-colors",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 /**
  * Terminal search bar — modeled after BrowserFindBar.
- * Sends search queries to Ghostty via sendBindingAction and
- * receives match counts via the search callback pipeline.
+ * Sends search queries to Ghostty via sendBindingAction; receives match counts
+ * via the search callback pipeline.
  */
 export default function TerminalFindBar({
   paneId,
@@ -34,14 +64,11 @@ export default function TerminalFindBar({
   const [value, setValue] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Focus input whenever the token bumps (open / re-focus)
   useEffect(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
   }, [focusToken]);
 
-  // Send the search query to Ghostty with debouncing.
-  // Search immediately for empty or 3+ chars, and debounce 1-2 chars by 300ms.
   const sendSearch = useCallback(
     (needle: string) => {
       void window.api.terminal.sendBindingAction(paneId, `search:${needle}`);
@@ -53,7 +80,6 @@ export default function TerminalFindBar({
     (nextValue: string) => {
       setValue(nextValue);
       if (debounceRef.current) clearTimeout(debounceRef.current);
-
       if (nextValue.length === 0 || nextValue.length >= 3) {
         sendSearch(nextValue);
       } else {
@@ -63,7 +89,6 @@ export default function TerminalFindBar({
     [sendSearch],
   );
 
-  // Clean up debounce on unmount
   useEffect(() => {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -73,85 +98,76 @@ export default function TerminalFindBar({
   const navigateNext = useCallback(() => {
     void window.api.terminal.sendBindingAction(paneId, "navigate_search:next");
   }, [paneId]);
-
   const navigatePrev = useCallback(() => {
     void window.api.terminal.sendBindingAction(paneId, "navigate_search:previous");
   }, [paneId]);
-
-  const handleClose = useCallback(() => {
-    // Parent (TerminalPane) handles end_search and re-focus via onClose.
-    onClose();
-  }, [onClose]);
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLInputElement>) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        // Ghostty's navigate_search:next goes toward older content (visually down),
-        // navigate_search:previous goes toward newer content (visually up).
-        // Enter = down (next match below), Shift+Enter = up (next match above).
-        if (event.shiftKey) {
-          navigateNext();
-        } else {
-          navigatePrev();
-        }
+        if (event.shiftKey) navigateNext();
+        else navigatePrev();
         return;
       }
       if (event.key === "Escape") {
         event.preventDefault();
-        handleClose();
+        onClose();
       }
     },
-    [navigateNext, navigatePrev, handleClose],
+    [navigateNext, navigatePrev, onClose],
   );
 
-  // Format match display
   const matchDisplay =
     totalMatches > 0
-      ? `${selectedMatch >= 0 ? selectedMatch + 1 : "-"} of ${totalMatches}`
+      ? `${selectedMatch >= 0 ? selectedMatch + 1 : "-"} / ${totalMatches}`
       : value
-        ? "No matches"
+        ? "no matches"
         : "";
 
   return (
-    <div className="browser-find-bar">
+    <div className="flex items-center gap-1.5 shrink-0 h-9 px-2 bg-rail border-b border-hairline relative z-[2]">
       <input
         ref={inputRef}
         type="text"
         value={value}
         onChange={(event) => handleChange(event.target.value)}
         onKeyDown={handleKeyDown}
-        className="browser-find-input"
         placeholder="Find in terminal"
+        className={cn(
+          "flex-1 min-w-0 h-6 px-2 rounded-md",
+          "bg-surface border border-border/70",
+          "text-[11px] text-foreground placeholder:text-muted-foreground/60",
+          "outline-none focus:border-brand-edge focus:ring-2 focus:ring-brand-soft",
+          "transition-colors",
+        )}
       />
-      <div className="browser-find-count">{matchDisplay}</div>
-      <Tooltip content="Previous result" shortcut="Shift+Enter">
-        <Button
-          variant="ghost"
-          size="icon-sm"
+      <div className="min-w-[68px] text-right text-[10.5px] font-mono text-muted-foreground tabular-nums">
+        {matchDisplay}
+      </div>
+      <HintTooltip content="Previous match" shortcut="Shift+Enter">
+        <FindBarButton
           onClick={navigateNext}
-          className="browser-nav-btn"
           disabled={!value || totalMatches <= 0}
+          ariaLabel="Previous match"
         >
-          <ChevronUp size={14} />
-        </Button>
-      </Tooltip>
-      <Tooltip content="Next result" shortcut="Enter">
-        <Button
-          variant="ghost"
-          size="icon-sm"
+          <ChevronUp size={13} />
+        </FindBarButton>
+      </HintTooltip>
+      <HintTooltip content="Next match" shortcut="Enter">
+        <FindBarButton
           onClick={navigatePrev}
-          className="browser-nav-btn"
           disabled={!value || totalMatches <= 0}
+          ariaLabel="Next match"
         >
-          <ChevronDown size={14} />
-        </Button>
-      </Tooltip>
-      <Tooltip content="Close" shortcut="Esc">
-        <Button variant="ghost" size="icon-sm" onClick={handleClose} className="browser-nav-btn">
-          <X size={14} />
-        </Button>
-      </Tooltip>
+          <ChevronDown size={13} />
+        </FindBarButton>
+      </HintTooltip>
+      <HintTooltip content="Close" shortcut="Esc">
+        <FindBarButton onClick={onClose} ariaLabel="Close find bar">
+          <X size={13} />
+        </FindBarButton>
+      </HintTooltip>
     </div>
   );
 }

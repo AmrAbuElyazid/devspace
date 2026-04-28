@@ -1,20 +1,57 @@
 import type { ReactElement } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, RotateCw, Search, X } from "lucide-react";
+
 import { resolveDisplayString } from "../../shared/shortcuts";
-import { Button } from "./ui/button";
-import { Tooltip } from "./ui/tooltip";
+import { useBrowserPaneController } from "./browser/useBrowserPaneController";
+import type { BrowserConfig } from "@/types/workspace";
+import { cn } from "@/lib/utils";
+
+import { HintTooltip } from "@/components/ui/hint-tooltip";
+
 import BrowserSecurityIndicator from "./browser/BrowserSecurityIndicator";
 import BrowserFindBar from "./browser/BrowserFindBar";
 import BrowserPermissionPrompt from "./browser/BrowserPermissionPrompt";
 import BrowserPaneStatusSurface from "./browser/BrowserPaneStatusSurface";
-import { useBrowserPaneController } from "./browser/useBrowserPaneController";
-import type { BrowserConfig } from "../types/workspace";
 
 interface BrowserPaneProps {
   paneId: string;
   workspaceId: string;
   config: BrowserConfig;
   isFocused: boolean;
+}
+
+/** Tiny helper for the browser toolbar's icon buttons — tightly tuned for
+ *  the 36px toolbar height and the dense default density. */
+function NavButton({
+  children,
+  onClick,
+  onMouseDown,
+  disabled,
+  ariaLabel,
+}: {
+  children: ReactElement;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onMouseDown?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  disabled?: boolean;
+  ariaLabel?: string;
+}): ReactElement {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseDown={onMouseDown}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      className={cn(
+        "inline-flex items-center justify-center size-7 rounded-md shrink-0",
+        "text-muted-foreground hover:text-foreground hover:bg-hover",
+        "disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
+        "transition-colors",
+      )}
+    >
+      {children}
+    </button>
+  );
 }
 
 export default function BrowserPane({
@@ -49,45 +86,35 @@ export default function BrowserPane({
   } = useBrowserPaneController({ paneId, workspaceId, config, isFocused });
 
   return (
-    <div className="browser-pane-shell">
-      <div className="browser-toolbar flex items-center gap-1 shrink-0 px-1">
-        <Tooltip content="Back" shortcut={resolveDisplayString("browser-back")}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
+    <div className="flex flex-col h-full w-full bg-background">
+      {/* Toolbar */}
+      <div className="flex items-center gap-1 shrink-0 h-9 px-1.5 bg-rail border-b border-hairline relative z-[2]">
+        <HintTooltip content="Back" shortcut={resolveDisplayString("browser-back")}>
+          <NavButton
             onClick={() => void window.api.browser.back(paneId)}
             disabled={!canGoBack}
-            className="browser-nav-btn"
+            ariaLabel="Back"
           >
-            <ArrowLeft size={16} />
-          </Button>
-        </Tooltip>
-
-        <Tooltip content="Forward" shortcut={resolveDisplayString("browser-forward")}>
-          <Button
-            variant="ghost"
-            size="icon-sm"
+            <ArrowLeft size={15} />
+          </NavButton>
+        </HintTooltip>
+        <HintTooltip content="Forward" shortcut={resolveDisplayString("browser-forward")}>
+          <NavButton
             onClick={() => void window.api.browser.forward(paneId)}
             disabled={!canGoForward}
-            className="browser-nav-btn"
+            ariaLabel="Forward"
           >
-            <ArrowRight size={16} />
-          </Button>
-        </Tooltip>
-
-        <Tooltip
+            <ArrowRight size={15} />
+          </NavButton>
+        </HintTooltip>
+        <HintTooltip
           content={isLoading ? "Stop" : "Reload"}
           shortcut={resolveDisplayString("browser-reload")}
         >
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={handleReloadOrStop}
-            className="browser-nav-btn"
-          >
-            {isLoading ? <X size={16} /> : <RotateCw size={14} />}
-          </Button>
-        </Tooltip>
+          <NavButton onClick={handleReloadOrStop} ariaLabel={isLoading ? "Stop" : "Reload"}>
+            {isLoading ? <X size={15} /> : <RotateCw size={13} />}
+          </NavButton>
+        </HintTooltip>
 
         <BrowserSecurityIndicator isSecure={isSecure} securityLabel={securityLabel} />
 
@@ -99,35 +126,37 @@ export default function BrowserPane({
           onKeyDown={handleKeyDown}
           onBlur={() => setInputUrl(currentUrl)}
           onFocus={() => inputRef.current?.select()}
-          className="browser-url-input flex-1 min-w-0 rounded px-2 text-xs outline-none"
           placeholder="Enter URL or search..."
+          className={cn(
+            "flex-1 min-w-0 h-7 px-2.5 rounded-md",
+            "bg-surface border border-border/70",
+            "font-mono text-[11.5px] text-foreground placeholder:text-muted-foreground/60",
+            "outline-none",
+            "focus:border-brand-edge focus:ring-2 focus:ring-brand-soft",
+            "transition-colors",
+          )}
         />
 
-        <Tooltip content="Go">
-          <Button
-            variant="ghost"
-            size="icon-sm"
+        <HintTooltip content="Go">
+          <NavButton
             onMouseDown={(event) => {
               event.preventDefault();
               handleAddressBarSubmit(inputRef.current?.value);
             }}
-            className="browser-nav-btn"
+            ariaLabel="Go"
           >
-            <Search size={14} />
-          </Button>
-        </Tooltip>
+            <Search size={13} />
+          </NavButton>
+        </HintTooltip>
 
-        <Tooltip content="Open in external browser">
-          <Button
-            variant="ghost"
-            size="icon-sm"
+        <HintTooltip content="Open in external browser">
+          <NavButton
             onClick={() => window.api.shell.openExternal(currentUrl)}
-            className="browser-nav-btn"
-            aria-label="Open in external browser"
+            ariaLabel="Open in external browser"
           >
-            <ExternalLink size={14} />
-          </Button>
-        </Tooltip>
+            <ExternalLink size={13} />
+          </NavButton>
+        </HintTooltip>
       </div>
 
       {isFindBarOpen && (
@@ -141,7 +170,16 @@ export default function BrowserPane({
         />
       )}
 
-      {isLoading && <div className="browser-loading-bar" />}
+      {/* Loading bar — animates a brand-colored sliver across the top */}
+      {isLoading && (
+        <div className="relative h-0.5 shrink-0 bg-transparent overflow-hidden">
+          <div
+            aria-hidden
+            className="absolute inset-y-0 -left-1/3 w-1/3 bg-brand"
+            style={{ animation: "browser-loading 1.2s linear infinite" }}
+          />
+        </div>
+      )}
 
       {activePermissionRequest && (
         <BrowserPermissionPrompt
@@ -151,7 +189,8 @@ export default function BrowserPane({
         />
       )}
 
-      <div className="browser-shell-viewport">
+      {/* Native WebContentsView slot */}
+      <div className="relative flex-1 min-h-0">
         {failure && (
           <BrowserPaneStatusSurface
             failure={failure}
@@ -160,8 +199,8 @@ export default function BrowserPane({
         )}
         <div
           ref={placeholderRef}
-          className="browser-native-view-slot"
-          data-native-view-hidden={!isVisible ? "true" : undefined}
+          className="absolute inset-0 bg-background data-[hidden=true]:invisible"
+          data-hidden={!isVisible ? "true" : undefined}
         />
       </div>
     </div>

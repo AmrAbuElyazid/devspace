@@ -101,6 +101,10 @@ test("collapses the hidden traffic-light gutter for top-left controls in fullscr
     await Promise.resolve();
   });
 
-  const trafficZone = container.querySelector(".tabbar-traffic-zone");
+  // The traffic-light gutter is the first drag-region inside the top-left
+  // group's tab bar; it carries data-fullscreen="true" while collapsed.
+  const trafficZone = container.querySelector("[data-fullscreen]");
   expect(trafficZone?.getAttribute("data-fullscreen")).toBe("true");
+  // And it collapses to zero width when fullscreen.
+  expect((trafficZone as HTMLElement | null)?.style.width).toBe("0px");
 });

@@ -11,9 +11,9 @@ import {
 } from "react";
 import { useDroppable } from "@dnd-kit/core";
 
-import { paneTypeIcons, paneTypeLabels } from "../lib/pane-type-meta";
-import { syncWorkspaceFocusForPane } from "../lib/native-pane-focus";
-import { useWorkspaceStore } from "../store/workspace-store";
+import { paneTypeIcons, paneTypeLabels } from "@/lib/pane-type-meta";
+import { syncWorkspaceFocusForPane } from "@/lib/native-pane-focus";
+import { useWorkspaceStore } from "@/store/workspace-store";
 import type {
   BrowserConfig,
   EditorConfig,
@@ -22,7 +22,12 @@ import type {
   PaneGroupTab,
   PaneType,
   TerminalConfig,
-} from "../types/workspace";
+} from "@/types/workspace";
+import { cn } from "@/lib/utils";
+
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+
 import BrowserPane from "./BrowserPane";
 import EditorPane from "./EditorPane";
 import T3CodePane from "./T3CodePane";
@@ -44,69 +49,35 @@ class NotePaneErrorBoundary extends Component<{ children: ReactNode }, { error: 
   override render() {
     if (this.state.error) {
       return (
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "100%",
-            gap: 8,
-            color: "var(--foreground-faint)",
-            fontSize: 13,
-            padding: 20,
-            textAlign: "center",
-          }}
-        >
-          <span>Note editor failed to load</span>
-          <span style={{ fontSize: 11, opacity: 0.6 }}>{this.state.error.message}</span>
-          <button
-            type="button"
-            style={{
-              marginTop: 8,
-              padding: "4px 12px",
-              fontSize: 12,
-              borderRadius: 4,
-              border: "1px solid var(--border)",
-              background: "var(--surface)",
-              color: "var(--foreground)",
-              cursor: "pointer",
-            }}
+        <div className="flex flex-col items-center justify-center h-full gap-2 p-5 text-center text-muted-foreground">
+          <span className="text-[13px] text-foreground">Note editor failed to load</span>
+          <span className="text-[11px] opacity-60 max-w-md">{this.state.error.message}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
             onClick={() => this.setState({ error: null })}
           >
-            Try Again
-          </button>
+            Try again
+          </Button>
         </div>
       );
     }
-
     return this.props.children;
   }
 }
 
-function DragPlaceholder({ pane }: { pane: Pane }): ReactElement {
+function PanePlaceholder({ pane, message }: { pane: Pane; message?: string }): ReactElement {
   const Icon = paneTypeIcons[pane.type];
   const label = pane.title || paneTypeLabels[pane.type] || pane.type;
 
   return (
-    <div className="pane-drag-placeholder">
-      {Icon && <Icon size={24} />}
-      <span>{label}</span>
-    </div>
-  );
-}
-
-function LeaderPlaceholder({ pane }: { pane: Pane }): ReactElement {
-  const Icon = paneTypeIcons[pane.type];
-  const label = pane.title || paneTypeLabels[pane.type] || pane.type;
-
-  return (
-    <div className="pane-drag-placeholder pane-hidden-placeholder">
-      {Icon && <Icon size={24} />}
-      <span>{label}</span>
-      <span className="pane-hidden-placeholder-message">
-        Leader active. Enter a Devspace shortcut.
-      </span>
+    <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center gap-2 bg-background pointer-events-none">
+      {Icon ? <Icon width={28} height={28} className="opacity-25" /> : null}
+      <span className="text-[12px] font-medium text-muted-foreground/70">{label}</span>
+      {message ? (
+        <span className="text-[10.5px] font-mono text-muted-foreground/60">{message}</span>
+      ) : null}
     </div>
   );
 }
@@ -123,7 +94,6 @@ function PaneContentDropZone({
   previewSide: "left" | "right" | "top" | "bottom" | null;
 }) {
   const zoneRef = useRef<HTMLDivElement | null>(null);
-
   const { setNodeRef, isOver } = useDroppable({
     id: `pane-drop-${groupId}`,
     disabled: !enabled,
@@ -141,11 +111,11 @@ function PaneContentDropZone({
   return (
     <div
       ref={mergedRef}
-      className="pane-drop-zone-overlay"
+      className="absolute inset-0 z-[10]"
       style={{ pointerEvents: enabled ? "auto" : "none" }}
       data-drop-zone={groupId}
     >
-      {isOver && previewSide && <div className={`pane-drop-zone-half ${previewSide}`} />}
+      {isOver && previewSide ? <div className={cn("drop-half", previewSide)} /> : null}
     </div>
   );
 }
@@ -196,17 +166,9 @@ const PaneContent = memo(function PaneContent({
         <NotePaneErrorBoundary>
           <Suspense
             fallback={
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  height: "100%",
-                  color: "var(--foreground-faint)",
-                  fontSize: 13,
-                }}
-              >
-                Loading editor...
+              <div className="flex h-full items-center justify-center gap-2 text-muted-foreground/70 text-[12px]">
+                <Spinner className="size-3.5" />
+                Loading editor…
               </div>
             }
           >
@@ -243,10 +205,10 @@ const TabLayer = memo(function TabLayer({
 
   return (
     <div
-      className="pane-tab-layer"
       data-active
       onMouseDownCapture={handleActivate}
       onFocusCapture={handleActivate}
+      className="absolute inset-0 hidden data-[active]:block z-[1]"
     >
       <PaneContent
         paneId={tab.paneId}
@@ -255,8 +217,10 @@ const TabLayer = memo(function TabLayer({
         workspaceId={workspaceId}
         isFocused={isFocused}
       />
-      {showDragPlaceholder ? <DragPlaceholder pane={pane} /> : null}
-      {!showDragPlaceholder && showLeaderPlaceholder ? <LeaderPlaceholder pane={pane} /> : null}
+      {showDragPlaceholder ? <PanePlaceholder pane={pane} /> : null}
+      {!showDragPlaceholder && showLeaderPlaceholder ? (
+        <PanePlaceholder pane={pane} message="Leader active — enter a Devspace shortcut" />
+      ) : null}
     </div>
   );
 });
@@ -285,7 +249,7 @@ export default memo(function PaneGroupContent({
   workspaceId,
 }: PaneGroupContentProps): ReactElement {
   return (
-    <div className="pane-group-content">
+    <div className="relative flex-1 min-h-0 overflow-hidden bg-background">
       {hasDragOverlay && (
         <PaneContentDropZone
           groupId={groupId}

@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
-import { focusBrowserNativePane, hasEditableRendererFocus } from "../lib/native-pane-focus";
-import { useNativeView } from "../hooks/useNativeView";
-import { useSettingsStore } from "../store/settings-store";
-import { useWorkspaceStore } from "../store/workspace-store";
-import { Button } from "./ui/button";
-import type { EditorConfig } from "../types/workspace";
-import type { ReactElement } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactElement } from "react";
+import { AlertCircle } from "lucide-react";
+
+import { focusBrowserNativePane, hasEditableRendererFocus } from "@/lib/native-pane-focus";
+import { useNativeView } from "@/hooks/useNativeView";
+import { useSettingsStore } from "@/store/settings-store";
+import { useWorkspaceStore } from "@/store/workspace-store";
+import type { EditorConfig } from "@/types/workspace";
+
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 
 // Module-level tracking to survive React remounts (same pattern as TerminalPane)
 const startedEditors = new Set<string>();
@@ -159,61 +161,77 @@ export default function EditorPane({ paneId, config, isFocused }: EditorPaneProp
     setState({ status: "starting", folderPath: config.folderPath });
   }, [config.folderPath]);
 
-  // Render states before the VS Code view is ready
   if (state.status === "unavailable") {
     return (
-      <div
-        className="h-full w-full flex flex-col items-center justify-center gap-4"
-        style={{ backgroundColor: "var(--background)" }}
-      >
-        <AlertCircle size={48} style={{ color: "var(--destructive)", opacity: 0.6 }} />
-        <p className="text-sm text-center max-w-xs" style={{ color: "var(--muted-foreground)" }}>
-          VS Code CLI not found. Install <strong>Visual Studio Code</strong>, configure a direct CLI
-          path in Settings, or run{" "}
-          <code className="px-1 py-0.5 rounded text-xs" style={{ background: "var(--surface)" }}>
-            Shell Command: Install &apos;code&apos; command in PATH
+      <PaneStatusCard eyebrow="Editor unavailable" title="VS Code CLI not found" tone="warning">
+        <p className="text-[12px] text-muted-foreground leading-relaxed">
+          Install <span className="text-foreground font-medium">Visual Studio Code</span>, set a
+          custom CLI path in Settings, or run{" "}
+          <code className="px-1.5 py-0.5 rounded bg-surface font-mono text-[10.5px] text-foreground">
+            Shell Command: Install &lsquo;code&rsquo; command in PATH
           </code>{" "}
           from the VS Code command palette.
         </p>
-      </div>
+      </PaneStatusCard>
     );
   }
 
   if (state.status === "error") {
     return (
-      <div
-        className="h-full w-full flex flex-col items-center justify-center gap-4"
-        style={{ backgroundColor: "var(--background)" }}
-      >
-        <AlertCircle size={48} style={{ color: "var(--destructive)", opacity: 0.6 }} />
-        <p className="text-sm text-center max-w-xs" style={{ color: "var(--muted-foreground)" }}>
+      <PaneStatusCard eyebrow="Editor error" title="VS Code failed to start" tone="error">
+        <p className="text-[12px] text-muted-foreground leading-relaxed self-stretch">
           {state.message}
         </p>
-        <Button onClick={handleRetry}>Retry</Button>
-      </div>
+        <Button size="sm" onClick={handleRetry}>
+          Retry
+        </Button>
+      </PaneStatusCard>
     );
   }
 
   if (state.status === "checking" || state.status === "starting") {
     return (
-      <div
-        className="h-full w-full flex flex-col items-center justify-center gap-3"
-        style={{ backgroundColor: "var(--background)" }}
-      >
-        <Loader2 size={24} className="animate-spin" style={{ color: "var(--muted-foreground)" }} />
-        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
-          Starting VS Code server...
-        </p>
+      <div className="h-full w-full flex flex-col items-center justify-center gap-2 bg-background">
+        <Spinner className="size-4 text-muted-foreground" />
+        <p className="text-[11.5px] font-mono text-muted-foreground">starting vs code server…</p>
       </div>
     );
   }
 
-  // Running state — native view placeholder
   return (
     <div
       ref={placeholderRef}
-      className="browser-native-view-slot"
-      data-native-view-hidden={!isVisible ? "true" : undefined}
+      className="absolute inset-0 bg-background data-[hidden=true]:invisible"
+      data-hidden={!isVisible ? "true" : undefined}
     />
+  );
+}
+
+function PaneStatusCard({
+  eyebrow,
+  title,
+  tone,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  tone: "warning" | "error";
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="h-full w-full flex items-center justify-center p-6 bg-background">
+      <div className="flex flex-col items-start gap-3 max-w-md p-5 rounded-lg bg-card border border-border shadow-[var(--overlay-shadow)]">
+        <div
+          className={`inline-flex items-center gap-1.5 text-[9.5px] font-mono uppercase tracking-[0.12em] ${
+            tone === "error" ? "text-destructive" : "text-status-warning"
+          }`}
+        >
+          <AlertCircle size={11} />
+          {eyebrow}
+        </div>
+        <div className="text-[14px] font-medium text-foreground leading-snug">{title}</div>
+        {children}
+      </div>
+    </div>
   );
 }

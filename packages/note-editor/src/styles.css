@@ -1,31 +1,9 @@
+/* Devspace note editor — styles consumed by the renderer.
+   Tokens (--background, --foreground, --brand-soft, --foreground-muted)
+   are provided by the host app's globals.css. */
+
 .note-pane {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--background);
-  color: var(--foreground);
   -webkit-app-region: no-drag;
-}
-
-.note-pane-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  color: var(--foreground-faint);
-}
-
-.note-save-error {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  flex-shrink: 0;
-  padding: 6px 12px;
-  font-size: 12px;
-  background: var(--destructive);
-  color: #fff;
-  text-align: center;
 }
 
 .note-editor-shell {
@@ -39,22 +17,12 @@
 }
 
 .note-editor-content [data-slate-placeholder] {
-  color: var(--foreground-muted);
+  color: var(--muted-foreground);
   pointer-events: none;
 }
 
-.note-editor-content ::selection {
-  background: color-mix(in srgb, var(--accent) 32%, transparent);
-  color: var(--foreground);
-}
-
-.note-editor-content::-moz-selection,
-.note-editor-content *::-moz-selection {
-  background: color-mix(in srgb, var(--accent) 32%, transparent);
-  color: var(--foreground);
-}
-
+.note-editor-content ::selection,
 .note-editor-content *::selection {
-  background: color-mix(in srgb, var(--accent) 32%, transparent);
+  background: var(--brand-soft);
   color: var(--foreground);
 }

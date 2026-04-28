@@ -1,16 +1,21 @@
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { Plus, Columns2, Rows2, X, Menu } from "lucide-react";
 import { SortableContext, useSortable, horizontalListSortingStrategy } from "@dnd-kit/sortable";
-import { useWorkspaceStore } from "../store/workspace-store";
-import { collectGroupIds } from "../lib/split-tree";
-import { useActiveDrag, useDropIntent } from "../hooks/useDndOrchestrator";
-import { useSettingsStore } from "../store/settings-store";
-import { useModifierHeldContext } from "../App";
+
+import { useWorkspaceStore } from "@/store/workspace-store";
+import { collectGroupIds } from "@/lib/split-tree";
+import { useActiveDrag, useDropIntent } from "@/hooks/useDndOrchestrator";
+import { useSettingsStore } from "@/store/settings-store";
+import { useModifierHeldContext } from "@/App";
 import { resolveDisplayString } from "../../shared/shortcuts";
-import { paneTypeIcons } from "../lib/pane-type-meta";
-import { releaseNativeFocus } from "../lib/native-pane-focus";
-import type { PaneGroup } from "../types/workspace";
-import type { DragItemData } from "../types/dnd";
+import { paneTypeIcons } from "@/lib/pane-type-meta";
+import { releaseNativeFocus } from "@/lib/native-pane-focus";
+import { cn } from "@/lib/utils";
+import type { PaneGroup } from "@/types/workspace";
+import type { DragItemData } from "@/types/dnd";
+
+import { Kbd } from "@/components/ui/kbd";
+import { HintTooltip } from "@/components/ui/hint-tooltip";
 
 export function handleTabBarWindowZoomDoubleClick(
   event: Pick<React.MouseEvent, "detail" | "stopPropagation">,
@@ -36,6 +41,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
   groupId,
   workspaceId,
   isActive,
+  isFocused,
   dndEnabled,
   shortcutHint,
   showInsertBefore,
@@ -48,6 +54,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
   groupId: string;
   workspaceId: string;
   isActive: boolean;
+  isFocused: boolean;
   dndEnabled: boolean;
   shortcutHint: string | null;
   showInsertBefore: boolean;
@@ -71,7 +78,6 @@ const SortableGroupTab = memo(function SortableGroupTab({
   const [editValue, setEditValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Pick up pending tab rename from shortcut (Cmd+Shift+T)
   useEffect(() => {
     if (pendingEditType === "tab" && pendingEditId === tabId && isActive) {
       setIsEditing(true);
@@ -80,7 +86,6 @@ const SortableGroupTab = memo(function SortableGroupTab({
     }
   }, [pendingEditId, pendingEditType, tabId, isActive, pane?.title, clearPendingEdit]);
 
-  // Focus input when editing starts
   useEffect(() => {
     if (isEditing && inputRef.current) {
       releaseNativeFocus();
@@ -93,30 +98,21 @@ const SortableGroupTab = memo(function SortableGroupTab({
 
   const commitEdit = useCallback(() => {
     const trimmed = editValue.trim();
-    if (trimmed && trimmed !== (pane?.title ?? "")) {
-      updatePaneTitle(paneId, trimmed);
-    }
+    if (trimmed && trimmed !== (pane?.title ?? "")) updatePaneTitle(paneId, trimmed);
     setIsEditing(false);
   }, [editValue, pane?.title, paneId, updatePaneTitle]);
 
-  const cancelEdit = useCallback(() => {
-    setIsEditing(false);
-  }, []);
-
-  const style = {
-    opacity: isDragging ? 0.4 : undefined,
-  };
+  const cancelEdit = useCallback(() => setIsEditing(false), []);
 
   const isDropTarget = isOver && !isDragging && activeDrag?.type === "sidebar-workspace";
-
   const Icon = pane ? paneTypeIcons[pane.type] : paneTypeIcons.terminal;
 
   return (
     <div
       ref={setNodeRef}
       data-sortable-id={`gtab-${tabId}`}
-      className={`group-tab ${isActive ? "group-tab-active" : ""} ${isDropTarget ? "group-tab-drop-target" : ""} ${showInsertBefore ? "group-tab-insert-before" : ""} ${showInsertAfter ? "group-tab-insert-after" : ""}`}
-      style={style}
+      data-active={isActive || undefined}
+      style={{ opacity: isDragging ? 0.4 : undefined }}
       onClick={onSelect}
       onDoubleClick={(e) => {
         e.stopPropagation();
@@ -131,12 +127,26 @@ const SortableGroupTab = memo(function SortableGroupTab({
       }}
       {...attributes}
       {...listeners}
+      className={cn(
+        "no-drag relative group/tab inline-flex items-center gap-1.5 h-[22px] px-2 max-w-[180px]",
+        "rounded-[5px] cursor-default select-none shrink-0",
+        "text-[11px] text-muted-foreground transition-[background-color,color] duration-100",
+        "hover:bg-hover hover:text-foreground",
+        isActive && "bg-foreground/[0.07] text-foreground hover:bg-foreground/[0.07]",
+        isFocused && isActive && "bg-foreground/10 hover:bg-foreground/10",
+        isDropTarget && "bg-brand-soft outline outline-1 outline-brand-edge",
+        showInsertBefore && "insert-before-x",
+        showInsertAfter && "insert-after-x",
+      )}
     >
-      <Icon size={10} />
+      <Icon
+        width={10}
+        height={10}
+        className={cn("shrink-0", isActive ? "text-brand" : "text-muted-foreground/70")}
+      />
       {isEditing ? (
         <input
           ref={inputRef}
-          className="tab-rename-input"
           value={editValue}
           onChange={(e) => setEditValue(e.target.value)}
           onKeyDown={(e) => {
@@ -153,21 +163,30 @@ const SortableGroupTab = memo(function SortableGroupTab({
           onBlur={commitEdit}
           onClick={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
+          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[11px] text-foreground p-0"
         />
       ) : (
         <span className="truncate">{pane?.title ?? "Empty"}</span>
       )}
       {shortcutHint ? (
-        <span className="tab-shortcut-hint">{shortcutHint}</span>
+        <Kbd className="animate-hint shrink-0 h-3.5 min-w-3.5 px-1 text-[9px] font-mono">
+          {shortcutHint}
+        </Kbd>
       ) : (
         <button
-          className="tab-close no-drag"
+          type="button"
+          aria-label="Close tab"
           onClick={(e) => {
             e.stopPropagation();
             onClose();
           }}
+          className={cn(
+            "no-drag shrink-0 inline-flex items-center justify-center size-3.5 rounded-sm",
+            "text-muted-foreground/50 opacity-0 group-hover/tab:opacity-100",
+            "hover:text-foreground hover:bg-hover transition-[opacity,color]",
+          )}
         >
-          <X size={9} />
+          <X size={9} strokeWidth={2.4} />
         </button>
       )}
     </div>
@@ -190,8 +209,6 @@ export default memo(function GroupTabBar({
   const addWorkspace = useWorkspaceStore((s) => s.addWorkspace);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
   const defaultPaneType = useSettingsStore((s) => s.defaultPaneType);
-  // Return a boolean instead of the root object to avoid re-renders on split
-  // resize (which creates a new root just to update sizes).
   const hasMultipleGroups = useWorkspaceStore((s) => {
     const root = s.workspaces.find((w) => w.id === workspaceId)?.root;
     return root ? collectGroupIds(root).length > 1 : false;
@@ -201,22 +218,12 @@ export default memo(function GroupTabBar({
   const dropIntent = useDropIntent();
 
   useEffect(() => {
-    if (!isTopLeftGroup) {
-      return;
-    }
-
+    if (!isTopLeftGroup) return;
     let cancelled = false;
-
     void window.api.window.isFullScreen().then((fullScreen) => {
-      if (!cancelled) {
-        setIsFullScreen(fullScreen);
-      }
+      if (!cancelled) setIsFullScreen(fullScreen);
     });
-
-    const unsubscribe = window.api.window.onFullScreenChange((fullScreen) => {
-      setIsFullScreen(fullScreen);
-    });
-
+    const unsubscribe = window.api.window.onFullScreenChange(setIsFullScreen);
     return () => {
       cancelled = true;
       unsubscribe();
@@ -224,45 +231,69 @@ export default memo(function GroupTabBar({
   }, [isTopLeftGroup]);
 
   return (
-    <div className="group-tabbar">
+    <div
+      data-focused={isFocused || undefined}
+      className={cn(
+        "group/tabbar relative flex items-center gap-px shrink-0",
+        "h-[30px] px-1 pt-[2px]",
+        "bg-rail border-b border-hairline",
+        "overflow-x-auto scrollbar-none select-none",
+        "data-[focused=true]:bg-[color-mix(in_srgb,var(--foreground)_4%,var(--rail))]",
+      )}
+    >
       {isTopLeftGroup && (
         <>
           <div
-            className="tabbar-traffic-zone drag-region"
+            className="drag-region shrink-0 h-full"
             data-fullscreen={isFullScreen ? "true" : undefined}
+            style={{ width: isFullScreen ? 0 : 78 }}
           />
-          <div className="tabbar-inline-controls">
-            <button
-              className="tabbar-ctl-btn no-drag"
-              onClick={toggleSidebar}
-              title={`Open sidebar (${resolveDisplayString("toggle-sidebar")})`}
+          <div className="flex items-center gap-px shrink-0 mr-1.5 pr-1.5 border-r border-hairline">
+            <HintTooltip
+              content="Open sidebar"
+              shortcut={resolveDisplayString("toggle-sidebar")}
+              sideOffset={4}
             >
-              <Menu size={13} />
-            </button>
-            <button
-              className="tabbar-ctl-btn no-drag"
-              onClick={() => {
-                if (defaultPaneType === "picker") {
-                  useSettingsStore
-                    .getState()
-                    .openPanePicker({ action: "new-workspace", container: "main" });
-                } else {
-                  addWorkspace(undefined, null, "main", defaultPaneType);
-                }
-              }}
-              title={`New workspace (${resolveDisplayString("new-workspace")})`}
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                aria-label="Open sidebar"
+                className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+              >
+                <Menu size={12} />
+              </button>
+            </HintTooltip>
+            <HintTooltip
+              content="New workspace"
+              shortcut={resolveDisplayString("new-workspace")}
+              sideOffset={4}
             >
-              <Plus size={13} />
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (defaultPaneType === "picker") {
+                    useSettingsStore
+                      .getState()
+                      .openPanePicker({ action: "new-workspace", container: "main" });
+                  } else {
+                    addWorkspace(undefined, null, "main", defaultPaneType);
+                  }
+                }}
+                aria-label="New workspace"
+                className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+              >
+                <Plus size={12} strokeWidth={2.2} />
+              </button>
+            </HintTooltip>
           </div>
         </>
       )}
+
       <SortableContext
         items={group.tabs.map((t) => `gtab-${t.id}`)}
         strategy={horizontalListSortingStrategy}
       >
         {group.tabs.map((tab, tabIndex) => {
-          // Show ⌃1-9 hint when Ctrl is held and this group is focused
           const hintDigit = tabIndex + 1;
           const hint =
             modifierHeld === "control" && isFocused && hintDigit <= 9 ? `⌃${hintDigit}` : null;
@@ -279,6 +310,7 @@ export default memo(function GroupTabBar({
               groupId={groupId}
               workspaceId={workspaceId}
               isActive={tab.id === group.activeTabId}
+              isFocused={isFocused}
               dndEnabled={dndEnabled}
               shortcutHint={hint}
               showInsertBefore={tabInsertIndex === tabIndex}
@@ -293,62 +325,82 @@ export default memo(function GroupTabBar({
       </SortableContext>
 
       <div
-        className="group-tabbar-drag-spacer drag-region"
+        className="drag-region flex-1 self-stretch min-w-2"
         onDoubleClick={(event) => handleTabBarWindowZoomDoubleClick(event)}
         title="Drag window"
       />
 
-      <button
-        className="group-tabbar-add no-drag"
-        onClick={() => {
-          if (defaultPaneType === "picker") {
-            useSettingsStore.getState().openPanePicker({ action: "new-tab", workspaceId, groupId });
-          } else {
-            addGroupTab(workspaceId, groupId, defaultPaneType);
-          }
-        }}
-        title="New tab"
-      >
-        <Plus size={12} />
-      </button>
+      <HintTooltip content="New tab" shortcut={resolveDisplayString("new-tab")} sideOffset={4}>
+        <button
+          type="button"
+          onClick={() => {
+            if (defaultPaneType === "picker") {
+              useSettingsStore
+                .getState()
+                .openPanePicker({ action: "new-tab", workspaceId, groupId });
+            } else {
+              addGroupTab(workspaceId, groupId, defaultPaneType);
+            }
+          }}
+          aria-label="New tab"
+          className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+        >
+          <Plus size={12} strokeWidth={2.2} />
+        </button>
+      </HintTooltip>
 
-      <div className="group-tabbar-actions">
-        <button
-          className="group-tabbar-action no-drag"
-          onClick={() =>
-            useSettingsStore.getState().openPanePicker({
-              action: "split",
-              workspaceId,
-              groupId,
-              splitDirection: "horizontal",
-            })
-          }
-          title="Split Right"
-        >
-          <Columns2 size={12} />
-        </button>
-        <button
-          className="group-tabbar-action no-drag"
-          onClick={() =>
-            useSettingsStore.getState().openPanePicker({
-              action: "split",
-              workspaceId,
-              groupId,
-              splitDirection: "vertical",
-            })
-          }
-          title="Split Down"
-        >
-          <Rows2 size={12} />
-        </button>
-        {hasMultipleGroups && (
+      <div
+        className={cn(
+          "flex items-center gap-px shrink-0 ml-1 pl-1 border-l border-hairline",
+          "opacity-0 group-hover/tabbar:opacity-100 transition-opacity",
+          isFocused && "opacity-100",
+        )}
+      >
+        <HintTooltip content="Split right" sideOffset={4}>
           <button
-            className="group-tabbar-action no-drag"
-            onClick={() => closeGroup(workspaceId, groupId)}
-            title="Close Split"
+            type="button"
+            aria-label="Split right"
+            onClick={() =>
+              useSettingsStore.getState().openPanePicker({
+                action: "split",
+                workspaceId,
+                groupId,
+                splitDirection: "horizontal",
+              })
+            }
+            className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
           >
-            <X size={12} />
+            <Columns2 size={11} />
           </button>
+        </HintTooltip>
+        <HintTooltip content="Split down" sideOffset={4}>
+          <button
+            type="button"
+            aria-label="Split down"
+            onClick={() =>
+              useSettingsStore.getState().openPanePicker({
+                action: "split",
+                workspaceId,
+                groupId,
+                splitDirection: "vertical",
+              })
+            }
+            className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+          >
+            <Rows2 size={11} />
+          </button>
+        </HintTooltip>
+        {hasMultipleGroups && (
+          <HintTooltip content="Close split" sideOffset={4}>
+            <button
+              type="button"
+              aria-label="Close split"
+              onClick={() => closeGroup(workspaceId, groupId)}
+              className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+            >
+              <X size={11} strokeWidth={2.2} />
+            </button>
+          </HintTooltip>
         )}
       </div>
     </div>

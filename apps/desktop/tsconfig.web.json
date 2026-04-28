@@ -7,7 +7,13 @@
     "outDir": "./out",
     "paths": {
       "@/*": ["./src/renderer/*"]
-    }
+    },
+    // shadcn/ui's base-nova components spread `...props` whose optional
+    // fields are typed as `T | undefined`. With `exactOptionalPropertyTypes`
+    // on, those spreads don't satisfy Base UI's strict prop types. Since
+    // shadcn components are vendored library code we don't own, we relax
+    // this single flag for the renderer rather than patching every file.
+    "exactOptionalPropertyTypes": false
   },
   "include": ["src/renderer/**/*", "src/shared/**/*"]
 }

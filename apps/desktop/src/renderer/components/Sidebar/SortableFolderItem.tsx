@@ -1,13 +1,16 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { ChevronDown, ChevronRight, FolderClosed, FolderOpen, Plus } from "lucide-react";
-import { useActiveDrag } from "../../hooks/useDndOrchestrator";
-import { useInsertionIndicator } from "../../hooks/useInsertionIndicator";
-import { InlineRenameInput } from "../ui/InlineRenameInput";
+import { ChevronRight, FolderClosed, FolderOpen, Plus } from "lucide-react";
+
+import { useActiveDrag } from "@/hooks/useDndOrchestrator";
+import { useInsertionIndicator } from "@/hooks/useInsertionIndicator";
+import type { SidebarNode } from "@/types/workspace";
+import type { SidebarContainer } from "@/types/dnd";
+import { cn } from "@/lib/utils";
+
+import { InlineRenameInput } from "@/components/ui/inline-rename-input";
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
 import { useSidebarContext } from "./SidebarContext";
-import type { SidebarNode } from "../../types/workspace";
-import type { SidebarContainer } from "../../types/dnd";
 
 interface SortableFolderItemProps {
   folder: SidebarNode & { type: "folder" };
@@ -51,7 +54,6 @@ export function SortableFolderItem({
     [setNodeRef],
   );
 
-  // Folder uses edge zones (0.25 threshold): edges show insertion line, center shows folder highlight
   const activeDrag = useActiveDrag();
   const isRelevantDrag =
     activeDrag?.type === "sidebar-workspace" ||
@@ -64,41 +66,50 @@ export function SortableFolderItem({
     "vertical",
     0.25,
   );
-
-  // Show folder highlight only when pointer is in center zone (insertPosition === null means center)
   const showDragOver = isOver && !isDragging && isRelevantDrag && insertPosition === null;
   const insertClass =
     insertPosition === "before"
-      ? "sidebar-insert-before"
+      ? "insert-before"
       : insertPosition === "after"
-        ? "sidebar-insert-after"
+        ? "insert-after"
         : "";
 
-  // When filtering, force folders expanded
   const isExpanded = filteredWorkspaceIds ? true : !folder.collapsed;
+  const FolderIcon = isExpanded ? FolderOpen : FolderClosed;
 
   return (
     <div style={{ opacity: isDragging ? 0.4 : undefined }}>
       <div
         ref={setFolderRef}
         data-sortable-id={`folder-${folder.id}`}
-        className={`folder-header no-drag ${showDragOver ? "sidebar-item-drag-over-folder" : ""} ${insertClass}`}
         onClick={onToggle}
         onContextMenu={(e) => onContextMenuFolder(e, folder.id)}
-        style={{ marginLeft: depth * 16 }}
+        style={{ marginLeft: depth * 14 }}
         {...attributes}
         {...listeners}
+        className={cn(
+          "no-drag relative group/folder flex items-center gap-1.5 h-8 pl-1.5 pr-1.5 rounded-md cursor-default select-none",
+          "text-[12px] text-foreground/75 hover:text-foreground hover:bg-hover",
+          "transition-colors duration-100",
+          showDragOver && "drop-into-folder",
+          insertClass,
+        )}
       >
-        {!isExpanded ? (
-          <ChevronRight size={10} className="folder-chevron" />
-        ) : (
-          <ChevronDown size={10} className="folder-chevron" />
-        )}
-        {isExpanded ? (
-          <FolderOpen size={11} className="folder-icon" />
-        ) : (
-          <FolderClosed size={11} className="folder-icon" />
-        )}
+        <ChevronRight
+          size={10}
+          strokeWidth={2.4}
+          className={cn(
+            "shrink-0 transition-transform duration-150 text-muted-foreground/60",
+            isExpanded && "rotate-90 text-muted-foreground",
+          )}
+        />
+        <FolderIcon
+          size={12}
+          className={cn(
+            "shrink-0 transition-colors",
+            isExpanded ? "text-brand/85" : "text-muted-foreground/75",
+          )}
+        />
         {isEditing ? (
           <InlineRenameInput
             initialValue={folder.name}
@@ -107,23 +118,28 @@ export function SortableFolderItem({
               onStopEditing();
             }}
             onCancel={onStopEditing}
-            className="text-[11px]"
+            className="text-[12px]"
+            aria-label="Rename folder"
           />
         ) : (
-          <span className="flex-1 truncate">{folder.name}</span>
+          <span className="flex-1 truncate text-foreground/85">{folder.name}</span>
         )}
         {!isEditing && (
           <button
             type="button"
-            className="folder-add-btn"
             aria-label="Add workspace to folder"
             title="Add workspace"
             onClick={(e) => {
               e.stopPropagation();
               onAddWorkspace();
             }}
+            className={cn(
+              "shrink-0 inline-flex items-center justify-center size-4 rounded-sm",
+              "text-muted-foreground/60 opacity-0 group-hover/folder:opacity-100",
+              "hover:text-foreground hover:bg-hover transition-[opacity,color]",
+            )}
           >
-            <Plus size={12} />
+            <Plus size={11} strokeWidth={2.2} />
           </button>
         )}
       </div>
@@ -137,7 +153,10 @@ export function SortableFolderItem({
             depth={depth + 1}
           />
           {folder.children.length === 0 && (
-            <div className="folder-empty" style={{ marginLeft: (depth + 1) * 16 }}>
+            <div
+              style={{ marginLeft: (depth + 1) * 14 + 18 }}
+              className="px-2 py-1 text-[10px] text-muted-foreground/50 italic select-none"
+            >
               Drop workspaces here
             </div>
           )}

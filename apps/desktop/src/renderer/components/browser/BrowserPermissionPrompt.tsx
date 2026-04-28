@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
+
 import type { BrowserPermissionDecision, BrowserPermissionRequest } from "../../../shared/browser";
-import { Button } from "../ui/button";
+import { Button } from "@/components/ui/button";
 
 interface BrowserPermissionPromptProps {
   request: BrowserPermissionRequest;
@@ -15,11 +16,11 @@ function humanizePermissionType(
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/[-_]+/g, " ")
     .trim()
-    .replace(/\b\w/g, (match) => match.toUpperCase());
+    .replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-function formatPermissionLabel(permissionType: BrowserPermissionRequest["permissionType"]): string {
-  switch (permissionType) {
+function formatPermissionLabel(t: BrowserPermissionRequest["permissionType"]): string {
+  switch (t) {
     case "camera":
       return "Camera";
     case "microphone":
@@ -45,15 +46,15 @@ function formatPermissionLabel(permissionType: BrowserPermissionRequest["permiss
     case "fileSystem":
       return "File System";
     default:
-      return humanizePermissionType(permissionType);
+      return humanizePermissionType(t);
   }
 }
 
 function formatPermissionDescription(
-  permissionType: BrowserPermissionRequest["permissionType"],
-  permissionLabel: string,
+  t: BrowserPermissionRequest["permissionType"],
+  label: string,
 ): string {
-  switch (permissionType) {
+  switch (t) {
     case "camera":
       return "wants access to your camera.";
     case "microphone":
@@ -65,7 +66,7 @@ function formatPermissionDescription(
     case "notifications":
       return "wants to show notifications.";
     default:
-      return `is requesting ${permissionLabel.toLowerCase()} permission.`;
+      return `is requesting ${label.toLowerCase()} permission.`;
   }
 }
 
@@ -74,35 +75,35 @@ export default function BrowserPermissionPrompt({
   onDecision,
   onDismiss,
 }: BrowserPermissionPromptProps): ReactElement {
-  const permissionLabel = formatPermissionLabel(request.permissionType);
-  const originLabel = request.origin;
-  const permissionDescription = formatPermissionDescription(
-    request.permissionType,
-    permissionLabel,
-  );
+  const label = formatPermissionLabel(request.permissionType);
+  const description = formatPermissionDescription(request.permissionType, label);
 
   return (
     <div
-      className="browser-permission-prompt"
       role="dialog"
-      aria-label={`${permissionLabel} permission request`}
+      aria-label={`${label} permission request`}
+      className="flex flex-wrap items-center gap-3 shrink-0 px-4 py-2.5 bg-rail border-b border-hairline"
     >
-      <div className="browser-permission-eyebrow">Permission request</div>
-      <h2>{permissionLabel}</h2>
-      <p>
-        <strong>{originLabel}</strong> {permissionDescription}
-      </p>
-      <div className="browser-permission-actions">
-        <Button variant="ghost" size="sm" onClick={onDismiss}>
+      <div className="flex flex-col min-w-0 flex-1">
+        <span className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-brand">
+          Permission request
+        </span>
+        <div className="text-[12px] text-foreground mt-0.5">
+          <span className="font-medium">{request.origin}</span>{" "}
+          <span className="text-muted-foreground">{description}</span>
+        </div>
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <Button variant="ghost" size="xs" onClick={onDismiss}>
           Dismiss
         </Button>
-        <Button variant="outline" size="sm" onClick={() => onDecision("deny")}>
+        <Button variant="outline" size="xs" onClick={() => onDecision("deny")}>
           Deny
         </Button>
-        <Button variant="secondary" size="sm" onClick={() => onDecision("allow-once")}>
+        <Button variant="secondary" size="xs" onClick={() => onDecision("allow-once")}>
           Allow once
         </Button>
-        <Button size="sm" onClick={() => onDecision("allow-for-session")}>
+        <Button variant="default" size="xs" onClick={() => onDecision("allow-for-session")}>
           Allow for session
         </Button>
       </div>

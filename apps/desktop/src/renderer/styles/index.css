@@ -1,6 +1,0 @@
-@import "tailwindcss";
-
-/* Tailwind v4 does not automatically scan classes from workspace packages. */
-@source "../../../../../packages/note-editor/src";
-
-@custom-variant dark (&:is(.dark, .dark *));

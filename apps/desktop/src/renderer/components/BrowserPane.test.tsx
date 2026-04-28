@@ -114,8 +114,8 @@ vi.mock("./ui/button", () => ({
   ),
 }));
 
-vi.mock("./ui/tooltip", () => ({
-  Tooltip: ({ children }: { children: unknown }) => children,
+vi.mock("./ui/hint-tooltip", () => ({
+  HintTooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("./browser/BrowserFindBar", () => ({

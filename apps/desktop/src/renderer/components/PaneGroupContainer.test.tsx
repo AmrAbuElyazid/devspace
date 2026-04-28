@@ -159,9 +159,11 @@ test("renders a drag placeholder and split preview when native views are hidden 
     );
   });
 
-  expect(container.innerHTML).toContain("pane-drag-placeholder");
+  // The drag placeholder shows the pane title (no leader message).
   expect(container.textContent).toContain("Terminal One");
-  expect(container.innerHTML).toContain("pane-drop-zone-half left");
+  expect(container.textContent).not.toContain("Leader active");
+  // And the split preview half is rendered inside the active drop zone.
+  expect(container.querySelector(".drop-half.left")).toBeTruthy();
 });
 
 test("keeps the placeholder hidden when native views remain visible", async () => {
@@ -179,7 +181,9 @@ test("keeps the placeholder hidden when native views remain visible", async () =
     );
   });
 
-  expect(container.innerHTML).not.toContain("pane-drag-placeholder");
+  // No drag placeholder UI should appear when native views remain visible.
+  expect(container.textContent).not.toContain("Terminal One");
+  expect(container.textContent).not.toContain("Leader active");
   expect(container.innerHTML).toContain('data-testid="terminal-pane-1"');
 });
 
@@ -200,7 +204,8 @@ test("renders a leader placeholder when the active native pane is temporarily hi
     );
   });
 
-  expect(container.innerHTML).toContain("pane-hidden-placeholder");
+  // The leader-hidden placeholder shows the pane title plus a "Leader active"
+  // hint so the user knows to enter a Devspace shortcut.
   expect(container.textContent).toContain("Terminal One");
   expect(container.textContent).toContain("Leader active");
 });

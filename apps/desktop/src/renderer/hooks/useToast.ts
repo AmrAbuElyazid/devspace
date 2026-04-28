@@ -1,40 +1,27 @@
-import { create } from "zustand";
+import { toast as sonnerToast } from "sonner";
 
-type ToastVariant = "default" | "success" | "error" | "warning";
+type ToastVariant = "default" | "success" | "error" | "warning" | "info";
 
-interface Toast {
-  id: string;
-  message: string;
-  variant: ToastVariant;
-  createdAt: number;
+/**
+ * Single entry point for app-wide toasts. Backed by `sonner`. The renderer
+ * mounts a `<Toaster>` in App.tsx — calling `addToast` from anywhere queues
+ * a notification.
+ */
+export function addToast(message: string, variant: ToastVariant = "default"): void {
+  switch (variant) {
+    case "success":
+      sonnerToast.success(message);
+      return;
+    case "error":
+      sonnerToast.error(message);
+      return;
+    case "warning":
+      sonnerToast.warning(message);
+      return;
+    case "info":
+      sonnerToast.info(message);
+      return;
+    default:
+      sonnerToast(message);
+  }
 }
-
-interface ToastState {
-  toasts: Toast[];
-  addToast: (message: string, variant?: ToastVariant) => void;
-  removeToast: (id: string) => void;
-}
-
-let toastCounter = 0;
-
-export const useToastStore = create<ToastState>((set) => ({
-  toasts: [],
-  addToast: (message, variant = "default") => {
-    const id = `toast-${++toastCounter}`;
-    const toast: Toast = { id, message, variant, createdAt: Date.now() };
-    set((state) => ({
-      toasts: [...state.toasts.slice(-2), toast], // Keep max 3
-    }));
-    // Auto-dismiss after 4 seconds
-    setTimeout(() => {
-      set((state) => ({
-        toasts: state.toasts.filter((t) => t.id !== id),
-      }));
-    }, 4000);
-  },
-  removeToast: (id) => {
-    set((state) => ({
-      toasts: state.toasts.filter((t) => t.id !== id),
-    }));
-  },
-}));

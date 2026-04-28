@@ -61,7 +61,8 @@ export default memo(function PaneGroupContainer({
 
   return (
     <div
-      className={`pane-group${isFocused ? " pane-group-focused" : ""}`}
+      data-focused={isFocused || undefined}
+      className="group flex flex-col h-full w-full overflow-hidden"
       onMouseDown={handleFocus}
     >
       <GroupTabBar
