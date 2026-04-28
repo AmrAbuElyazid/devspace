@@ -49,7 +49,18 @@ export function QuickLaunchGrid() {
   }, []);
 
   return (
-    <div className="no-drag grid grid-cols-5 gap-1.5" role="toolbar" aria-label="Quick launch">
+    <div
+      className={cn(
+        "no-drag flex gap-1 p-1 rounded-[10px]",
+        "bg-black/25 border border-white/[0.05]",
+        "shadow-[inset_0_1px_0_rgb(255_255_255_/_0.025)]",
+        // Compact: center icons inside the pill at their intrinsic
+        // width. Expanded: tiles distribute evenly across the pill.
+        "justify-center @min-[300px]/sidebar:justify-stretch @min-[300px]/sidebar:gap-0.5",
+      )}
+      role="toolbar"
+      aria-label="Quick launch"
+    >
       {quickLaunchTypes.map((type) => {
         const Icon = paneTypeIcons[type];
         const isDefault = defaultPaneType === type;
@@ -63,18 +74,16 @@ export function QuickLaunchGrid() {
             title={`${fullLabels[type]}${isDefault ? " — default for ⌘T" : ""}`}
             className={cn(
               "group/ql relative flex flex-col items-center justify-center gap-1",
-              "h-11 rounded-[8px] border",
+              "rounded-[7px] transition-colors duration-150",
               "text-[9px] font-semibold leading-none uppercase tracking-[0.12em]",
-              "transition-[transform,background-color,color,border-color] duration-150",
+              // Compact: 32×32 square icon button at intrinsic width.
+              "size-8 shrink-0",
+              // Expanded: tile grows to share the pill width and adds
+              // height for the label below the icon.
+              "@min-[300px]/sidebar:size-auto @min-[300px]/sidebar:flex-1 @min-[300px]/sidebar:h-11",
               isDefault
-                ? cn(
-                    "text-brand bg-brand-soft border-brand-edge",
-                    "shadow-[inset_0_1px_0_oklch(0.86_0.17_92_/_0.25)]",
-                  )
-                : cn(
-                    "text-muted-foreground bg-white/[0.025] border-white/[0.06]",
-                    "hover:bg-white/[0.05] hover:text-foreground hover:border-white/[0.12]",
-                  ),
+                ? "text-brand bg-brand-soft shadow-[inset_0_1px_0_oklch(0.86_0.17_92_/_0.18)]"
+                : "text-muted-foreground hover:bg-white/[0.05] hover:text-foreground",
             )}
           >
             <Icon
@@ -85,7 +94,7 @@ export function QuickLaunchGrid() {
                 isDefault ? "text-brand" : "text-foreground/70 group-hover/ql:text-foreground",
               )}
             />
-            <span>{quickLaunchLabels[type]}</span>
+            <span className="hidden @min-[300px]/sidebar:block">{quickLaunchLabels[type]}</span>
           </button>
         );
       })}

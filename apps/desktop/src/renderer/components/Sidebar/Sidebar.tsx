@@ -311,6 +311,7 @@ export default function Sidebar() {
         className={cn(
           "sidebar-bg relative flex flex-col shrink-0 overflow-hidden text-foreground",
           "border-r border-border/60",
+          "@container/sidebar",
           "transition-[width,opacity] duration-200 ease-out",
           !sidebarOpen && "!w-0 opacity-0 pointer-events-none",
           isResizing && "!transition-none",
