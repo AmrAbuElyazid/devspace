@@ -331,16 +331,16 @@ export default function Sidebar() {
               "pr-2",
             )}
           >
-            <span className="no-drag select-none inline-flex items-center font-sans font-semibold text-[14.5px] leading-none tracking-tight">
+            <span className="app-title no-drag select-none inline-flex items-center font-sans font-semibold text-[14.5px] leading-none tracking-tight">
               <img
                 src={appIconUrl}
                 alt=""
                 aria-hidden
                 draggable={false}
-                className="h-[18px] w-auto -my-1 -mr-px shrink-0 select-none"
+                className="app-title-icon h-[18px] w-auto -my-1 -mr-px shrink-0 select-none"
               />
-              <span className="text-brand">ev</span>
-              <span className="text-foreground/85">space</span>
+              <span className="app-title-text app-title-text--ev">ev</span>
+              <span className="app-title-text app-title-text--space">space</span>
             </span>
             <HintTooltip
               content="Hide sidebar"

@@ -433,3 +433,48 @@
 :root:not(.dark) .sidebar-bg {
   background: linear-gradient(180deg, oklch(0.985 0.002 270) 0%, oklch(0.955 0.002 270) 100%);
 }
+
+/* ─── App title hover (Sidebar header) ────────────────────────────────
+   Brand wash flows across "space" on hover. Both word spans share a
+   single linear-gradient (brand → foreground) sized 220% wide, with the
+   background-position animated to slide the brand half across.
+*/
+.app-title-text {
+  background-image: linear-gradient(
+    90deg,
+    var(--brand) 0%,
+    var(--brand) 40%,
+    color-mix(in oklch, var(--foreground) 85%, transparent) 60%,
+    color-mix(in oklch, var(--foreground) 85%, transparent) 100%
+  );
+  background-size: 220% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  transition: background-position 600ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.app-title-text--ev {
+  background-position: 0% 0;
+}
+.app-title-text--space {
+  background-position: 100% 0;
+}
+.app-title:hover .app-title-text--space {
+  background-position: 0% 0;
+}
+.app-title-icon {
+  transition: transform 500ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.app-title:hover .app-title-icon {
+  transform: scale(1.06);
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-title-text,
+  .app-title-icon {
+    transition-duration: 150ms;
+  }
+  .app-title:hover .app-title-icon {
+    transform: none;
+  }
+}
