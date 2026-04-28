@@ -49,19 +49,10 @@ export function QuickLaunchGrid() {
   }, []);
 
   return (
-    <div
-      className={cn(
-        "no-drag grid grid-cols-5 gap-px p-px rounded-lg",
-        "bg-surface/40 border border-border/50",
-      )}
-      role="toolbar"
-      aria-label="Quick launch"
-    >
-      {quickLaunchTypes.map((type, i) => {
+    <div className="no-drag grid grid-cols-5 gap-1.5" role="toolbar" aria-label="Quick launch">
+      {quickLaunchTypes.map((type) => {
         const Icon = paneTypeIcons[type];
         const isDefault = defaultPaneType === type;
-        const isFirst = i === 0;
-        const isLast = i === quickLaunchTypes.length - 1;
         return (
           <button
             key={type}
@@ -71,15 +62,19 @@ export function QuickLaunchGrid() {
             aria-label={fullLabels[type]}
             title={`${fullLabels[type]}${isDefault ? " — default for ⌘T" : ""}`}
             className={cn(
-              "group/ql relative flex flex-col items-center justify-center gap-[3px]",
-              "h-11 text-[9.5px] font-medium leading-none uppercase tracking-wider",
-              "transition-colors",
-              // tile rounding follows the outer pill
-              isFirst && "rounded-l-[7px]",
-              isLast && "rounded-r-[7px]",
+              "group/ql relative flex flex-col items-center justify-center gap-1",
+              "h-11 rounded-[8px] border",
+              "text-[9px] font-semibold leading-none uppercase tracking-[0.12em]",
+              "transition-[transform,background-color,color,border-color] duration-150",
               isDefault
-                ? "bg-brand-soft text-foreground"
-                : "text-muted-foreground/85 hover:bg-hover hover:text-foreground",
+                ? cn(
+                    "text-brand bg-brand-soft border-brand-edge",
+                    "shadow-[inset_0_1px_0_oklch(0.86_0.17_92_/_0.25)]",
+                  )
+                : cn(
+                    "text-muted-foreground bg-white/[0.025] border-white/[0.06]",
+                    "hover:bg-white/[0.05] hover:text-foreground hover:border-white/[0.12]",
+                  ),
             )}
           >
             <Icon
@@ -87,16 +82,10 @@ export function QuickLaunchGrid() {
               height={15}
               className={cn(
                 "shrink-0 transition-colors",
-                isDefault ? "text-brand" : "text-foreground/65 group-hover/ql:text-foreground",
+                isDefault ? "text-brand" : "text-foreground/70 group-hover/ql:text-foreground",
               )}
             />
             <span>{quickLaunchLabels[type]}</span>
-            {isDefault ? (
-              <span
-                aria-hidden
-                className="absolute top-1 right-1 size-[3px] rounded-full bg-brand shadow-[0_0_4px_var(--brand)]"
-              />
-            ) : null}
           </button>
         );
       })}

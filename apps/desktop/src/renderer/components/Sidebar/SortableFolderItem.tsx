@@ -78,7 +78,7 @@ export function SortableFolderItem({
   const FolderIcon = isExpanded ? FolderOpen : FolderClosed;
 
   return (
-    <div style={{ opacity: isDragging ? 0.4 : undefined }}>
+    <div style={{ opacity: isDragging ? 0.4 : undefined }} className="flex flex-col gap-[2px]">
       <div
         ref={setFolderRef}
         data-sortable-id={`folder-${folder.id}`}
@@ -88,8 +88,8 @@ export function SortableFolderItem({
         {...attributes}
         {...listeners}
         className={cn(
-          "no-drag relative group/folder flex items-center gap-1.5 h-8 pl-1.5 pr-1.5 rounded-md cursor-default select-none",
-          "text-[12px] text-foreground/75 hover:text-foreground hover:bg-hover",
+          "no-drag relative group/folder flex items-center gap-2 h-8 px-2.5 rounded-[7px] cursor-default select-none",
+          "text-[12.5px] text-foreground/80 hover:text-foreground hover:bg-white/[0.03]",
           "transition-colors duration-100",
           showDragOver && "drop-into-folder",
           insertClass,
@@ -99,15 +99,15 @@ export function SortableFolderItem({
           size={10}
           strokeWidth={2.4}
           className={cn(
-            "shrink-0 transition-transform duration-150 text-muted-foreground/60",
-            isExpanded && "rotate-90 text-muted-foreground",
+            "shrink-0 transition-transform duration-150 text-muted-foreground/55",
+            isExpanded && "rotate-90 text-muted-foreground/80",
           )}
         />
         <FolderIcon
           size={12}
           className={cn(
             "shrink-0 transition-colors",
-            isExpanded ? "text-brand/85" : "text-muted-foreground/75",
+            isExpanded ? "text-brand/90" : "text-muted-foreground/75",
           )}
         />
         {isEditing ? (
@@ -118,11 +118,11 @@ export function SortableFolderItem({
               onStopEditing();
             }}
             onCancel={onStopEditing}
-            className="text-[12px]"
+            className="text-[12.5px]"
             aria-label="Rename folder"
           />
         ) : (
-          <span className="flex-1 truncate text-foreground/85">{folder.name}</span>
+          <span className="flex-1 truncate text-foreground/90 font-medium">{folder.name}</span>
         )}
         {!isEditing && (
           <button
@@ -134,9 +134,9 @@ export function SortableFolderItem({
               onAddWorkspace();
             }}
             className={cn(
-              "shrink-0 inline-flex items-center justify-center size-4 rounded-sm",
-              "text-muted-foreground/60 opacity-0 group-hover/folder:opacity-100",
-              "hover:text-foreground hover:bg-hover transition-[opacity,color]",
+              "shrink-0 inline-flex items-center justify-center size-[18px] rounded-[5px]",
+              "text-muted-foreground/65 opacity-0 group-hover/folder:opacity-100",
+              "hover:text-foreground hover:bg-white/[0.06] transition-[opacity,color,background-color]",
             )}
           >
             <Plus size={11} strokeWidth={2.2} />

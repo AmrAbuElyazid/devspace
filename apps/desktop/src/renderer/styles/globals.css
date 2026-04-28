@@ -407,3 +407,15 @@
     transform: translateX(400%);
   }
 }
+
+/* ─── Sidebar atmosphere ─────────────────────────────────────────────
+   Single neutral-grey wash on the sidebar surface — slightly brighter
+   at the top so the chrome reads as illuminated from above, no color
+   tinting. Replaces the earlier colored frost system.
+*/
+.sidebar-bg {
+  background: linear-gradient(180deg, oklch(0.18 0.003 270) 0%, oklch(0.145 0.003 270) 100%);
+}
+:root:not(.dark) .sidebar-bg {
+  background: linear-gradient(180deg, oklch(0.985 0.002 270) 0%, oklch(0.955 0.002 270) 100%);
+}

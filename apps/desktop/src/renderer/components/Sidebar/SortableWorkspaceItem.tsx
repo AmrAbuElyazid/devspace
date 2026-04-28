@@ -150,29 +150,36 @@ export function SortableWorkspaceItem({
       {...attributes}
       {...listeners}
       className={cn(
-        "no-drag relative group/ws flex items-center gap-2.5 h-9 pl-2.5 pr-1.5 rounded-md cursor-default select-none",
+        "no-drag relative group/ws flex items-center gap-2.5 h-9 px-2.5 rounded-[8px] cursor-default select-none",
         "text-[12.5px] text-foreground/80",
-        "transition-[background-color,color] duration-100",
-        "hover:bg-hover hover:text-foreground",
-        // Active state: clean elevated surface (no muddy yellow tint) +
-        // bright 3px brand bar on the left edge.
+        "transition-[background-color,color,box-shadow] duration-100",
+        "hover:bg-white/[0.03] hover:text-foreground",
+        // Active state: solid neutral wash + a thin top inset highlight
+        // so the row reads as gently raised. No gradient, no glow.
         isActive &&
-          "bg-surface text-foreground hover:bg-surface " +
-            "before:content-[''] before:absolute before:left-0 before:top-[7px] before:bottom-[7px] before:w-[3px] before:bg-brand before:rounded-r-[2px] " +
-            "before:shadow-[0_0_8px_var(--brand)]",
+          cn(
+            "text-foreground bg-white/[0.05] hover:bg-white/[0.05]",
+            "shadow-[inset_0_1px_0_rgb(255_255_255_/_0.06)]",
+          ),
         isTabDropTarget && "drop-into-folder",
         insertClass,
       )}
     >
-      {/* Pane icon — sits in a small subtle "chip" so the row reads as
-          structured. Active state pops the chip background to brand-soft. */}
+      {/* Pane icon chip — active state uses solid brand-soft bg + brand
+          edge border + thin top inset, no gradient. */}
       <div
         className={cn(
-          "shrink-0 inline-flex items-center justify-center size-[22px] rounded-[5px]",
-          "transition-colors",
+          "shrink-0 inline-flex items-center justify-center size-[24px] rounded-[6px] border",
+          "transition-[background-color,color,border-color] duration-100",
           isActive
-            ? "bg-brand-soft text-brand"
-            : "bg-surface/50 text-muted-foreground/85 group-hover/ws:text-foreground",
+            ? cn(
+                "text-brand bg-brand-soft border-brand-edge",
+                "shadow-[inset_0_1px_0_oklch(0.86_0.17_92_/_0.22)]",
+              )
+            : cn(
+                "border-white/[0.05] bg-white/[0.04]",
+                "text-muted-foreground/85 group-hover/ws:text-foreground",
+              ),
         )}
       >
         {PaneIcon ? <PaneIcon width={13} height={13} /> : <span className="size-[13px]" />}
@@ -192,20 +199,30 @@ export function SortableWorkspaceItem({
           />
         ) : (
           <span
-            className={cn("truncate leading-tight", isActive ? "text-foreground font-medium" : "")}
+            className={cn(
+              "truncate leading-tight tracking-[-0.005em]",
+              isActive ? "text-foreground font-[550]" : "",
+            )}
           >
             {name}
           </span>
         )}
         {!isEditing && metadata ? (
-          <span className="truncate leading-none text-[10px] font-mono text-muted-foreground/55">
+          <span className="truncate leading-none text-[10px] font-mono text-muted-foreground/50">
             {metadata}
           </span>
         ) : null}
       </div>
 
       {shortcutHint ? (
-        <Kbd className="animate-hint shrink-0 h-[18px] min-w-[18px] px-1.5 text-[9.5px] font-mono">
+        <Kbd
+          className={cn(
+            "animate-hint shrink-0 h-[18px] min-w-[18px] px-1.5 text-[10px] font-mono border",
+            isActive
+              ? "text-brand bg-brand-soft border-brand-edge/60"
+              : "text-muted-foreground/65 bg-black/30 border-white/[0.04]",
+          )}
+        >
           {shortcutHint}
         </Kbd>
       ) : canDelete && !isEditing ? (
@@ -218,7 +235,7 @@ export function SortableWorkspaceItem({
             onDelete();
           }}
           className={cn(
-            "shrink-0 inline-flex items-center justify-center size-5 rounded-sm",
+            "shrink-0 inline-flex items-center justify-center size-5 rounded-[5px]",
             "text-muted-foreground/55 opacity-0 group-hover/ws:opacity-100",
             "hover:text-destructive hover:bg-destructive/10",
             "transition-[opacity,color,background-color]",

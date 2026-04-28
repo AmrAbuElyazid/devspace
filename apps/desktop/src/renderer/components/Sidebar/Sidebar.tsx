@@ -309,7 +309,7 @@ export default function Sidebar() {
         data-state={sidebarOpen ? "open" : "collapsed"}
         data-resizing={isResizing || undefined}
         className={cn(
-          "relative flex flex-col shrink-0 bg-sidebar text-foreground",
+          "sidebar-bg relative flex flex-col shrink-0 overflow-hidden text-foreground",
           "border-r border-border/60",
           "transition-[width,opacity] duration-200 ease-out",
           !sidebarOpen && "!w-0 opacity-0 pointer-events-none",
@@ -319,197 +319,201 @@ export default function Sidebar() {
           sidebarOpen ? { width: renderedSidebarWidth, minWidth: renderedSidebarWidth } : undefined
         }
       >
-        {/* Header — drag region + traffic-light reserve when not fullscreen */}
-        <div
-          className={cn(
-            "drag-region flex items-center justify-between h-[44px] shrink-0",
-            isFullScreen ? "pl-3" : "pl-[88px]",
-            "pr-2",
-          )}
-        >
-          <span className="no-drag select-none inline-flex items-baseline gap-[3px] font-sans font-semibold text-[14px] leading-none tracking-tight">
-            <span className="text-brand">dev</span>
-            <span className="text-foreground/75">space</span>
-          </span>
-          <HintTooltip
-            content="Hide sidebar"
-            shortcut={resolveDisplayString("toggle-sidebar")}
-            sideOffset={4}
-            align="end"
-          >
-            <button
-              type="button"
-              className={cn(
-                "no-drag inline-flex items-center justify-center size-6 rounded-md",
-                "text-muted-foreground/80 hover:text-foreground hover:bg-hover",
-                "transition-colors",
-              )}
-              onClick={toggleSidebar}
-              aria-label="Toggle sidebar"
-            >
-              <ChevronLeft size={14} strokeWidth={2.2} />
-            </button>
-          </HintTooltip>
-        </div>
-
-        {/* Quick launch */}
-        <div className="px-2 pt-1 pb-2">
-          <QuickLaunchGrid />
-        </div>
-
-        {/* Search */}
-        <div className="px-2 pb-2">
+        <div className="relative z-[1] flex flex-col h-full min-h-0">
+          {/* Header — drag region + traffic-light reserve when not fullscreen */}
           <div
             className={cn(
-              "no-drag group/search relative flex items-center h-7 rounded-md",
-              "bg-surface/70 border border-border/60",
-              "focus-within:bg-surface focus-within:border-brand-edge focus-within:ring-2 focus-within:ring-brand-soft",
-              "transition-colors",
+              "drag-region flex items-center justify-between h-12 shrink-0",
+              isFullScreen ? "pl-3" : "pl-[88px]",
+              "pr-2",
             )}
           >
-            <Search size={11} className="absolute left-2.5 text-muted-foreground/60" />
-            <input
-              type="text"
-              placeholder="Search workspaces"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") setSearchQuery("");
-              }}
-              aria-label="Search workspaces"
-              className={cn(
-                "flex-1 bg-transparent border-0 outline-none",
-                "pl-7 pr-2 h-full text-[12px] text-foreground placeholder:text-muted-foreground/55",
-              )}
-            />
-            {searchQuery ? (
+            <span className="no-drag select-none inline-flex items-baseline font-sans font-semibold text-[14px] leading-none tracking-tight">
+              <span className="text-brand">dev</span>
+              <span className="text-foreground/75">space</span>
+            </span>
+            <HintTooltip
+              content="Hide sidebar"
+              shortcut={resolveDisplayString("toggle-sidebar")}
+              sideOffset={4}
+              align="end"
+            >
               <button
-                className="no-drag absolute right-1.5 inline-flex items-center justify-center size-4 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover"
-                aria-label="Clear search"
-                onClick={() => setSearchQuery("")}
+                type="button"
+                className={cn(
+                  "no-drag inline-flex items-center justify-center size-[26px] rounded-[7px]",
+                  "text-muted-foreground/80 hover:text-foreground",
+                  "border border-border/40 bg-white/[0.025] hover:bg-white/[0.06] hover:border-border/70",
+                  "transition-colors",
+                )}
+                onClick={toggleSidebar}
+                aria-label="Toggle sidebar"
               >
-                <X size={9} />
+                <ChevronLeft size={14} strokeWidth={2.2} />
               </button>
-            ) : (
-              <Kbd className="no-drag absolute right-1.5 h-4 min-w-4 px-1 text-[9px] font-mono opacity-70">
-                /
+            </HintTooltip>
+          </div>
+
+          {/* Quick launch */}
+          <div className="px-3 pt-1 pb-3">
+            <QuickLaunchGrid />
+          </div>
+
+          {/* Search — embedded inset feel, sits over the frost */}
+          <div className="px-3 pb-3">
+            <div
+              className={cn(
+                "no-drag group/search relative flex items-center h-8 rounded-lg gap-2 px-3",
+                "bg-black/25 border border-white/[0.05]",
+                "shadow-[inset_0_1px_0_rgb(255_255_255_/_0.025),inset_0_1px_2px_rgb(0_0_0_/_0.3)]",
+                "focus-within:border-brand-edge focus-within:ring-2 focus-within:ring-brand-soft",
+                "transition-colors",
+              )}
+            >
+              <Search size={12} className="text-muted-foreground/55 shrink-0" />
+              <input
+                type="text"
+                placeholder="Search workspaces"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setSearchQuery("");
+                }}
+                aria-label="Search workspaces"
+                className={cn(
+                  "flex-1 min-w-0 bg-transparent border-0 outline-none",
+                  "text-[12.5px] text-foreground placeholder:text-muted-foreground/45",
+                )}
+              />
+              {searchQuery ? (
+                <button
+                  className="no-drag inline-flex items-center justify-center size-4 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover shrink-0"
+                  aria-label="Clear search"
+                  onClick={() => setSearchQuery("")}
+                >
+                  <X size={9} />
+                </button>
+              ) : (
+                <Kbd className="no-drag h-[18px] min-w-[18px] px-1.5 text-[10px] font-mono opacity-70 shrink-0">
+                  /
+                </Kbd>
+              )}
+            </div>
+          </div>
+
+          {/* Pinned section */}
+          {pinnedSidebarNodes.length > 0 && (
+            <>
+              <SectionHeader label="Pinned" />
+              <div
+                ref={setPinnedRootRef}
+                className={cn(
+                  "relative px-2 pb-2 flex flex-col gap-1",
+                  isRelevantDrag && isPinnedRootOver && "drop-into-folder",
+                  pinnedRootInsertClass,
+                )}
+              >
+                <SidebarTreeLevel
+                  nodes={pinnedSidebarNodes}
+                  container="pinned"
+                  parentFolderId={null}
+                  depth={0}
+                />
+              </div>
+            </>
+          )}
+
+          {/* Workspaces section */}
+          <SectionHeader label="Workspaces" count={workspaces.length}>
+            <HintTooltip content="New folder" sideOffset={4} align="end">
+              <button
+                type="button"
+                onClick={() => addFolder("New Folder")}
+                className={cn(
+                  "no-drag inline-flex items-center justify-center size-[18px] rounded-[5px]",
+                  "text-muted-foreground/85 hover:text-foreground hover:bg-white/[0.06] transition-colors",
+                )}
+                aria-label="New folder"
+              >
+                <FolderPlus size={11} strokeWidth={1.8} />
+              </button>
+            </HintTooltip>
+            <HintTooltip
+              content="New workspace"
+              shortcut={resolveDisplayString("new-workspace")}
+              sideOffset={4}
+              align="end"
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  if (defaultPaneType === "picker") {
+                    useSettingsStore
+                      .getState()
+                      .openPanePicker({ action: "new-workspace", container: "main" });
+                  } else {
+                    addWorkspace(undefined, null, "main", defaultPaneType);
+                  }
+                }}
+                className={cn(
+                  "no-drag inline-flex items-center justify-center size-[18px] rounded-[5px]",
+                  "text-muted-foreground/85 hover:text-foreground hover:bg-white/[0.06] transition-colors",
+                )}
+                aria-label="New workspace"
+              >
+                <Plus size={12} strokeWidth={2.2} />
+              </button>
+            </HintTooltip>
+          </SectionHeader>
+
+          {/* Workspace tree */}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            <ScrollArea className="h-full">
+              <div
+                ref={setMainRootRef}
+                className={cn(
+                  "relative px-2 pb-3 flex flex-col gap-1",
+                  isRelevantDrag && isMainRootOver && "drop-into-folder",
+                  mainRootInsertClass,
+                )}
+              >
+                <SidebarTreeLevel
+                  nodes={sidebarTree}
+                  container="main"
+                  parentFolderId={null}
+                  depth={0}
+                />
+              </div>
+            </ScrollArea>
+          </div>
+
+          {/* Footer */}
+          <div className="shrink-0 border-t border-white/[0.05] px-2 py-2 flex flex-col gap-1">
+            <SidebarUpdateButton />
+            <button
+              type="button"
+              onClick={toggleSettings}
+              className={cn(
+                "no-drag group/settings flex items-center gap-2.5 h-8 px-2.5 rounded-[7px]",
+                "text-[12.5px] text-foreground/80 hover:text-foreground hover:bg-white/[0.04]",
+                "transition-colors",
+              )}
+              title={`Settings (${resolveDisplayString("toggle-settings")})`}
+            >
+              <Settings size={13} strokeWidth={1.6} className="text-muted-foreground/80" />
+              <span className="flex-1 text-left">Settings</span>
+              <Kbd className="h-[18px] min-w-[18px] px-1.5 text-[10px] font-mono opacity-60 group-hover/settings:opacity-100 transition-opacity">
+                {resolveDisplayString("toggle-settings")}
               </Kbd>
-            )}
+            </button>
           </div>
         </div>
 
-        {/* Pinned section */}
-        {pinnedSidebarNodes.length > 0 && (
-          <>
-            <SectionHeader label="Pinned" />
-            <div
-              ref={setPinnedRootRef}
-              className={cn(
-                "relative px-1 pb-1",
-                isRelevantDrag && isPinnedRootOver && "drop-into-folder",
-                pinnedRootInsertClass,
-              )}
-            >
-              <SidebarTreeLevel
-                nodes={pinnedSidebarNodes}
-                container="pinned"
-                parentFolderId={null}
-                depth={0}
-              />
-            </div>
-          </>
-        )}
-
-        {/* Workspaces section */}
-        <SectionHeader label="Workspaces" count={workspaces.length}>
-          <HintTooltip content="New folder" sideOffset={4} align="end">
-            <button
-              type="button"
-              onClick={() => addFolder("New Folder")}
-              className={cn(
-                "no-drag inline-flex items-center justify-center size-5 rounded-[5px]",
-                "text-muted-foreground/80 hover:text-foreground hover:bg-hover transition-colors",
-              )}
-              aria-label="New folder"
-            >
-              <FolderPlus size={11} strokeWidth={1.8} />
-            </button>
-          </HintTooltip>
-          <HintTooltip
-            content="New workspace"
-            shortcut={resolveDisplayString("new-workspace")}
-            sideOffset={4}
-            align="end"
-          >
-            <button
-              type="button"
-              onClick={() => {
-                if (defaultPaneType === "picker") {
-                  useSettingsStore
-                    .getState()
-                    .openPanePicker({ action: "new-workspace", container: "main" });
-                } else {
-                  addWorkspace(undefined, null, "main", defaultPaneType);
-                }
-              }}
-              className={cn(
-                "no-drag inline-flex items-center justify-center size-5 rounded-[5px]",
-                "text-muted-foreground/80 hover:text-foreground hover:bg-hover transition-colors",
-              )}
-              aria-label="New workspace"
-            >
-              <Plus size={12} strokeWidth={2.2} />
-            </button>
-          </HintTooltip>
-        </SectionHeader>
-
-        {/* Workspace tree */}
-        <div className="flex-1 min-h-0 overflow-hidden">
-          <ScrollArea className="h-full">
-            <div
-              ref={setMainRootRef}
-              className={cn(
-                "relative px-1 pb-2",
-                isRelevantDrag && isMainRootOver && "drop-into-folder",
-                mainRootInsertClass,
-              )}
-            >
-              <SidebarTreeLevel
-                nodes={sidebarTree}
-                container="main"
-                parentFolderId={null}
-                depth={0}
-              />
-            </div>
-          </ScrollArea>
-        </div>
-
-        {/* Footer */}
-        <div className="shrink-0 border-t border-hairline bg-rail/60 px-1.5 py-1.5 flex flex-col gap-1">
-          <SidebarUpdateButton />
-          <button
-            type="button"
-            onClick={toggleSettings}
-            className={cn(
-              "no-drag group/settings flex items-center gap-2 h-8 px-2 rounded-md",
-              "text-[12px] text-foreground/75 hover:text-foreground hover:bg-hover",
-              "transition-colors",
-            )}
-            title={`Settings (${resolveDisplayString("toggle-settings")})`}
-          >
-            <Settings size={13} strokeWidth={1.6} className="text-muted-foreground/80" />
-            <span className="flex-1 text-left">Settings</span>
-            <Kbd className="h-4 min-w-4 px-1 text-[9px] font-mono opacity-60 group-hover/settings:opacity-100 transition-opacity">
-              {resolveDisplayString("toggle-settings")}
-            </Kbd>
-          </button>
-        </div>
-
-        {/* Resize handle (right edge) */}
+        {/* Resize handle (right edge, above frost) */}
         {sidebarOpen && (
           <div
             className={cn(
-              "absolute top-0 right-0 bottom-0 w-1 cursor-col-resize",
+              "absolute top-0 right-0 bottom-0 w-1 cursor-col-resize z-[2]",
               "hover:bg-brand/40 transition-colors",
               isResizing && "bg-brand/60",
             )}
@@ -548,18 +552,18 @@ function SectionHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between px-3 pt-3 pb-1.5 select-none">
-      <div className="inline-flex items-baseline gap-1.5">
-        <span className="text-[9.5px] font-mono uppercase tracking-[0.14em] text-muted-foreground/65">
+    <div className="flex items-center justify-between px-4 pt-3 pb-2 select-none">
+      <div className="inline-flex items-baseline gap-2">
+        <span className="text-[9.5px] font-mono uppercase tracking-[0.18em] text-muted-foreground/55">
           {label}
         </span>
         {typeof count === "number" ? (
-          <span className="text-[9.5px] font-mono tabular-nums text-muted-foreground/45">
+          <span className="text-[9.5px] font-mono tabular-nums text-muted-foreground/40">
             {count}
           </span>
         ) : null}
       </div>
-      {children ? <div className="flex items-center gap-px">{children}</div> : null}
+      {children ? <div className="flex items-center gap-1">{children}</div> : null}
     </div>
   );
 }
