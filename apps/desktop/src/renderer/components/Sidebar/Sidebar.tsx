@@ -337,7 +337,7 @@ export default function Sidebar() {
                 alt=""
                 aria-hidden
                 draggable={false}
-                className="size-[20px] -ml-0.5 -my-1 -mr-px shrink-0 select-none"
+                className="h-[18px] w-auto -my-1 -mr-px shrink-0 select-none"
               />
               <span className="text-brand">ev</span>
               <span className="text-foreground/85">space</span>
@@ -353,7 +353,7 @@ export default function Sidebar() {
                 className={cn(
                   "no-drag inline-flex items-center justify-center size-[26px] rounded-[7px]",
                   "text-muted-foreground/80 hover:text-foreground",
-                  "border border-border/40 bg-white/[0.025] hover:bg-white/[0.06] hover:border-border/70",
+                  "border border-foreground/[0.06] bg-foreground/[0.03] hover:bg-foreground/[0.07] hover:border-foreground/[0.1]",
                   "transition-colors",
                 )}
                 onClick={toggleSidebar}
@@ -369,18 +369,18 @@ export default function Sidebar() {
             <QuickLaunchGrid />
           </div>
 
-          {/* Search — embedded inset feel, sits over the frost */}
+          {/* Search — recessed input, theme-adaptive */}
           <div className="px-3 pb-3">
             <div
               className={cn(
                 "no-drag group/search relative flex items-center h-8 rounded-lg gap-2 px-3",
-                "bg-black/25 border border-white/[0.05]",
-                "shadow-[inset_0_1px_0_rgb(255_255_255_/_0.025),inset_0_1px_2px_rgb(0_0_0_/_0.3)]",
+                "bg-foreground/[0.04] border border-foreground/[0.06]",
+                "shadow-[var(--bevel-recess)]",
                 "focus-within:border-brand-edge focus-within:ring-2 focus-within:ring-brand-soft",
                 "transition-colors",
               )}
             >
-              <Search size={12} className="text-muted-foreground/55 shrink-0" />
+              <Search size={12} className="text-muted-foreground shrink-0" />
               <input
                 type="text"
                 placeholder="Search workspaces"
@@ -392,7 +392,7 @@ export default function Sidebar() {
                 aria-label="Search workspaces"
                 className={cn(
                   "flex-1 min-w-0 bg-transparent border-0 outline-none",
-                  "text-[12.5px] text-foreground placeholder:text-muted-foreground/45",
+                  "text-[12.5px] text-foreground placeholder:text-muted-foreground/65",
                 )}
               />
               {searchQuery ? (
@@ -441,7 +441,7 @@ export default function Sidebar() {
                 onClick={() => addFolder("New Folder")}
                 className={cn(
                   "no-drag inline-flex items-center justify-center size-[18px] rounded-[5px]",
-                  "text-muted-foreground/85 hover:text-foreground hover:bg-white/[0.06] transition-colors",
+                  "text-muted-foreground/85 hover:text-foreground hover:bg-foreground/[0.06] transition-colors",
                 )}
                 aria-label="New folder"
               >
@@ -467,7 +467,7 @@ export default function Sidebar() {
                 }}
                 className={cn(
                   "no-drag inline-flex items-center justify-center size-[18px] rounded-[5px]",
-                  "text-muted-foreground/85 hover:text-foreground hover:bg-white/[0.06] transition-colors",
+                  "text-muted-foreground/85 hover:text-foreground hover:bg-foreground/[0.06] transition-colors",
                 )}
                 aria-label="New workspace"
               >
@@ -498,14 +498,14 @@ export default function Sidebar() {
           </div>
 
           {/* Footer */}
-          <div className="shrink-0 border-t border-white/[0.05] px-2 py-2 flex flex-col gap-1">
+          <div className="shrink-0 border-t border-foreground/[0.06] px-2 py-2 flex flex-col gap-1">
             <SidebarUpdateButton />
             <button
               type="button"
               onClick={toggleSettings}
               className={cn(
                 "no-drag group/settings flex items-center gap-2.5 h-8 px-2.5 rounded-[7px]",
-                "text-[12.5px] text-foreground/80 hover:text-foreground hover:bg-white/[0.04]",
+                "text-[12.5px] text-foreground/80 hover:text-foreground hover:bg-foreground/[0.05]",
                 "transition-colors",
               )}
               title={`Settings (${resolveDisplayString("toggle-settings")})`}

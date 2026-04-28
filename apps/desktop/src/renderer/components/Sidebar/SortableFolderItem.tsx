@@ -89,7 +89,7 @@ export function SortableFolderItem({
         {...listeners}
         className={cn(
           "no-drag relative group/folder flex items-center gap-2 h-8 px-2.5 rounded-[7px] cursor-default select-none",
-          "text-[12.5px] text-foreground/80 hover:text-foreground hover:bg-white/[0.03]",
+          "text-[12.5px] text-foreground/80 hover:text-foreground hover:bg-foreground/[0.04]",
           "transition-colors duration-100",
           showDragOver && "drop-into-folder",
           insertClass,
@@ -136,7 +136,7 @@ export function SortableFolderItem({
             className={cn(
               "shrink-0 inline-flex items-center justify-center size-[18px] rounded-[5px]",
               "text-muted-foreground/65 opacity-0 group-hover/folder:opacity-100",
-              "hover:text-foreground hover:bg-white/[0.06] transition-[opacity,color,background-color]",
+              "hover:text-foreground hover:bg-foreground/[0.06] transition-[opacity,color,background-color]",
             )}
           >
             <Plus size={11} strokeWidth={2.2} />

@@ -52,8 +52,8 @@ export function QuickLaunchGrid() {
     <div
       className={cn(
         "no-drag flex gap-1 p-1 rounded-[10px]",
-        "bg-black/25 border border-white/[0.05]",
-        "shadow-[inset_0_1px_0_rgb(255_255_255_/_0.025)]",
+        "bg-foreground/[0.04] border border-foreground/[0.06]",
+        "shadow-[var(--bevel-top)]",
         // Compact: center icons inside the pill at their intrinsic
         // width. Expanded: tiles distribute evenly across the pill.
         "justify-center @min-[300px]/sidebar:justify-stretch @min-[300px]/sidebar:gap-0.5",
@@ -82,8 +82,8 @@ export function QuickLaunchGrid() {
               // height for the label below the icon.
               "@min-[300px]/sidebar:size-auto @min-[300px]/sidebar:flex-1 @min-[300px]/sidebar:h-11",
               isDefault
-                ? "text-brand bg-brand-soft shadow-[inset_0_1px_0_oklch(0.86_0.17_92_/_0.18)]"
-                : "text-muted-foreground hover:bg-white/[0.05] hover:text-foreground",
+                ? "text-brand bg-brand-soft shadow-[inset_0_1px_0_oklch(0.7084_0.1523_71.24_/_0.22)]"
+                : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
             )}
           >
             <Icon

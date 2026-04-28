@@ -86,8 +86,8 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.01 95);
 
-  /* Brand yellow: deeper in light mode for legibility on white */
-  --primary: oklch(0.78 0.16 90);
+  /* Brand: deep amber #DB8E00 */
+  --primary: oklch(0.7084 0.1523 71.24);
   --primary-foreground: oklch(0.18 0.01 95);
 
   --secondary: oklch(0.96 0.005 95);
@@ -101,16 +101,16 @@
 
   --border: oklch(0.18 0.01 95 / 9%);
   --input: oklch(0.18 0.01 95 / 14%);
-  --ring: oklch(0.78 0.16 90);
+  --ring: oklch(0.7084 0.1523 71.24);
 
   /* Devspace extensions */
   --rail: oklch(0.97 0.005 95);
   --surface: oklch(0.97 0.005 95);
   --surface-2: oklch(0.93 0.006 95);
   --hover: oklch(0.18 0.01 95 / 6%);
-  --brand: oklch(0.78 0.16 90);
-  --brand-soft: oklch(0.78 0.16 90 / 14%);
-  --brand-edge: oklch(0.78 0.16 90 / 42%);
+  --brand: oklch(0.7084 0.1523 71.24);
+  --brand-soft: oklch(0.7084 0.1523 71.24 / 14%);
+  --brand-edge: oklch(0.7084 0.1523 71.24 / 42%);
   --hairline: oklch(0.18 0.01 95 / 5%);
   --status-success: oklch(0.65 0.17 145);
   --status-warning: oklch(0.78 0.15 75);
@@ -131,6 +131,15 @@
   --focus-border: var(--brand);
   --sash-hover-size: 3px;
   --separator-border: oklch(0.18 0.01 95 / 7%);
+
+  /* Bevel insets — adaptive theme-aware top/bottom edge shadows used
+     by tactile chrome (QL tiles, active rows, search bar). On light
+     mode the top edge is slightly darker (a recess) and the bottom is
+     a soft drop. On dark, the top is a subtle lift and the bottom is
+     a darker line. */
+  --bevel-top: inset 0 1px 0 oklch(0 0 0 / 4%);
+  --bevel-bottom: inset 0 -1px 0 oklch(0 0 0 / 5%);
+  --bevel-recess: inset 0 1px 2px oklch(0 0 0 / 6%);
 }
 
 /* ─── Dark theme (the primary surface) ───────────────────────────────
@@ -147,7 +156,7 @@
   --popover: oklch(0.21 0.007 95);
   --popover-foreground: oklch(0.95 0.005 95);
 
-  --primary: oklch(0.86 0.17 92);
+  --primary: oklch(0.7084 0.1523 71.24);
   --primary-foreground: oklch(0.16 0.01 95);
 
   --secondary: oklch(0.24 0.006 95);
@@ -161,16 +170,16 @@
 
   --border: oklch(1 0 0 / 9%);
   --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.86 0.17 92);
+  --ring: oklch(0.7084 0.1523 71.24);
 
   /* Devspace extensions */
   --rail: oklch(0.13 0.005 95);
   --surface: oklch(0.21 0.006 95);
   --surface-2: oklch(0.27 0.006 95); /* one step above surface for active rows */
   --hover: oklch(1 0 0 / 6%);
-  --brand: oklch(0.86 0.17 92);
-  --brand-soft: oklch(0.86 0.17 92 / 14%);
-  --brand-edge: oklch(0.86 0.17 92 / 38%);
+  --brand: oklch(0.7084 0.1523 71.24);
+  --brand-soft: oklch(0.7084 0.1523 71.24 / 14%);
+  --brand-edge: oklch(0.7084 0.1523 71.24 / 38%);
   --hairline: oklch(1 0 0 / 5%);
   --status-success: oklch(0.78 0.18 145);
   --status-warning: oklch(0.83 0.16 80);
@@ -189,6 +198,11 @@
   --focus-border: var(--brand);
   --sash-hover-size: 3px;
   --separator-border: oklch(1 0 0 / 6%);
+
+  /* Dark-mode bevels: top edge lifts, bottom edge sinks. */
+  --bevel-top: inset 0 1px 0 oklch(1 0 0 / 6%);
+  --bevel-bottom: inset 0 -1px 0 oklch(0 0 0 / 18%);
+  --bevel-recess: inset 0 1px 2px oklch(0 0 0 / 30%);
 }
 
 /* ─── Base layer ───────────────────────────────────────────────────── */

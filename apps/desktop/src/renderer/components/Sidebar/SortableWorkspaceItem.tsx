@@ -153,13 +153,14 @@ export function SortableWorkspaceItem({
         "no-drag relative group/ws flex items-center gap-2.5 h-9 px-2.5 rounded-[8px] cursor-default select-none",
         "text-[12.5px] text-foreground/80",
         "transition-[background-color,color,box-shadow] duration-100",
-        "hover:bg-white/[0.03] hover:text-foreground",
-        // Active state: solid neutral wash + a thin top inset highlight
-        // so the row reads as gently raised. No gradient, no glow.
+        "hover:bg-foreground/[0.04] hover:text-foreground",
+        // Active state: adaptive neutral wash + theme-aware top inset
+        // bevel so the row reads as gently raised in dark, or quietly
+        // recessed in light. No gradient, no glow.
         isActive &&
           cn(
-            "text-foreground bg-white/[0.05] hover:bg-white/[0.05]",
-            "shadow-[inset_0_1px_0_rgb(255_255_255_/_0.06)]",
+            "text-foreground bg-foreground/[0.06] hover:bg-foreground/[0.06]",
+            "shadow-[var(--bevel-top)]",
           ),
         isTabDropTarget && "drop-into-folder",
         insertClass,
@@ -174,10 +175,10 @@ export function SortableWorkspaceItem({
           isActive
             ? cn(
                 "text-brand bg-brand-soft border-brand-edge",
-                "shadow-[inset_0_1px_0_oklch(0.86_0.17_92_/_0.22)]",
+                "shadow-[inset_0_1px_0_oklch(0.7084_0.1523_71.24_/_0.22)]",
               )
             : cn(
-                "border-white/[0.05] bg-white/[0.04]",
+                "border-foreground/[0.06] bg-foreground/[0.04]",
                 "text-muted-foreground/85 group-hover/ws:text-foreground",
               ),
         )}
@@ -220,7 +221,7 @@ export function SortableWorkspaceItem({
             "animate-hint shrink-0 h-[18px] min-w-[18px] px-1.5 text-[10px] font-mono border",
             isActive
               ? "text-brand bg-brand-soft border-brand-edge/60"
-              : "text-muted-foreground/65 bg-black/30 border-white/[0.04]",
+              : "text-muted-foreground/75 bg-foreground/[0.05] border-foreground/[0.06]",
           )}
         >
           {shortcutHint}
