@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { Plus, ChevronLeft, FolderPlus, Search, X, Settings } from "lucide-react";
 
+import appIconUrl from "@/assets/app-icon.png";
+
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { useSettingsStore } from "@/store/settings-store";
 import { resolveDisplayString } from "../../../shared/shortcuts";
@@ -329,9 +331,16 @@ export default function Sidebar() {
               "pr-2",
             )}
           >
-            <span className="no-drag select-none inline-flex items-baseline font-sans font-semibold text-[14px] leading-none tracking-tight">
-              <span className="text-brand">dev</span>
-              <span className="text-foreground/75">space</span>
+            <span className="no-drag select-none inline-flex items-center font-sans font-semibold text-[14.5px] leading-none tracking-tight">
+              <img
+                src={appIconUrl}
+                alt=""
+                aria-hidden
+                draggable={false}
+                className="size-[20px] -ml-0.5 -my-1 -mr-px shrink-0 select-none"
+              />
+              <span className="text-brand">ev</span>
+              <span className="text-foreground/85">space</span>
             </span>
             <HintTooltip
               content="Hide sidebar"
