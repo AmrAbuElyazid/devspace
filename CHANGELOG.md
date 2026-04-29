@@ -6,6 +6,16 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.1.3 - 2026-04-29
+
+### Summary
+
+- Provide the second small public-feed update test release for validating update discovery and install from `v0.1.2`.
+
+### Highlights
+
+- No user-facing changes beyond the version bump; this release exists to validate the public updater feed path.
+
 ## v0.1.2 - 2026-04-29
 
 ### Summary
