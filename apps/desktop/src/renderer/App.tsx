@@ -113,7 +113,7 @@ export default function App() {
           onDragCancel={dnd.onDragCancel}
         >
           <div
-            className="flex h-screen w-screen overflow-hidden bg-background text-foreground"
+            className="app-shell flex h-screen w-screen overflow-hidden bg-background text-foreground"
             data-dragging={activeDrag ? "true" : undefined}
           >
             <Sidebar />
