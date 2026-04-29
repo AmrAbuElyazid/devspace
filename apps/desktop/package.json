@@ -1,6 +1,6 @@
 {
   "name": "@devspace/desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Devspace desktop app with embedded terminal, browser, and editor panes",
   "homepage": "https://github.com/AmrAbuElyazid/devspace",

@@ -6,6 +6,17 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.1.2 - 2026-04-29
+
+### Summary
+
+- Prepare a small public-feed update test release after hardening the repo for public source access.
+
+### Highlights
+
+- Hardened Electron IPC trust boundaries, privileged IPC input validation, and `ghostty-electron` native bridge safety.
+- Cleaned public-readiness docs, roadmap, contributor scaffolding, and intentional test log noise.
+
 ## v0.1.1 - 2026-04-26
 
 ### Summary
