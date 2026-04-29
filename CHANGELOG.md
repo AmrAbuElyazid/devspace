@@ -6,6 +6,17 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.1.4 - 2026-04-29
+
+### Summary
+
+- Recover the public-feed test release after the `v0.1.2` packaged smoke run exposed a missing app-shell readiness marker.
+
+### Highlights
+
+- Restored the `.app-shell` renderer marker used by packaged Playwright smoke tests.
+- Keeps the release small so it can be used as the first successful public-feed update-test build.
+
 ## v0.1.3 - 2026-04-29
 
 ### Summary
