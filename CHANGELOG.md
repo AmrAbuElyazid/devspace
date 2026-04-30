@@ -6,6 +6,16 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.1.5 - 2026-04-30
+
+### Summary
+
+- Publish a follow-up patch release for validating the public auto-update flow from `v0.1.4`.
+
+### Highlights
+
+- Keeps the app behavior unchanged while advancing the version for update-feed testing.
+
 ## v0.1.4 - 2026-04-29
 
 ### Summary
