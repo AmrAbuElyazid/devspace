@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import {
+  findEditorWebZoomShortcutBinding,
   findShortcutBinding,
   resolveNativeModifier,
   shouldIgnoreMenuShortcuts,
@@ -79,6 +80,34 @@ test("findShortcutBinding keeps leader but yields other app shortcuts in editor 
   expect(findShortcutBinding([leader], "editor", leader.shortcut)).toEqual(leader);
   expect(findShortcutBinding([closeWindow], "editor", closeWindow.shortcut)).toBeUndefined();
   expect(findShortcutBinding([newTab], "editor", newTab.shortcut)).toBeUndefined();
+});
+
+test("findEditorWebZoomShortcutBinding allows app zoom shortcuts in editor panes", () => {
+  const zoomOut = {
+    action: "terminal-zoom-out" as const,
+    channel: "app:zoom-out" as const,
+    shortcut: {
+      key: "-",
+      command: true,
+      shift: false,
+      option: false,
+      control: false,
+    },
+  };
+  const newTab = {
+    action: "new-tab" as const,
+    channel: "app:new-tab" as const,
+    shortcut: {
+      key: "t",
+      command: true,
+      shift: false,
+      option: false,
+      control: false,
+    },
+  };
+
+  expect(findEditorWebZoomShortcutBinding([zoomOut, newTab], zoomOut.shortcut)).toEqual(zoomOut);
+  expect(findEditorWebZoomShortcutBinding([zoomOut, newTab], newTab.shortcut)).toBeUndefined();
 });
 
 test("shouldIgnoreMenuShortcuts always yields menu shortcuts to editor panes", () => {

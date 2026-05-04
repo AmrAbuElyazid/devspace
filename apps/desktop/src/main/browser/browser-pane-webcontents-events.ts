@@ -1,5 +1,6 @@
 import type { BrowserContextMenuTarget } from "../../shared/browser";
 import {
+  findEditorWebZoomShortcutBinding,
   findShortcutBinding,
   resolveNativeModifier,
   shouldIgnoreMenuShortcuts,
@@ -216,6 +217,20 @@ export function registerBrowserPaneWebContentsListeners({
 
       const binding = findShortcutBinding(getAppShortcutBindings?.(), pane.kind, shortcut);
       if (!binding) {
+        const editorZoomBinding =
+          pane.kind === "editor"
+            ? findEditorWebZoomShortcutBinding(getAppShortcutBindings?.(), shortcut)
+            : undefined;
+        if (editorZoomBinding) {
+          const preventDefault = (event as { preventDefault?: () => void }).preventDefault;
+          if (typeof preventDefault === "function") {
+            preventDefault.call(event);
+          }
+
+          sendToRenderer(editorZoomBinding.channel, ...(editorZoomBinding.args ?? []));
+          return;
+        }
+
         if (pane.kind === "editor" && handleEditorNativeEditShortcut(webContents, shortcut)) {
           const preventDefault = (event as { preventDefault?: () => void }).preventDefault;
           if (typeof preventDefault === "function") {

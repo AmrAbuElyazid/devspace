@@ -6,6 +6,16 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.1.6 - 2026-05-05
+
+### Summary
+
+- Ship a focused patch release for VS Code editor pane zoom shortcuts.
+
+### Highlights
+
+- Fixed embedded VS Code panes so `Cmd+-`, `Cmd+=`, and `Cmd+0` route through Devspace webview zoom handling while preserving VS Code ownership of other editor shortcuts.
+
 ## v0.1.5 - 2026-04-30
 
 ### Summary

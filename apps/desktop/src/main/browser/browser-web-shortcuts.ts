@@ -74,6 +74,12 @@ const NON_EDITOR_GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS = new Set<ShortcutAction>([
 
 const EDITOR_GLOBALLY_OWNED_WEB_SHORTCUT_ACTIONS = new Set<ShortcutAction>(["leader"]);
 
+const EDITOR_WEB_ZOOM_SHORTCUT_ACTIONS = new Set<ShortcutAction>([
+  "terminal-zoom-in",
+  "terminal-zoom-out",
+  "terminal-zoom-reset",
+]);
+
 const BROWSER_ONLY_SHORTCUT_ACTIONS = new Set<ShortcutAction>([
   "browser-focus-url",
   "browser-reload",
@@ -177,6 +183,17 @@ export function findShortcutBinding(
 
     return kind === "browser" && BROWSER_ONLY_SHORTCUT_ACTIONS.has(binding.action);
   });
+}
+
+export function findEditorWebZoomShortcutBinding(
+  bindings: BrowserShortcutBinding[] | undefined,
+  shortcut: StoredShortcut,
+): BrowserShortcutBinding | undefined {
+  return bindings?.find(
+    (binding) =>
+      EDITOR_WEB_ZOOM_SHORTCUT_ACTIONS.has(binding.action) &&
+      shortcutsEqual(binding.shortcut, shortcut),
+  );
 }
 
 export function shouldIgnoreMenuShortcuts(
