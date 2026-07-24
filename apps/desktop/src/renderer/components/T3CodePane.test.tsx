@@ -47,14 +47,14 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  markT3CodeDestroyed("pane-1");
-
   if (root) {
     await act(async () => {
       root?.unmount();
       root = null;
     });
   }
+
+  markT3CodeDestroyed("pane-1");
 
   container.remove();
 });
@@ -82,4 +82,37 @@ test("focuses the native t3code view when an already-visible pane becomes focuse
 
   expect(t3CodePaneMocks.browserSetFocus).toHaveBeenCalledTimes(1);
   expect(t3CodePaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
+});
+
+test("surfaces a pending T3 start failure after the pane remounts", async () => {
+  let resolveStart: ((value: { error: string }) => void) | null = null;
+  t3CodePaneMocks.start.mockReturnValue(
+    new Promise((resolve) => {
+      resolveStart = resolve;
+    }),
+  );
+
+  await act(async () => {
+    root?.render(<T3CodePane paneId="pane-1" isFocused={true} />);
+  });
+  await flushAsyncEffects();
+  expect(t3CodePaneMocks.start).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    root?.unmount();
+    root = null;
+  });
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<T3CodePane paneId="pane-1" isFocused={true} />);
+  });
+
+  expect(t3CodePaneMocks.start).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    resolveStart?.({ error: "t3 failed" });
+    await Promise.resolve();
+  });
+
+  expect(container.textContent).toContain("Failed to start");
+  expect(container.textContent).toContain("t3 failed");
 });

@@ -433,8 +433,8 @@ export class VscodeServerManager {
     if (this.folders.size === 0) {
       console.log(`[vscode-server] no remaining consumers, stopping server`);
       this.startLock = this.startLock.then(
-        () => this.stopManagedServer(),
-        () => this.stopManagedServer(),
+        () => (this.folders.size === 0 ? this.stopManagedServer() : undefined),
+        () => (this.folders.size === 0 ? this.stopManagedServer() : undefined),
       );
     }
   }

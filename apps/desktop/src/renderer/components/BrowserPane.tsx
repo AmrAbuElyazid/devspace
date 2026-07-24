@@ -73,6 +73,7 @@ export default function BrowserPane({
     handleAddressBarSubmit,
     handleCloseFindBar,
     handleDismissPermissionPrompt,
+    handleFailureRetry,
     handleKeyDown,
     handlePermissionDecision,
     handleReloadOrStop,
@@ -194,10 +195,7 @@ export default function BrowserPane({
       {/* Native WebContentsView slot */}
       <div className="relative flex-1 min-h-0">
         {failure && (
-          <BrowserPaneStatusSurface
-            failure={failure}
-            onPrimaryAction={() => void window.api.browser.reload(paneId)}
-          />
+          <BrowserPaneStatusSurface failure={failure} onPrimaryAction={handleFailureRetry} />
         )}
         <div
           ref={placeholderRef}

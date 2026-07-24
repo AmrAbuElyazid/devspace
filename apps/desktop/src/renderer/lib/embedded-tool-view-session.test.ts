@@ -1,11 +1,15 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import {
+  getEmbeddedToolViewSnapshot,
   hasCreatedEmbeddedToolView,
   markEmbeddedToolViewCreated,
+  markEmbeddedToolViewDestroyed,
+  markEmbeddedToolViewFailed,
   markEmbeddedToolViewInactive,
   markEmbeddedToolViewReady,
   MAX_INACTIVE_EMBEDDED_TOOL_VIEWS,
   resetTrackedEmbeddedToolViewsForTests,
+  subscribeEmbeddedToolView,
 } from "./embedded-tool-view-session";
 
 beforeEach(() => {
@@ -36,4 +40,25 @@ test("does not evict a view while its asynchronous start is pending", () => {
 
   expect(evict).not.toHaveBeenCalled();
   expect(hasCreatedEmbeddedToolView("pending")).toBe(true);
+});
+
+test("shares pending failures with remounted consumers and ignores stale completions", () => {
+  const listener = vi.fn();
+  subscribeEmbeddedToolView("editor", listener);
+  const firstGeneration = markEmbeddedToolViewCreated("editor", vi.fn());
+
+  expect(markEmbeddedToolViewFailed("editor", firstGeneration, "start failed")).toBe(true);
+  expect(getEmbeddedToolViewSnapshot("editor")).toMatchObject({
+    phase: "error",
+    error: "start failed",
+  });
+
+  markEmbeddedToolViewDestroyed("editor");
+  const secondGeneration = markEmbeddedToolViewCreated("editor", vi.fn());
+  expect(markEmbeddedToolViewFailed("editor", firstGeneration, "stale")).toBe(false);
+  expect(getEmbeddedToolViewSnapshot("editor")).toMatchObject({
+    phase: "pending",
+    generation: secondGeneration,
+  });
+  expect(listener).toHaveBeenCalled();
 });

@@ -1,9 +1,9 @@
 import {
   useEffect,
-  useRef,
   useCallback,
-  useState,
   useLayoutEffect,
+  useRef,
+  useSyncExternalStore,
   type ReactElement,
 } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
@@ -12,12 +12,15 @@ import { useNativeView } from "@/hooks/useNativeView";
 import { useTerminalStore } from "@/store/terminal-store";
 import { focusTerminalNativePane } from "@/lib/native-pane-focus";
 import {
+  getTerminalSurfaceSnapshot,
   hasCreatedTerminalSurface,
   markTerminalSurfaceActive,
   markTerminalSurfaceCreated,
   markTerminalSurfaceDestroyed,
+  markTerminalSurfaceFailed,
   markTerminalSurfaceInactive,
   markTerminalSurfaceReady,
+  subscribeTerminalSurface,
 } from "@/lib/terminal-surface-session";
 import type { TerminalConfig } from "@/types/workspace";
 
@@ -39,21 +42,25 @@ export default function TerminalPane({
   isActive = true,
 }: TerminalPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
-  const createAttemptRef = useRef(0);
-  const unmountedRef = useRef(false);
   const wasVisibleRef = useRef(false);
   const wasFocusedRef = useRef(false);
   const isFindBarOpen = useTerminalStore((s) => s.findBarOpenByPaneId[paneId] ?? false);
   const findBarFocusToken = useTerminalStore((s) => s.findBarFocusTokenByPaneId[paneId] ?? 0);
   const searchState = useTerminalStore((s) => s.searchStateByPaneId[paneId]);
   const closeFindBar = useTerminalStore((s) => s.closeFindBar);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const [surfaceReady, setSurfaceReady] = useState(() => hasCreatedTerminalSurface(paneId));
+  const subscribeToSurface = useCallback(
+    (listener: () => void) => subscribeTerminalSurface(paneId, listener),
+    [paneId],
+  );
+  const readSurface = useCallback(() => getTerminalSurfaceSnapshot(paneId), [paneId]);
+  const surface = useSyncExternalStore(subscribeToSurface, readSurface, readSurface);
+  const surfaceReady = surface.phase === "ready";
+  const createError =
+    surface.phase === "error" || surface.phase === "closed" ? surface.error : null;
+  const sessionClosed = surface.phase === "closed";
 
   useEffect(() => {
-    unmountedRef.current = false;
     return () => {
-      unmountedRef.current = true;
       markTerminalSurfaceInactive(paneId, (surfaceId) => {
         void window.api.terminal.destroy(surfaceId);
       });
@@ -68,30 +75,15 @@ export default function TerminalPane({
       return;
     }
 
-    if (surfaceReady && !hasCreatedTerminalSurface(paneId)) {
-      setSurfaceReady(false);
-      return;
-    }
-
     markTerminalSurfaceActive(paneId);
-  }, [isActive, paneId, surfaceReady]);
+  }, [isActive, paneId, surface.phase]);
 
   // Queue native creation during layout so the create IPC is in flight before
   // useNativeView's registration effect can reconcile visibility.
   useLayoutEffect(() => {
-    if (surfaceReady) {
-      return;
-    }
+    if (!isActive || surface.phase !== "missing" || hasCreatedTerminalSurface(paneId)) return;
 
-    if (hasCreatedTerminalSurface(paneId)) {
-      markTerminalSurfaceActive(paneId);
-      setSurfaceReady(true);
-      return;
-    }
-
-    const attemptId = ++createAttemptRef.current;
-    markTerminalSurfaceCreated(paneId, config.backend ?? "direct");
-    setSurfaceReady(true);
+    const generation = markTerminalSurfaceCreated(paneId, config.backend ?? "direct");
 
     const createOptions =
       config.backend === "managed-tmux"
@@ -111,27 +103,26 @@ export default function TerminalPane({
       .create(paneId, createOptions)
       .then((result) => {
         if ("error" in result) {
-          markTerminalSurfaceDestroyed(paneId);
-          if (unmountedRef.current || createAttemptRef.current !== attemptId) return;
-          setCreateError(result.error);
+          markTerminalSurfaceFailed(paneId, generation, result.error);
           return;
         }
 
-        markTerminalSurfaceReady(paneId, (surfaceId) => {
-          void window.api.terminal.destroy(surfaceId);
-        });
-        if (unmountedRef.current || createAttemptRef.current !== attemptId) return;
-        setCreateError(null);
+        markTerminalSurfaceReady(
+          paneId,
+          (surfaceId) => {
+            void window.api.terminal.destroy(surfaceId);
+          },
+          generation,
+        );
       })
       .catch((error: unknown) => {
-        if (unmountedRef.current || createAttemptRef.current !== attemptId) {
-          return;
-        }
-
-        markTerminalSurfaceDestroyed(paneId);
-        setCreateError(error instanceof Error ? error.message : String(error));
+        markTerminalSurfaceFailed(
+          paneId,
+          generation,
+          error instanceof Error ? error.message : String(error),
+        );
       });
-  }, [config, paneId, surfaceReady]);
+  }, [config, isActive, paneId, surface.phase]);
 
   // Centralized native view management. Registration is gated on
   // `surfaceReady` so that `reconcile()` → `setVisibleSurfaces` never fires
@@ -169,8 +160,6 @@ export default function TerminalPane({
 
   const handleRetryCreate = useCallback(() => {
     markTerminalSurfaceDestroyed(paneId);
-    setSurfaceReady(false);
-    setCreateError(null);
   }, [paneId]);
 
   const handleCloseFindBar = useCallback(() => {
@@ -188,17 +177,17 @@ export default function TerminalPane({
         <div className="flex flex-col items-start gap-3 max-w-md p-5 rounded-lg bg-card border border-border shadow-[var(--overlay-shadow)]">
           <div className="inline-flex items-center gap-1.5 text-[9.5px] font-mono uppercase tracking-[0.12em] text-destructive">
             <AlertTriangle size={11} />
-            Terminal error
+            {sessionClosed ? "Terminal closed" : "Terminal error"}
           </div>
           <div className="text-[14px] font-medium text-foreground leading-snug">
-            Terminal failed to start
+            {sessionClosed ? "Terminal session ended" : "Terminal failed to start"}
           </div>
           <p className="text-[12px] text-muted-foreground leading-relaxed self-stretch">
             {createError}
           </p>
           <Button size="sm" onClick={handleRetryCreate} className="mt-1">
             <RefreshCw size={12} data-icon="inline-start" />
-            Retry
+            {sessionClosed ? "Restart" : "Retry"}
           </Button>
         </div>
       </div>

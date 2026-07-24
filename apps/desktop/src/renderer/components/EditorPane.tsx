@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, useCallback, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactElement,
+} from "react";
 import { AlertCircle } from "lucide-react";
 
 import { focusBrowserNativePane, hasEditableRendererFocus } from "@/lib/native-pane-focus";
@@ -7,12 +14,14 @@ import { useSettingsStore } from "@/store/settings-store";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import type { EditorConfig } from "@/types/workspace";
 import {
-  hasCreatedEmbeddedToolView,
+  getEmbeddedToolViewSnapshot,
   markEmbeddedToolViewActive,
   markEmbeddedToolViewCreated,
   markEmbeddedToolViewDestroyed,
+  markEmbeddedToolViewFailed,
   markEmbeddedToolViewInactive,
   markEmbeddedToolViewReady,
+  subscribeEmbeddedToolView,
 } from "@/lib/embedded-tool-view-session";
 
 import { Button } from "@/components/ui/button";
@@ -50,11 +59,20 @@ export default function EditorPane({
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig);
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
   const vscodeCliPath = useSettingsStore((s) => s.vscodeCliPath);
+  const subscribeToView = useCallback(
+    (listener: () => void) => subscribeEmbeddedToolView(paneId, listener),
+    [paneId],
+  );
+  const readViewSession = useCallback(() => getEmbeddedToolViewSnapshot(paneId), [paneId]);
+  const viewSession = useSyncExternalStore(subscribeToView, readViewSession, readViewSession);
 
   // Determine initial state based on config
   const [state, setState] = useState<EditorState>(() => {
-    if (hasCreatedEmbeddedToolView(paneId)) {
+    if (viewSession.phase === "ready") {
       return { status: "running", folderPath: config.folderPath };
+    }
+    if (viewSession.phase === "error") {
+      return { status: "error", message: viewSession.error ?? "VS Code failed to start" };
     }
     // Skip availability check if we already have a folder (e.g. opened via CLI)
     if (config.folderPath) {
@@ -70,7 +88,7 @@ export default function EditorPane({
     id: paneId,
     type: "browser",
     ref: placeholderRef,
-    enabled: state.status === "running",
+    enabled: state.status === "running" && viewSession.phase === "ready",
   });
 
   // Check availability on mount, then immediately transition to starting
@@ -96,6 +114,20 @@ export default function EditorPane({
   const stateFolderPath = "folderPath" in state ? state.folderPath : undefined;
 
   useEffect(() => {
+    if (viewSession.phase === "ready" && stateStatus !== "running") {
+      setState({ status: "running", folderPath: stateFolderPath ?? config.folderPath });
+      return;
+    }
+    if (viewSession.phase === "error" && stateStatus !== "error") {
+      setState({ status: "error", message: viewSession.error ?? "VS Code failed to start" });
+      return;
+    }
+    if (viewSession.phase === "missing" && stateStatus === "running") {
+      setState({ status: "starting", folderPath: stateFolderPath ?? config.folderPath });
+    }
+  }, [config.folderPath, stateFolderPath, stateStatus, viewSession.error, viewSession.phase]);
+
+  useEffect(() => {
     return () => {
       markEmbeddedToolViewInactive(paneId);
     };
@@ -107,13 +139,8 @@ export default function EditorPane({
       return;
     }
 
-    if (stateStatus === "running" && !hasCreatedEmbeddedToolView(paneId)) {
-      setState({ status: "starting", folderPath: stateFolderPath });
-      return;
-    }
-
     markEmbeddedToolViewActive(paneId);
-  }, [isActive, paneId, stateFolderPath, stateStatus]);
+  }, [isActive, paneId, viewSession.phase]);
 
   useEffect(() => {
     if (previousCliPathRef.current === null) {
@@ -127,12 +154,13 @@ export default function EditorPane({
     }
 
     previousCliPathRef.current = vscodeCliPath;
+    markEmbeddedToolViewDestroyed(paneId);
     setState(
       config.folderPath
         ? { status: "starting", folderPath: config.folderPath }
         : { status: "checking" },
     );
-  }, [config.folderPath, state.status, vscodeCliPath]);
+  }, [config.folderPath, paneId, state.status, vscodeCliPath]);
 
   useEffect(() => {
     const wasVisible = wasVisibleRef.current;
@@ -154,13 +182,18 @@ export default function EditorPane({
   // Start the VS Code server
   useEffect(() => {
     if (stateStatus !== "starting") return;
-    if (hasCreatedEmbeddedToolView(paneId)) {
+    if (viewSession.phase === "ready") {
       setState({ status: "running", folderPath: stateFolderPath });
+      return;
+    }
+    if (viewSession.phase === "pending") return;
+    if (viewSession.phase === "error") {
+      setState({ status: "error", message: viewSession.error ?? "VS Code failed to start" });
       return;
     }
 
     let cancelled = false;
-    markEmbeddedToolViewCreated(paneId, () => {
+    const generation = markEmbeddedToolViewCreated(paneId, () => {
       void window.api.browser.destroy(paneId);
     });
 
@@ -168,12 +201,12 @@ export default function EditorPane({
       const result = await window.api.editor.start(paneId, stateFolderPath, vscodeCliPath);
 
       if ("error" in result) {
-        markEmbeddedToolViewDestroyed(paneId);
+        markEmbeddedToolViewFailed(paneId, generation, result.error);
         if (!cancelled) setState({ status: "error", message: result.error });
         return;
       }
 
-      markEmbeddedToolViewReady(paneId);
+      markEmbeddedToolViewReady(paneId, generation);
       if (cancelled) return;
 
       if (stateFolderPath) {
@@ -189,12 +222,22 @@ export default function EditorPane({
     return () => {
       cancelled = true;
     };
-  }, [paneId, stateStatus, stateFolderPath, updatePaneConfig, updatePaneTitle, vscodeCliPath]);
+  }, [
+    paneId,
+    stateStatus,
+    stateFolderPath,
+    updatePaneConfig,
+    updatePaneTitle,
+    viewSession.error,
+    viewSession.phase,
+    vscodeCliPath,
+  ]);
 
   // Retry on error
   const handleRetry = useCallback(() => {
+    markEmbeddedToolViewDestroyed(paneId);
     setState({ status: "starting", folderPath: config.folderPath });
-  }, [config.folderPath]);
+  }, [config.folderPath, paneId]);
 
   if (state.status === "unavailable") {
     return (

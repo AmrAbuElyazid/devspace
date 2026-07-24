@@ -247,6 +247,48 @@ test("workspaceState patch rejects malformed and graph-breaking deltas", async (
   ).rejects.toThrow("Invalid workspace state patch result");
 });
 
+test("workspaceState patch requires orderedIds to contain every surviving workspace", async () => {
+  await callRegisteredHandler(handlers, "workspaceState:save", {
+    activeWorkspaceId: "workspace-1",
+    workspaces: [
+      {
+        id: "workspace-1",
+        name: "Workspace 1",
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: 1,
+      },
+      {
+        id: "workspace-2",
+        name: "Workspace 2",
+        root: { type: "leaf", groupId: "group-1" },
+        focusedGroupId: "group-1",
+        zoomedGroupId: null,
+        lastActiveAt: 2,
+      },
+    ],
+    panes: {
+      "pane-1": { id: "pane-1", title: "Terminal", type: "terminal", config: {} },
+    },
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "pane-1" }],
+      },
+    },
+    pinnedSidebarNodes: [],
+    sidebarTree: [{ type: "workspace", workspaceId: "workspace-1" }],
+  });
+
+  await expect(
+    callRegisteredHandler(handlers, "workspaceState:patch", {
+      workspaces: { upsert: [], removeIds: [], orderedIds: ["workspace-1"] },
+    }),
+  ).rejects.toThrow("Invalid workspace ordering patch");
+});
+
 test("workspaceState async save rejects graph-inconsistent payloads", async () => {
   const snapshot = {
     activeWorkspaceId: "missing-workspace",

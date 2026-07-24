@@ -1,12 +1,16 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import {
+  getTerminalSurfaceSnapshot,
   hasCreatedTerminalSurface,
   markTerminalSurfaceActive,
   markTerminalSurfaceCreated,
+  markTerminalSurfaceDestroyed,
+  markTerminalSurfaceFailed,
   markTerminalSurfaceInactive,
   markTerminalSurfaceReady,
   MAX_INACTIVE_PERSISTENT_TERMINAL_SURFACES,
   resetTrackedTerminalSurfacesForTests,
+  subscribeTerminalSurface,
 } from "./terminal-surface-session";
 
 beforeEach(() => {
@@ -70,4 +74,26 @@ test("pending surface creation is not evicted before it can be cancelled safely"
 
   expect(destroySurface).not.toHaveBeenCalled();
   expect(hasCreatedTerminalSurface("pending")).toBe(true);
+});
+
+test("publishes close and failure states while ignoring stale completions", () => {
+  const listener = vi.fn();
+  const unsubscribe = subscribeTerminalSurface("surface", listener);
+  const generation = markTerminalSurfaceCreated("surface", "managed-tmux");
+
+  markTerminalSurfaceDestroyed("surface", "closed");
+  expect(getTerminalSurfaceSnapshot("surface")).toMatchObject({
+    phase: "closed",
+    error: "The terminal session ended.",
+  });
+
+  markTerminalSurfaceDestroyed("surface");
+  const replacementGeneration = markTerminalSurfaceCreated("surface", "managed-tmux");
+  expect(markTerminalSurfaceFailed("surface", generation, "stale")).toBe(false);
+  expect(getTerminalSurfaceSnapshot("surface")).toMatchObject({
+    phase: "pending",
+    generation: replacementGeneration,
+  });
+  expect(listener).toHaveBeenCalled();
+  unsubscribe();
 });

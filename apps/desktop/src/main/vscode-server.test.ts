@@ -434,6 +434,26 @@ describe("resolveVscodeCli", () => {
     expect(fsMocks.unlinkSync).toHaveBeenCalledWith(`${serverDataDir}/server.pid`);
   });
 
+  test("does not run a queued shutdown after a newer consumer becomes active", async () => {
+    const manager = new VscodeServerManager("/tmp/devspace-vscode");
+    const internals = manager as unknown as {
+      folders: Map<string, { url: string; refCount: number }>;
+      startLock: Promise<unknown>;
+      stopManagedServer: () => Promise<void>;
+    };
+    const stopSpy = vi.spyOn(internals, "stopManagedServer").mockResolvedValue();
+    internals.folders.set("/tmp/old", { url: "http://old", refCount: 1 });
+    internals.startLock = Promise.resolve().then(() => {
+      internals.folders.set("/tmp/new", { url: "http://new", refCount: 1 });
+    });
+
+    manager.release("/tmp/old");
+    await internals.startLock;
+
+    expect(internals.folders.has("/tmp/new")).toBe(true);
+    expect(stopSpy).not.toHaveBeenCalled();
+  });
+
   test("reconciles only stale processes with the full Devspace ownership signature", async () => {
     const serverDataDir = "/tmp/devspace-vscode";
     const tokenFilePath = `${serverDataDir}/connection-token`;

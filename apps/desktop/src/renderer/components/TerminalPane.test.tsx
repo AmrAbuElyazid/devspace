@@ -15,6 +15,12 @@ const terminalPaneMocks = vi.hoisted(() => ({
   terminalBlur: vi.fn(),
   sendBindingAction: vi.fn(() => Promise.resolve(true)),
   createdSurfaces: new Set<string>(),
+  surfaceSnapshots: new Map<
+    string,
+    { phase: "pending" | "ready" | "closed" | "error"; generation: number; error: string | null }
+  >(),
+  surfaceListeners: new Map<string, Set<() => void>>(),
+  missingSurfaceSnapshot: { phase: "missing" as const, generation: 0, error: null },
   terminalStoreState: {
     findBarOpenByPaneId: {} as Record<string, boolean>,
     findBarFocusTokenByPaneId: {} as Record<string, number>,
@@ -43,16 +49,59 @@ vi.mock("../store/terminal-store", () => ({
 }));
 
 vi.mock("../lib/terminal-surface-session", () => ({
+  getTerminalSurfaceSnapshot: (surfaceId: string) =>
+    terminalPaneMocks.surfaceSnapshots.get(surfaceId) ?? terminalPaneMocks.missingSurfaceSnapshot,
+  subscribeTerminalSurface: (surfaceId: string, listener: () => void) => {
+    const listeners = terminalPaneMocks.surfaceListeners.get(surfaceId) ?? new Set<() => void>();
+    listeners.add(listener);
+    terminalPaneMocks.surfaceListeners.set(surfaceId, listeners);
+    return () => listeners.delete(listener);
+  },
   hasCreatedTerminalSurface: (surfaceId: string) =>
     terminalPaneMocks.createdSurfaces.has(surfaceId),
   markTerminalSurfaceCreated: (surfaceId: string) => {
+    const generation = (terminalPaneMocks.surfaceSnapshots.get(surfaceId)?.generation ?? 0) + 1;
     terminalPaneMocks.createdSurfaces.add(surfaceId);
+    terminalPaneMocks.surfaceSnapshots.set(surfaceId, {
+      phase: "pending",
+      generation,
+      error: null,
+    });
+    for (const listener of terminalPaneMocks.surfaceListeners.get(surfaceId) ?? []) listener();
+    return generation;
   },
-  markTerminalSurfaceReady: () => {},
+  markTerminalSurfaceReady: (surfaceId: string, _destroy: unknown, generation: number) => {
+    if (terminalPaneMocks.surfaceSnapshots.get(surfaceId)?.generation !== generation) return false;
+    terminalPaneMocks.surfaceSnapshots.set(surfaceId, {
+      phase: "ready",
+      generation,
+      error: null,
+    });
+    for (const listener of terminalPaneMocks.surfaceListeners.get(surfaceId) ?? []) listener();
+    return true;
+  },
+  markTerminalSurfaceFailed: (surfaceId: string, generation: number, error: string) => {
+    if (terminalPaneMocks.surfaceSnapshots.get(surfaceId)?.generation !== generation) return false;
+    terminalPaneMocks.createdSurfaces.delete(surfaceId);
+    terminalPaneMocks.surfaceSnapshots.set(surfaceId, { phase: "error", generation, error });
+    for (const listener of terminalPaneMocks.surfaceListeners.get(surfaceId) ?? []) listener();
+    return true;
+  },
   markTerminalSurfaceActive: () => {},
   markTerminalSurfaceInactive: () => {},
-  markTerminalSurfaceDestroyed: (surfaceId: string) => {
+  markTerminalSurfaceDestroyed: (surfaceId: string, reason?: "closed" | "removed") => {
     terminalPaneMocks.createdSurfaces.delete(surfaceId);
+    const existing = terminalPaneMocks.surfaceSnapshots.get(surfaceId);
+    if (reason === "closed" && existing) {
+      terminalPaneMocks.surfaceSnapshots.set(surfaceId, {
+        phase: "closed",
+        generation: existing.generation,
+        error: "The terminal session ended.",
+      });
+    } else {
+      terminalPaneMocks.surfaceSnapshots.delete(surfaceId);
+    }
+    for (const listener of terminalPaneMocks.surfaceListeners.get(surfaceId) ?? []) listener();
   },
 }));
 
@@ -84,6 +133,8 @@ beforeEach(() => {
   terminalPaneMocks.terminalBlur.mockReset();
   terminalPaneMocks.sendBindingAction.mockClear();
   terminalPaneMocks.createdSurfaces.clear();
+  terminalPaneMocks.surfaceSnapshots.clear();
+  terminalPaneMocks.surfaceListeners.clear();
 
   terminalPaneMocks.terminalStoreState = {
     findBarOpenByPaneId: {},
@@ -292,4 +343,33 @@ test("retries terminal creation after an initial failure", async () => {
   });
   expect(container.textContent).not.toContain("Terminal failed to start");
   expect(terminalPaneMocks.createdSurfaces.has("pane-1")).toBe(true);
+});
+
+test("shows a restart action when a running terminal closes", async () => {
+  await act(async () => {
+    root?.render(<TerminalPane paneId="pane-1" config={{}} isFocused={true} />);
+  });
+  await flushAsyncEffects();
+
+  const generation = terminalPaneMocks.surfaceSnapshots.get("pane-1")?.generation ?? 0;
+  await act(async () => {
+    terminalPaneMocks.createdSurfaces.delete("pane-1");
+    terminalPaneMocks.surfaceSnapshots.set("pane-1", {
+      phase: "closed",
+      generation,
+      error: "The terminal session ended.",
+    });
+    for (const listener of terminalPaneMocks.surfaceListeners.get("pane-1") ?? []) listener();
+  });
+
+  expect(container.textContent).toContain("The terminal session ended.");
+  expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledTimes(1);
+
+  const retryButton = container.querySelector('button[type="button"]');
+  await act(async () => {
+    retryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  });
+  await flushAsyncEffects();
+
+  expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledTimes(2);
 });

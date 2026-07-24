@@ -265,6 +265,223 @@ function isValidPersistedWorkspacePatch(value: unknown): value is PersistedWorks
   return true;
 }
 
+function isWorkspaceOrderPatchConsistent(
+  current: PersistedWorkspaceState,
+  patch: PersistedWorkspacePatch,
+): boolean {
+  const workspacePatch = patch.workspaces;
+  if (!workspacePatch?.orderedIds) return true;
+
+  const expectedIds = new Set(current.workspaces.map((workspace) => workspace.id));
+  for (const id of workspacePatch.removeIds) expectedIds.delete(id);
+  for (const workspace of workspacePatch.upsert) expectedIds.add(workspace.id);
+
+  return (
+    workspacePatch.orderedIds.length === expectedIds.size &&
+    workspacePatch.orderedIds.every((id) => expectedIds.has(id))
+  );
+}
+
+function isWorkspaceEntityValid(
+  workspace: unknown,
+  paneGroupIds: Set<string>,
+): workspace is PersistedWorkspaceState["workspaces"][number] {
+  return (
+    isRecord(workspace) &&
+    isSafeString(workspace.id) &&
+    isSafeString(workspace.name) &&
+    isFiniteNumber(workspace.lastActiveAt) &&
+    (workspace.pinned === undefined || typeof workspace.pinned === "boolean") &&
+    isSplitNodeValid(workspace.root, paneGroupIds) &&
+    isNullableSafeString(workspace.focusedGroupId) &&
+    isNullableSafeString(workspace.zoomedGroupId) &&
+    isOptionalSafeString(workspace.lastTerminalCwd)
+  );
+}
+
+function isPaneEntityValid(paneId: string, pane: unknown): boolean {
+  return (
+    isRecord(pane) &&
+    pane.id === paneId &&
+    isSafeString(pane.id) &&
+    isSafeString(pane.title) &&
+    typeof pane.type === "string" &&
+    isPaneConfigValid(pane.type, pane.config)
+  );
+}
+
+function isPaneGroupEntityValid(groupId: string, group: unknown, paneIds: Set<string>): boolean {
+  if (
+    !isRecord(group) ||
+    group.id !== groupId ||
+    !isSafeString(group.id) ||
+    !isSafeString(group.activeTabId) ||
+    !Array.isArray(group.tabs) ||
+    group.tabs.length > MAX_TABS_PER_GROUP
+  ) {
+    return false;
+  }
+
+  const tabIds = new Set<string>();
+  for (const tab of group.tabs) {
+    if (!isRecord(tab) || !isSafeString(tab.id) || !isSafeString(tab.paneId)) return false;
+    if (tabIds.has(tab.id) || !paneIds.has(tab.paneId)) return false;
+    tabIds.add(tab.id);
+  }
+  return tabIds.has(group.activeTabId);
+}
+
+function isPatchResultValidIncrementally(
+  current: PersistedWorkspaceState,
+  patch: PersistedWorkspacePatch,
+  next: PersistedWorkspaceState,
+): boolean {
+  if (
+    next.workspaces.length > MAX_WORKSPACES ||
+    Object.keys(next.panes).length > MAX_PANES ||
+    Object.keys(next.paneGroups).length > MAX_PANE_GROUPS
+  ) {
+    return false;
+  }
+
+  const workspaceIds = new Set(next.workspaces.map((workspace) => workspace.id));
+  const paneIds = new Set(Object.keys(next.panes));
+  const paneGroupIds = new Set(Object.keys(next.paneGroups));
+  if (workspaceIds.size !== next.workspaces.length || !workspaceIds.has(next.activeWorkspaceId)) {
+    return false;
+  }
+
+  for (const workspace of patch.workspaces?.upsert ?? []) {
+    if (!isWorkspaceEntityValid(workspace, paneGroupIds)) return false;
+  }
+  for (const pane of patch.panes?.upsert ?? []) {
+    if (!isPaneEntityValid(pane.id, pane)) return false;
+  }
+  for (const group of patch.paneGroups?.upsert ?? []) {
+    if (!isPaneGroupEntityValid(group.id, group, paneIds)) return false;
+  }
+
+  // Entity removals can invalidate unchanged owners, so only those rarer
+  // operations require scanning the corresponding owner collection.
+  if (patch.panes?.removeIds.length) {
+    for (const [groupId, group] of Object.entries(next.paneGroups)) {
+      if (!isPaneGroupEntityValid(groupId, group, paneIds)) return false;
+    }
+  }
+  if (patch.paneGroups?.removeIds.length) {
+    for (const workspace of next.workspaces) {
+      if (!isWorkspaceEntityValid(workspace, paneGroupIds)) return false;
+    }
+  }
+
+  const workspaceIdsChanged =
+    Boolean(patch.workspaces?.removeIds.length) ||
+    (patch.workspaces?.upsert ?? []).some(
+      (workspace) => !current.workspaces.some((existing) => existing.id === workspace.id),
+    );
+  if (patch.sidebarTree || workspaceIdsChanged) {
+    if (!next.sidebarTree.every((node) => isSidebarNodeValid(node, workspaceIds))) return false;
+  }
+  if (patch.pinnedSidebarNodes || workspaceIdsChanged) {
+    if (!next.pinnedSidebarNodes.every((node) => isSidebarNodeValid(node, workspaceIds))) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function jsonByteSize(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value), "utf8");
+}
+
+function collectionCommaBytes(count: number): number {
+  return Math.max(0, count - 1);
+}
+
+function workspacePatchSizeDelta(
+  current: PersistedWorkspaceState,
+  patch: NonNullable<PersistedWorkspacePatch["workspaces"]>,
+): number {
+  const currentById = new Map(current.workspaces.map((workspace) => [workspace.id, workspace]));
+  let nextCount = current.workspaces.length;
+  let delta = 0;
+
+  for (const id of patch.removeIds) {
+    const existing = currentById.get(id);
+    if (!existing) continue;
+    delta -= jsonByteSize(existing);
+    nextCount -= 1;
+    currentById.delete(id);
+  }
+  for (const workspace of patch.upsert) {
+    const existing = currentById.get(workspace.id);
+    if (existing) delta -= jsonByteSize(existing);
+    else nextCount += 1;
+    delta += jsonByteSize(workspace);
+    currentById.set(workspace.id, workspace);
+  }
+
+  return delta + collectionCommaBytes(nextCount) - collectionCommaBytes(current.workspaces.length);
+}
+
+function recordPatchSizeDelta<T extends { id: string }>(
+  current: Record<string, T>,
+  patch: { upsert: T[]; removeIds: string[] },
+): number {
+  const memberSize = (id: string, entity: T): number => jsonByteSize(id) + 1 + jsonByteSize(entity);
+  let nextCount = Object.keys(current).length;
+  let delta = 0;
+
+  for (const id of patch.removeIds) {
+    const existing = Object.prototype.hasOwnProperty.call(current, id) ? current[id] : undefined;
+    if (!existing) continue;
+    delta -= memberSize(id, existing);
+    nextCount -= 1;
+  }
+  for (const entity of patch.upsert) {
+    const existing = Object.prototype.hasOwnProperty.call(current, entity.id)
+      ? current[entity.id]
+      : undefined;
+    if (existing) delta -= memberSize(entity.id, existing);
+    else nextCount += 1;
+    delta += memberSize(entity.id, entity);
+  }
+
+  return (
+    delta + collectionCommaBytes(nextCount) - collectionCommaBytes(Object.keys(current).length)
+  );
+}
+
+function getPatchedStateSize(
+  currentSize: number,
+  current: PersistedWorkspaceState,
+  patch: PersistedWorkspacePatch,
+): number {
+  let nextSize = currentSize;
+  if (patch.workspaces) nextSize += workspacePatchSizeDelta(current, patch.workspaces);
+  if (patch.panes) nextSize += recordPatchSizeDelta(current.panes, patch.panes);
+  if (patch.paneGroups) nextSize += recordPatchSizeDelta(current.paneGroups, patch.paneGroups);
+  if (patch.activeWorkspaceId !== undefined) {
+    nextSize += jsonByteSize(patch.activeWorkspaceId) - jsonByteSize(current.activeWorkspaceId);
+  }
+  if (patch.sidebarTree !== undefined) {
+    nextSize += jsonByteSize(patch.sidebarTree) - jsonByteSize(current.sidebarTree);
+  }
+  if (patch.pinnedSidebarNodes !== undefined) {
+    nextSize += jsonByteSize(patch.pinnedSidebarNodes) - jsonByteSize(current.pinnedSidebarNodes);
+  }
+  return nextSize;
+}
+
+let validatedSnapshot: PersistedWorkspaceState | null = null;
+let validatedSnapshotSize = 0;
+
+function rememberValidatedSnapshot(snapshot: PersistedWorkspaceState, size?: number): void {
+  validatedSnapshot = snapshot;
+  validatedSnapshotSize = size ?? jsonByteSize(snapshot);
+}
+
 function handleSaveSync(
   event: IpcMainEvent,
   persistenceStore: WorkspacePersistenceStore,
@@ -277,6 +494,7 @@ function handleSaveSync(
 
   try {
     persistenceStore.save(snapshot);
+    rememberValidatedSnapshot(snapshot);
     event.returnValue = { ok: true };
   } catch (error) {
     event.returnValue = {
@@ -298,12 +516,24 @@ export function registerWorkspaceStateIpc(): void {
     app.once("will-quit", () => {
       store.close();
       persistenceStore = null;
+      validatedSnapshot = null;
+      validatedSnapshotSize = 0;
       closeRegistered = false;
     });
   }
 
   safeHandle("workspaceState:load", async () => {
-    return store.load();
+    const snapshot = store.load();
+    if (!snapshot) {
+      validatedSnapshot = null;
+      validatedSnapshotSize = 0;
+      return null;
+    }
+    if (!isValidPersistedWorkspaceState(snapshot)) {
+      throw new Error("Invalid persisted workspace state");
+    }
+    rememberValidatedSnapshot(snapshot);
+    return snapshot;
   });
 
   safeHandle("workspaceState:save", async (_event, snapshot: unknown) => {
@@ -312,6 +542,7 @@ export function registerWorkspaceStateIpc(): void {
     }
 
     store.save(snapshot);
+    rememberValidatedSnapshot(snapshot);
   });
 
   safeHandle("workspaceState:patch", async (_event, patch: unknown) => {
@@ -321,13 +552,27 @@ export function registerWorkspaceStateIpc(): void {
 
     const current = store.getCurrentSnapshot();
     if (!current) return { needsFullSave: true } as const;
+    if (validatedSnapshot !== current) {
+      if (!isValidPersistedWorkspaceState(current)) {
+        throw new Error("Invalid persisted workspace state");
+      }
+      rememberValidatedSnapshot(current);
+    }
+    if (!isWorkspaceOrderPatchConsistent(current, patch)) {
+      throw new Error("Invalid workspace ordering patch");
+    }
 
     const next = applyPersistedWorkspacePatch(current, patch);
-    if (!isValidPersistedWorkspaceState(next)) {
+    const nextSize = getPatchedStateSize(validatedSnapshotSize, current, patch);
+    if (
+      nextSize > MAX_WORKSPACE_STATE_BYTES ||
+      !isPatchResultValidIncrementally(current, patch, next)
+    ) {
       throw new Error("Invalid workspace state patch result");
     }
 
     store.save(next);
+    rememberValidatedSnapshot(next, nextSize);
     return { ok: true } as const;
   });
 
