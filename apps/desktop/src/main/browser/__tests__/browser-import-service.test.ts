@@ -1307,6 +1307,15 @@ test("importBrowser wraps Zen cookie write failures with ZEN_COOKIE_IMPORT_FAILE
 // clearBrowsingData
 // ---------------------------------------------------------------------------
 
+test("getCacheSize reports Chromium cache usage without deleting data", async () => {
+  const service = new BrowserImportService({
+    sessionManager: stubSession({ getCacheSize: async () => 12_345 }),
+    historyService: stubHistoryService(),
+  });
+
+  await expect(service.getCacheSize()).resolves.toBe(12_345);
+});
+
 test("clearBrowsingData everything calls all session clearing methods and history clearAll", async () => {
   const calls: string[] = [];
 

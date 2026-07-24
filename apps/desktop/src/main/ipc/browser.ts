@@ -251,4 +251,15 @@ export function registerBrowserIpc(
 
     return browserImportService.clearBrowsingData(clearTarget);
   });
+
+  safeHandle("browser:getCacheSize", async () => {
+    if (!browserImportService) return { error: "Browser storage is unavailable." } as const;
+    try {
+      return { bytes: await browserImportService.getCacheSize() } as const;
+    } catch (error) {
+      return {
+        error: error instanceof Error ? error.message : "Unable to measure browser cache.",
+      } as const;
+    }
+  });
 }

@@ -15,7 +15,7 @@ import type {
   ClearBrowsingDataTarget,
 } from "./browser";
 import type { ShortcutAction, StoredShortcut } from "./shortcuts";
-import type { PersistedWorkspaceState } from "./workspace-persistence";
+import type { PersistedWorkspacePatch, PersistedWorkspaceState } from "./workspace-persistence";
 import type { MainProcessPerformanceSnapshot } from "./performance";
 
 export interface TerminalBounds {
@@ -25,12 +25,34 @@ export interface TerminalBounds {
   height: number;
 }
 
-export interface TerminalCreateOptions {
-  cwd?: string;
-  envVars?: Record<string, string>;
-}
+export type TerminalCreateOptions =
+  | {
+      cwd?: string;
+      envVars?: Record<string, string>;
+      backend?: "direct";
+    }
+  | {
+      cwd?: string;
+      envVars?: Record<string, string>;
+      backend: "managed-tmux";
+      sessionId: string;
+    }
+  | {
+      cwd?: string;
+      envVars?: Record<string, string>;
+      backend: "external-tmux";
+      sessionName: string;
+      socketPath?: string;
+    };
 
 export type TerminalCreateResult = { ok: true } | { error: string };
+export type TerminalKillSessionResult = { killed: boolean } | { error: string };
+export interface ManagedTerminalSession {
+  sessionId: string;
+  attachedClients: number;
+  createdAt: number;
+}
+export type TerminalListSessionsResult = { sessions: ManagedTerminalSession[] } | { error: string };
 
 export type AppUpdateStatus =
   | "disabled"
@@ -78,6 +100,8 @@ export interface DevspaceBridge {
   terminal: {
     create: (surfaceId: string, options?: TerminalCreateOptions) => Promise<TerminalCreateResult>;
     destroy: (surfaceId: string) => Promise<void>;
+    killManagedSession: (sessionId: string) => Promise<TerminalKillSessionResult>;
+    listManagedSessions: () => Promise<TerminalListSessionsResult>;
     show: (surfaceId: string) => Promise<void>;
     hide: (surfaceId: string) => Promise<void>;
     focus: (surfaceId: string) => void;
@@ -156,6 +180,7 @@ export interface DevspaceBridge {
   workspaceState: {
     load: () => Promise<PersistedWorkspaceState | null>;
     save: (snapshot: PersistedWorkspaceState) => Promise<void>;
+    patch: (patch: PersistedWorkspacePatch) => Promise<{ ok: true } | { needsFullSave: true }>;
     saveSync: (snapshot: PersistedWorkspaceState) => void;
   };
   t3code: {
@@ -208,6 +233,7 @@ export interface BrowserBridge {
     mode?: BrowserImportMode,
   ) => Promise<BrowserAccessResult>;
   clearBrowsingData: (target: ClearBrowsingDataTarget) => Promise<{ ok: boolean; error?: string }>;
+  getCacheSize: () => Promise<{ bytes: number } | { error: string }>;
   onStateChange: (callback: (state: BrowserRuntimeState) => void) => BrowserBridgeUnsubscribe;
   onFocused: (callback: (paneId: string) => void) => BrowserBridgeUnsubscribe;
   onPermissionRequest: (

@@ -23,9 +23,10 @@ export function registerIpcHandlers(
   browserSessionManager?: BrowserSessionManager,
   appUpdater?: AppUpdaterLike,
 ): void {
-  trustIpcWebContents(mainWindow.webContents);
+  const trustedWebContents = mainWindow.webContents;
+  trustIpcWebContents(trustedWebContents);
   mainWindow.on("closed", () => {
-    untrustIpcWebContents(mainWindow.webContents);
+    untrustIpcWebContents(trustedWebContents);
   });
 
   registerTerminalAndEditorIpc(

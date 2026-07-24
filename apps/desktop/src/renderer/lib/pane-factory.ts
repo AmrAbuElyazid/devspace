@@ -3,6 +3,8 @@ import type {
   Pane,
   PaneType,
   PaneConfig,
+  PaneConfigByType,
+  PaneOfType,
   PaneGroup,
   PaneGroupTab,
   Workspace,
@@ -25,14 +27,37 @@ const titleForType: Record<PaneType, string> = {
 // Factory functions
 // ---------------------------------------------------------------------------
 
+function createDefaultPaneConfig(type: PaneType): PaneConfig {
+  switch (type) {
+    case "editor":
+    case "t3code":
+      return {};
+    case "terminal":
+      return { backend: "managed-tmux", sessionId: nanoid() };
+    case "browser":
+      return { url: "about:blank" };
+    case "note":
+      return { noteId: nanoid() };
+  }
+}
+
+export function createPane<T extends PaneType>(
+  type: T,
+  configOverride?: Partial<PaneConfigByType[T]>,
+): PaneOfType<T>;
 export function createPane(type: PaneType, configOverride?: Partial<PaneConfig>): Pane {
-  // Type assertion needed: we construct from dynamic PaneType values, but the
-  // result is always a valid Pane discriminated union member at runtime.
+  const hasNonManagedTerminalBackend =
+    type === "terminal" &&
+    configOverride !== undefined &&
+    "backend" in configOverride &&
+    configOverride.backend !== undefined &&
+    configOverride.backend !== "managed-tmux";
+  const defaultConfig = hasNonManagedTerminalBackend ? {} : createDefaultPaneConfig(type);
   return {
     id: nanoid(),
     type,
-    title: titleForType[type] ?? "Terminal",
-    config: configOverride ?? {},
+    title: titleForType[type],
+    config: { ...defaultConfig, ...configOverride },
   } as Pane;
 }
 
@@ -50,11 +75,9 @@ export function createPaneWithInheritedConfig(
     if (cwd) {
       inheritedConfig = { cwd };
     }
-  } else if (type === "note") {
-    inheritedConfig = { noteId: nanoid() };
   }
 
-  return createPane(type, inheritedConfig);
+  return createPane(type, inheritedConfig) as Pane;
 }
 
 export function createPaneGroup(pane: Pane): PaneGroup {

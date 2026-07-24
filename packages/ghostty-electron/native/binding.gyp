@@ -19,6 +19,7 @@
           "-framework AppKit",
           "-framework Carbon",
           "-framework CoreText",
+          "-framework CoreVideo",
           "-framework QuartzCore",
           "-framework CoreGraphics",
           "-framework Foundation",

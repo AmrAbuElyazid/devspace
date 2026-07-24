@@ -4,12 +4,8 @@ import { useWorkspaceStore } from "../store/workspace-store";
 import PaneGroupContainer from "./PaneGroupContainer";
 import type { SplitNode } from "../types/workspace";
 
-function getNodeIdentity(node: SplitNode): string {
-  if (node.type === "leaf") {
-    return `leaf:${node.groupId}`;
-  }
-
-  return `branch:${node.direction}:[${node.children.map(getNodeIdentity).join(",")}]`;
+function getSubtreeAnchor(node: SplitNode): string {
+  return node.type === "leaf" ? node.groupId : getSubtreeAnchor(node.children[0]!);
 }
 
 interface SplitLayoutProps {
@@ -71,15 +67,12 @@ export default memo(function SplitLayout({
 
   return (
     <Allotment
-      key={getNodeIdentity(node)}
       vertical={node.direction === "vertical"}
       defaultSizes={node.sizes}
       onChange={handleChange}
     >
       {node.children.map((child, i) => (
-        <Allotment.Pane
-          key={child.type === "leaf" ? child.groupId : `branch-${i}-${child.direction}`}
-        >
+        <Allotment.Pane key={`subtree:${getSubtreeAnchor(child)}`}>
           <SplitLayout
             node={child}
             workspaceId={workspaceId}

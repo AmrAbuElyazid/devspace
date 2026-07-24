@@ -6,22 +6,28 @@ import { useNativeView } from "@/hooks/useNativeView";
 import { useSettingsStore } from "@/store/settings-store";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import type { EditorConfig } from "@/types/workspace";
+import {
+  hasCreatedEmbeddedToolView,
+  markEmbeddedToolViewActive,
+  markEmbeddedToolViewCreated,
+  markEmbeddedToolViewDestroyed,
+  markEmbeddedToolViewInactive,
+  markEmbeddedToolViewReady,
+} from "@/lib/embedded-tool-view-session";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
-// Module-level tracking to survive React remounts (same pattern as TerminalPane)
-const startedEditors = new Set<string>();
-
 /** Call when an editor pane is destroyed externally. */
 export function markEditorDestroyed(paneId: string): void {
-  startedEditors.delete(paneId);
+  markEmbeddedToolViewDestroyed(paneId);
 }
 
 interface EditorPaneProps {
   paneId: string;
   config: EditorConfig;
   isFocused: boolean;
+  isActive?: boolean;
 }
 
 type EditorState =
@@ -31,7 +37,12 @@ type EditorState =
   | { status: "error"; message: string }
   | { status: "unavailable" };
 
-export default function EditorPane({ paneId, config, isFocused }: EditorPaneProps): ReactElement {
+export default function EditorPane({
+  paneId,
+  config,
+  isFocused,
+  isActive = true,
+}: EditorPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const wasVisibleRef = useRef(false);
   const wasFocusedRef = useRef(false);
@@ -42,7 +53,7 @@ export default function EditorPane({ paneId, config, isFocused }: EditorPaneProp
 
   // Determine initial state based on config
   const [state, setState] = useState<EditorState>(() => {
-    if (startedEditors.has(paneId)) {
+    if (hasCreatedEmbeddedToolView(paneId)) {
       return { status: "running", folderPath: config.folderPath };
     }
     // Skip availability check if we already have a folder (e.g. opened via CLI)
@@ -85,6 +96,26 @@ export default function EditorPane({ paneId, config, isFocused }: EditorPaneProp
   const stateFolderPath = "folderPath" in state ? state.folderPath : undefined;
 
   useEffect(() => {
+    return () => {
+      markEmbeddedToolViewInactive(paneId);
+    };
+  }, [paneId]);
+
+  useEffect(() => {
+    if (!isActive) {
+      markEmbeddedToolViewInactive(paneId);
+      return;
+    }
+
+    if (stateStatus === "running" && !hasCreatedEmbeddedToolView(paneId)) {
+      setState({ status: "starting", folderPath: stateFolderPath });
+      return;
+    }
+
+    markEmbeddedToolViewActive(paneId);
+  }, [isActive, paneId, stateFolderPath, stateStatus]);
+
+  useEffect(() => {
     if (previousCliPathRef.current === null) {
       previousCliPathRef.current = vscodeCliPath;
       return;
@@ -123,24 +154,28 @@ export default function EditorPane({ paneId, config, isFocused }: EditorPaneProp
   // Start the VS Code server
   useEffect(() => {
     if (stateStatus !== "starting") return;
-    if (startedEditors.has(paneId)) {
+    if (hasCreatedEmbeddedToolView(paneId)) {
       setState({ status: "running", folderPath: stateFolderPath });
       return;
     }
 
     let cancelled = false;
+    markEmbeddedToolViewCreated(paneId, () => {
+      void window.api.browser.destroy(paneId);
+    });
 
     void (async () => {
       const result = await window.api.editor.start(paneId, stateFolderPath, vscodeCliPath);
 
-      if (cancelled) return;
-
       if ("error" in result) {
-        setState({ status: "error", message: result.error });
+        markEmbeddedToolViewDestroyed(paneId);
+        if (!cancelled) setState({ status: "error", message: result.error });
         return;
       }
 
-      startedEditors.add(paneId);
+      markEmbeddedToolViewReady(paneId);
+      if (cancelled) return;
+
       if (stateFolderPath) {
         const folderName = stateFolderPath.split("/").pop() || stateFolderPath;
         updatePaneTitle(paneId, `VC: ${folderName}`);

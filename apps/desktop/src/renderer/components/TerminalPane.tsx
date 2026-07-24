@@ -13,8 +13,11 @@ import { useTerminalStore } from "@/store/terminal-store";
 import { focusTerminalNativePane } from "@/lib/native-pane-focus";
 import {
   hasCreatedTerminalSurface,
+  markTerminalSurfaceActive,
   markTerminalSurfaceCreated,
   markTerminalSurfaceDestroyed,
+  markTerminalSurfaceInactive,
+  markTerminalSurfaceReady,
 } from "@/lib/terminal-surface-session";
 import type { TerminalConfig } from "@/types/workspace";
 
@@ -26,12 +29,14 @@ interface TerminalPaneProps {
   paneId: string;
   config: TerminalConfig;
   isFocused: boolean;
+  isActive?: boolean;
 }
 
 export default function TerminalPane({
   paneId,
   config,
   isFocused,
+  isActive = true,
 }: TerminalPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const createAttemptRef = useRef(0);
@@ -46,10 +51,30 @@ export default function TerminalPane({
   const [surfaceReady, setSurfaceReady] = useState(() => hasCreatedTerminalSurface(paneId));
 
   useEffect(() => {
+    unmountedRef.current = false;
     return () => {
       unmountedRef.current = true;
+      markTerminalSurfaceInactive(paneId, (surfaceId) => {
+        void window.api.terminal.destroy(surfaceId);
+      });
     };
-  }, []);
+  }, [paneId]);
+
+  useEffect(() => {
+    if (!isActive) {
+      markTerminalSurfaceInactive(paneId, (surfaceId) => {
+        void window.api.terminal.destroy(surfaceId);
+      });
+      return;
+    }
+
+    if (surfaceReady && !hasCreatedTerminalSurface(paneId)) {
+      setSurfaceReady(false);
+      return;
+    }
+
+    markTerminalSurfaceActive(paneId);
+  }, [isActive, paneId, surfaceReady]);
 
   // Queue native creation during layout so the create IPC is in flight before
   // useNativeView's registration effect can reconcile visibility.
@@ -59,27 +84,43 @@ export default function TerminalPane({
     }
 
     if (hasCreatedTerminalSurface(paneId)) {
+      markTerminalSurfaceActive(paneId);
       setSurfaceReady(true);
       return;
     }
 
     const attemptId = ++createAttemptRef.current;
-    markTerminalSurfaceCreated(paneId);
+    markTerminalSurfaceCreated(paneId, config.backend ?? "direct");
     setSurfaceReady(true);
 
-    void window.api.terminal
-      .create(paneId, config.cwd ? { cwd: config.cwd } : undefined)
-      .then((result) => {
-        if (unmountedRef.current || createAttemptRef.current !== attemptId) {
-          return;
-        }
+    const createOptions =
+      config.backend === "managed-tmux"
+        ? { backend: config.backend, sessionId: config.sessionId, cwd: config.cwd }
+        : config.backend === "external-tmux"
+          ? {
+              backend: config.backend,
+              sessionName: config.sessionName,
+              socketPath: config.socketPath,
+              cwd: config.cwd,
+            }
+          : config.cwd
+            ? { backend: "direct" as const, cwd: config.cwd }
+            : { backend: "direct" as const };
 
+    void window.api.terminal
+      .create(paneId, createOptions)
+      .then((result) => {
         if ("error" in result) {
           markTerminalSurfaceDestroyed(paneId);
+          if (unmountedRef.current || createAttemptRef.current !== attemptId) return;
           setCreateError(result.error);
           return;
         }
 
+        markTerminalSurfaceReady(paneId, (surfaceId) => {
+          void window.api.terminal.destroy(surfaceId);
+        });
+        if (unmountedRef.current || createAttemptRef.current !== attemptId) return;
         setCreateError(null);
       })
       .catch((error: unknown) => {
@@ -90,7 +131,7 @@ export default function TerminalPane({
         markTerminalSurfaceDestroyed(paneId);
         setCreateError(error instanceof Error ? error.message : String(error));
       });
-  }, [config.cwd, paneId, surfaceReady]);
+  }, [config, paneId, surfaceReady]);
 
   // Centralized native view management. Registration is gated on
   // `surfaceReady` so that `reconcile()` → `setVisibleSurfaces` never fires

@@ -1,7 +1,11 @@
 import { app, type IpcMainEvent } from "electron";
 import { safeHandle, safeOn } from "./shared";
 import { WorkspacePersistenceStore } from "../workspace-persistence-store";
-import type { PersistedWorkspaceState } from "../../shared/workspace-persistence";
+import {
+  applyPersistedWorkspacePatch,
+  type PersistedWorkspacePatch,
+  type PersistedWorkspaceState,
+} from "../../shared/workspace-persistence";
 
 const MAX_WORKSPACE_STATE_BYTES = 5 * 1024 * 1024;
 const MAX_WORKSPACES = 500;
@@ -10,6 +14,15 @@ const MAX_PANE_GROUPS = 5000;
 const MAX_TABS_PER_GROUP = 500;
 const MAX_STRING_LENGTH = 4096;
 const MAX_SPLIT_DEPTH = 64;
+
+const PATCH_KEYS = new Set([
+  "workspaces",
+  "activeWorkspaceId",
+  "panes",
+  "paneGroups",
+  "pinnedSidebarNodes",
+  "sidebarTree",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -75,7 +88,13 @@ function isPaneConfigValid(type: string, config: unknown): boolean {
   }
 
   if (type === "terminal") {
-    return isOptionalSafeString(config.cwd);
+    if (!isOptionalSafeString(config.cwd)) return false;
+    if (config.backend === undefined || config.backend === "direct") return true;
+    if (config.backend === "managed-tmux") return isSafeString(config.sessionId);
+    if (config.backend === "external-tmux") {
+      return isSafeString(config.sessionName) && isOptionalSafeString(config.socketPath);
+    }
+    return false;
   }
   if (type === "browser") {
     return isSafeString(config.url) && (config.zoom === undefined || isFiniteNumber(config.zoom));
@@ -119,20 +138,25 @@ function isValidPersistedWorkspaceState(value: unknown): value is PersistedWorks
     return false;
   }
 
-  const workspaceIds = new Set(value.workspaces.map((workspace) => workspace.id));
+  if (!value.workspaces.every(isRecord)) return false;
+
+  const workspaceIds = new Set<string>();
+  for (const workspace of value.workspaces) {
+    if (!isSafeString(workspace.id)) return false;
+    workspaceIds.add(workspace.id);
+  }
   const paneIds = new Set(Object.keys(value.panes));
   const paneGroupIds = new Set(Object.keys(value.paneGroups));
 
+  if (workspaceIds.size !== value.workspaces.length) return false;
   if (!workspaceIds.has(value.activeWorkspaceId)) return false;
 
   for (const workspace of value.workspaces) {
-    if (!isRecord(workspace)) {
-      return false;
-    }
     if (
       !isSafeString(workspace.id) ||
       !isSafeString(workspace.name) ||
       !isFiniteNumber(workspace.lastActiveAt) ||
+      (workspace.pinned !== undefined && typeof workspace.pinned !== "boolean") ||
       !isSplitNodeValid(workspace.root, paneGroupIds) ||
       !isNullableSafeString(workspace.focusedGroupId) ||
       !isNullableSafeString(workspace.zoomedGroupId) ||
@@ -187,6 +211,60 @@ function isValidPersistedWorkspaceState(value: unknown): value is PersistedWorks
   return true;
 }
 
+function hasOnlyKeys(value: Record<string, unknown>, allowed: ReadonlySet<string>): boolean {
+  return Object.keys(value).every((key) => allowed.has(key));
+}
+
+function isUniqueSafeStringArray(value: unknown, maxLength: number): value is string[] {
+  return (
+    Array.isArray(value) &&
+    value.length <= maxLength &&
+    value.every(isSafeString) &&
+    new Set(value).size === value.length
+  );
+}
+
+function isEntityPatchValid(value: unknown, maxEntities: number, allowOrder: boolean): boolean {
+  if (!isRecord(value)) return false;
+  const allowedKeys = allowOrder
+    ? new Set(["upsert", "removeIds", "orderedIds"])
+    : new Set(["upsert", "removeIds"]);
+  if (!hasOnlyKeys(value, allowedKeys)) return false;
+  if (!Array.isArray(value.upsert) || value.upsert.length > maxEntities) return false;
+  if (!value.upsert.every((entity) => isRecord(entity) && isSafeString(entity.id))) return false;
+  const removeIds = value.removeIds;
+  if (!isUniqueSafeStringArray(removeIds, maxEntities)) return false;
+
+  const upsertIds = value.upsert.map((entity) => entity.id as string);
+  if (new Set(upsertIds).size !== upsertIds.length) return false;
+  if (upsertIds.some((id) => removeIds.includes(id))) return false;
+
+  if ("orderedIds" in value) {
+    if (!allowOrder || !isUniqueSafeStringArray(value.orderedIds, maxEntities)) return false;
+  }
+
+  return true;
+}
+
+function isValidPersistedWorkspacePatch(value: unknown): value is PersistedWorkspacePatch {
+  if (!isRecord(value) || isPayloadTooLarge(value) || !hasOnlyKeys(value, PATCH_KEYS)) {
+    return false;
+  }
+
+  if ("activeWorkspaceId" in value && !isSafeString(value.activeWorkspaceId)) return false;
+  if ("workspaces" in value && !isEntityPatchValid(value.workspaces, MAX_WORKSPACES, true)) {
+    return false;
+  }
+  if ("panes" in value && !isEntityPatchValid(value.panes, MAX_PANES, false)) return false;
+  if ("paneGroups" in value && !isEntityPatchValid(value.paneGroups, MAX_PANE_GROUPS, false)) {
+    return false;
+  }
+  if ("pinnedSidebarNodes" in value && !Array.isArray(value.pinnedSidebarNodes)) return false;
+  if ("sidebarTree" in value && !Array.isArray(value.sidebarTree)) return false;
+
+  return true;
+}
+
 function handleSaveSync(
   event: IpcMainEvent,
   persistenceStore: WorkspacePersistenceStore,
@@ -208,11 +286,24 @@ function handleSaveSync(
   }
 }
 
+let persistenceStore: WorkspacePersistenceStore | null = null;
+let closeRegistered = false;
+
 export function registerWorkspaceStateIpc(): void {
-  const persistenceStore = new WorkspacePersistenceStore(app.getPath("userData"));
+  persistenceStore ??= new WorkspacePersistenceStore(app.getPath("userData"));
+  const store = persistenceStore;
+
+  if (!closeRegistered && typeof app.once === "function") {
+    closeRegistered = true;
+    app.once("will-quit", () => {
+      store.close();
+      persistenceStore = null;
+      closeRegistered = false;
+    });
+  }
 
   safeHandle("workspaceState:load", async () => {
-    return persistenceStore.load();
+    return store.load();
   });
 
   safeHandle("workspaceState:save", async (_event, snapshot: unknown) => {
@@ -220,10 +311,27 @@ export function registerWorkspaceStateIpc(): void {
       throw new Error("Invalid workspace state");
     }
 
-    persistenceStore.save(snapshot);
+    store.save(snapshot);
+  });
+
+  safeHandle("workspaceState:patch", async (_event, patch: unknown) => {
+    if (!isValidPersistedWorkspacePatch(patch)) {
+      throw new Error("Invalid workspace state patch");
+    }
+
+    const current = store.getCurrentSnapshot();
+    if (!current) return { needsFullSave: true } as const;
+
+    const next = applyPersistedWorkspacePatch(current, patch);
+    if (!isValidPersistedWorkspaceState(next)) {
+      throw new Error("Invalid workspace state patch result");
+    }
+
+    store.save(next);
+    return { ok: true } as const;
   });
 
   safeOn("workspaceState:saveSync", (event, snapshot: unknown) => {
-    handleSaveSync(event, persistenceStore, snapshot);
+    handleSaveSync(event, store, snapshot);
   });
 }

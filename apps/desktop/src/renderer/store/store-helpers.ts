@@ -4,6 +4,7 @@ import { cleanupPaneResources, type PaneCleanupDeps } from "../lib/pane-cleanup"
 import { insertSidebarNode } from "../lib/sidebar-tree";
 import { markBrowserPaneDestroyed } from "../lib/browser-pane-session";
 import { useBrowserStore } from "./browser-store";
+import { useTerminalStore } from "./terminal-store";
 import type { WorkspaceState } from "./workspace-state";
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,9 @@ const defaultPaneCleanupDeps: PaneCleanupDeps = {
   },
   clearBrowserRuntime: (paneId) => {
     useBrowserStore.getState().clearRuntimeState(paneId);
+  },
+  clearTerminalRuntime: (paneId) => {
+    useTerminalStore.getState().clearPaneState(paneId);
   },
 };
 

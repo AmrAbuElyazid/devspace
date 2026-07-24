@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import type { PersistedWorkspaceState } from "../../shared/workspace-persistence";
 import type { WorkspaceState } from "./workspace-state";
-import { setupPersistence } from "./persistence";
+import { buildPersistedWorkspacePatch, setupPersistence } from "./persistence";
 import { installMockWindowApi } from "../test-utils/mock-window-api";
 
 function createState(overrides: Partial<WorkspaceState> = {}): WorkspaceState {
@@ -64,7 +65,7 @@ afterEach(() => {
 });
 
 test("setupPersistence ignores ui-only changes and persists structural changes after debounce", async () => {
-  const saveSpy = vi.spyOn(window.api.workspaceState, "save");
+  const patchSpy = vi.spyOn(window.api.workspaceState, "patch");
 
   let currentState = createState({
     workspaces: [{ id: "workspace-1", name: "Workspace 1" }] as WorkspaceState["workspaces"],
@@ -93,7 +94,7 @@ test("setupPersistence ignores ui-only changes and persists structural changes a
   vi.advanceTimersByTime(500);
   await vi.runAllTimersAsync();
 
-  expect(saveSpy).not.toHaveBeenCalled();
+  expect(patchSpy).not.toHaveBeenCalled();
 
   currentState = {
     ...currentState,
@@ -107,15 +108,99 @@ test("setupPersistence ignores ui-only changes and persists structural changes a
   vi.advanceTimersByTime(500);
   await vi.runAllTimersAsync();
 
-  expect(saveSpy).toHaveBeenCalledTimes(1);
-  expect(saveSpy).toHaveBeenCalledWith(
+  expect(patchSpy).toHaveBeenCalledTimes(1);
+  expect(patchSpy).toHaveBeenCalledWith(
     expect.objectContaining({
-      activeWorkspaceId: "workspace-1",
-      workspaces: expect.arrayContaining([
-        expect.objectContaining({ id: "workspace-2", name: "Workspace 2" }),
+      workspaces: {
+        upsert: [expect.objectContaining({ id: "workspace-2", name: "Workspace 2" })],
+        removeIds: [],
+        orderedIds: ["workspace-1", "workspace-2"],
+      },
+      sidebarTree: expect.arrayContaining([
+        expect.objectContaining({ type: "workspace", workspaceId: "workspace-2" }),
       ]),
     }),
   );
+});
+
+test("setupPersistence falls back to a full save when main has no baseline", async () => {
+  vi.spyOn(window.api.workspaceState, "patch").mockResolvedValue({ needsFullSave: true });
+  const saveSpy = vi.spyOn(window.api.workspaceState, "save");
+
+  let currentState = createState({
+    workspaces: [{ id: "workspace-1", name: "Workspace 1" }] as WorkspaceState["workspaces"],
+  });
+  let subscriber: ((state: WorkspaceState) => void) | null = null;
+  const store = {
+    subscribe(fn: (state: WorkspaceState) => void) {
+      subscriber = fn;
+    },
+    getState: () => currentState,
+  };
+
+  setupPersistence(store);
+  currentState = {
+    ...currentState,
+    workspaces: [
+      { ...currentState.workspaces[0]!, name: "Renamed" },
+    ] as WorkspaceState["workspaces"],
+  };
+  subscriber!(currentState);
+
+  await vi.advanceTimersByTimeAsync(500);
+  await Promise.resolve();
+
+  expect(saveSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      workspaces: [expect.objectContaining({ name: "Renamed" })],
+    }),
+  );
+});
+
+test("buildPersistedWorkspacePatch sends only changed and removed entities", () => {
+  const workspace: PersistedWorkspaceState["workspaces"][number] = {
+    id: "workspace-1",
+    name: "Workspace 1",
+    root: { type: "leaf", groupId: "group-1" },
+    focusedGroupId: null,
+    zoomedGroupId: null,
+    lastActiveAt: 1,
+  };
+  const removedPane = {
+    id: "pane-1",
+    title: "One",
+    type: "terminal" as const,
+    config: {},
+  };
+  const changedPane = {
+    id: "pane-2",
+    title: "Two",
+    type: "terminal" as const,
+    config: {},
+  };
+  const unchangedPane = {
+    id: "pane-3",
+    title: "Three",
+    type: "terminal" as const,
+    config: {},
+  };
+  const previous: PersistedWorkspaceState = {
+    workspaces: [workspace],
+    activeWorkspaceId: "workspace-1",
+    panes: { "pane-1": removedPane, "pane-2": changedPane, "pane-3": unchangedPane },
+    paneGroups: {},
+    pinnedSidebarNodes: [],
+    sidebarTree: [],
+  };
+  const replacementPane = { ...changedPane, title: "Renamed" };
+  const next: PersistedWorkspaceState = {
+    ...previous,
+    panes: { "pane-2": replacementPane, "pane-3": unchangedPane },
+  };
+
+  expect(buildPersistedWorkspacePatch(previous, next)).toEqual({
+    panes: { upsert: [replacementPane], removeIds: ["pane-1"] },
+  });
 });
 
 test("setupPersistence flushes pending state synchronously on beforeunload", () => {

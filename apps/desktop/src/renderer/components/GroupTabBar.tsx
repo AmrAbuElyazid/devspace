@@ -46,8 +46,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
   shortcutHint,
   showInsertBefore,
   showInsertAfter,
-  onSelect,
-  onClose,
+  isSidebarWorkspaceDrag,
 }: {
   tabId: string;
   paneId: string;
@@ -59,20 +58,21 @@ const SortableGroupTab = memo(function SortableGroupTab({
   shortcutHint: string | null;
   showInsertBefore: boolean;
   showInsertAfter: boolean;
-  onSelect: () => void;
-  onClose: () => void;
+  isSidebarWorkspaceDrag: boolean;
 }) {
   const pane = useWorkspaceStore((s) => s.panes[paneId]);
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
   const pendingEditId = useWorkspaceStore((s) => s.pendingEditId);
   const pendingEditType = useWorkspaceStore((s) => s.pendingEditType);
   const clearPendingEdit = useWorkspaceStore((s) => s.clearPendingEdit);
-  const activeDrag = useActiveDrag();
-  const { attributes, listeners, setNodeRef, isDragging, isOver } = useSortable({
-    id: `gtab-${tabId}`,
-    disabled: !dndEnabled,
-    data: { type: "group-tab", workspaceId, groupId, tabId } satisfies DragItemData,
-  });
+  const setActiveGroupTab = useWorkspaceStore((s) => s.setActiveGroupTab);
+  const removeGroupTab = useWorkspaceStore((s) => s.removeGroupTab);
+  const { attributes, listeners, setNodeRef, isDragging, isOver, transform, transition } =
+    useSortable({
+      id: `gtab-${tabId}`,
+      disabled: !dndEnabled,
+      data: { type: "group-tab", workspaceId, groupId, tabId } satisfies DragItemData,
+    });
 
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
@@ -104,7 +104,15 @@ const SortableGroupTab = memo(function SortableGroupTab({
 
   const cancelEdit = useCallback(() => setIsEditing(false), []);
 
-  const isDropTarget = isOver && !isDragging && activeDrag?.type === "sidebar-workspace";
+  const handleSelect = useCallback(() => {
+    setActiveGroupTab(workspaceId, groupId, tabId);
+  }, [setActiveGroupTab, workspaceId, groupId, tabId]);
+
+  const handleClose = useCallback(() => {
+    removeGroupTab(workspaceId, groupId, tabId);
+  }, [removeGroupTab, workspaceId, groupId, tabId]);
+
+  const isDropTarget = isOver && !isDragging && isSidebarWorkspaceDrag;
   const Icon = pane ? paneTypeIcons[pane.type] : paneTypeIcons.terminal;
 
   return (
@@ -112,8 +120,15 @@ const SortableGroupTab = memo(function SortableGroupTab({
       ref={setNodeRef}
       data-sortable-id={`gtab-${tabId}`}
       data-active={isActive || undefined}
-      style={{ opacity: isDragging ? 0.4 : undefined }}
-      onClick={onSelect}
+      style={{
+        opacity: isDragging ? 0.4 : undefined,
+        transform: transform
+          ? `translate3d(${Math.round(transform.x)}px, ${Math.round(transform.y)}px, 0) scaleX(${transform.scaleX}) scaleY(${transform.scaleY})`
+          : undefined,
+        transition,
+        zIndex: isDragging ? 2 : undefined,
+      }}
+      onClick={handleSelect}
       onDoubleClick={(e) => {
         e.stopPropagation();
         setIsEditing(true);
@@ -122,7 +137,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
       onMouseDown={(e) => {
         if (e.button === 1) {
           e.preventDefault();
-          onClose();
+          handleClose();
         }
       }}
       {...attributes}
@@ -178,7 +193,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
           aria-label="Close tab"
           onClick={(e) => {
             e.stopPropagation();
-            onClose();
+            handleClose();
           }}
           className={cn(
             "no-drag shrink-0 inline-flex items-center justify-center size-3.5 rounded-sm",
@@ -203,8 +218,6 @@ export default memo(function GroupTabBar({
 }: GroupTabBarProps) {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const addGroupTab = useWorkspaceStore((s) => s.addGroupTab);
-  const removeGroupTab = useWorkspaceStore((s) => s.removeGroupTab);
-  const setActiveGroupTab = useWorkspaceStore((s) => s.setActiveGroupTab);
   const closeGroup = useWorkspaceStore((s) => s.closeGroup);
   const addWorkspace = useWorkspaceStore((s) => s.addWorkspace);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
@@ -215,6 +228,7 @@ export default memo(function GroupTabBar({
   });
 
   const modifierHeld = useModifierHeldContext();
+  const activeDrag = useActiveDrag();
   const dropIntent = useDropIntent();
 
   useEffect(() => {
@@ -317,8 +331,7 @@ export default memo(function GroupTabBar({
               showInsertAfter={
                 tabInsertIndex === group.tabs.length && tabIndex === group.tabs.length - 1
               }
-              onSelect={() => setActiveGroupTab(workspaceId, groupId, tab.id)}
-              onClose={() => removeGroupTab(workspaceId, groupId, tab.id)}
+              isSidebarWorkspaceDrag={activeDrag?.type === "sidebar-workspace"}
             />
           );
         })}

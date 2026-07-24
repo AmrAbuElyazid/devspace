@@ -80,6 +80,12 @@ export interface WorkspaceState {
 
   // Group tab CRUD
   addGroupTab: (workspaceId: string, groupId: string, defaultType?: PaneType) => void;
+  openTerminalWithConfig: (
+    workspaceId: string,
+    groupId: string,
+    config: import("../types/workspace").TerminalConfig,
+  ) => void;
+  openManagedTerminalSession: (workspaceId: string, groupId: string, sessionId: string) => void;
   removeGroupTab: (workspaceId: string, groupId: string, tabId: string) => void;
   setActiveGroupTab: (workspaceId: string, groupId: string, tabId: string) => void;
   reorderGroupTabs: (

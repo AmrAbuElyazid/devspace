@@ -3,19 +3,26 @@ import { AlertCircle } from "lucide-react";
 
 import { focusBrowserNativePane, hasEditableRendererFocus } from "@/lib/native-pane-focus";
 import { useNativeView } from "@/hooks/useNativeView";
+import {
+  hasCreatedEmbeddedToolView,
+  markEmbeddedToolViewActive,
+  markEmbeddedToolViewCreated,
+  markEmbeddedToolViewDestroyed,
+  markEmbeddedToolViewInactive,
+  markEmbeddedToolViewReady,
+} from "@/lib/embedded-tool-view-session";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
-const startedInstances = new Set<string>();
-
 export function markT3CodeDestroyed(paneId: string): void {
-  startedInstances.delete(paneId);
+  markEmbeddedToolViewDestroyed(paneId);
 }
 
 interface T3CodePaneProps {
   paneId: string;
   isFocused: boolean;
+  isActive?: boolean;
 }
 
 type T3CodeState =
@@ -24,13 +31,17 @@ type T3CodeState =
   | { status: "error"; message: string }
   | { status: "unavailable" };
 
-export default function T3CodePane({ paneId, isFocused }: T3CodePaneProps): ReactElement {
+export default function T3CodePane({
+  paneId,
+  isFocused,
+  isActive = true,
+}: T3CodePaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const wasVisibleRef = useRef(false);
   const wasFocusedRef = useRef(false);
 
   const [state, setState] = useState<T3CodeState>(() =>
-    startedInstances.has(paneId) ? { status: "running" } : { status: "starting" },
+    hasCreatedEmbeddedToolView(paneId) ? { status: "running" } : { status: "starting" },
   );
 
   const { isVisible } = useNativeView({
@@ -53,26 +64,50 @@ export default function T3CodePane({ paneId, isFocused }: T3CodePaneProps): Reac
   }, [isFocused, isVisible, paneId, state.status]);
 
   useEffect(() => {
+    return () => {
+      markEmbeddedToolViewInactive(paneId);
+    };
+  }, [paneId]);
+
+  useEffect(() => {
+    if (!isActive) {
+      markEmbeddedToolViewInactive(paneId);
+      return;
+    }
+
+    if (state.status === "running" && !hasCreatedEmbeddedToolView(paneId)) {
+      setState({ status: "starting" });
+      return;
+    }
+
+    markEmbeddedToolViewActive(paneId);
+  }, [isActive, paneId, state.status]);
+
+  useEffect(() => {
     if (state.status !== "starting") return;
-    if (startedInstances.has(paneId)) {
+    if (hasCreatedEmbeddedToolView(paneId)) {
       setState({ status: "running" });
       return;
     }
     let cancelled = false;
+    markEmbeddedToolViewCreated(paneId, () => {
+      void window.api.browser.destroy(paneId);
+    });
     void (async () => {
       const available = await window.api.t3code.isAvailable();
-      if (cancelled) return;
       if (!available) {
-        setState({ status: "unavailable" });
+        markEmbeddedToolViewDestroyed(paneId);
+        if (!cancelled) setState({ status: "unavailable" });
         return;
       }
       const result = await window.api.t3code.start(paneId);
-      if (cancelled) return;
       if ("error" in result) {
-        setState({ status: "error", message: result.error });
+        markEmbeddedToolViewDestroyed(paneId);
+        if (!cancelled) setState({ status: "error", message: result.error });
         return;
       }
-      startedInstances.add(paneId);
+      markEmbeddedToolViewReady(paneId);
+      if (cancelled) return;
       setState({ status: "running" });
     })();
     return () => {

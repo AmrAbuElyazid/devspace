@@ -218,14 +218,14 @@ describe("resolveVscodeCli", () => {
       ],
       {
         stdio: ["ignore", "pipe", "pipe"],
-        detached: false,
+        detached: true,
       },
     );
 
     const pidWriteCall = fsMocks.writeFileSync.mock.calls.find(
       (call: unknown[]) => call[0] === `${serverDataDir}/server.pid`,
     );
-    expect(pidWriteCall?.[1]).toBe("5678\n");
+    expect(pidWriteCall?.[1]).toBe('{"version":1,"listenerPid":5678,"processGroupId":1234}\n');
 
     const parsed = new URL(result.url);
     expect(parsed.pathname).toBe("/devspace-vscode");
@@ -259,10 +259,14 @@ describe("resolveVscodeCli", () => {
     const result = await manager.start("/tmp/project", "/missing/code");
 
     expect(childProcessMocks.spawn).not.toHaveBeenCalled();
-    expect(fsMocks.writeFileSync).toHaveBeenCalledWith(`${serverDataDir}/server.pid`, "9999\n", {
-      encoding: "utf-8",
-      mode: 0o600,
-    });
+    expect(fsMocks.writeFileSync).toHaveBeenCalledWith(
+      `${serverDataDir}/server.pid`,
+      '{"version":1,"listenerPid":9999}\n',
+      {
+        encoding: "utf-8",
+        mode: 0o600,
+      },
+    );
     expect(result).toEqual({
       port: 18562,
       url: "http://127.0.0.1:18562/devspace-vscode?tkn=stable-token&folder=%2Ftmp%2Fproject",
@@ -428,5 +432,83 @@ describe("resolveVscodeCli", () => {
 
     expect(processKillSpy).toHaveBeenCalledWith(9999, "SIGTERM");
     expect(fsMocks.unlinkSync).toHaveBeenCalledWith(`${serverDataDir}/server.pid`);
+  });
+
+  test("reconciles only stale processes with the full Devspace ownership signature", async () => {
+    const serverDataDir = "/tmp/devspace-vscode";
+    const tokenFilePath = `${serverDataDir}/connection-token`;
+    const managedCommand = managedListenerCommand(
+      18562,
+      "/devspace-vscode",
+      tokenFilePath,
+      serverDataDir,
+    );
+    const alivePids = new Set([7777, 8888]);
+
+    fsMocks.existsSync.mockImplementation((filePath: string) => filePath === tokenFilePath);
+    fsMocks.readFileSync.mockImplementation((filePath: string) => {
+      if (filePath === tokenFilePath) return "stable-token\n";
+      throw new Error("no ownership record");
+    });
+    childProcessMocks.execFileSync.mockImplementation((command: string, args: string[]) => {
+      if (command === "lsof") return "";
+      if (command === "ps" && args[0] === "-axo") {
+        return ` 7777 ${managedCommand}\n 8888 /usr/bin/python3 -m http.server 18562\n`;
+      }
+      if (command === "ps" && args[1] === "7777") return `${managedCommand}\n`;
+      if (command === "ps" && args[1] === "8888") {
+        return "/usr/bin/python3 -m http.server 18562\n";
+      }
+      throw new Error(`Unexpected execFileSync call: ${command} ${args.join(" ")}`);
+    });
+    processKillSpy.mockImplementation((pid: number, signal?: string | number) => {
+      if (signal === 0) {
+        if (alivePids.has(pid)) return true;
+        throw new Error("ESRCH");
+      }
+      alivePids.delete(pid);
+      return true;
+    });
+
+    const manager = new VscodeServerManager(serverDataDir);
+    await (
+      manager as unknown as { reconcileStaleManagedProcesses: () => Promise<void> }
+    ).reconcileStaleManagedProcesses();
+
+    expect(processKillSpy).toHaveBeenCalledWith(7777, "SIGTERM");
+    expect(processKillSpy).not.toHaveBeenCalledWith(8888, "SIGTERM");
+  });
+
+  test("never kills a reused pid when its command does not prove Devspace ownership", async () => {
+    const serverDataDir = "/tmp/devspace-vscode";
+    const tokenFilePath = `${serverDataDir}/connection-token`;
+    const pidFilePath = `${serverDataDir}/server.pid`;
+
+    fsMocks.existsSync.mockImplementation(
+      (filePath: string) => filePath === tokenFilePath || filePath === pidFilePath,
+    );
+    fsMocks.readFileSync.mockImplementation((filePath: string) => {
+      if (filePath === tokenFilePath) return "stable-token\n";
+      if (filePath === pidFilePath) return "8888\n";
+      throw new Error(`Unexpected read for ${filePath}`);
+    });
+    childProcessMocks.execFileSync.mockImplementation((command: string, args: string[]) => {
+      if (command === "lsof") return "";
+      if (command === "ps" && args[0] === "-axo") {
+        return " 8888 /usr/bin/python3 -m http.server 18562\n";
+      }
+      if (command === "ps" && args[1] === "8888") {
+        return "/usr/bin/python3 -m http.server 18562\n";
+      }
+      throw new Error(`Unexpected execFileSync call: ${command} ${args.join(" ")}`);
+    });
+
+    const manager = new VscodeServerManager(serverDataDir);
+    await (
+      manager as unknown as { reconcileStaleManagedProcesses: () => Promise<void> }
+    ).reconcileStaleManagedProcesses();
+
+    expect(processKillSpy).not.toHaveBeenCalledWith(8888, expect.anything());
+    expect(fsMocks.unlinkSync).toHaveBeenCalledWith(pidFilePath);
   });
 });

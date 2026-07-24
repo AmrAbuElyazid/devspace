@@ -10,8 +10,11 @@ import {
 import { getAddressBarSubmitValue, normalizeBrowserInput } from "../../lib/browser-url";
 import {
   hasCreatedBrowserPane,
+  markBrowserPaneActive,
   markBrowserPaneCreated,
   markBrowserPaneDestroyed,
+  markBrowserPaneInactive,
+  markBrowserPaneReady,
 } from "../../lib/browser-pane-session";
 import { useNativeView } from "../../hooks/useNativeView";
 import { useBrowserStore } from "../../store/browser-store";
@@ -28,17 +31,17 @@ interface UseBrowserPaneControllerArgs {
   workspaceId: string;
   config: BrowserConfig;
   isFocused: boolean;
+  isActive: boolean;
 }
 
 export function useBrowserPaneController({
   paneId,
   config,
   isFocused,
+  isActive,
 }: UseBrowserPaneControllerArgs) {
   const [paneReady, setPaneReady] = useState(() => hasCreatedBrowserPane(paneId));
   const placeholderRef = useRef<HTMLDivElement>(null);
-  const createAttemptRef = useRef(0);
-  const unmountedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId]);
   const pendingPermissionRequest = useBrowserStore((s) => s.pendingPermissionRequest);
@@ -61,9 +64,29 @@ export function useBrowserPaneController({
 
   useEffect(() => {
     return () => {
-      unmountedRef.current = true;
+      markBrowserPaneInactive(paneId, (stalePaneId) => {
+        void window.api.browser.destroy(stalePaneId);
+        useBrowserStore.getState().clearRuntimeState(stalePaneId);
+      });
     };
-  }, []);
+  }, [paneId]);
+
+  useEffect(() => {
+    if (!isActive) {
+      markBrowserPaneInactive(paneId, (stalePaneId) => {
+        void window.api.browser.destroy(stalePaneId);
+        useBrowserStore.getState().clearRuntimeState(stalePaneId);
+      });
+      return;
+    }
+
+    if (paneReady && !hasCreatedBrowserPane(paneId)) {
+      setPaneReady(false);
+      return;
+    }
+
+    markBrowserPaneActive(paneId);
+  }, [isActive, paneId, paneReady]);
 
   // Queue native browser creation during layout so the create IPC is already
   // in flight before useNativeView's registration effect can reconcile.
@@ -73,19 +96,25 @@ export function useBrowserPaneController({
     }
 
     if (hasCreatedBrowserPane(paneId)) {
+      markBrowserPaneActive(paneId);
       setPaneReady(true);
       return;
     }
 
-    const attemptId = ++createAttemptRef.current;
     markBrowserPaneCreated(paneId);
     setPaneReady(true);
 
-    void window.api.browser.create(paneId, initialUrl).catch(() => {
-      if (!unmountedRef.current && createAttemptRef.current === attemptId) {
+    void window.api.browser
+      .create(paneId, initialUrl)
+      .then(() => {
+        markBrowserPaneReady(paneId, (stalePaneId) => {
+          void window.api.browser.destroy(stalePaneId);
+          useBrowserStore.getState().clearRuntimeState(stalePaneId);
+        });
+      })
+      .catch(() => {
         markBrowserPaneDestroyed(paneId);
-      }
-    });
+      });
   }, [initialUrl, paneId, paneReady]);
 
   const { isVisible } = useNativeView({

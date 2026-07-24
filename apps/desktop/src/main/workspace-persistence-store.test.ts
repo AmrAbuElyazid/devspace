@@ -158,6 +158,60 @@ test("workspace persistence store incrementally applies later snapshots", async 
   expect(store.load()).toEqual(nextSnapshot);
 });
 
+test("workspace persistence store preserves reordered workspace IDs", async () => {
+  const userDataPath = await mkdtemp(join(tmpdir(), "devspace-workspace-db-"));
+  tempDirs.push(userDataPath);
+
+  const workspaceOne: PersistedWorkspaceState["workspaces"][number] = {
+    id: "workspace-1",
+    name: "Workspace One",
+    root: { type: "leaf", groupId: "group-1" },
+    focusedGroupId: "group-1",
+    zoomedGroupId: null,
+    lastActiveAt: 100,
+  };
+  const workspaceTwo: PersistedWorkspaceState["workspaces"][number] = {
+    id: "workspace-2",
+    name: "Workspace Two",
+    root: { type: "leaf", groupId: "group-2" },
+    focusedGroupId: "group-2",
+    zoomedGroupId: null,
+    lastActiveAt: 200,
+  };
+  const base: Omit<PersistedWorkspaceState, "workspaces"> = {
+    activeWorkspaceId: "workspace-1",
+    panes: {
+      "pane-1": { id: "pane-1", title: "One", type: "terminal", config: {} },
+      "pane-2": { id: "pane-2", title: "Two", type: "terminal", config: {} },
+    },
+    paneGroups: {
+      "group-1": {
+        id: "group-1",
+        activeTabId: "tab-1",
+        tabs: [{ id: "tab-1", paneId: "pane-1" }],
+      },
+      "group-2": {
+        id: "group-2",
+        activeTabId: "tab-2",
+        tabs: [{ id: "tab-2", paneId: "pane-2" }],
+      },
+    },
+    pinnedSidebarNodes: [],
+    sidebarTree: [
+      { type: "workspace", workspaceId: "workspace-1" },
+      { type: "workspace", workspaceId: "workspace-2" },
+    ],
+  };
+  const store = new WorkspacePersistenceStore(userDataPath);
+  store.save({ ...base, workspaces: [workspaceOne, workspaceTwo] });
+  store.save({ ...base, workspaces: [workspaceTwo, workspaceOne] });
+
+  expect(store.load()?.workspaces.map((workspace) => workspace.id)).toEqual([
+    "workspace-2",
+    "workspace-1",
+  ]);
+});
+
 test("workspace persistence store migrates legacy databases without schema_version", async () => {
   const userDataPath = await mkdtemp(join(tmpdir(), "devspace-workspace-db-"));
   tempDirs.push(userDataPath);

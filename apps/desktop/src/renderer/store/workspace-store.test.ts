@@ -237,6 +237,65 @@ test("cleanupPaneResources only destroys tracked terminal panes", () => {
   expect(destroyedPaneIds).toEqual(["pane-1"]);
 });
 
+test("openManagedTerminalSession recovers a detached session without duplicating it", () => {
+  const workspaceId = setupWorkspace();
+  const workspace = getWorkspace(workspaceId);
+  const groupId = workspace?.focusedGroupId;
+  expect(groupId).toBeTruthy();
+
+  useWorkspaceStore
+    .getState()
+    .openManagedTerminalSession(workspaceId, groupId!, "detached-session-1");
+
+  let state = useWorkspaceStore.getState();
+  const recoveredPanes = Object.values(state.panes).filter(
+    (pane) =>
+      pane.type === "terminal" &&
+      pane.config.backend === "managed-tmux" &&
+      pane.config.sessionId === "detached-session-1",
+  );
+  expect(recoveredPanes).toHaveLength(1);
+  expect(state.paneGroups[groupId!]?.tabs.at(-1)?.paneId).toBe(recoveredPanes[0]?.id);
+
+  useWorkspaceStore
+    .getState()
+    .openManagedTerminalSession(workspaceId, groupId!, "detached-session-1");
+  state = useWorkspaceStore.getState();
+  expect(
+    Object.values(state.panes).filter(
+      (pane) =>
+        pane.type === "terminal" &&
+        pane.config.backend === "managed-tmux" &&
+        pane.config.sessionId === "detached-session-1",
+    ),
+  ).toHaveLength(1);
+});
+
+test("openTerminalWithConfig exposes direct and user-owned tmux backends", () => {
+  const workspaceId = setupWorkspace();
+  const state = useWorkspaceStore.getState();
+  const groupId = getWorkspace(workspaceId)?.focusedGroupId;
+  expect(groupId).toBeTruthy();
+
+  state.openTerminalWithConfig(workspaceId, groupId!, { backend: "direct", cwd: "/tmp/direct" });
+  useWorkspaceStore.getState().openTerminalWithConfig(workspaceId, groupId!, {
+    backend: "external-tmux",
+    sessionName: "personal",
+    socketPath: "/tmp/tmux-user/default",
+  });
+
+  const terminalConfigs = Object.values(useWorkspaceStore.getState().panes).flatMap((pane) =>
+    pane.type === "terminal" ? [pane.config] : [],
+  );
+  expect(terminalConfigs).toContainEqual({ backend: "direct", cwd: "/tmp/direct" });
+  expect(terminalConfigs).toContainEqual({
+    backend: "external-tmux",
+    sessionName: "personal",
+    socketPath: "/tmp/tmux-user/default",
+    cwd: "/tmp/direct",
+  });
+});
+
 test("updateBrowserPaneZoom persists zoom on browser pane config only", () => {
   resetWorkspaceStore();
   useWorkspaceStore.setState({
@@ -1805,7 +1864,10 @@ test("findNearestTerminalCwd falls back to workspace.lastTerminalCwd when no ter
   expect(newTerminalTab).toBeTruthy();
   const newTerminalPane = useWorkspaceStore.getState().panes[newTerminalTab!.paneId]!;
   expect(newTerminalPane.type).toBe("terminal");
-  expect(newTerminalPane.config).toEqual({ cwd: "/Users/test/remembered" });
+  expect(newTerminalPane.config).toMatchObject({
+    backend: "managed-tmux",
+    cwd: "/Users/test/remembered",
+  });
 });
 
 test("updatePaneConfig does not update lastTerminalCwd for non-terminal panes", () => {

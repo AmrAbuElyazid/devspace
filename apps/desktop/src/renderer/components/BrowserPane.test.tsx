@@ -96,6 +96,9 @@ vi.mock("../lib/browser-pane-session", () => ({
   markBrowserPaneCreated: (paneId: string) => {
     browserPaneMocks.createdPanes.add(paneId);
   },
+  markBrowserPaneReady: () => {},
+  markBrowserPaneActive: () => {},
+  markBrowserPaneInactive: () => {},
   markBrowserPaneDestroyed: (paneId: string) => {
     browserPaneMocks.createdPanes.delete(paneId);
   },

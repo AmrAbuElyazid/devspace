@@ -26,6 +26,7 @@ interface TerminalStoreState {
   updateSearchTotal: (paneId: string, total: number) => void;
   updateSearchSelected: (paneId: string, selected: number) => void;
   clearSearchState: (paneId: string) => void;
+  clearPaneState: (paneId: string) => void;
 }
 
 export const useTerminalStore = create<TerminalStoreState>((set) => ({
@@ -88,6 +89,26 @@ export const useTerminalStore = create<TerminalStoreState>((set) => ({
       const next = { ...state.searchStateByPaneId };
       delete next[paneId];
       return { searchStateByPaneId: next };
+    });
+  },
+
+  clearPaneState: (paneId) => {
+    set((state) => {
+      if (
+        !(paneId in state.findBarOpenByPaneId) &&
+        !(paneId in state.findBarFocusTokenByPaneId) &&
+        !(paneId in state.searchStateByPaneId)
+      ) {
+        return state;
+      }
+
+      const findBarOpenByPaneId = { ...state.findBarOpenByPaneId };
+      const findBarFocusTokenByPaneId = { ...state.findBarFocusTokenByPaneId };
+      const searchStateByPaneId = { ...state.searchStateByPaneId };
+      delete findBarOpenByPaneId[paneId];
+      delete findBarFocusTokenByPaneId[paneId];
+      delete searchStateByPaneId[paneId];
+      return { findBarOpenByPaneId, findBarFocusTokenByPaneId, searchStateByPaneId };
     });
   },
 }));

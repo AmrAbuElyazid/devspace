@@ -9,7 +9,7 @@ export interface GhosttyNativeBridge {
   shutdown(): void;
   createSurface(
     surfaceId: string,
-    options?: { cwd?: string; envVars?: Record<string, string> },
+    options?: { cwd?: string; envVars?: Record<string, string>; command?: string },
   ): void;
   destroySurface(surfaceId: string): void;
   showSurface(surfaceId: string): void;

@@ -123,7 +123,7 @@ describe("buildShellIntegrationEnvVars", () => {
 });
 
 describe("TerminalManager profiling", () => {
-  test("records terminal lifecycle timings for profiling", () => {
+  test("records terminal lifecycle timings for profiling", async () => {
     const manager = new TerminalManager();
     const terminal = {
       createSurface: vi.fn(),
@@ -138,7 +138,7 @@ describe("TerminalManager profiling", () => {
 
     (manager as unknown as { terminal: typeof terminal }).terminal = terminal;
 
-    manager.createSurface("surface-1", { cwd: "/tmp/project" });
+    await manager.createSurface("surface-1", { cwd: "/tmp/project" });
     manager.showSurface("surface-1");
     manager.hideSurface("surface-1");
     manager.focusSurface("surface-1");
@@ -159,5 +159,42 @@ describe("TerminalManager profiling", () => {
       "terminal.blurSurfaces": { count: 1 },
       "terminal.destroySurface": { count: 1 },
     });
+  });
+
+  test("prepares a managed session before attaching the Ghostty client", async () => {
+    const manager = new TerminalManager();
+    const terminal = { createSurface: vi.fn() };
+    const managedTmux = {
+      ensureSession: vi.fn(async () => {}),
+      buildAttachCommand: vi.fn(() => "managed attach command"),
+      killSession: vi.fn(async () => true),
+      listSessions: vi.fn(async () => [
+        { sessionId: "session-1", attachedClients: 1, createdAt: 1 },
+      ]),
+    };
+
+    (manager as unknown as { terminal: typeof terminal }).terminal = terminal;
+    (manager as unknown as { managedTmux: typeof managedTmux }).managedTmux = managedTmux;
+
+    await manager.createSurface("surface-1", {
+      backend: "managed-tmux",
+      sessionId: "session-1",
+      cwd: "/tmp/project",
+    });
+
+    expect(managedTmux.ensureSession).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      cwd: "/tmp/project",
+      envVars: {},
+    });
+    expect(terminal.createSurface).toHaveBeenCalledWith("surface-1", {
+      cwd: "/tmp/project",
+      command: "managed attach command",
+    });
+    await expect(manager.killManagedSession("session-1")).resolves.toBe(true);
+    expect(managedTmux.killSession).toHaveBeenCalledWith("session-1");
+    await expect(manager.listManagedSessions()).resolves.toEqual([
+      { sessionId: "session-1", attachedClients: 1, createdAt: 1 },
+    ]);
   });
 });

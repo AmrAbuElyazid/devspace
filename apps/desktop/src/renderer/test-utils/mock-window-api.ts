@@ -71,6 +71,8 @@ function createDefaultWindowApi(): DevspaceBridge {
     terminal: {
       create: vi.fn(async () => ({ ok: true as const })),
       destroy: vi.fn(async () => {}),
+      killManagedSession: vi.fn(async () => ({ killed: true as const })),
+      listManagedSessions: vi.fn(async () => ({ sessions: [] })),
       show: vi.fn(async () => {}),
       hide: vi.fn(async () => {}),
       focus: vi.fn(),
@@ -138,6 +140,7 @@ function createDefaultWindowApi(): DevspaceBridge {
     workspaceState: {
       load: vi.fn(async () => null),
       save: vi.fn(async () => {}),
+      patch: vi.fn(async () => ({ ok: true as const })),
       saveSync: vi.fn(),
     },
     t3code: {
@@ -174,6 +177,7 @@ function createDefaultWindowApi(): DevspaceBridge {
       })),
       detectAccess: vi.fn(async () => ({ ok: true as const })),
       clearBrowsingData: vi.fn(async () => ({ ok: true })),
+      getCacheSize: vi.fn(async () => ({ bytes: 0 })),
       onStateChange: vi.fn(() => unsubscribe),
       onFocused: vi.fn(() => unsubscribe),
       onPermissionRequest: vi.fn(() => unsubscribe),

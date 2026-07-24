@@ -2,6 +2,7 @@
 #include <napi.h>
 #import <AppKit/AppKit.h>
 #import <Carbon/Carbon.h>
+#import <CoreVideo/CoreVideo.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/QuartzCore.h>
 #include <cstdlib>
@@ -12,6 +13,18 @@
 #include <string>
 
 GhosttyAppState g_state;
+
+// CVDisplayLinkCreateWithActiveCGDisplays returns kCVReturnInvalidArgument
+// inside Electron on current macOS releases. libghostty treats that as an
+// allocation failure and refuses to create a surface. A link created for the
+// main display is valid, and libghostty retargets it when the surface's display
+// ID is set after creation.
+extern "C" CVReturn CVDisplayLinkCreateWithActiveCGDisplays(
+    CVDisplayLinkRef* displayLinkOut
+) {
+    if (!displayLinkOut) return kCVReturnInvalidArgument;
+    return CVDisplayLinkCreateWithCGDisplay(CGMainDisplayID(), displayLinkOut);
+}
 
 // Forward declare
 @class GhosttyView;
@@ -1750,8 +1763,9 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
 
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
 
-    // Optionally accept a second argument (options object with `cwd` and `envVars`)
+    // Optionally accept a second argument (options object with `cwd`, `envVars`, and `command`)
     NSString* workingDirectory = nil;
+    std::string command;
     std::vector<ghostty_env_var_s> envVars;
     std::vector<std::string> envStorage; // keep strings alive until surface is created
     if (info.Length() > 1 && info[1].IsObject()) {
@@ -1759,6 +1773,10 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
         Napi::Value cwdVal = opts.Get("cwd");
         if (cwdVal.IsString()) {
             workingDirectory = [NSString stringWithUTF8String:cwdVal.As<Napi::String>().Utf8Value().c_str()];
+        }
+        Napi::Value commandVal = opts.Get("command");
+        if (commandVal.IsString()) {
+            command = commandVal.As<Napi::String>().Utf8Value();
         }
         // Parse env vars: { envVars: { KEY: "value", ... } }
         Napi::Value envVal = opts.Get("envVars");
@@ -1822,6 +1840,10 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
 
     if (workingDirectory) {
         surface_cfg.working_directory = [workingDirectory UTF8String];
+    }
+
+    if (!command.empty()) {
+        surface_cfg.command = command.c_str();
     }
 
     if (!envVars.empty()) {

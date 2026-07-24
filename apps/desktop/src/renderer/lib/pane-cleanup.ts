@@ -9,6 +9,7 @@ export type PaneCleanupDeps = {
   destroyEditor: (paneId: string) => void;
   destroyT3Code: (paneId: string) => void;
   clearBrowserRuntime: (paneId: string) => void;
+  clearTerminalRuntime?: (paneId: string) => void;
 };
 
 export function cleanupPaneResources(
@@ -20,6 +21,7 @@ export function cleanupPaneResources(
 
   if (pane?.type === "terminal") {
     destroyTrackedTerminalSurfaces([paneId], deps.destroyTerminal);
+    deps.clearTerminalRuntime?.(paneId);
   }
 
   if (pane?.type === "browser") {

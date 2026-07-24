@@ -57,8 +57,6 @@ export default memo(function PaneGroupContainer({
 
   if (!group) return null;
 
-  const activeTab = group.tabs.find((tab) => tab.id === group.activeTabId) ?? null;
-
   return (
     <div
       data-focused={isFocused || undefined}
@@ -74,7 +72,7 @@ export default memo(function PaneGroupContainer({
         dndEnabled={dndEnabled}
       />
       <PaneGroupContent
-        activeTab={activeTab}
+        activeTabId={group.activeTabId}
         dragHidesViews={dragHidesViews}
         dndEnabled={dndEnabled}
         groupId={groupId}
@@ -82,6 +80,7 @@ export default memo(function PaneGroupContainer({
         isFocused={isFocused}
         previewSide={previewSide}
         temporarilyHiddenPaneId={temporarilyHiddenPaneId}
+        tabs={group.tabs}
         workspaceId={workspaceId}
       />
     </div>

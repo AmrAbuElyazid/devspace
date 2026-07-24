@@ -110,7 +110,7 @@ test("group-removed deletes the source group and tab history by default", () => 
   expect(nextState.workspaces[0]?.zoomedGroupId).toBeNull();
 });
 
-test("group-removed can preserve an empty tab history entry for close-tab flows", () => {
+test("group-removed does not retain dead tab history keys", () => {
   const state = createBaseState();
   const resolution: SourceGroupResolution = {
     kind: "group-removed",
@@ -124,10 +124,9 @@ test("group-removed can preserve an empty tab history entry for close-tab flows"
     sourceGroupId: "group-1",
     removedTabId: "tab-2",
     resolution,
-    removedGroupTabHistoryMode: "empty",
   });
 
-  expect(nextState.tabHistoryByGroupId["group-1"]).toEqual([]);
+  expect(nextState.tabHistoryByGroupId["group-1"]).toBeUndefined();
 });
 
 test("group-replaced-with-fallback adds the fallback pane and source group", () => {

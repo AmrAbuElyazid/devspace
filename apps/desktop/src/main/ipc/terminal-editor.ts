@@ -12,6 +12,7 @@ const MAX_TERMINAL_ENV_VARS = 100;
 const MAX_TERMINAL_ENV_KEY_LENGTH = 128;
 const MAX_TERMINAL_ENV_VALUE_LENGTH = 8192;
 const MAX_TERMINAL_CWD_LENGTH = 4096;
+const MAX_TMUX_VALUE_LENGTH = 4096;
 const MAX_EDITOR_CLI_LENGTH = 4096;
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const ALLOWED_EDITOR_CLI_COMMANDS = new Set(["code", "code-insiders"]);
@@ -34,6 +35,24 @@ function parseTerminalEnvVars(value: unknown): Record<string, string> | undefine
   }
 
   return Object.keys(envVars).length > 0 ? envVars : undefined;
+}
+
+function parseManagedSessionId(value: unknown): string | undefined {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(value)) return undefined;
+  return value;
+}
+
+function parseExternalTmuxValue(value: unknown): string | undefined {
+  if (typeof value !== "string" || value.length === 0 || value.length > MAX_TMUX_VALUE_LENGTH) {
+    return undefined;
+  }
+  return value.includes("\0") || value.includes("\r") || value.includes("\n") ? undefined : value;
+}
+
+function nextGeneration(generations: Map<string, number>, paneId: string): number {
+  const generation = (generations.get(paneId) ?? 0) + 1;
+  generations.set(paneId, generation);
+  return generation;
 }
 
 function parseConfiguredEditorCli(value: unknown): string | undefined {
@@ -65,19 +84,34 @@ export function registerTerminalAndEditorIpc(
     "registerTrustedLocalOrigin" | "unregisterTrustedLocalOrigin"
   >,
 ): void {
-  safeHandle("terminal:create", (_event, surfaceId: unknown, options: unknown) => {
+  safeHandle("terminal:create", async (_event, surfaceId: unknown, options: unknown) => {
     if (typeof surfaceId !== "string") return;
     const opts =
       typeof options === "object" && options !== null ? (options as Record<string, unknown>) : {};
     const cwd = parseTerminalCwd(opts["cwd"]);
     const envVars = parseTerminalEnvVars(opts["envVars"]);
 
-    const createOpts: { cwd?: string; envVars?: Record<string, string> } = {};
+    const createOpts: import("../../shared/types").TerminalCreateOptions = {};
     if (cwd) createOpts.cwd = cwd;
     if (envVars) createOpts.envVars = envVars;
 
+    if (opts["backend"] === "managed-tmux") {
+      const sessionId = parseManagedSessionId(opts["sessionId"]);
+      if (!sessionId) return { error: "Invalid managed terminal session ID" } as const;
+      Object.assign(createOpts, { backend: "managed-tmux", sessionId });
+    } else if (opts["backend"] === "external-tmux") {
+      const sessionName = parseExternalTmuxValue(opts["sessionName"]);
+      if (!sessionName) return { error: "Invalid external tmux session name" } as const;
+      const socketPath = parseExternalTmuxValue(opts["socketPath"]);
+      Object.assign(createOpts, {
+        backend: "external-tmux",
+        sessionName,
+        ...(socketPath ? { socketPath } : {}),
+      });
+    }
+
     try {
-      terminalManager.createSurface(
+      await terminalManager.createSurface(
         surfaceId,
         Object.keys(createOpts).length > 0 ? createOpts : undefined,
       );
@@ -85,6 +119,24 @@ export function registerTerminalAndEditorIpc(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return { error: message } as const;
+    }
+  });
+
+  safeHandle("terminal:killManagedSession", async (_event, sessionId: unknown) => {
+    const safeSessionId = parseManagedSessionId(sessionId);
+    if (!safeSessionId) return { error: "Invalid managed terminal session ID" } as const;
+    try {
+      return { killed: await terminalManager.killManagedSession(safeSessionId) } as const;
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) } as const;
+    }
+  });
+
+  safeHandle("terminal:listManagedSessions", async () => {
+    try {
+      return { sessions: await terminalManager.listManagedSessions() } as const;
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) } as const;
     }
   });
 
@@ -135,6 +187,8 @@ export function registerTerminalAndEditorIpc(
 
   const editorPaneSessions = new Map<string, { folder: string | undefined; url: string }>();
   const t3codePaneUrls = new Map<string, string>();
+  const editorPaneGenerations = new Map<string, number>();
+  const t3codePaneGenerations = new Map<string, number>();
 
   safeHandle("editor:isAvailable", (_event, configuredCli: unknown) => {
     return vscodeServerManager.isAvailable(parseConfiguredEditorCli(configuredCli));
@@ -153,9 +207,19 @@ export function registerTerminalAndEditorIpc(
 
       const folder = typeof folderPath === "string" ? folderPath : undefined;
       const preferredCli = parseConfiguredEditorCli(configuredCli);
+      const generation = nextGeneration(editorPaneGenerations, paneId);
       try {
-        const { url } = await vscodeServerManager.start(folder, preferredCli);
         const existingSession = editorPaneSessions.get(paneId);
+        if (existingSession && existingSession.folder === folder) {
+          browserPaneManager.createPane(paneId, existingSession.url, "editor");
+          return { url: existingSession.url };
+        }
+
+        const { url } = await vscodeServerManager.start(folder, preferredCli);
+        if (editorPaneGenerations.get(paneId) !== generation) {
+          vscodeServerManager.release(folder);
+          return { error: "Editor start was cancelled" };
+        }
         if (existingSession) {
           editorSessionManager?.unregisterTrustedLocalOrigin(existingSession.url);
           vscodeServerManager.release(existingSession.folder);
@@ -174,6 +238,7 @@ export function registerTerminalAndEditorIpc(
 
   safeHandle("editor:stop", (_event, paneId: unknown) => {
     if (typeof paneId !== "string") return;
+    nextGeneration(editorPaneGenerations, paneId);
     if (editorPaneSessions.has(paneId)) {
       const session = editorPaneSessions.get(paneId);
       editorPaneSessions.delete(paneId);
@@ -200,12 +265,18 @@ export function registerTerminalAndEditorIpc(
     }
 
     try {
-      const { url } = await t3codeServerManager.start();
+      const generation = nextGeneration(t3codePaneGenerations, paneId);
       const existingUrl = t3codePaneUrls.get(paneId);
       if (existingUrl) {
-        browserSessionManager?.unregisterTrustedLocalOrigin(existingUrl);
+        browserPaneManager.createPane(paneId, existingUrl, "t3code");
+        return { url: existingUrl };
       }
 
+      const { url } = await t3codeServerManager.start();
+      if (t3codePaneGenerations.get(paneId) !== generation) {
+        t3codeServerManager.release();
+        return { error: "T3 Code start was cancelled" };
+      }
       t3codePaneUrls.set(paneId, url);
       browserSessionManager?.registerTrustedLocalOrigin(url);
       browserPaneManager.createPane(paneId, url, "t3code");
@@ -218,6 +289,7 @@ export function registerTerminalAndEditorIpc(
 
   safeHandle("t3code:stop", (_event, paneId: unknown) => {
     if (typeof paneId !== "string") return;
+    nextGeneration(t3codePaneGenerations, paneId);
     const url = t3codePaneUrls.get(paneId);
     t3codePaneUrls.delete(paneId);
     if (url) {

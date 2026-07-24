@@ -96,7 +96,10 @@ test("surface lifecycle methods forward to the bridge and closed callbacks retir
   });
   terminal.on("surface-closed", onClosed);
 
-  terminal.createSurface("surface-1", { cwd: "/tmp/project" });
+  terminal.createSurface("surface-1", {
+    cwd: "/tmp/project",
+    command: "/usr/bin/env tmux attach-session -t session",
+  });
   terminal.createSurface("surface-2");
   terminal.focusSurface("surface-1");
   terminal.setBounds("surface-1", { x: 1, y: 2, width: 300, height: 160 });
@@ -108,6 +111,7 @@ test("surface lifecycle methods forward to the bridge and closed callbacks retir
 
   expect(nativeMocks.bridge.createSurface).toHaveBeenCalledWith("surface-1", {
     cwd: "/tmp/project",
+    command: "/usr/bin/env tmux attach-session -t session",
   });
   expect(nativeMocks.bridge.focusSurface).toHaveBeenCalledWith("surface-1");
   expect(nativeMocks.bridge.resizeSurface).toHaveBeenCalledWith("surface-1", 1, 2, 300, 160);

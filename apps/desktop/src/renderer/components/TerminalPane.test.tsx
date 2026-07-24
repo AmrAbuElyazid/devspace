@@ -48,6 +48,9 @@ vi.mock("../lib/terminal-surface-session", () => ({
   markTerminalSurfaceCreated: (surfaceId: string) => {
     terminalPaneMocks.createdSurfaces.add(surfaceId);
   },
+  markTerminalSurfaceReady: () => {},
+  markTerminalSurfaceActive: () => {},
+  markTerminalSurfaceInactive: () => {},
   markTerminalSurfaceDestroyed: (surfaceId: string) => {
     terminalPaneMocks.createdSurfaces.delete(surfaceId);
   },
@@ -124,7 +127,10 @@ test("creates the terminal surface once and focuses visible focused panes", asyn
   });
 
   expect(terminalPaneMocks.createdSurfaces.has("pane-1")).toBe(true);
-  expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledWith("pane-1", { cwd: "/tmp/project" });
+  expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledWith("pane-1", {
+    backend: "direct",
+    cwd: "/tmp/project",
+  });
   expect(terminalPaneMocks.terminalFocus).toHaveBeenCalledWith("pane-1");
 
   await act(async () => {
@@ -157,7 +163,9 @@ test("does not focus visible terminals when the group is not focused", async () 
     root?.render(<TerminalPane paneId="pane-1" config={{}} isFocused={false} />);
   });
 
-  expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledWith("pane-1", undefined);
+  expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledWith("pane-1", {
+    backend: "direct",
+  });
   expect(terminalPaneMocks.terminalFocus).not.toHaveBeenCalled();
 });
 
@@ -189,6 +197,24 @@ test("reuses an existing terminal surface across unmount and remount", async () 
   expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledTimes(1);
   expect(terminalPaneMocks.terminalFocus).toHaveBeenCalledTimes(2);
   expect(terminalPaneMocks.createdSurfaces.has("pane-1")).toBe(true);
+});
+
+test("forwards durable managed session metadata when creating a surface", async () => {
+  await act(async () => {
+    root?.render(
+      <TerminalPane
+        paneId="pane-1"
+        config={{ backend: "managed-tmux", sessionId: "session-1", cwd: "/tmp/project" }}
+        isFocused={true}
+      />,
+    );
+  });
+
+  expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledWith("pane-1", {
+    backend: "managed-tmux",
+    sessionId: "session-1",
+    cwd: "/tmp/project",
+  });
 });
 
 test("blurs when the find bar is open and refocuses on close", async () => {
@@ -261,6 +287,7 @@ test("retries terminal creation after an initial failure", async () => {
 
   expect(terminalPaneMocks.terminalCreate).toHaveBeenCalledTimes(2);
   expect(terminalPaneMocks.terminalCreate).toHaveBeenNthCalledWith(2, "pane-1", {
+    backend: "direct",
     cwd: "/tmp/project",
   });
   expect(container.textContent).not.toContain("Terminal failed to start");

@@ -11,6 +11,7 @@ import {
   getNativeViewProfilingSnapshot,
   resetNativeViewProfilingCounters,
 } from "./store/native-view-store";
+import { getTerminalSurfaceSessionSnapshot } from "./lib/terminal-surface-session";
 
 function renderFatalBootstrapError(message: string): void {
   ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -47,6 +48,7 @@ async function bootstrap(): Promise<void> {
       getSnapshot: async () => ({
         main: await window.api.app.getPerformanceSnapshot(),
         nativeViews: getNativeViewProfilingSnapshot(),
+        terminalSurfaces: getTerminalSurfaceSessionSnapshot(),
       }),
       resetCounters: async () => {
         resetNativeViewProfilingCounters();

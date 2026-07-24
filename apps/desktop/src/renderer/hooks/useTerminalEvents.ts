@@ -24,10 +24,9 @@ export function useTerminalEvents(): void {
 
   useEffect(() => {
     return window.api.terminal.onClosed((surfaceId) => {
-      markTerminalSurfaceDestroyed(surfaceId);
+      markTerminalSurfaceDestroyed(surfaceId, "closed");
       const terminalState = useTerminalStore.getState();
-      terminalState.closeFindBar(surfaceId);
-      terminalState.clearSearchState(surfaceId);
+      terminalState.clearPaneState(surfaceId);
     });
   }, []);
 
