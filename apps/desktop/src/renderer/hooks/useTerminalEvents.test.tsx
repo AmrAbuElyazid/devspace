@@ -4,6 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useTerminalEvents } from "./useTerminalEvents";
+import { useWorkspaceStore } from "../store/workspace-store";
 import { installMockWindowApi } from "../test-utils/mock-window-api";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -12,8 +13,13 @@ const terminalEventsMocks = vi.hoisted(() => ({
   syncWorkspaceFocusForPane: vi.fn(),
   focusActiveNativePane: vi.fn(),
   focusedHandler: null as null | ((surfaceId: string) => void),
+  pwdHandler: null as null | ((surfaceId: string, pwd: string) => void),
   terminalOnFocused: vi.fn((callback: (surfaceId: string) => void) => {
     terminalEventsMocks.focusedHandler = callback;
+    return () => {};
+  }),
+  terminalOnPwdChanged: vi.fn((callback: (surfaceId: string, pwd: string) => void) => {
+    terminalEventsMocks.pwdHandler = callback;
     return () => {};
   }),
 }));
@@ -39,11 +45,14 @@ beforeEach(async () => {
   terminalEventsMocks.syncWorkspaceFocusForPane.mockReset();
   terminalEventsMocks.focusActiveNativePane.mockReset();
   terminalEventsMocks.focusedHandler = null;
+  terminalEventsMocks.pwdHandler = null;
   terminalEventsMocks.terminalOnFocused.mockClear();
+  terminalEventsMocks.terminalOnPwdChanged.mockClear();
 
   installMockWindowApi({
     terminal: {
       onFocused: terminalEventsMocks.terminalOnFocused,
+      onPwdChanged: terminalEventsMocks.terminalOnPwdChanged,
     },
   });
 
@@ -71,4 +80,15 @@ test("terminal focus events sync the owning pane activation", async () => {
   });
 
   expect(terminalEventsMocks.syncWorkspaceFocusForPane).toHaveBeenCalledWith("surface-2");
+});
+
+test("empty terminal pwd events are ignored", async () => {
+  const updatePaneConfig = vi.spyOn(useWorkspaceStore.getState(), "updatePaneConfig");
+  expect(terminalEventsMocks.pwdHandler).toBeTypeOf("function");
+
+  await act(async () => {
+    terminalEventsMocks.pwdHandler?.("surface-1", "");
+  });
+
+  expect(updatePaneConfig).not.toHaveBeenCalled();
 });

@@ -34,6 +34,10 @@ export function useTerminalEvents(): void {
   // Track CWD changes from terminals so new tabs can inherit the directory.
   useEffect(() => {
     return window.api.terminal.onPwdChanged((surfaceId, pwd) => {
+      if (!pwd) {
+        return;
+      }
+
       const state = useWorkspaceStore.getState();
       const pane = state.panes[surfaceId];
       if (pane?.type === "terminal") {

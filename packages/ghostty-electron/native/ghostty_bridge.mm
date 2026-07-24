@@ -59,13 +59,12 @@ GhosttyAppState g_state;
     return self;
 }
 
-- (void)refreshSurfaceLayoutAfterFocus {
+- (void)refreshSurfaceLayout {
     if (!self.surface) return;
 
     // Some TUIs only recover from stale rows/cols after a real layout pass.
-    // Re-run layout whenever the terminal regains first responder so focus
-    // churn does not leave the surface stuck at an old size until the next
-    // manual window resize.
+    // Re-run layout whenever the terminal is restored from a hidden/stale
+    // native-view state so it doesn't stay stuck until the next manual resize.
     [self setNeedsLayout:YES];
     [self layoutSubtreeIfNeeded];
     ghostty_surface_refresh(self.surface);
@@ -99,7 +98,7 @@ GhosttyAppState g_state;
         [self notifySurfaceFocused];
     }
 
-    [self refreshSurfaceLayoutAfterFocus];
+    [self refreshSurfaceLayout];
     return YES;
 }
 
@@ -153,6 +152,7 @@ GhosttyAppState g_state;
     [CATransaction setDisableActions:YES];
     if ([self.layer isKindOfClass:[CAMetalLayer class]]) {
         CAMetalLayer* metalLayer = (CAMetalLayer*)self.layer;
+        metalLayer.frame = self.bounds;
         metalLayer.drawableSize = CGSizeMake(wpx, hpx);
         metalLayer.contentsScale = layerScale;
     }
@@ -955,6 +955,7 @@ static void applyDomBounds(GhosttyView* view, double domX, double domY, double w
         view.lastDomW == w &&
         view.lastDomH == h &&
         NSEqualRects([view frame], nextFrame)) {
+        [view refreshSurfaceLayout];
         return;
     }
 
@@ -994,6 +995,7 @@ static void evaluateVisibility(GhosttyView* view) {
     if (shouldBeVisible && !isCurrentlyVisible) {
         [view setHidden:NO];
         if (view.surface) ghostty_surface_set_occlusion(view.surface, true);
+        [view refreshSurfaceLayout];
     } else if (!shouldBeVisible && isCurrentlyVisible) {
         [view setHidden:YES];
         if (view.surface) ghostty_surface_set_occlusion(view.surface, false);
