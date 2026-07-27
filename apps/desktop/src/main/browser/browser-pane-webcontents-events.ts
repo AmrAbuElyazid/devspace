@@ -167,6 +167,16 @@ export function registerBrowserPaneWebContentsListeners({
       typeof mouseInput === "object" && mouseInput !== null && "type" in mouseInput
         ? mouseInput.type
         : undefined;
+    if (type === "mouseUp") {
+      // A WebContentsView sits above the renderer and consumes the events in
+      // its bounds, so a drag released over one never reaches dnd-kit and gets
+      // stuck. The drag shield normally hides these views for the duration of a
+      // drag; this is the net for when it doesn't. Ghostty terminals are native
+      // NSViews with no equivalent hook, so they aren't covered.
+      sendToRenderer("window:nativePointerRelease");
+      return;
+    }
+
     if (type === "mouseDown") {
       if (typeof webContents.isFocused === "function" && webContents.isFocused()) {
         lastPointerDownAt = 0;

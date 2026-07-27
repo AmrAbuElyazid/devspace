@@ -31,6 +31,11 @@ const useDndStateStore = create<DndState>(() => ({
 export const useActiveDrag = () => useDndStateStore((state) => state.activeDrag);
 export const useDropIntent = () => useDndStateStore((state) => state.dropIntent);
 
+/** Non-reactive read, for listeners that run outside React's render cycle. */
+export function getActiveDrag(): DragItemData | null {
+  return useDndStateStore.getState().activeDrag;
+}
+
 export function resetDndState(): void {
   useDndStateStore.setState({ activeDrag: null, dropIntent: null });
 }
@@ -62,6 +67,41 @@ function getPointerPosition(event: {
     x: event.activatorEvent.clientX + event.delta.x,
     y: event.activatorEvent.clientY + event.delta.y,
   };
+}
+
+/**
+ * Ask the handlers that can take this drag to turn a set of collisions into a
+ * concrete intent. Registry order is the priority order — the first non-null
+ * result wins.
+ */
+function resolveDropIntent(
+  drag: DragItemData,
+  collisions: CollisionDescriptor[],
+  pointer: { x: number; y: number },
+  store: typeof useWorkspaceStore,
+): DropIntent | null {
+  for (const handler of dndHandlers) {
+    if (!handler.canHandle(drag)) continue;
+    const intent = handler.resolveIntent({ drag, collisions, pointer, store });
+    if (intent) return intent;
+  }
+  return null;
+}
+
+/**
+ * Abort a drag from outside dnd-kit, which exposes no imperative cancel. Its
+ * PointerSensor listens for Escape on the document, so a synthetic keydown
+ * drives the sensor's own teardown — that is what clears the DragOverlay and
+ * fires onDragCancel. resetDndState covers the case where the sensor has
+ * already torn its listeners down and never sees the key.
+ */
+function cancelActiveDrag(): void {
+  if (!getActiveDrag()) return;
+
+  document.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+  );
+  resetDndState();
 }
 
 function droppableType(collision: CollisionDescriptor): string | undefined {
@@ -140,13 +180,58 @@ export function useDndOrchestrator() {
   const dropIntentRef = useRef<DropIntent | null>(useDndStateStore.getState().dropIntent);
   const folderExpandTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hoveredFolderIdRef = useRef<string | null>(null);
+  // dnd-kit's own view of where the cursor is, captured during collision
+  // detection. See the note in `collisionDetection`.
   const pointerPosRef = useRef<{ x: number; y: number } | null>(null);
+  const stuckDragCheckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const store = useWorkspaceStore;
 
   useEffect(() => {
     return () => {
       resetDndState();
+    };
+  }, []);
+
+  // Watchdog for drags that never get an end event. The primary fix is keeping
+  // native views out from under the cursor (useNativeViewDragShield), but a
+  // release that dnd-kit's sensor misses would otherwise leave the overlay and
+  // the drop indicators on screen with no way back.
+  useEffect(() => {
+    const checkForStuckDrag = () => {
+      if (!getActiveDrag()) return;
+      if (stuckDragCheckRef.current !== null) return;
+
+      // This listener is on the capture phase, so it runs *before* dnd-kit's
+      // own pointerup handler. Give that handler its turn and only step in if
+      // the drag is somehow still active afterwards.
+      stuckDragCheckRef.current = setTimeout(() => {
+        stuckDragCheckRef.current = null;
+        cancelActiveDrag();
+      }, 0);
+    };
+
+    const cancelOnFocusLoss = () => {
+      if (document.visibilityState === "visible" && document.hasFocus()) return;
+      cancelActiveDrag();
+    };
+
+    window.addEventListener("pointerup", checkForStuckDrag, true);
+    window.addEventListener("pointercancel", checkForStuckDrag, true);
+    window.addEventListener("blur", cancelOnFocusLoss);
+    document.addEventListener("visibilitychange", cancelOnFocusLoss);
+
+    // A release that landed on a WebContentsView instead of the renderer. The
+    // main process relays it because the DOM never will.
+    const disposeNativeRelease = window.api?.window?.onNativePointerRelease?.(checkForStuckDrag);
+
+    return () => {
+      window.removeEventListener("pointerup", checkForStuckDrag, true);
+      window.removeEventListener("pointercancel", checkForStuckDrag, true);
+      window.removeEventListener("blur", cancelOnFocusLoss);
+      document.removeEventListener("visibilitychange", cancelOnFocusLoss);
+      disposeNativeRelease?.();
+      if (stuckDragCheckRef.current !== null) clearTimeout(stuckDragCheckRef.current);
     };
   }, []);
 
@@ -172,6 +257,15 @@ export function useDndOrchestrator() {
   // tabs (where pointer isn't inside any tab rect) would match a drop zone
   // by proximity and trigger an unintended split.
   const collisionDetection: CollisionDetection = useCallback((args) => {
+    // dnd-kit tracks the true cursor position here, and it runs on every
+    // measurement pass during a drag. Reconstructing the pointer from
+    // `activatorEvent + delta` instead drifts, because delta folds in
+    // auto-scroll compensation and the tab bar scrolls horizontally — which
+    // made `computeClosestSide` disagree with the collisions it was fed.
+    if (args.pointerCoordinates) {
+      pointerPosRef.current = args.pointerCoordinates;
+    }
+
     const activeDrag = useDndStateStore.getState().activeDrag;
     if (!activeDrag) return [];
 
@@ -217,6 +311,7 @@ export function useDndOrchestrator() {
   const onDragStart = useCallback(
     (event: DragStartEvent) => {
       const data = event.active.data.current as DragItemData;
+      pointerPosRef.current = null;
       setDndState({ activeDrag: data });
       setResolvedDropIntent(null);
     },
@@ -226,8 +321,7 @@ export function useDndOrchestrator() {
   const onDragMove = useCallback(
     (event: DragMoveEvent) => {
       const dragData = event.active.data.current as DragItemData;
-      const pointer = getPointerPosition(event);
-      pointerPosRef.current = pointer;
+      const pointer = pointerPosRef.current ?? getPointerPosition(event);
 
       if (!dragData || !pointer) {
         setResolvedDropIntent(null);
@@ -235,23 +329,7 @@ export function useDndOrchestrator() {
       }
 
       const collisions = ((event.collisions ?? []) as CollisionDescriptor[]).slice();
-
-      // Iterate handlers in registry order — first non-null intent wins
-      const activeHandlers = dndHandlers.filter((h) => h.canHandle(dragData));
-      for (const handler of activeHandlers) {
-        const intent = handler.resolveIntent({
-          drag: dragData,
-          collisions,
-          pointer,
-          store,
-        });
-        if (intent) {
-          setResolvedDropIntent(intent);
-          return;
-        }
-      }
-
-      setResolvedDropIntent(null);
+      setResolvedDropIntent(resolveDropIntent(dragData, collisions, pointer, store));
     },
     [setResolvedDropIntent, store],
   );
@@ -287,18 +365,31 @@ export function useDndOrchestrator() {
   const onDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active } = event;
+      const dragData = active.data.current as DragItemData | undefined;
+      const pointer = pointerPosRef.current ?? getPointerPosition(event);
+
       setDndState({ activeDrag: null });
       clearFolderExpandTimer();
-      // Read from ref to avoid stale closure — onDragMove may have updated
-      // the intent after the last React render that created this callback.
-      const currentDropIntent = dropIntentRef.current;
+
+      // Resolve from the drop itself rather than trusting the last onDragMove.
+      // The ref can be a frame stale, and it is empty altogether when the
+      // release arrives without a final move — which used to make the drop a
+      // silent no-op. The ref stays as the fallback for exactly that case.
+      const droppedIntent =
+        dragData && pointer
+          ? resolveDropIntent(
+              dragData,
+              ((event.collisions ?? []) as CollisionDescriptor[]).slice(),
+              pointer,
+              store,
+            )
+          : null;
+      const currentDropIntent = droppedIntent ?? dropIntentRef.current;
+
       pointerPosRef.current = null;
       setResolvedDropIntent(null);
 
-      if (!currentDropIntent) return;
-
-      const dragData = active.data.current as DragItemData;
-      if (!dragData) return;
+      if (!currentDropIntent || !dragData) return;
 
       // Dispatch to the handler that owns this intent kind. Each handler's
       // resolveIntent produced the intent, so only one handler should match.

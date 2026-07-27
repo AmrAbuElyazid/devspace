@@ -34,6 +34,7 @@ vi.mock("../hooks/useDndOrchestrator", () => ({
   useActiveDrag: () => sidebarShellMocks.activeDrag,
   useDropIntent: () => null,
   useDragContext: () => ({ activeDrag: sidebarShellMocks.activeDrag, dropIntent: null }),
+  getActiveDrag: () => sidebarShellMocks.activeDrag,
 }));
 
 vi.mock("@dnd-kit/core", () => ({
@@ -324,19 +325,21 @@ test("only persists sidebar width when resize ends", async () => {
   expect(sidebar.style.width).toBe("240px");
   expect(useSettingsStore.getState().sidebarWidth).toBe(240);
 
+  // Pointer events with capture on the divider, not document-level mouse
+  // events — a release over a native pane never reaches `document`.
   await act(async () => {
-    resizeHandle.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX: 100 }));
+    resizeHandle.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, clientX: 100 }));
   });
 
   await act(async () => {
-    document.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX: 160 }));
+    resizeHandle.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 160 }));
   });
 
   expect(sidebar.style.width).toBe("300px");
   expect(useSettingsStore.getState().sidebarWidth).toBe(240);
 
   await act(async () => {
-    document.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    resizeHandle.dispatchEvent(new MouseEvent("pointerup", { bubbles: true }));
   });
 
   expect(useSettingsStore.getState().sidebarWidth).toBe(300);
