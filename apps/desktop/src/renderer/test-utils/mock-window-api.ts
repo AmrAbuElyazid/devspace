@@ -102,6 +102,7 @@ function createDefaultWindowApi(): DevspaceBridge {
       onFullScreenChange: vi.fn(() => unsubscribe),
       onFocus: vi.fn(() => unsubscribe),
       onNativeModifierChanged: vi.fn(() => unsubscribe),
+      onNativePointerRelease: vi.fn(() => unsubscribe),
       onOpenEditor: vi.fn(() => unsubscribe),
     },
     dialog: {

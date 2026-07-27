@@ -143,6 +143,8 @@ export interface DevspaceBridge {
     onNativeModifierChanged: (
       callback: (modifier: "command" | "control" | null) => void,
     ) => () => void;
+    /** Mouse released over a native pane view, where the renderer can't see it. */
+    onNativePointerRelease: (callback: () => void) => () => void;
     onOpenEditor: (callback: (folderPath: string) => void) => () => void;
   };
   dialog: {
