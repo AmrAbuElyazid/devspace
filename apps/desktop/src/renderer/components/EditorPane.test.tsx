@@ -188,6 +188,28 @@ test("an inactive pane does not rebuild the view its eviction just reclaimed", a
   expect(editorPaneMocks.editorStart).toHaveBeenCalledTimes(2);
 });
 
+test("a superseded start is not shown as a failure, and the pane starts over", async () => {
+  // main cancels a start when a newer start or a stop for the same pane bumps
+  // its generation. That is routine bookkeeping, but it used to come back as
+  // { error: "Editor start was cancelled" } and land in the error card.
+  editorPaneMocks.editorStart.mockResolvedValueOnce({ cancelled: true });
+
+  await act(async () => {
+    root?.render(
+      <EditorPane paneId="pane-1" config={{ folderPath: "/tmp/project" }} isFocused={true} />,
+    );
+  });
+  await flushAsyncEffects();
+  await flushAsyncEffects();
+
+  expect(container.textContent).not.toContain("VS Code failed to start");
+  expect(container.textContent).not.toContain("cancelled");
+
+  // Discarding the pending record is what lets it retry — parking on "pending"
+  // would strand the pane, because the start effect returns early on that phase.
+  expect(editorPaneMocks.editorStart).toHaveBeenCalledTimes(2);
+});
+
 test("a rejected start invoke shows the error instead of spinning forever", async () => {
   editorPaneMocks.editorStart.mockRejectedValue(new Error("IPC channel closed"));
 

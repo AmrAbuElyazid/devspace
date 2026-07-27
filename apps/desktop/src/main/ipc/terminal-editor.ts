@@ -234,8 +234,11 @@ export function registerTerminalAndEditorIpc(
 
         const { url } = await vscodeServerManager.start(folder, preferredCli);
         if (editorPaneGenerations.get(paneId) !== generation) {
+          // A newer start (or a stop) for this pane superseded us while the
+          // server was coming up. That is routine, not a failure — reporting it
+          // as an error puts a "Failed to start" card in front of the user.
           vscodeServerManager.release(folder);
-          return { error: "Editor start was cancelled" };
+          return { cancelled: true } as const;
         }
         if (existingSession) {
           editorSessionManager?.unregisterTrustedLocalOrigin(existingSession.url);
@@ -291,8 +294,9 @@ export function registerTerminalAndEditorIpc(
 
       const { url } = await t3codeServerManager.start();
       if (t3codePaneGenerations.get(paneId) !== generation) {
+        // Superseded by a newer start or a stop — routine, not a failure.
         t3codeServerManager.release();
-        return { error: "T3 Code start was cancelled" };
+        return { cancelled: true } as const;
       }
       t3codePaneUrls.set(paneId, url);
       browserSessionManager?.registerTrustedLocalOrigin(url);
