@@ -345,32 +345,40 @@ function isPatchResultValidIncrementally(
   }
 
   const workspaceIds = new Set(next.workspaces.map((workspace) => workspace.id));
-  const paneIds = new Set(Object.keys(next.panes));
-  const paneGroupIds = new Set(Object.keys(next.paneGroups));
   if (workspaceIds.size !== next.workspaces.length || !workspaceIds.has(next.activeWorkspaceId)) {
     return false;
   }
 
+  // Only patches that touch groups or workspaces need to resolve the owners
+  // those entities point at. The common patch — a retitled pane, a new tab —
+  // reads neither, and building both would walk every pane and every group for
+  // nothing. Built at most once each.
+  let paneIds: Set<string> | null = null;
+  const getPaneIds = (): Set<string> => (paneIds ??= new Set(Object.keys(next.panes)));
+  let paneGroupIds: Set<string> | null = null;
+  const getPaneGroupIds = (): Set<string> =>
+    (paneGroupIds ??= new Set(Object.keys(next.paneGroups)));
+
   for (const workspace of patch.workspaces?.upsert ?? []) {
-    if (!isWorkspaceEntityValid(workspace, paneGroupIds)) return false;
+    if (!isWorkspaceEntityValid(workspace, getPaneGroupIds())) return false;
   }
   for (const pane of patch.panes?.upsert ?? []) {
     if (!isPaneEntityValid(pane.id, pane)) return false;
   }
   for (const group of patch.paneGroups?.upsert ?? []) {
-    if (!isPaneGroupEntityValid(group.id, group, paneIds)) return false;
+    if (!isPaneGroupEntityValid(group.id, group, getPaneIds())) return false;
   }
 
   // Entity removals can invalidate unchanged owners, so only those rarer
   // operations require scanning the corresponding owner collection.
   if (patch.panes?.removeIds.length) {
     for (const [groupId, group] of Object.entries(next.paneGroups)) {
-      if (!isPaneGroupEntityValid(groupId, group, paneIds)) return false;
+      if (!isPaneGroupEntityValid(groupId, group, getPaneIds())) return false;
     }
   }
   if (patch.paneGroups?.removeIds.length) {
     for (const workspace of next.workspaces) {
-      if (!isWorkspaceEntityValid(workspace, paneGroupIds)) return false;
+      if (!isWorkspaceEntityValid(workspace, getPaneGroupIds())) return false;
     }
   }
 

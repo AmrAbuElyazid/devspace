@@ -129,10 +129,14 @@ function applyRecordPatch<T extends { id: string }>(
   current: Record<string, T>,
   patch: { upsert: T[]; removeIds: string[] },
 ): Record<string, T> {
-  const entries = new Map(Object.entries(current));
-  for (const id of patch.removeIds) entries.delete(id);
-  for (const entity of patch.upsert) entries.set(entity.id, entity);
-  return Object.fromEntries(entries);
+  // Spreading walks the record once. Going through Object.entries and a Map
+  // would walk it three times to reach the same object with the same key
+  // order: deleting drops a key, and assigning an existing one keeps its
+  // position, exactly as the Map did.
+  const next = { ...current };
+  for (const id of patch.removeIds) delete next[id];
+  for (const entity of patch.upsert) next[entity.id] = entity;
+  return next;
 }
 
 export function applyPersistedWorkspacePatch(

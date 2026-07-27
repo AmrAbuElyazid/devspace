@@ -111,8 +111,25 @@ export function prepareSnapshot(
   };
 }
 
+/**
+ * Row-array identity -> its ID index.
+ *
+ * Each save indexes the same row arrays twice: `prepareSnapshot` indexes the
+ * previous snapshot's rows to reuse them, then `saveIncrementalWorkspaceSnapshot`
+ * indexes those same arrays again to diff against. The arrays are built once by
+ * `prepareSnapshot` and only ever read afterwards, so keying on their identity
+ * is safe — and it also carries each index forward to the next save, where
+ * today's `next` rows become tomorrow's `previous` rows.
+ */
+const rowIndexCache = new WeakMap<readonly { id: string }[], Map<string, { id: string }>>();
+
 function rowsById<Row extends { id: string }>(rows: Row[]): Map<string, Row> {
-  return new Map(rows.map((row) => [row.id, row]));
+  const cached = rowIndexCache.get(rows);
+  if (cached) return cached as Map<string, Row>;
+
+  const index = new Map(rows.map((row) => [row.id, row]));
+  rowIndexCache.set(rows, index);
+  return index;
 }
 
 function tabsEqual(previous: PreparedTabRow[], next: PreparedTabRow[]): boolean {
