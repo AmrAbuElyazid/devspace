@@ -14,6 +14,7 @@ import { useSettingsStore } from "@/store/settings-store";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import type { EditorConfig } from "@/types/workspace";
 import {
+  discardEmbeddedToolViewIfCurrent,
   getEmbeddedToolViewSnapshot,
   markEmbeddedToolViewActive,
   markEmbeddedToolViewCreated,
@@ -219,6 +220,15 @@ export default function EditorPane({
     void (async () => {
       try {
         const result = await window.api.editor.start(paneId, stateFolderPath, vscodeCliPath);
+
+        if ("cancelled" in result) {
+          // A newer start or a stop took this pane over in main. Drop the
+          // pending record instead of recording a failure — parking on
+          // "pending" would strand the pane, since this effect returns early on
+          // that phase and nothing else would ever resolve it.
+          discardEmbeddedToolViewIfCurrent(paneId, generation);
+          return;
+        }
 
         if ("error" in result) {
           markEmbeddedToolViewFailed(paneId, generation, result.error);

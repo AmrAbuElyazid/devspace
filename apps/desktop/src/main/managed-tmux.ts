@@ -185,6 +185,7 @@ export class ManagedTmuxManager {
   private readonly configuredBinaryPath: string | undefined;
   private binaryPath: string | null | undefined;
   private versionChecked = false;
+  private pendingReady: Promise<void> | null = null;
   private readonly pendingSessions = new Map<string, Promise<void>>();
 
   constructor(private readonly options: ManagedTmuxOptions) {
@@ -325,6 +326,23 @@ export class ManagedTmuxManager {
     }
     if (this.versionChecked) return;
 
+    // `versionChecked` is only set at the very end, after two awaited tmux
+    // invocations. Restoring a workspace calls this once per managed pane, all
+    // in the same tick, so without sharing the in-flight run every caller would
+    // rewrite the config file and spawn its own version probes before the first
+    // one finished. Same shape as pendingSessions: cleared on settle, so a
+    // failure is retried rather than cached.
+    const existing = this.pendingReady;
+    if (existing) return existing;
+
+    const pending = this.ensureReadyOnce().finally(() => {
+      this.pendingReady = null;
+    });
+    this.pendingReady = pending;
+    return pending;
+  }
+
+  private async ensureReadyOnce(): Promise<void> {
     mkdirSync(join(this.options.userDataPath, "tmux"), { recursive: true, mode: 0o700 });
     let currentConfig: string | null = null;
     try {

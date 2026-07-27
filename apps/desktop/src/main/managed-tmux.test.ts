@@ -116,6 +116,64 @@ test("managed sessions use only the private socket and clear inherited tmux stat
   ]);
 });
 
+test("a burst of session restores runs the readiness check once", async () => {
+  const userDataPath = await makeTempDirectory();
+  const runCommand = vi.fn<TmuxCommandRunner>(async (_binary, args) => {
+    if (args[0] === "-V") return { exitCode: 0, stdout: "tmux 3.4\n", stderr: "" };
+    if (args.includes("has-session")) return { exitCode: 1, stdout: "", stderr: "" };
+    return { exitCode: 0, stdout: "", stderr: "" };
+  });
+  const manager = new ManagedTmuxManager({
+    userDataPath,
+    resourcesPath: "/unused",
+    isPackaged: false,
+    env: { PATH: "/usr/bin" },
+    binaryPath: "/opt/devspace/bin/tmux",
+    runCommand,
+  });
+
+  // Restoring a workspace fires one of these per managed pane in the same tick.
+  // pendingSessions only dedups by session id, so every one of them lands in
+  // ensureReady before the first has finished setting versionChecked.
+  await Promise.all(
+    ["pane_1", "pane_2", "pane_3", "pane_4"].map((sessionId) =>
+      manager.ensureSession({ sessionId }),
+    ),
+  );
+
+  expect(runCommand.mock.calls.filter(([, args]) => args[0] === "-V")).toHaveLength(1);
+  expect(runCommand.mock.calls.filter(([, args]) => args.includes("new-session"))).toHaveLength(4);
+});
+
+test("a failed readiness check is retried rather than cached", async () => {
+  const userDataPath = await makeTempDirectory();
+  let versionAttempts = 0;
+  const runCommand = vi.fn<TmuxCommandRunner>(async (_binary, args) => {
+    if (args[0] === "-V") {
+      versionAttempts += 1;
+      // Unsupported the first time, fine afterwards — sharing the in-flight
+      // check must not turn a transient failure into a permanent one.
+      return versionAttempts === 1
+        ? { exitCode: 0, stdout: "tmux 2.8\n", stderr: "" }
+        : { exitCode: 0, stdout: "tmux 3.4\n", stderr: "" };
+    }
+    if (args.includes("has-session")) return { exitCode: 1, stdout: "", stderr: "" };
+    return { exitCode: 0, stdout: "", stderr: "" };
+  });
+  const manager = new ManagedTmuxManager({
+    userDataPath,
+    resourcesPath: "/unused",
+    isPackaged: false,
+    env: { PATH: "/usr/bin" },
+    binaryPath: "/opt/devspace/bin/tmux",
+    runCommand,
+  });
+
+  await expect(manager.ensureSession({ sessionId: "pane_1" })).rejects.toThrow(/requires tmux/);
+  await expect(manager.ensureSession({ sessionId: "pane_1" })).resolves.toBeUndefined();
+  expect(versionAttempts).toBe(2);
+});
+
 test("external attach commands do not target the managed socket", () => {
   const command = buildExternalTmuxAttachCommand({
     binaryPath: "/opt/homebrew/bin/tmux",

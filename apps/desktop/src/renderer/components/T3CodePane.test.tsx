@@ -146,6 +146,20 @@ test("an inactive pane does not rebuild the view its eviction just reclaimed", a
   expect(t3CodePaneMocks.start).toHaveBeenCalledTimes(2);
 });
 
+test("a superseded start is not shown as a failure, and the pane starts over", async () => {
+  t3CodePaneMocks.start.mockResolvedValueOnce({ cancelled: true });
+
+  await act(async () => {
+    root?.render(<T3CodePane paneId="pane-1" isFocused={true} />);
+  });
+  await flushAsyncEffects();
+  await flushAsyncEffects();
+
+  expect(container.textContent).not.toContain("Failed to start");
+  expect(container.textContent).not.toContain("cancelled");
+  expect(t3CodePaneMocks.start).toHaveBeenCalledTimes(2);
+});
+
 test("a rejected start invoke shows the error instead of spinning forever", async () => {
   t3CodePaneMocks.start.mockRejectedValue(new Error("IPC channel closed"));
 
