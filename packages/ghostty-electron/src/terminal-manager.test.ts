@@ -109,17 +109,21 @@ test("surface lifecycle methods forward to the bridge and closed callbacks retir
     { key: "K", command: true, shift: false, option: false, control: false },
   ]);
 
-  expect(nativeMocks.bridge.createSurface).toHaveBeenCalledWith("surface-1", {
-    cwd: "/tmp/project",
-    command: "/usr/bin/env tmux attach-session -t session",
-  });
+  expect(nativeMocks.bridge.createSurface).toHaveBeenCalledWith(
+    "surface-1",
+    {
+      cwd: "/tmp/project",
+      command: "/usr/bin/env tmux attach-session -t session",
+    },
+    1,
+  );
   expect(nativeMocks.bridge.focusSurface).toHaveBeenCalledWith("surface-1");
   expect(nativeMocks.bridge.resizeSurface).toHaveBeenCalledWith("surface-1", 1, 2, 300, 160);
   expect(nativeMocks.bridge.setVisibleSurfaces).toHaveBeenCalledWith(["surface-1"]);
   expect(nativeMocks.bridge.blurSurfaces).toHaveBeenCalledTimes(1);
   expect(nativeMocks.bridge.setReservedShortcuts).toHaveBeenCalledTimes(1);
 
-  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1");
+  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1", 1);
 
   expect(onClosed).toHaveBeenCalledWith("surface-1");
   expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledWith("surface-1");
@@ -143,10 +147,56 @@ test("late surface-closed callbacks do not double-destroy or re-emit retired sur
 
   terminal.createSurface("surface-1");
   terminal.destroySurface("surface-1");
-  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1");
+  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1", 1);
 
   expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledTimes(1);
   expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledWith("surface-1");
+  expect(onClosed).not.toHaveBeenCalled();
+});
+
+test("a close queued by a replaced surface never destroys its replacement", () => {
+  const terminal = new GhosttyTerminal();
+  const onClosed = vi.fn();
+
+  terminal.init({
+    windowHandle: Buffer.from("window-handle"),
+    nativeAddonPath: "/tmp/ghostty_bridge.node",
+  });
+  terminal.on("surface-closed", onClosed);
+
+  terminal.createSurface("surface-1");
+  terminal.destroySurface("surface-1");
+  terminal.createSurface("surface-1");
+  (nativeMocks.bridge.destroySurface as ReturnType<typeof vi.fn>).mockClear();
+
+  // Close notification queued by the first incarnation, delivered after the
+  // second one is already live under the same ID.
+  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1", 1);
+
+  expect(nativeMocks.bridge.destroySurface).not.toHaveBeenCalled();
+  expect(onClosed).not.toHaveBeenCalled();
+
+  // The live incarnation still closes normally.
+  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1", 2);
+
+  expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledWith("surface-1");
+  expect(onClosed).toHaveBeenCalledWith("surface-1");
+});
+
+test("close callbacks that report no epoch are ignored", () => {
+  const terminal = new GhosttyTerminal();
+  const onClosed = vi.fn();
+
+  terminal.init({
+    windowHandle: Buffer.from("window-handle"),
+    nativeAddonPath: "/tmp/ghostty_bridge.node",
+  });
+  terminal.on("surface-closed", onClosed);
+
+  terminal.createSurface("surface-1");
+  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1");
+
+  expect(nativeMocks.bridge.destroySurface).not.toHaveBeenCalled();
   expect(onClosed).not.toHaveBeenCalled();
 });
 
@@ -190,7 +240,7 @@ test("destroy clears listeners and active surfaces before late native callbacks"
   terminal.createSurface("surface-1");
   terminal.destroy();
 
-  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1");
+  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1", 1);
   nativeMocks.bridgeCallbacks.get("title-changed")?.("surface-1", "Shell");
 
   expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledTimes(1);
@@ -263,7 +313,7 @@ test("destroy still shuts down after native surface teardown failures", () => {
   expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledWith("surface-2");
   expect(nativeMocks.bridge.shutdown).toHaveBeenCalledTimes(1);
 
-  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1");
+  nativeMocks.bridgeCallbacks.get("surface-closed")?.("surface-1", 1);
   expect(nativeMocks.bridge.destroySurface).toHaveBeenCalledTimes(2);
 });
 

@@ -1079,9 +1079,33 @@ static std::vector<GhosttyView*> takeAllSurfaceViews() {
     return views;
 }
 
+// Surface userdata carries an epoch alongside the ID. Surface IDs are pane IDs
+// and are reused when a pane's surface is recreated, so a callback that only
+// reports an ID cannot be attributed to a specific incarnation. The epoch lets
+// the JS side drop callbacks queued by a surface that has since been replaced.
+struct SurfaceUserdata {
+    uint64_t epoch;
+    char surfaceId[1]; // over-allocated to hold the full ID plus terminator
+};
+
+static SurfaceUserdata* allocateSurfaceUserdata(const std::string& surfaceId, uint64_t epoch) {
+    void* raw = malloc(sizeof(SurfaceUserdata) + surfaceId.size());
+    if (!raw) return nullptr;
+
+    auto* data = static_cast<SurfaceUserdata*>(raw);
+    data->epoch = epoch;
+    memcpy(data->surfaceId, surfaceId.c_str(), surfaceId.size() + 1);
+    return data;
+}
+
 static std::string surfaceIdFromUserdata(void* userdata) {
-    const char* surfaceId = static_cast<const char*>(userdata);
-    return surfaceId ? std::string(surfaceId) : "";
+    const auto* data = static_cast<const SurfaceUserdata*>(userdata);
+    return data ? std::string(data->surfaceId) : "";
+}
+
+static uint64_t surfaceEpochFromUserdata(void* userdata) {
+    const auto* data = static_cast<const SurfaceUserdata*>(userdata);
+    return data ? data->epoch : 0;
 }
 
 static void destroySurfaceView(GhosttyView* view) {
@@ -1581,12 +1605,18 @@ static void close_surface_cb(void* userdata, bool process_alive) {
     (void)process_alive;
     std::string capturedId = surfaceIdFromUserdata(userdata);
     if (capturedId.empty()) return;
+    uint64_t capturedEpoch = surfaceEpochFromUserdata(userdata);
 
+    // Both hops below are asynchronous, so by the time JS runs this the surface
+    // may already have been destroyed and a new one created under the same ID.
+    // The epoch travels with the notification so the receiver can tell which
+    // incarnation closed.
     dispatch_async(dispatch_get_main_queue(), ^{
         if (g_state.surfaceClosedCallback) {
             g_state.surfaceClosedCallback.NonBlockingCall(
-                [capturedId](Napi::Env env, Napi::Function fn) {
-                    fn.Call({Napi::String::New(env, capturedId)});
+                [capturedId, capturedEpoch](Napi::Env env, Napi::Function fn) {
+                    fn.Call({Napi::String::New(env, capturedId),
+                             Napi::Number::New(env, static_cast<double>(capturedEpoch))});
                 });
         }
     });
@@ -1763,6 +1793,14 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
 
     std::string surfaceId = info[0].As<Napi::String>().Utf8Value();
 
+    // Third argument is the caller-assigned epoch for this incarnation. It is
+    // echoed back by close_surface_cb so late callbacks can be discarded.
+    uint64_t epoch = 0;
+    if (info.Length() > 2 && info[2].IsNumber()) {
+        double rawEpoch = info[2].As<Napi::Number>().DoubleValue();
+        if (rawEpoch > 0) epoch = static_cast<uint64_t>(rawEpoch);
+    }
+
     // Optionally accept a second argument (options object with `cwd`, `envVars`, and `command`)
     NSString* workingDirectory = nil;
     std::string command;
@@ -1827,7 +1865,7 @@ static Napi::Value CreateSurface(const Napi::CallbackInfo& info) {
     ghostty_surface_config_s surface_cfg = ghostty_surface_config_new();
     surface_cfg.platform_tag = GHOSTTY_PLATFORM_MACOS;
     surface_cfg.platform.macos.nsview = (__bridge void*)view;
-    char* surfaceUserdata = strdup(surfaceId.c_str());
+    SurfaceUserdata* surfaceUserdata = allocateSurfaceUserdata(surfaceId, epoch);
     if (!surfaceUserdata) {
         [view removeFromSuperview];
         Napi::Error::New(env, "Failed to allocate surface userdata").ThrowAsJavaScriptException();

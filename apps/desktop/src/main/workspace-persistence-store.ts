@@ -58,6 +58,21 @@ export class WorkspacePersistenceStore {
     return this.hasLoaded ? this.lastSavedState : this.load();
   }
 
+  /**
+   * Drop the cached incremental baseline while keeping the store loaded.
+   *
+   * `load()` caches whatever it read before the caller has had a chance to
+   * validate it. When validation rejects that snapshot the cache has to go too,
+   * otherwise `getCurrentSnapshot()` keeps handing the rejected state to every
+   * later patch and none of them can ever be applied. Clearing it makes the
+   * next `save()` write a full snapshot, which overwrites the bad rows.
+   */
+  discardCachedSnapshot(): void {
+    this.hasLoaded = true;
+    this.lastSavedState = null;
+    this.lastSavedSnapshot = null;
+  }
+
   save(snapshot: PersistedWorkspaceState): void {
     const nextSnapshot = prepareSnapshot(snapshot, this.lastSavedState, this.lastSavedSnapshot);
     const db = this.getDb();

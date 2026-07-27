@@ -225,9 +225,20 @@ export function markTerminalSurfaceInactive(
 export function markTerminalSurfaceDestroyed(
   surfaceId: string,
   reason: "closed" | "removed" = "removed",
-): void {
-  terminalSurfaceSessionState.lifecycle[reason] += 1;
+  generation?: number,
+): boolean {
   const record = terminalSurfaces.get(surfaceId);
+
+  // A close event can still be in flight when the surface it refers to is
+  // evicted and recreated under the same pane ID. Retiring the successor would
+  // show "session ended" over a live terminal, so a close that names an older
+  // generation is dropped. Callers that legitimately have no generation to
+  // offer (explicit teardown) pass none and keep the unconditional behaviour.
+  if (generation !== undefined && record && record.snapshot.generation !== generation) {
+    return false;
+  }
+
+  terminalSurfaceSessionState.lifecycle[reason] += 1;
   if (reason === "closed" && record) {
     record.snapshot = {
       phase: "closed",
@@ -239,6 +250,7 @@ export function markTerminalSurfaceDestroyed(
     nextSurfaceGeneration(surfaceId);
   }
   notifySurfaceChanged(surfaceId);
+  return true;
 }
 
 export function destroyTrackedTerminalSurfaces(

@@ -134,8 +134,17 @@ export function setupPersistence(store: {
           await window.api.workspaceState.save(target);
         }
         lastSavedState = target;
-      } catch (error) {
-        console.error("[Persist] Failed to save state:", error);
+      } catch (patchError) {
+        // A rejected patch means main could not reconcile it against its
+        // baseline. Retrying more patches against that same baseline would
+        // fail the same way for the rest of the session, so fall back to a
+        // full save, which replaces the baseline outright.
+        try {
+          await window.api.workspaceState.save(target);
+          lastSavedState = target;
+        } catch (saveError) {
+          console.error("[Persist] Failed to save state:", saveError, "after patch:", patchError);
+        }
       }
     });
   };

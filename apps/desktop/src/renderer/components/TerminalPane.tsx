@@ -100,7 +100,7 @@ export default function TerminalPane({
             : { backend: "direct" as const };
 
     void window.api.terminal
-      .create(paneId, createOptions)
+      .create(paneId, createOptions, generation)
       .then((result) => {
         if ("error" in result) {
           markTerminalSurfaceFailed(paneId, generation, result.error);

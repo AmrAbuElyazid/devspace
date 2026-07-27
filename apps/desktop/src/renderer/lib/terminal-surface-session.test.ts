@@ -97,3 +97,23 @@ test("publishes close and failure states while ignoring stale completions", () =
   expect(listener).toHaveBeenCalled();
   unsubscribe();
 });
+
+test("a close naming a replaced generation leaves the live surface running", () => {
+  const destroySurface = vi.fn();
+  const staleGeneration = markTerminalSurfaceCreated("surface", "managed-tmux");
+  markTerminalSurfaceReady("surface", destroySurface, staleGeneration);
+
+  // The surface is evicted and immediately recreated under the same pane ID.
+  markTerminalSurfaceDestroyed("surface");
+  const liveGeneration = markTerminalSurfaceCreated("surface", "managed-tmux");
+  markTerminalSurfaceReady("surface", destroySurface, liveGeneration);
+
+  expect(markTerminalSurfaceDestroyed("surface", "closed", staleGeneration)).toBe(false);
+  expect(getTerminalSurfaceSnapshot("surface")).toMatchObject({
+    phase: "ready",
+    generation: liveGeneration,
+  });
+
+  expect(markTerminalSurfaceDestroyed("surface", "closed", liveGeneration)).toBe(true);
+  expect(getTerminalSurfaceSnapshot("surface")).toMatchObject({ phase: "closed" });
+});

@@ -142,3 +142,62 @@ test("surfaces a pending start failure after the pane remounts", async () => {
   expect(container.textContent).toContain("VS Code failed to start");
   expect(container.textContent).toContain("serve-web failed");
 });
+
+test("an inactive pane does not rebuild the view its eviction just reclaimed", async () => {
+  await act(async () => {
+    root?.render(
+      <EditorPane paneId="pane-1" config={{ folderPath: "/tmp/project" }} isFocused={true} />,
+    );
+  });
+  await flushAsyncEffects();
+  expect(editorPaneMocks.editorStart).toHaveBeenCalledTimes(1);
+
+  // Deactivating and then evicting drops the pane back to "starting". While it
+  // is off screen that must not trigger another start, or the pane and the
+  // warm-view budget fight each other forever.
+  await act(async () => {
+    root?.render(
+      <EditorPane
+        paneId="pane-1"
+        config={{ folderPath: "/tmp/project" }}
+        isFocused={false}
+        isActive={false}
+      />,
+    );
+  });
+  await act(async () => {
+    markEditorDestroyed("pane-1");
+  });
+  await flushAsyncEffects();
+
+  expect(editorPaneMocks.editorStart).toHaveBeenCalledTimes(1);
+
+  // Coming back on screen restarts it.
+  await act(async () => {
+    root?.render(
+      <EditorPane
+        paneId="pane-1"
+        config={{ folderPath: "/tmp/project" }}
+        isFocused={true}
+        isActive={true}
+      />,
+    );
+  });
+  await flushAsyncEffects();
+
+  expect(editorPaneMocks.editorStart).toHaveBeenCalledTimes(2);
+});
+
+test("a rejected start invoke shows the error instead of spinning forever", async () => {
+  editorPaneMocks.editorStart.mockRejectedValue(new Error("IPC channel closed"));
+
+  await act(async () => {
+    root?.render(
+      <EditorPane paneId="pane-1" config={{ folderPath: "/tmp/project" }} isFocused={true} />,
+    );
+  });
+  await flushAsyncEffects();
+
+  expect(container.textContent).toContain("VS Code failed to start");
+  expect(container.textContent).toContain("IPC channel closed");
+});

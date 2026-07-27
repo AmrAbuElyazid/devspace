@@ -530,6 +530,14 @@ export function registerWorkspaceStateIpc(): void {
       return null;
     }
     if (!isValidPersistedWorkspaceState(snapshot)) {
+      // store.load() has already cached this snapshot as the incremental
+      // baseline. The renderer recovers from this throw by starting fresh, so
+      // the baseline has to be dropped with it — otherwise every later patch
+      // is validated against the state we just rejected, fails, and the
+      // session runs to completion without persisting anything.
+      store.discardCachedSnapshot();
+      validatedSnapshot = null;
+      validatedSnapshotSize = 0;
       throw new Error("Invalid persisted workspace state");
     }
     rememberValidatedSnapshot(snapshot);
@@ -554,7 +562,13 @@ export function registerWorkspaceStateIpc(): void {
     if (!current) return { needsFullSave: true } as const;
     if (validatedSnapshot !== current) {
       if (!isValidPersistedWorkspaceState(current)) {
-        throw new Error("Invalid persisted workspace state");
+        // Nothing can be patched onto a baseline we cannot validate. Drop it
+        // and ask for a full save rather than throwing, so the renderer
+        // replaces the bad state instead of retrying against it forever.
+        store.discardCachedSnapshot();
+        validatedSnapshot = null;
+        validatedSnapshotSize = 0;
+        return { needsFullSave: true } as const;
       }
       rememberValidatedSnapshot(current);
     }

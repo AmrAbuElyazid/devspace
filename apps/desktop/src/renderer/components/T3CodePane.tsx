@@ -112,6 +112,11 @@ export default function T3CodePane({
   }, [isActive, paneId, viewSession.phase]);
 
   useEffect(() => {
+    // Evicting an inactive view flips this pane back to "starting", so without
+    // this guard the pane immediately rebuilds the view the warm-view budget
+    // just reclaimed, only for the next eviction pass to reclaim it again. The
+    // restart is deferred until the pane is actually on screen.
+    if (!isActive) return;
     if (state.status !== "starting") return;
     if (viewSession.phase === "ready") {
       setState({ status: "running" });
@@ -127,26 +132,36 @@ export default function T3CodePane({
       void window.api.browser.destroy(paneId);
     });
     void (async () => {
-      const available = await window.api.t3code.isAvailable();
-      if (!available) {
-        markEmbeddedToolViewDestroyed(paneId);
-        if (!cancelled) setState({ status: "unavailable" });
-        return;
+      try {
+        const available = await window.api.t3code.isAvailable();
+        if (!available) {
+          markEmbeddedToolViewDestroyed(paneId);
+          if (!cancelled) setState({ status: "unavailable" });
+          return;
+        }
+        const result = await window.api.t3code.start(paneId);
+        if ("error" in result) {
+          markEmbeddedToolViewFailed(paneId, generation, result.error);
+          if (!cancelled) setState({ status: "error", message: result.error });
+          return;
+        }
+        markEmbeddedToolViewReady(paneId, generation);
+        if (cancelled) return;
+        setState({ status: "running" });
+      } catch (error) {
+        // A rejected invoke leaves the session in "pending", and this effect
+        // returns early on "pending", so nothing would ever retry it — the pane
+        // would spin forever. Record the failure so the error UI (and its retry)
+        // can take over.
+        const message = error instanceof Error ? error.message : String(error);
+        markEmbeddedToolViewFailed(paneId, generation, message);
+        if (!cancelled) setState({ status: "error", message });
       }
-      const result = await window.api.t3code.start(paneId);
-      if ("error" in result) {
-        markEmbeddedToolViewFailed(paneId, generation, result.error);
-        if (!cancelled) setState({ status: "error", message: result.error });
-        return;
-      }
-      markEmbeddedToolViewReady(paneId, generation);
-      if (cancelled) return;
-      setState({ status: "running" });
     })();
     return () => {
       cancelled = true;
     };
-  }, [paneId, state.status, viewSession.error, viewSession.phase]);
+  }, [isActive, paneId, state.status, viewSession.error, viewSession.phase]);
 
   const handleRetry = useCallback(() => {
     markEmbeddedToolViewDestroyed(paneId);

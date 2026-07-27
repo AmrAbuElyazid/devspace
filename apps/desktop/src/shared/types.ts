@@ -98,7 +98,17 @@ export interface DevspaceBridge {
     onUpdateStateChanged: (callback: (state: AppUpdateState) => void) => () => void;
   };
   terminal: {
-    create: (surfaceId: string, options?: TerminalCreateOptions) => Promise<TerminalCreateResult>;
+    create: (
+      surfaceId: string,
+      options?: TerminalCreateOptions,
+      /**
+       * Renderer-side generation for this incarnation of `surfaceId`. Echoed
+       * back by `onClosed` so a close event that was already in flight when the
+       * surface was replaced can be discarded instead of retiring its
+       * successor.
+       */
+      generation?: number,
+    ) => Promise<TerminalCreateResult>;
     destroy: (surfaceId: string) => Promise<void>;
     killManagedSession: (sessionId: string) => Promise<TerminalKillSessionResult>;
     listManagedSessions: () => Promise<TerminalListSessionsResult>;
@@ -110,7 +120,7 @@ export interface DevspaceBridge {
     sendBindingAction: (surfaceId: string, action: string) => Promise<boolean>;
     blur: () => void;
     onTitleChanged: (callback: (surfaceId: string, title: string) => void) => () => void;
-    onClosed: (callback: (surfaceId: string) => void) => () => void;
+    onClosed: (callback: (surfaceId: string, generation: number | null) => void) => () => void;
     onFocused: (callback: (surfaceId: string) => void) => () => void;
     onPwdChanged: (callback: (surfaceId: string, pwd: string) => void) => () => void;
     onSearchStart: (callback: (surfaceId: string, needle: string) => void) => () => void;

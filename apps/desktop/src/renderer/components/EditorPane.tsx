@@ -95,14 +95,26 @@ export default function EditorPane({
   useEffect(() => {
     if (state.status !== "checking") return;
     let cancelled = false;
-    void window.api.editor.isAvailable(vscodeCliPath).then((available) => {
-      if (cancelled) return;
-      if (!available) {
-        setState({ status: "unavailable" });
-      } else {
-        setState({ status: "starting", folderPath: config.folderPath });
-      }
-    });
+    void window.api.editor
+      .isAvailable(vscodeCliPath)
+      .then((available) => {
+        if (cancelled) return;
+        if (!available) {
+          setState({ status: "unavailable" });
+        } else {
+          setState({ status: "starting", folderPath: config.folderPath });
+        }
+      })
+      .catch((error: unknown) => {
+        // Nothing re-runs this effect while the status stays "checking", so a
+        // rejected invoke has to move the pane out of it or the spinner never
+        // stops.
+        if (cancelled) return;
+        setState({
+          status: "error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
     return () => {
       cancelled = true;
     };
@@ -181,6 +193,13 @@ export default function EditorPane({
 
   // Start the VS Code server
   useEffect(() => {
+    // Evicting an inactive view flips this pane back to "starting", so without
+    // this guard the pane immediately rebuilds the view the warm-view budget
+    // just reclaimed, only for the next eviction pass to reclaim it again. The
+    // restart is deferred until the pane is actually on screen. (The code-server
+    // process behind it is reference-counted in main and is unaffected either
+    // way — only the WebContentsView churns.)
+    if (!isActive) return;
     if (stateStatus !== "starting") return;
     if (viewSession.phase === "ready") {
       setState({ status: "running", folderPath: stateFolderPath });
@@ -198,31 +217,42 @@ export default function EditorPane({
     });
 
     void (async () => {
-      const result = await window.api.editor.start(paneId, stateFolderPath, vscodeCliPath);
+      try {
+        const result = await window.api.editor.start(paneId, stateFolderPath, vscodeCliPath);
 
-      if ("error" in result) {
-        markEmbeddedToolViewFailed(paneId, generation, result.error);
-        if (!cancelled) setState({ status: "error", message: result.error });
-        return;
+        if ("error" in result) {
+          markEmbeddedToolViewFailed(paneId, generation, result.error);
+          if (!cancelled) setState({ status: "error", message: result.error });
+          return;
+        }
+
+        markEmbeddedToolViewReady(paneId, generation);
+        if (cancelled) return;
+
+        if (stateFolderPath) {
+          const folderName = stateFolderPath.split("/").pop() || stateFolderPath;
+          updatePaneTitle(paneId, `VC: ${folderName}`);
+          updatePaneConfig(paneId, { folderPath: stateFolderPath });
+        } else {
+          updatePaneTitle(paneId, "VS Code");
+        }
+        setState({ status: "running", folderPath: stateFolderPath });
+      } catch (error) {
+        // A rejected invoke leaves the session in "pending", and this effect
+        // returns early on "pending", so nothing would ever retry it — the pane
+        // would spin forever. Record the failure so the error UI (and its retry)
+        // can take over.
+        const message = error instanceof Error ? error.message : String(error);
+        markEmbeddedToolViewFailed(paneId, generation, message);
+        if (!cancelled) setState({ status: "error", message });
       }
-
-      markEmbeddedToolViewReady(paneId, generation);
-      if (cancelled) return;
-
-      if (stateFolderPath) {
-        const folderName = stateFolderPath.split("/").pop() || stateFolderPath;
-        updatePaneTitle(paneId, `VC: ${folderName}`);
-        updatePaneConfig(paneId, { folderPath: stateFolderPath });
-      } else {
-        updatePaneTitle(paneId, "VS Code");
-      }
-      setState({ status: "running", folderPath: stateFolderPath });
     })();
 
     return () => {
       cancelled = true;
     };
   }, [
+    isActive,
     paneId,
     stateStatus,
     stateFolderPath,

@@ -84,43 +84,59 @@ export function registerTerminalAndEditorIpc(
     "registerTrustedLocalOrigin" | "unregisterTrustedLocalOrigin"
   >,
 ): void {
-  safeHandle("terminal:create", async (_event, surfaceId: unknown, options: unknown) => {
-    if (typeof surfaceId !== "string") return;
-    const opts =
-      typeof options === "object" && options !== null ? (options as Record<string, unknown>) : {};
-    const cwd = parseTerminalCwd(opts["cwd"]);
-    const envVars = parseTerminalEnvVars(opts["envVars"]);
+  // Renderer generation per live surface, echoed back on "terminal:closed" so
+  // the renderer can drop a close that was already in flight when the surface
+  // was replaced. Keyed by surface ID, which the renderer reuses across
+  // recreates, so the entry is always overwritten by the newest incarnation.
+  const surfaceGenerations = new Map<string, number>();
 
-    const createOpts: import("../../shared/types").TerminalCreateOptions = {};
-    if (cwd) createOpts.cwd = cwd;
-    if (envVars) createOpts.envVars = envVars;
+  safeHandle(
+    "terminal:create",
+    async (_event, surfaceId: unknown, options: unknown, generation: unknown) => {
+      if (typeof surfaceId !== "string") {
+        return { error: "Invalid terminal surface ID" } as const;
+      }
+      const opts =
+        typeof options === "object" && options !== null ? (options as Record<string, unknown>) : {};
+      const cwd = parseTerminalCwd(opts["cwd"]);
+      const envVars = parseTerminalEnvVars(opts["envVars"]);
 
-    if (opts["backend"] === "managed-tmux") {
-      const sessionId = parseManagedSessionId(opts["sessionId"]);
-      if (!sessionId) return { error: "Invalid managed terminal session ID" } as const;
-      Object.assign(createOpts, { backend: "managed-tmux", sessionId });
-    } else if (opts["backend"] === "external-tmux") {
-      const sessionName = parseExternalTmuxValue(opts["sessionName"]);
-      if (!sessionName) return { error: "Invalid external tmux session name" } as const;
-      const socketPath = parseExternalTmuxValue(opts["socketPath"]);
-      Object.assign(createOpts, {
-        backend: "external-tmux",
-        sessionName,
-        ...(socketPath ? { socketPath } : {}),
-      });
-    }
+      const createOpts: import("../../shared/types").TerminalCreateOptions = {};
+      if (cwd) createOpts.cwd = cwd;
+      if (envVars) createOpts.envVars = envVars;
 
-    try {
-      await terminalManager.createSurface(
-        surfaceId,
-        Object.keys(createOpts).length > 0 ? createOpts : undefined,
-      );
-      return { ok: true } as const;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      return { error: message } as const;
-    }
-  });
+      if (opts["backend"] === "managed-tmux") {
+        const sessionId = parseManagedSessionId(opts["sessionId"]);
+        if (!sessionId) return { error: "Invalid managed terminal session ID" } as const;
+        Object.assign(createOpts, { backend: "managed-tmux", sessionId });
+      } else if (opts["backend"] === "external-tmux") {
+        const sessionName = parseExternalTmuxValue(opts["sessionName"]);
+        if (!sessionName) return { error: "Invalid external tmux session name" } as const;
+        const socketPath = parseExternalTmuxValue(opts["socketPath"]);
+        Object.assign(createOpts, {
+          backend: "external-tmux",
+          sessionName,
+          ...(socketPath ? { socketPath } : {}),
+        });
+      }
+
+      try {
+        await terminalManager.createSurface(
+          surfaceId,
+          Object.keys(createOpts).length > 0 ? createOpts : undefined,
+        );
+        if (typeof generation === "number" && Number.isFinite(generation)) {
+          surfaceGenerations.set(surfaceId, generation);
+        } else {
+          surfaceGenerations.delete(surfaceId);
+        }
+        return { ok: true } as const;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        return { error: message } as const;
+      }
+    },
+  );
 
   safeHandle("terminal:killManagedSession", async (_event, sessionId: unknown) => {
     const safeSessionId = parseManagedSessionId(sessionId);
@@ -142,6 +158,7 @@ export function registerTerminalAndEditorIpc(
 
   safeHandle("terminal:destroy", (_event, surfaceId: unknown) => {
     if (typeof surfaceId !== "string") return;
+    surfaceGenerations.delete(surfaceId);
     terminalManager.destroySurface(surfaceId);
   });
 
@@ -304,7 +321,9 @@ export function registerTerminalAndEditorIpc(
   });
 
   terminalManager.onSurfaceClosed((surfaceId) => {
-    mainWindow.webContents.send("terminal:closed", surfaceId);
+    const generation = surfaceGenerations.get(surfaceId) ?? null;
+    surfaceGenerations.delete(surfaceId);
+    mainWindow.webContents.send("terminal:closed", surfaceId, generation);
   });
 
   terminalManager.onSurfaceFocused((surfaceId) => {

@@ -157,6 +157,42 @@ test("setupPersistence falls back to a full save when main has no baseline", asy
   );
 });
 
+test("setupPersistence falls back to a full save when a patch is rejected", async () => {
+  vi.spyOn(window.api.workspaceState, "patch").mockRejectedValue(
+    new Error("Invalid persisted workspace state"),
+  );
+  const saveSpy = vi.spyOn(window.api.workspaceState, "save");
+
+  let currentState = createState({
+    workspaces: [{ id: "workspace-1", name: "Workspace 1" }] as WorkspaceState["workspaces"],
+  });
+  let subscriber: ((state: WorkspaceState) => void) | null = null;
+  const store = {
+    subscribe(fn: (state: WorkspaceState) => void) {
+      subscriber = fn;
+    },
+    getState: () => currentState,
+  };
+
+  setupPersistence(store);
+  currentState = {
+    ...currentState,
+    workspaces: [
+      { ...currentState.workspaces[0]!, name: "Renamed" },
+    ] as WorkspaceState["workspaces"],
+  };
+  subscriber!(currentState);
+
+  await vi.advanceTimersByTimeAsync(500);
+  await Promise.resolve();
+
+  expect(saveSpy).toHaveBeenCalledWith(
+    expect.objectContaining({
+      workspaces: [expect.objectContaining({ name: "Renamed" })],
+    }),
+  );
+});
+
 test("buildPersistedWorkspacePatch sends only changed and removed entities", () => {
   const workspace: PersistedWorkspaceState["workspaces"][number] = {
     id: "workspace-1",

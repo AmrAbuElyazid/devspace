@@ -5,7 +5,11 @@ import { test, expect, vi } from "vitest";
 const noop = () => {};
 globalThis.window = {
   api: {
-    terminal: { destroy: noop, blur: noop },
+    terminal: {
+      destroy: noop,
+      blur: noop,
+      killManagedSession: async () => ({ killed: true }),
+    },
     browser: { destroy: noop },
     editor: { stop: noop },
     t3code: { stop: noop },
@@ -235,6 +239,85 @@ test("cleanupPaneResources only destroys tracked terminal panes", () => {
   );
 
   expect(destroyedPaneIds).toEqual(["pane-1"]);
+});
+
+test("cleanupPaneResources kills the tmux session behind a managed terminal pane", () => {
+  const killedSessionIds: string[] = [];
+  const deps = {
+    destroyTerminal: () => {},
+    destroyBrowser: () => {},
+    destroyEditor: () => {},
+    destroyT3Code: () => {},
+    clearBrowserRuntime: () => {},
+    killManagedTerminalSession: (sessionId: string) => {
+      killedSessionIds.push(sessionId);
+    },
+  };
+  const panes = {
+    managed: {
+      id: "managed",
+      type: "terminal" as const,
+      title: "Managed",
+      config: { backend: "managed-tmux" as const, sessionId: "session-1" },
+    },
+    direct: {
+      id: "direct",
+      type: "terminal" as const,
+      title: "Direct",
+      config: {},
+    },
+    external: {
+      id: "external",
+      type: "terminal" as const,
+      title: "External",
+      config: { backend: "external-tmux" as const, sessionName: "work" },
+    },
+  };
+
+  // Only a session Devspace created is ours to kill. Direct panes have no
+  // session, and an external one belongs to the user's own tmux server.
+  cleanupPaneResources(panes, "direct", deps);
+  cleanupPaneResources(panes, "external", deps);
+  expect(killedSessionIds).toEqual([]);
+
+  cleanupPaneResources(panes, "managed", deps);
+  expect(killedSessionIds).toEqual(["session-1"]);
+});
+
+test("switching workspaces leaves managed sessions running; closing a tab kills one", () => {
+  const killManagedSession = vi.fn(async () => ({ killed: true }));
+  const previous = window.api.terminal.killManagedSession;
+  window.api.terminal.killManagedSession = killManagedSession as never;
+
+  try {
+    const firstId = setupWorkspace("First");
+    useWorkspaceStore.getState().addWorkspace("Second");
+    const secondId = useWorkspaceStore.getState().activeWorkspaceId;
+    expect(secondId).not.toBe(firstId);
+
+    // A dev server in the workspace the user just left must survive.
+    useWorkspaceStore.getState().setActiveWorkspace(firstId);
+    useWorkspaceStore.getState().setActiveWorkspace(secondId);
+    expect(killManagedSession).not.toHaveBeenCalled();
+
+    const groupId = getWorkspace(secondId)?.focusedGroupId;
+    expect(groupId).toBeTruthy();
+    const group = useWorkspaceStore.getState().paneGroups[groupId!];
+    const tab = group?.tabs[0];
+    expect(tab).toBeTruthy();
+    const pane = useWorkspaceStore.getState().panes[tab!.paneId];
+    expect(pane?.type === "terminal" && pane.config.backend).toBe("managed-tmux");
+
+    useWorkspaceStore.getState().removeGroupTab(secondId, groupId!, tab!.id);
+    expect(killManagedSession).toHaveBeenCalledTimes(1);
+    expect(killManagedSession).toHaveBeenCalledWith(
+      pane?.type === "terminal" && pane.config.backend === "managed-tmux"
+        ? pane.config.sessionId
+        : undefined,
+    );
+  } finally {
+    window.api.terminal.killManagedSession = previous;
+  }
 });
 
 test("openManagedTerminalSession recovers a detached session without duplicating it", () => {

@@ -56,6 +56,25 @@ const defaultPaneCleanupDeps: PaneCleanupDeps = {
   clearTerminalRuntime: (paneId) => {
     useTerminalStore.getState().clearPaneState(paneId);
   },
+  killManagedTerminalSession: (sessionId) => {
+    void window.api.terminal
+      .killManagedSession(sessionId)
+      .then((result) => {
+        // The pane is already gone from the store, so there is nothing to retry
+        // against. A failure here leaves an orphaned session the user can still
+        // reap from Settings, so log it rather than swallowing it.
+        if ("error" in result) {
+          console.error(
+            "[Workspace] Failed to kill managed terminal session:",
+            sessionId,
+            result.error,
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("[Workspace] Failed to kill managed terminal session:", sessionId, error);
+      });
+  },
 };
 
 export const defaultPaneCleanup: PaneCleanup = (panes, paneIds) => {

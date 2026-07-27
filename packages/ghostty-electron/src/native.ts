@@ -10,6 +10,12 @@ export interface GhosttyNativeBridge {
   createSurface(
     surfaceId: string,
     options?: { cwd?: string; envVars?: Record<string, string>; command?: string },
+    /**
+     * Monotonic epoch identifying this incarnation of `surfaceId`. Stored in the
+     * surface's native userdata and echoed back by the `surface-closed`
+     * callback so stale notifications can be discarded.
+     */
+    epoch?: number,
   ): void;
   destroySurface(surfaceId: string): void;
   showSurface(surfaceId: string): void;

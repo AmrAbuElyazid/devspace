@@ -41,7 +41,8 @@ const bridge: DevspaceBridge = {
   },
 
   terminal: {
-    create: (surfaceId, options) => ipcRenderer.invoke("terminal:create", surfaceId, options),
+    create: (surfaceId, options, generation) =>
+      ipcRenderer.invoke("terminal:create", surfaceId, options, generation),
     destroy: (surfaceId) => ipcRenderer.invoke("terminal:destroy", surfaceId),
     killManagedSession: (sessionId) => ipcRenderer.invoke("terminal:killManagedSession", sessionId),
     listManagedSessions: () => ipcRenderer.invoke("terminal:listManagedSessions"),
@@ -67,8 +68,12 @@ const bridge: DevspaceBridge = {
       };
     },
     onClosed: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, surfaceId: string): void => {
-        callback(surfaceId);
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        surfaceId: string,
+        generation: number | null,
+      ): void => {
+        callback(surfaceId, generation);
       };
       ipcRenderer.on("terminal:closed", listener);
       return () => {
