@@ -281,14 +281,16 @@ test("browser import IPC rejects invalid import mode", async () => {
   });
 });
 
-test("window setSidebarOpen IPC updates native traffic light position", async () => {
+test("window setTitleBarHeight IPC recenters the native traffic lights", async () => {
   mainWindowCalls.length = 0;
 
-  await handlers.get("window:setSidebarOpen")?.({}, false);
-  await handlers.get("window:setSidebarOpen")?.({}, true);
+  await handlers.get("window:setTitleBarHeight")?.({}, 32);
+  await handlers.get("window:setTitleBarHeight")?.({}, 48);
+  // Garbage from a stale renderer must not move the buttons at all.
+  await handlers.get("window:setTitleBarHeight")?.({}, "tall");
 
   expect(mainWindowCalls).toEqual([
-    ["setWindowButtonPosition", { x: 16, y: 6 }],
+    ["setWindowButtonPosition", { x: 16, y: 10 }],
     ["setWindowButtonPosition", { x: 16, y: 18 }],
   ]);
 });

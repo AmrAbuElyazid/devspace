@@ -26,6 +26,7 @@ const appMocks = vi.hoisted(() => ({
   },
   setDragHidesViews: vi.fn(),
   initNativeViewSubscriptions: vi.fn(),
+  initWindowChromeSubscriptions: vi.fn(),
   useTheme: vi.fn(),
   useAppShortcuts: vi.fn(),
   useBrowserBridge: vi.fn(),
@@ -64,6 +65,10 @@ vi.mock("./store/native-view-store", () => ({
     selector: (state: { setDragHidesViews: typeof appMocks.setDragHidesViews }) => unknown,
   ) => selector({ setDragHidesViews: appMocks.setDragHidesViews }),
   initNativeViewSubscriptions: appMocks.initNativeViewSubscriptions,
+}));
+
+vi.mock("./store/window-chrome-store", () => ({
+  initWindowChromeSubscriptions: appMocks.initWindowChromeSubscriptions,
 }));
 
 vi.mock("./hooks/useTheme", () => ({

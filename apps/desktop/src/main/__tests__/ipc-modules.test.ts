@@ -659,8 +659,8 @@ test("system IPC forwards window actions and native window events", async () => 
   await emitToChannel("window:maximize", {});
   await emitToChannel("window:focusContent", {});
   await emitToChannel("window:close", {});
-  await emitToChannel("window:setSidebarOpen", {}, false);
-  await emitToChannel("window:setSidebarOpen", {}, true);
+  await emitToChannel("window:setTitleBarHeight", {}, 32);
+  await emitToChannel("window:setTitleBarHeight", {}, 48);
   await emitToChannel("window:setThemeMode", {}, "dark");
   expect(nativeThemeMock.themeSource).toBe("dark");
   await emitToChannel("window:setThemeMode", {}, "light");
@@ -679,7 +679,7 @@ test("system IPC forwards window actions and native window events", async () => 
     ["unmaximize"],
     ["focusContent"],
     ["close"],
-    ["setWindowButtonPosition", { x: 16, y: 6 }],
+    ["setWindowButtonPosition", { x: 16, y: 10 }],
     ["setWindowButtonPosition", { x: 16, y: 18 }],
   ]);
   expect(rendererMessages).toEqual([
