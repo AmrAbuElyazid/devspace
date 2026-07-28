@@ -10,7 +10,14 @@ import { useTrafficLightGutter } from "@/store/window-chrome-store";
 import { resolveDisplayString } from "../../../shared/shortcuts";
 import { useActiveDrag, useDropIntent } from "@/hooks/useDndOrchestrator";
 import { acquireNativeViewShield, releaseNativeViewShield } from "@/hooks/useNativeViewDragShield";
-import { findSidebarNode } from "@/lib/sidebar-tree";
+import {
+  collectWorkspaceIds,
+  findFolder,
+  findSidebarNode,
+  folderSelectionKey,
+  partitionSelectionKeys,
+  workspaceSelectionKey,
+} from "@/lib/sidebar-tree";
 import type { ContextMenuItem } from "../../../shared/types";
 import type { SidebarContainer } from "@/types/dnd";
 
@@ -48,6 +55,7 @@ export default function Sidebar() {
   const sidebarTree = useWorkspaceStore((s) => s.sidebarTree);
   const addFolder = useWorkspaceStore((s) => s.addFolder);
   const removeFolder = useWorkspaceStore((s) => s.removeFolder);
+  const removeFolderWithContents = useWorkspaceStore((s) => s.removeFolderWithContents);
   const renameFolder = useWorkspaceStore((s) => s.renameFolder);
   const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed);
   const togglePinWorkspace = useWorkspaceStore((s) => s.togglePinWorkspace);
@@ -85,18 +93,9 @@ export default function Sidebar() {
   );
   const renderedSidebarWidth = liveSidebarWidth ?? sidebarWidth;
 
-  const workspaceIds = useMemo(
-    () => new Set(workspaces.map((workspace) => workspace.id)),
-    [workspaces],
-  );
-  const selection = useSidebarSelection(
-    pinnedSidebarNodes,
-    sidebarTree,
-    workspaceIds,
-    setActiveWorkspace,
-  );
-  const { selectedIds, actionTargets, clear: clearSelection } = selection;
-  const selectedCount = selectedIds.size;
+  const selection = useSidebarSelection(pinnedSidebarNodes, sidebarTree, setActiveWorkspace);
+  const { selectedKeys, actionTargets, clear: clearSelection } = selection;
+  const selectedCount = selectedKeys.size;
 
   const filteredWorkspaceIds = useMemo(() => {
     if (!searchQuery.trim()) return null;
@@ -226,50 +225,78 @@ export default function Sidebar() {
   }, []);
 
   const duplicateWorkspaces = useCallback(
-    (ids: string[]) => {
-      for (const id of ids) duplicateWorkspace(id);
+    (keys: string[]) => {
+      // Folders in the selection are skipped — duplicating a folder would mean
+      // copying every workspace in it, which is a different (and much heavier)
+      // action than the one this menu entry offers.
+      for (const id of partitionSelectionKeys(keys).workspaceIds) duplicateWorkspace(id);
       clearSelection();
     },
     [duplicateWorkspace, clearSelection],
   );
 
+  /**
+   * What deleting these rows would actually remove. A selected folder takes
+   * everything inside it, so the counts the confirmation quotes have to be
+   * resolved through the tree rather than read off the selection.
+   */
+  const resolveDeletion = useCallback(
+    (keys: string[]) => {
+      const { workspaceIds, folderIds } = partitionSelectionKeys(keys);
+      const doomedWorkspaceIds = new Set(workspaceIds);
+      for (const folderId of folderIds) {
+        const folder =
+          findFolder(sidebarTree, folderId) ?? findFolder(pinnedSidebarNodes, folderId);
+        if (!folder) continue;
+        for (const id of collectWorkspaceIds(folder.children, true)) doomedWorkspaceIds.add(id);
+      }
+      return { workspaceCount: doomedWorkspaceIds.size, folderCount: folderIds.length };
+    },
+    [sidebarTree, pinnedSidebarNodes],
+  );
+
+  /**
+   * Deleting every workspace is allowed by the store — it mints a fresh one —
+   * but offering it as a menu entry reads like a way to empty the app, so the
+   * entry hides unless something would survive. Folder-only deletions (no
+   * workspaces at all) are always fine.
+   */
+  const canDelete = useCallback(
+    (keys: string[]) => {
+      const { workspaceCount } = resolveDeletion(keys);
+      return workspaceCount === 0 || workspaceCount < workspaces.length;
+    },
+    [resolveDeletion, workspaces.length],
+  );
+
   const confirmDelete = useCallback(() => {
     if (!deleteTargets) return;
-    removeWorkspaces(deleteTargets);
+    const { workspaceIds, folderIds } = partitionSelectionKeys(deleteTargets);
+    // Folders first: each takes its own workspaces with it, so the loose list
+    // that follows is left with only what wasn't already inside one.
+    for (const folderId of folderIds) removeFolderWithContents(folderId);
+    removeWorkspaces(workspaceIds);
     clearSelection();
-  }, [deleteTargets, removeWorkspaces, clearSelection]);
+  }, [deleteTargets, removeFolderWithContents, removeWorkspaces, clearSelection]);
 
   const handleWorkspaceContextMenu = useCallback(
     async (e: React.MouseEvent, workspaceId: string) => {
       e.preventDefault();
       const ws = workspaces.find((w) => w.id === workspaceId);
       if (!ws) return;
-      const targets = actionTargets(workspaceId);
-      const many = targets.length > 1;
+      const targets = actionTargets(workspaceSelectionKey(workspaceId));
       const isPinned = workspaceContainer(workspaceId) === "pinned";
-      // Deleting everything would leave the app with no workspace at all, so
-      // the entry only appears while at least one would survive.
-      const canDelete = workspaces.length > targets.length;
-      const items: ContextMenuItem[] = many
-        ? [
-            { id: "duplicate", label: `Duplicate ${targets.length} Workspaces` },
-            ...(canDelete
-              ? [
-                  {
-                    id: "delete",
-                    label: `Delete ${targets.length} Workspaces`,
-                    destructive: true,
-                  },
-                ]
-              : []),
-          ]
-        : [
-            { id: "rename", label: "Rename" },
-            { id: "duplicate", label: "Duplicate" },
-            { id: "pin", label: isPinned ? "Unpin" : "Pin" },
-            { id: "new-folder", label: "New Folder..." },
-            ...(canDelete ? [{ id: "delete", label: "Delete", destructive: true }] : []),
-          ];
+      const deletable = canDelete(targets);
+      const items: ContextMenuItem[] =
+        targets.length > 1
+          ? buildBulkMenuItems(targets, resolveDeletion(targets), deletable)
+          : [
+              { id: "rename", label: "Rename" },
+              { id: "duplicate", label: "Duplicate" },
+              { id: "pin", label: isPinned ? "Unpin" : "Pin" },
+              { id: "new-folder", label: "New Folder..." },
+              ...(deletable ? [{ id: "delete", label: "Delete", destructive: true }] : []),
+            ];
       const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY });
       if (!result) return;
       if (result === "rename") startEditingWorkspace(workspaceId);
@@ -282,6 +309,8 @@ export default function Sidebar() {
       workspaces,
       actionTargets,
       workspaceContainer,
+      canDelete,
+      resolveDeletion,
       startEditingWorkspace,
       duplicateWorkspaces,
       addFolder,
@@ -294,14 +323,48 @@ export default function Sidebar() {
       e.preventDefault();
       const container = folderContainer(folderId);
       const isPinned = container === "pinned";
+      const targets = actionTargets(folderSelectionKey(folderId));
+      const deletable = canDelete(targets);
+
+      if (targets.length > 1) {
+        const bulkResult = await window.api.contextMenu.show(
+          buildBulkMenuItems(targets, resolveDeletion(targets), deletable),
+          { x: e.clientX, y: e.clientY },
+        );
+        if (bulkResult === "duplicate") duplicateWorkspaces(targets);
+        else if (bulkResult === "delete") setDeleteTargets(targets);
+        return;
+      }
+
+      // Two ways out of a folder that holds something: keep the workspaces and
+      // just dissolve the folder, or take the lot. Only one of them is
+      // destructive, and conflating them is how people lose work.
+      const { workspaceCount } = resolveDeletion(targets);
       const items: ContextMenuItem[] = [
         { id: "rename", label: "Rename Folder" },
         { id: "pin", label: isPinned ? "Unpin" : "Pin" },
         { id: "add-workspace", label: "Add Workspace" },
         { id: "add-subfolder", label: "Add Sub-folder" },
-        { id: "delete", label: "Delete Folder", destructive: true },
+        ...(workspaceCount > 0
+          ? [
+              { id: "delete", label: "Remove Folder Only" },
+              ...(deletable
+                ? [
+                    {
+                      id: "delete-contents",
+                      label: `Delete Folder and ${workspaceCount} Workspace${workspaceCount === 1 ? "" : "s"}`,
+                      destructive: true,
+                    },
+                  ]
+                : []),
+            ]
+          : [{ id: "delete", label: "Delete Folder", destructive: true }]),
       ];
       const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY });
+      if (result === "delete-contents") {
+        setDeleteTargets(targets);
+        return;
+      }
       if (result === "rename") startEditingFolder(folderId);
       else if (result === "pin") {
         if (isPinned) unpinFolder(folderId);
@@ -319,6 +382,10 @@ export default function Sidebar() {
     },
     [
       folderContainer,
+      actionTargets,
+      canDelete,
+      resolveDeletion,
+      duplicateWorkspaces,
       startEditingFolder,
       addWorkspace,
       addFolder,
@@ -358,10 +425,11 @@ export default function Sidebar() {
       onStopEditing: stopEditing,
       onContextMenuFolder: handleFolderContextMenu,
       onContextMenuWorkspace: handleWorkspaceContextMenu,
-      onSelectWorkspace: selection.handleRowClick,
+      onSelectWorkspace: selection.handleWorkspaceClick,
+      onSelectFolder: selection.handleFolderClick,
       onAddWorkspaceToFolder: handleAddWorkspaceToFolder,
       activeWorkspaceId,
-      selectedWorkspaceIds: selectedIds,
+      selectedKeys,
       toggleFolderCollapsed,
       onRequestDelete: requestDelete,
     }),
@@ -376,16 +444,18 @@ export default function Sidebar() {
       stopEditing,
       handleFolderContextMenu,
       handleWorkspaceContextMenu,
-      selection.handleRowClick,
+      selection.handleWorkspaceClick,
+      selection.handleFolderClick,
       handleAddWorkspaceToFolder,
       activeWorkspaceId,
-      selectedIds,
+      selectedKeys,
       toggleFolderCollapsed,
       requestDelete,
     ],
   );
 
-  const deleteCount = deleteTargets?.length ?? 0;
+  const pendingDeletion = deleteTargets ? resolveDeletion(deleteTargets) : null;
+  const selectedWorkspaceCount = partitionSelectionKeys(selectedKeys).workspaceIds.length;
 
   return (
     <SidebarProvider value={sidebarContextValue}>
@@ -477,6 +547,9 @@ export default function Sidebar() {
                   "text-ui-sm text-foreground placeholder:text-muted-foreground",
                 )}
               />
+              {/* No "/" hint here: nothing ever bound that key to focusing the
+                  search, so the cap was advertising a shortcut that did not
+                  exist. */}
               {searchQuery ? (
                 <button
                   className={cn(iconButtonClass, "size-5 shrink-0 -mr-1")}
@@ -485,11 +558,7 @@ export default function Sidebar() {
                 >
                   <X size={12} strokeWidth={2.2} />
                 </button>
-              ) : (
-                <Kbd className="no-drag h-auto shrink-0 bg-transparent px-0 text-ui-micro font-mono">
-                  /
-                </Kbd>
-              )}
+              ) : null}
             </div>
           </div>
 
@@ -593,17 +662,27 @@ export default function Sidebar() {
                 <span className="flex-1 text-ui-xs font-medium tabular-nums">
                   {selectedCount} selected
                 </span>
-                <HintTooltip content="Duplicate" sideOffset={4} align="end">
-                  <button
-                    type="button"
-                    className={cn(iconButtonClass, "size-6")}
-                    aria-label={`Duplicate ${selectedCount} workspaces`}
-                    onClick={() => duplicateWorkspaces([...selectedIds])}
+                {selectedWorkspaceCount > 0 ? (
+                  <HintTooltip
+                    content={
+                      selectedWorkspaceCount === selectedCount
+                        ? "Duplicate"
+                        : `Duplicate ${selectedWorkspaceCount} workspaces (folders are skipped)`
+                    }
+                    sideOffset={4}
+                    align="end"
                   >
-                    <Copy size={12} />
-                  </button>
-                </HintTooltip>
-                {workspaces.length > selectedCount ? (
+                    <button
+                      type="button"
+                      className={cn(iconButtonClass, "size-6")}
+                      aria-label={`Duplicate ${selectedWorkspaceCount} workspaces`}
+                      onClick={() => duplicateWorkspaces([...selectedKeys])}
+                    >
+                      <Copy size={12} />
+                    </button>
+                  </HintTooltip>
+                ) : null}
+                {canDelete([...selectedKeys]) ? (
                   <HintTooltip content="Delete" sideOffset={4} align="end">
                     <button
                       type="button"
@@ -611,8 +690,8 @@ export default function Sidebar() {
                         iconButtonClass,
                         "size-6 hover:text-destructive hover:bg-destructive/10",
                       )}
-                      aria-label={`Delete ${selectedCount} workspaces`}
-                      onClick={() => setDeleteTargets([...selectedIds])}
+                      aria-label={`Delete ${selectedCount} items`}
+                      onClick={() => setDeleteTargets([...selectedKeys])}
                     >
                       <Trash2 size={12} />
                     </button>
@@ -643,7 +722,7 @@ export default function Sidebar() {
             >
               <Settings size={14} strokeWidth={1.8} className="shrink-0 text-muted-foreground" />
               <span className="flex-1 text-left">Settings</span>
-              <Kbd className="h-auto bg-transparent px-0 text-ui-micro font-mono">
+              <Kbd className="h-4 min-w-4 rounded-sm bg-foreground/10 px-1 text-ui-micro font-mono">
                 {resolveDisplayString("toggle-settings")}
               </Kbd>
             </button>
@@ -667,14 +746,10 @@ export default function Sidebar() {
 
         {/* Delete confirmation */}
         <ConfirmDialog
-          open={deleteCount > 0}
+          open={pendingDeletion !== null}
           onOpenChange={() => setDeleteTargets(null)}
-          title={deleteCount > 1 ? `Delete ${deleteCount} workspaces?` : "Delete workspace?"}
-          description={
-            deleteCount > 1
-              ? `These ${deleteCount} workspaces and all their tabs will be permanently removed. This action cannot be undone.`
-              : "This workspace and all its tabs will be permanently removed. This action cannot be undone."
-          }
+          title={describeDeletionTitle(pendingDeletion)}
+          description={describeDeletionBody(pendingDeletion)}
           confirmLabel="Delete"
           cancelLabel="Cancel"
           variant="destructive"
@@ -683,6 +758,69 @@ export default function Sidebar() {
       </aside>
     </SidebarProvider>
   );
+}
+
+interface DeletionScope {
+  workspaceCount: number;
+  folderCount: number;
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/** The context menu shown when the right-clicked row is part of a selection. */
+function buildBulkMenuItems(
+  targets: string[],
+  scope: DeletionScope,
+  deletable: boolean,
+): ContextMenuItem[] {
+  const workspaceTargets = partitionSelectionKeys(targets).workspaceIds.length;
+  return [
+    ...(workspaceTargets > 0
+      ? [{ id: "duplicate", label: `Duplicate ${plural(workspaceTargets, "Workspace")}` }]
+      : []),
+    ...(deletable
+      ? [
+          {
+            id: "delete",
+            label:
+              scope.folderCount > 0
+                ? `Delete ${plural(targets.length, "Item")}`
+                : `Delete ${plural(targets.length, "Workspace")}`,
+            destructive: true,
+          },
+        ]
+      : []),
+  ];
+}
+
+function describeDeletionTitle(scope: DeletionScope | null): string {
+  if (!scope) return "Delete?";
+  if (scope.folderCount === 0) {
+    return scope.workspaceCount === 1
+      ? "Delete workspace?"
+      : `Delete ${scope.workspaceCount} workspaces?`;
+  }
+  if (scope.workspaceCount === 0) {
+    return scope.folderCount === 1 ? "Delete folder?" : `Delete ${scope.folderCount} folders?`;
+  }
+  return `Delete ${plural(scope.folderCount, "folder")} and ${plural(scope.workspaceCount, "workspace")}?`;
+}
+
+function describeDeletionBody(scope: DeletionScope | null): string {
+  if (!scope) return "";
+  const undone = "This action cannot be undone.";
+  if (scope.workspaceCount === 0) {
+    return `The ${scope.folderCount === 1 ? "folder is" : "folders are"} empty and will be removed. ${undone}`;
+  }
+  const workspaces =
+    scope.workspaceCount === 1
+      ? "One workspace and all its tabs"
+      : `${scope.workspaceCount} workspaces and all their tabs`;
+  const inside =
+    scope.folderCount > 0 ? " Everything inside the selected folders goes with them." : "";
+  return `${workspaces} will be permanently removed, shutting down any terminals still running in them.${inside} ${undone}`;
 }
 
 function SectionHeader({

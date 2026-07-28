@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { ChevronRight, FolderClosed, FolderOpen, Plus } from "lucide-react";
+import { Check, ChevronRight, FolderClosed, FolderOpen, Plus } from "lucide-react";
 
 import { useActiveDrag } from "@/hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "@/hooks/useInsertionIndicator";
@@ -18,7 +18,8 @@ interface SortableFolderItemProps {
   parentFolderId: string | null;
   depth: number;
   isEditing: boolean;
-  onToggle: () => void;
+  isSelected: boolean;
+  onClick: (event: React.MouseEvent) => void;
   onAddWorkspace: () => void;
 }
 
@@ -28,7 +29,8 @@ export function SortableFolderItem({
   parentFolderId,
   depth,
   isEditing,
-  onToggle,
+  isSelected,
+  onClick,
   onAddWorkspace,
 }: SortableFolderItemProps) {
   const { filteredWorkspaceIds, onContextMenuFolder, onRenameFolder, onStopEditing } =
@@ -82,7 +84,8 @@ export function SortableFolderItem({
       <div
         ref={setFolderRef}
         data-sortable-id={`folder-${folder.id}`}
-        onClick={onToggle}
+        data-selected={isSelected || undefined}
+        onClick={onClick}
         onContextMenu={(e) => onContextMenuFolder(e, folder.id)}
         style={{ marginLeft: depth * 14 }}
         {...attributes}
@@ -105,10 +108,14 @@ export function SortableFolderItem({
             isExpanded && "rotate-90",
           )}
         />
-        <FolderIcon
-          size={14}
-          className="shrink-0 text-muted-foreground transition-colors group-hover/folder:text-foreground"
-        />
+        {isSelected ? (
+          <Check size={14} strokeWidth={2.4} className="shrink-0 text-brand" />
+        ) : (
+          <FolderIcon
+            size={14}
+            className="shrink-0 text-muted-foreground transition-colors group-hover/folder:text-foreground"
+          />
+        )}
         {isEditing ? (
           <InlineRenameInput
             initialValue={folder.name}

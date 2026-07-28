@@ -76,6 +76,58 @@ export function collectWorkspaceIds(tree: SidebarNode[], includeCollapsed = fals
 }
 
 /**
+ * A selectable sidebar row, namespaced by kind. Folders and workspaces share
+ * one selection so a bulk action can span both, and their ids come from
+ * different pools — the prefix is what keeps them apart.
+ */
+export type SidebarSelectionKey = `w:${string}` | `f:${string}`;
+
+export function workspaceSelectionKey(workspaceId: string): SidebarSelectionKey {
+  return `w:${workspaceId}`;
+}
+
+export function folderSelectionKey(folderId: string): SidebarSelectionKey {
+  return `f:${folderId}`;
+}
+
+/** Splits a mixed selection back into the two id lists actions need. */
+export function partitionSelectionKeys(keys: Iterable<string>): {
+  workspaceIds: string[];
+  folderIds: string[];
+} {
+  const workspaceIds: string[] = [];
+  const folderIds: string[] = [];
+  for (const key of keys) {
+    if (key.startsWith("w:")) workspaceIds.push(key.slice(2));
+    else if (key.startsWith("f:")) folderIds.push(key.slice(2));
+  }
+  return { workspaceIds, folderIds };
+}
+
+/**
+ * Every selectable row in a tree, in visual top-to-bottom order — the order a
+ * shift-click range runs along. Collapsed folders contribute themselves but
+ * not their contents unless `includeCollapsed` is set.
+ */
+export function collectSelectionKeys(
+  tree: SidebarNode[],
+  includeCollapsed = false,
+): SidebarSelectionKey[] {
+  const keys: SidebarSelectionKey[] = [];
+  for (const node of tree) {
+    if (node.type === "workspace") {
+      keys.push(workspaceSelectionKey(node.workspaceId));
+      continue;
+    }
+    keys.push(folderSelectionKey(node.id));
+    if (includeCollapsed || !node.collapsed) {
+      keys.push(...collectSelectionKeys(node.children, includeCollapsed));
+    }
+  }
+  return keys;
+}
+
+/**
  * Find a folder by ID. Returns the folder node or null.
  */
 export function findFolder(

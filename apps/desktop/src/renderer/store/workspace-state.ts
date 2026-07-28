@@ -76,6 +76,13 @@ export interface WorkspaceState {
   }) => void;
   addFolder: (name: string, parentId?: string | null, container?: SidebarContainer) => string;
   removeFolder: (folderId: string) => void;
+  /**
+   * Deletes a folder together with everything inside it — nested folders and
+   * every workspace they hold, whose panes are torn down like any other
+   * workspace removal. `removeFolder` only dissolves the folder and keeps its
+   * contents.
+   */
+  removeFolderWithContents: (folderId: string) => void;
   renameFolder: (folderId: string, name: string) => void;
   toggleFolderCollapsed: (folderId: string) => void;
   expandFolder: (folderId: string) => void;

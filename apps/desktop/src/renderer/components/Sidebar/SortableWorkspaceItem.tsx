@@ -204,7 +204,9 @@ export function SortableWorkspaceItem({
       {shortcutHint ? (
         <Kbd
           className={cn(
-            "animate-hint shrink-0 h-auto bg-transparent px-0 text-ui-micro font-mono",
+            // A translucent foreground fill rather than a solid one, so the
+            // cap sits correctly on both a plain row and the amber active row.
+            "animate-hint shrink-0 h-4 min-w-4 rounded-sm bg-foreground/10 px-1 text-ui-micro font-mono",
             isActive ? "text-brand" : "text-muted-foreground",
           )}
         >

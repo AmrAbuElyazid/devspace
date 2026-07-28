@@ -1,6 +1,7 @@
 import { test, expect } from "vitest";
 import type { SidebarNode } from "../types/workspace";
 import { normalizeSidebarPersistence, repairSidebarOrganization } from "./sidebar-organization";
+import { collectSelectionKeys, partitionSelectionKeys } from "./sidebar-tree";
 
 function folder(id: string, name: string, children: SidebarNode[] = []): SidebarNode {
   return {
@@ -10,6 +11,10 @@ function folder(id: string, name: string, children: SidebarNode[] = []): Sidebar
     collapsed: false,
     children,
   };
+}
+
+function workspace(workspaceId: string): SidebarNode {
+  return { type: "workspace", workspaceId };
 }
 
 test("repairSidebarOrganization removes duplicate workspace occurrences after the first valid one", () => {
@@ -89,4 +94,32 @@ test("normalizeSidebarPersistence migrates legacy pinned workspaces into pinnedS
 
   expect(normalized.pinnedSidebarNodes).toEqual([{ type: "workspace", workspaceId: "ws-1" }]);
   expect(normalized.sidebarTree).toEqual([{ type: "workspace", workspaceId: "ws-2" }]);
+});
+
+test("collectSelectionKeys walks folders and workspaces in visual order", () => {
+  const tree: SidebarNode[] = [
+    folder("f1", "One", [workspace("a"), folder("f2", "Two", [workspace("b")])]),
+    workspace("c"),
+  ];
+
+  expect(collectSelectionKeys(tree)).toEqual(["f:f1", "w:a", "f:f2", "w:b", "w:c"]);
+});
+
+test("collectSelectionKeys keeps a collapsed folder but skips what is inside it", () => {
+  const collapsed = folder("f1", "One", [workspace("a")]);
+  if (collapsed.type === "folder") collapsed.collapsed = true;
+  const tree: SidebarNode[] = [collapsed, workspace("b")];
+
+  // Shift-clicking across a collapsed folder must not select rows the user
+  // cannot see…
+  expect(collectSelectionKeys(tree)).toEqual(["f:f1", "w:b"]);
+  // …but pruning a stale selection has to know those rows still exist.
+  expect(collectSelectionKeys(tree, true)).toEqual(["f:f1", "w:a", "w:b"]);
+});
+
+test("partitionSelectionKeys splits a mixed selection by kind", () => {
+  expect(partitionSelectionKeys(["w:a", "f:f1", "w:b"])).toEqual({
+    workspaceIds: ["a", "b"],
+    folderIds: ["f1"],
+  });
 });

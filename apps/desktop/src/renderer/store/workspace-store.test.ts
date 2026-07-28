@@ -2056,3 +2056,61 @@ test("closing both panes on the left side of a 2x2 layout collapses to the right
     sizes: [50, 50],
   });
 });
+
+test("removeFolder keeps the workspaces inside it", () => {
+  const keeperId = setupWorkspace("Keeper");
+  const folderId = useWorkspaceStore.getState().addFolder("Folder");
+  const nestedId = useWorkspaceStore.getState().addWorkspace("Nested", folderId, "main");
+
+  useWorkspaceStore.getState().removeFolder(folderId);
+
+  const state = useWorkspaceStore.getState();
+  expect(findFolder(state.sidebarTree, folderId)).toBe(null);
+  expect(state.workspaces.map((w) => w.id).toSorted()).toEqual([keeperId, nestedId].toSorted());
+  expect(state.sidebarTree).toContainEqual({ type: "workspace", workspaceId: nestedId });
+});
+
+test("removeFolderWithContents deletes nested folders and every workspace under them", () => {
+  const keeperId = setupWorkspace("Keeper");
+  const folderId = useWorkspaceStore.getState().addFolder("Folder");
+  const subFolderId = useWorkspaceStore.getState().addFolder("Sub", folderId);
+  const directChildId = useWorkspaceStore.getState().addWorkspace("Direct", folderId, "main");
+  const nestedChildId = useWorkspaceStore.getState().addWorkspace("Nested", subFolderId, "main");
+
+  // A collapsed sub-folder is still part of what the user is deleting.
+  useWorkspaceStore.getState().toggleFolderCollapsed(subFolderId);
+  useWorkspaceStore.getState().removeFolderWithContents(folderId);
+
+  const state = useWorkspaceStore.getState();
+  expect(findFolder(state.sidebarTree, folderId)).toBe(null);
+  expect(findFolder(state.sidebarTree, subFolderId)).toBe(null);
+  expect(state.workspaces.map((w) => w.id)).toEqual([keeperId]);
+  expect(state.sidebarTree).toEqual([{ type: "workspace", workspaceId: keeperId }]);
+  // The panes of both deleted workspaces are gone, not orphaned in the maps.
+  for (const removedId of [directChildId, nestedChildId]) {
+    expect(state.workspaces.some((w) => w.id === removedId)).toBe(false);
+  }
+  expect(validateWorkspaceGraph(state)).toEqual({ valid: true });
+});
+
+test("removeFolderWithContents on the last folder still leaves a workspace behind", () => {
+  setupWorkspace("Only");
+  const onlyId = useWorkspaceStore.getState().activeWorkspaceId;
+  const folderId = useWorkspaceStore.getState().addFolder("Folder");
+  useWorkspaceStore.getState().moveSidebarNode({
+    nodeId: onlyId,
+    nodeType: "workspace",
+    sourceContainer: "main",
+    targetContainer: "main",
+    targetParentId: folderId,
+    targetIndex: 0,
+  });
+
+  useWorkspaceStore.getState().removeFolderWithContents(folderId);
+
+  const state = useWorkspaceStore.getState();
+  expect(findFolder(state.sidebarTree, folderId)).toBe(null);
+  expect(state.workspaces.length).toBe(1);
+  expect(state.workspaces[0]!.id).not.toBe(onlyId);
+  expect(state.activeWorkspaceId).toBe(state.workspaces[0]!.id);
+});

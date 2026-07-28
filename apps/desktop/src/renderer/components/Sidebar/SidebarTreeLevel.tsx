@@ -3,6 +3,7 @@ import { useModifierHeldContext } from "../../App";
 import { SortableWorkspaceItem } from "./SortableWorkspaceItem";
 import { SortableFolderItem } from "./SortableFolderItem";
 import { useSidebarContext } from "./SidebarContext";
+import { folderSelectionKey, workspaceSelectionKey } from "../../lib/sidebar-tree";
 import type { SidebarNode } from "../../types/workspace";
 import type { SidebarContainer } from "../../types/dnd";
 
@@ -30,7 +31,8 @@ export function SidebarTreeLevel({
     onSelectWorkspace,
     onAddWorkspaceToFolder,
     activeWorkspaceId,
-    selectedWorkspaceIds,
+    selectedKeys,
+    onSelectFolder,
     toggleFolderCollapsed,
     onRequestDelete,
   } = useSidebarContext();
@@ -54,7 +56,7 @@ export function SidebarTreeLevel({
               parentFolderId={parentFolderId}
               depth={depth}
               isActive={node.workspaceId === activeWorkspaceId}
-              isSelected={selectedWorkspaceIds.has(node.workspaceId)}
+              isSelected={selectedKeys.has(workspaceSelectionKey(node.workspaceId))}
               isEditing={editingId === node.workspaceId && editingType === "workspace"}
               modifierHeld={modifierHeld}
               onSelect={(event) => onSelectWorkspace(node.workspaceId, event)}
@@ -76,7 +78,11 @@ export function SidebarTreeLevel({
             parentFolderId={parentFolderId}
             depth={depth}
             isEditing={editingId === node.id && editingType === "folder"}
-            onToggle={() => toggleFolderCollapsed(node.id)}
+            isSelected={selectedKeys.has(folderSelectionKey(node.id))}
+            onClick={(event) => {
+              // A modified click marks the folder instead of folding it.
+              if (!onSelectFolder(node.id, event)) toggleFolderCollapsed(node.id);
+            }}
             onAddWorkspace={() => onAddWorkspaceToFolder(node.id, container)}
           />
         );

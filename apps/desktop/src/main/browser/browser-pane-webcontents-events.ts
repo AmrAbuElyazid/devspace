@@ -209,7 +209,13 @@ export function registerBrowserPaneWebContentsListeners({
     if (typeof setIgnoreMenuShortcuts === "function") {
       setIgnoreMenuShortcuts.call(webContents, false);
     }
-    sendToRenderer("window:nativeModifierChanged", null);
+    // Deliberately does NOT report the modifier as released. A pane blurs on
+    // every workspace switch, and ⌘ is still physically down during a
+    // ⌘1 → ⌘2 → ⌘1 run; clearing here dropped the shortcut hints and nothing
+    // restored them, because the pane that regained focus saw no new modifier
+    // transition to report. A genuine release still arrives via
+    // before-input-event, the terminal's flagsChanged, or — if the whole
+    // window loses focus — the renderer's own blur handler.
   });
 
   webContents.on(

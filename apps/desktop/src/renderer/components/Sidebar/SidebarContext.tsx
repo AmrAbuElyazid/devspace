@@ -14,10 +14,11 @@ export interface SidebarContextValue {
   // Selection & filtering
   activeWorkspaceId: string;
   /**
-   * Workspaces checked for a bulk action. Distinct from `activeWorkspaceId`:
+   * Rows checked for a bulk action, as `SidebarSelectionKey`s so folders and
+   * workspaces can be marked together. Distinct from `activeWorkspaceId`:
    * exactly one workspace is ever *open*, but any number can be *marked*.
    */
-  selectedWorkspaceIds: Set<string>;
+  selectedKeys: Set<string>;
   filteredWorkspaceIds: Set<string> | null;
   /** Click handler for a row — the event carries the ⌘/⇧ selection modifiers. */
   onSelectWorkspace: (id: string, event: React.MouseEvent) => void;
@@ -27,6 +28,9 @@ export interface SidebarContextValue {
   onContextMenuWorkspace: (e: React.MouseEvent, workspaceId: string) => void;
 
   // Folder operations
+  /** Click handler for a folder row; returns true if it changed the selection
+   *  rather than expanding or collapsing. */
+  onSelectFolder: (folderId: string, event: React.MouseEvent) => boolean;
   toggleFolderCollapsed: (folderId: string) => void;
   onAddWorkspaceToFolder: (folderId: string, container: SidebarContainer) => void;
 
