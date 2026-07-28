@@ -7,6 +7,8 @@ import Sidebar from "./Sidebar";
 import { useSettingsStore } from "../store/settings-store";
 import { installMockWindowApi } from "../test-utils/mock-window-api";
 import { useWorkspaceStore } from "../store/workspace-store";
+import { useWindowChromeStore } from "../store/window-chrome-store";
+import { TRAFFIC_LIGHT_GUTTER } from "../../shared/chrome";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -22,8 +24,6 @@ const sidebarShellMocks = vi.hoisted(() => ({
   },
   setDroppableNodeRef: vi.fn(),
   contextMenuShow: vi.fn(),
-  isFullScreen: vi.fn(),
-  onFullScreenChange: vi.fn(),
 }));
 
 vi.mock("../App", () => ({
@@ -135,10 +135,7 @@ beforeEach(() => {
   sidebarShellMocks.setDroppableNodeRef.mockReset();
   sidebarShellMocks.contextMenuShow.mockReset();
   sidebarShellMocks.contextMenuShow.mockResolvedValue(null);
-  sidebarShellMocks.isFullScreen.mockReset();
-  sidebarShellMocks.isFullScreen.mockResolvedValue(false);
-  sidebarShellMocks.onFullScreenChange.mockReset();
-  sidebarShellMocks.onFullScreenChange.mockReturnValue(() => {});
+  useWindowChromeStore.setState({ isFullScreen: false, trafficLightGutter: TRAFFIC_LIGHT_GUTTER });
 
   installMockWindowApi({
     terminal: {
@@ -146,8 +143,6 @@ beforeEach(() => {
     },
     window: {
       focusContent: vi.fn(),
-      isFullScreen: sidebarShellMocks.isFullScreen,
-      onFullScreenChange: sidebarShellMocks.onFullScreenChange,
     },
     contextMenu: {
       show: sidebarShellMocks.contextMenuShow,
@@ -252,22 +247,22 @@ test("picks up pending workspace edit requests from the store and clears the pen
   expect(container.innerHTML).toContain('data-editing="true"');
 });
 
-test("drops the reserved traffic-light gutter when the native window is fullscreen", async () => {
-  sidebarShellMocks.isFullScreen.mockResolvedValue(true);
-
+test("reserves the traffic-light gutter in the header and drops it in fullscreen", async () => {
   await act(async () => {
     root?.render(<Sidebar />);
   });
+
+  // The header is the first drag-region child of the sidebar.
+  const header = () => container.querySelector<HTMLElement>("aside .drag-region");
+  expect(header()?.style.paddingLeft).toBe(`${TRAFFIC_LIGHT_GUTTER}px`);
+
   await act(async () => {
-    await Promise.resolve();
+    useWindowChromeStore.setState({ isFullScreen: true });
   });
 
-  // The header is the first drag-region child of the sidebar; in fullscreen
-  // it drops the reserved 88px traffic-light gutter (pl-[88px] → pl-3).
-  const header = container.querySelector("aside .drag-region");
-  expect(header).toBeTruthy();
-  expect(header?.className).toContain("pl-3");
-  expect(header?.className).not.toContain("pl-[88px]");
+  // macOS hides the buttons in fullscreen, so the gutter collapses to the
+  // ordinary content inset instead of leaving a hole.
+  expect(header()?.style.paddingLeft).toBe("12px");
 });
 
 test("renders a restart-to-update pill above settings when an update is downloaded", async () => {

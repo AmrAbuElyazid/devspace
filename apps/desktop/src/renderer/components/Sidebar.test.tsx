@@ -22,9 +22,9 @@ function createTestContext(overrides: Partial<SidebarContextValue> = {}): Sideba
     onSelectWorkspace: noop,
     onAddWorkspaceToFolder: noop,
     activeWorkspaceId: "ws-1",
+    selectedWorkspaceIds: new Set<string>(),
     toggleFolderCollapsed: noop,
-    deleteTarget: null,
-    setDeleteTarget: noop,
+    onRequestDelete: noop,
     ...overrides,
   };
 }

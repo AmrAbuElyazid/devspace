@@ -51,9 +51,8 @@ export function QuickLaunchGrid() {
   return (
     <div
       className={cn(
-        "no-drag flex gap-1 p-1 rounded-[10px]",
-        "bg-foreground/[0.04] border border-foreground/[0.06]",
-        "shadow-[var(--bevel-top)]",
+        "no-drag flex gap-1 p-1 rounded-xl",
+        "bg-elevated/50 border border-border",
         // Compact: center icons inside the pill at their intrinsic
         // width. Expanded: tiles distribute evenly across the pill.
         "justify-center @min-[300px]/sidebar:justify-stretch @min-[300px]/sidebar:gap-0.5",
@@ -73,17 +72,17 @@ export function QuickLaunchGrid() {
             aria-label={fullLabels[type]}
             title={`${fullLabels[type]}${isDefault ? " — default for ⌘T" : ""}`}
             className={cn(
-              "group/ql relative flex flex-col items-center justify-center gap-1",
-              "rounded-[7px] transition-colors duration-150",
-              "text-[9px] font-semibold leading-none uppercase tracking-[0.12em]",
+              "group/ql chrome-focus relative flex flex-col items-center justify-center gap-1",
+              "rounded-lg transition-colors duration-150",
+              "text-ui-micro font-semibold leading-none uppercase tracking-[0.1em]",
               // Compact: 32×32 square icon button at intrinsic width.
               "size-8 shrink-0",
               // Expanded: tile grows to share the pill width and adds
               // height for the label below the icon.
               "@min-[300px]/sidebar:size-auto @min-[300px]/sidebar:flex-1 @min-[300px]/sidebar:h-11",
               isDefault
-                ? "text-brand bg-brand-soft shadow-[inset_0_1px_0_oklch(0.7084_0.1523_71.24_/_0.22)]"
-                : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
+                ? "text-brand bg-brand-soft"
+                : "text-muted-foreground hover:bg-row-hover hover:text-foreground",
             )}
           >
             <Icon
@@ -91,7 +90,7 @@ export function QuickLaunchGrid() {
               height={15}
               className={cn(
                 "shrink-0 transition-colors",
-                isDefault ? "text-brand" : "text-foreground/70 group-hover/ql:text-foreground",
+                isDefault ? "text-brand" : "text-muted-foreground group-hover/ql:text-foreground",
               )}
             />
             <span className="hidden @min-[300px]/sidebar:block">{quickLaunchLabels[type]}</span>

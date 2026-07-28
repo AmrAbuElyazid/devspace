@@ -30,8 +30,9 @@ export function SidebarTreeLevel({
     onSelectWorkspace,
     onAddWorkspaceToFolder,
     activeWorkspaceId,
+    selectedWorkspaceIds,
     toggleFolderCollapsed,
-    setDeleteTarget,
+    onRequestDelete,
   } = useSidebarContext();
 
   const sortableIds = nodes.map((n) =>
@@ -53,14 +54,15 @@ export function SidebarTreeLevel({
               parentFolderId={parentFolderId}
               depth={depth}
               isActive={node.workspaceId === activeWorkspaceId}
+              isSelected={selectedWorkspaceIds.has(node.workspaceId)}
               isEditing={editingId === node.workspaceId && editingType === "workspace"}
               modifierHeld={modifierHeld}
-              onSelect={() => onSelectWorkspace(node.workspaceId)}
+              onSelect={(event) => onSelectWorkspace(node.workspaceId, event)}
               onStartEditing={() => onStartEditingWorkspace(node.workspaceId)}
               onRename={(name) => onRenameWorkspace(node.workspaceId, name)}
               onStopEditing={onStopEditing}
               onContextMenu={(e) => onContextMenuWorkspace(e, node.workspaceId)}
-              onDelete={() => setDeleteTarget(node.workspaceId)}
+              onDelete={() => onRequestDelete(node.workspaceId)}
             />
           );
         }
