@@ -198,3 +198,101 @@ describe("TerminalManager profiling", () => {
     ]);
   });
 });
+
+/**
+ * Attaching a managed surface kicks off an immediate directory refresh, so
+ * tests have to let that settle before asserting on anything they trigger
+ * themselves.
+ */
+const settle = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe("managed directory tracking", () => {
+  function makeManager(paths: Map<string, string>) {
+    const manager = new TerminalManager();
+    const terminal = { createSurface: vi.fn(), destroySurface: vi.fn() };
+    const managedTmux = {
+      ensureSession: vi.fn(async () => {}),
+      buildAttachCommand: vi.fn(() => "attach"),
+      listSessionPaths: vi.fn(async () => paths),
+    };
+    (manager as unknown as { terminal: typeof terminal }).terminal = terminal;
+    (manager as unknown as { managedTmux: typeof managedTmux }).managedTmux = managedTmux;
+    const pwdChanged = vi.fn();
+    manager.onPwdChanged(pwdChanged);
+    const refresh = async () => {
+      await (
+        manager as unknown as { refreshManagedPaths: () => Promise<void> }
+      ).refreshManagedPaths();
+      await settle();
+    };
+    const attach = async (surfaceId: string, sessionId: string) => {
+      await manager.createSurface(surfaceId, { backend: "managed-tmux", sessionId });
+      await settle();
+    };
+    return { manager, managedTmux, pwdChanged, refresh, attach };
+  }
+
+  test("reports a managed pane's directory in place of the OSC 7 tmux swallowed", async () => {
+    const { pwdChanged, attach } = makeManager(new Map([["session-1", "/tmp/project"]]));
+
+    await attach("surface-1", "session-1");
+
+    // Downstream this is indistinguishable from a direct terminal's
+    // pwd-changed, which is what keeps new-tab directory inheritance working
+    // against the same store field it always used.
+    expect(pwdChanged).toHaveBeenCalledWith("surface-1", "/tmp/project");
+  });
+
+  test("an unchanged directory is not re-reported", async () => {
+    const paths = new Map([["session-1", "/tmp/project"]]);
+    const { pwdChanged, refresh, attach } = makeManager(paths);
+
+    await attach("surface-1", "session-1");
+    await refresh();
+    await refresh();
+    // Every report becomes a store write and a persistence patch, so polling
+    // has to stay silent until something actually moves.
+    expect(pwdChanged).toHaveBeenCalledTimes(1);
+
+    paths.set("session-1", "/tmp/elsewhere");
+    await refresh();
+    expect(pwdChanged).toHaveBeenLastCalledWith("surface-1", "/tmp/elsewhere");
+    expect(pwdChanged).toHaveBeenCalledTimes(2);
+  });
+
+  test("a destroyed surface stops being polled", async () => {
+    const { manager, managedTmux, pwdChanged, refresh, attach } = makeManager(
+      new Map([["session-1", "/tmp/project"]]),
+    );
+
+    await attach("surface-1", "session-1");
+    managedTmux.listSessionPaths.mockClear();
+    pwdChanged.mockClear();
+
+    manager.destroySurface("surface-1");
+    await refresh();
+
+    expect(managedTmux.listSessionPaths).not.toHaveBeenCalled();
+    expect(pwdChanged).not.toHaveBeenCalled();
+  });
+
+  test("a tmux failure costs a stale directory, not an error", async () => {
+    const { managedTmux, pwdChanged, refresh, attach } = makeManager(new Map());
+
+    await attach("surface-1", "session-1");
+    managedTmux.listSessionPaths.mockRejectedValueOnce(new Error("no server running"));
+
+    await expect(refresh()).resolves.toBeUndefined();
+    expect(pwdChanged).not.toHaveBeenCalled();
+  });
+
+  test("direct terminals are left to Ghostty's own pwd tracking", async () => {
+    const { manager, managedTmux, refresh } = makeManager(new Map());
+
+    await manager.createSurface("surface-1", { cwd: "/tmp/project" });
+    await settle();
+    await refresh();
+
+    expect(managedTmux.listSessionPaths).not.toHaveBeenCalled();
+  });
+});

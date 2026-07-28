@@ -84,6 +84,19 @@ type TerminalCallback = {
   onSearchSelected?: (surfaceId: string, selected: number) => void;
 };
 
+/**
+ * How often managed session directories are re-read as a safety net.
+ *
+ * The primary trigger is a title change, which catches a `cd` almost as soon as
+ * it happens. This interval only has to cover the case where the directory
+ * moved but the title did not — between two directories sharing a basename — so
+ * it can be slow enough to go unnoticed.
+ */
+const MANAGED_PATH_POLL_INTERVAL_MS = 5_000;
+
+/** Coalesces the burst of title changes a single command can produce. */
+const MANAGED_PATH_POLL_DEBOUNCE_MS = 150;
+
 export class TerminalManager {
   private terminal: GhosttyTerminal | null = null;
   private managedTmux: ManagedTmuxManager | null = null;
@@ -91,6 +104,15 @@ export class TerminalManager {
   private callbacks: TerminalCallback = {};
   /** Resolved path to Devspace's ZDOTDIR wrapper for zsh shell integration. */
   private shellIntegrationZshDir: string | null = null;
+  /** surfaceId → tmux session ID, for the managed panes currently attached. */
+  private readonly managedSessionIds = new Map<string, string>();
+  /** Last directory handed to the renderer, so unchanged ones stay quiet. */
+  private readonly reportedPaths = new Map<string, string>();
+  private pathPollTimer: NodeJS.Timeout | null = null;
+  private pathPollDebounce: NodeJS.Timeout | null = null;
+  private pathPollInFlight = false;
+  private pathPollRepeat = false;
+  private windowFocused = true;
 
   init(mainWindow: BrowserWindow): void {
     this.terminal = new GhosttyTerminal();
@@ -137,9 +159,24 @@ export class TerminalManager {
       }
     }
 
+    // Polling for managed directories is pointless while the user is elsewhere.
+    this.windowFocused = mainWindow.isFocused();
+    mainWindow.on("focus", () => {
+      this.windowFocused = true;
+      this.startPathPolling();
+    });
+    mainWindow.on("blur", () => {
+      this.windowFocused = false;
+      this.stopPathPolling();
+    });
+
     // Wire up events to callbacks
     this.terminal.on("title-changed", (surfaceId, title) => {
       this.callbacks.onTitleChanged?.(surfaceId, title);
+      // A managed pane's title is derived from its current directory, so a
+      // title change is the earliest hint that a `cd` happened — this is what
+      // stands in for the OSC 7 that tmux swallowed.
+      if (this.managedSessionIds.has(surfaceId)) this.requestManagedPathRefresh();
     });
 
     this.terminal.on("surface-closed", (surfaceId) => {
@@ -266,6 +303,11 @@ export class TerminalManager {
 
     if (this.surfaceGenerations.get(surfaceId) !== generation || !this.terminal) return;
 
+    if (options?.backend === "managed-tmux") {
+      this.managedSessionIds.set(surfaceId, options.sessionId);
+      this.startPathPolling();
+    }
+
     measureMainProcessOperation("terminal.createSurface", () => {
       this.terminal?.createSurface(
         surfaceId,
@@ -291,9 +333,82 @@ export class TerminalManager {
   destroySurface(surfaceId: string): void {
     if (!this.terminal) return;
     this.surfaceGenerations.set(surfaceId, (this.surfaceGenerations.get(surfaceId) ?? 0) + 1);
+    // Only the Ghostty client goes away here; the tmux session deliberately
+    // survives. Dropping it from the poll set just stops reporting a directory
+    // nothing is displaying.
+    this.managedSessionIds.delete(surfaceId);
+    this.reportedPaths.delete(surfaceId);
+    if (this.managedSessionIds.size === 0) this.stopPathPolling();
     measureMainProcessOperation("terminal.destroySurface", () => {
       this.terminal?.destroySurface(surfaceId);
     });
+  }
+
+  /** Re-read managed directories soon, collapsing a burst into one call. */
+  private requestManagedPathRefresh(): void {
+    if (this.pathPollDebounce) return;
+    this.pathPollDebounce = setTimeout(() => {
+      this.pathPollDebounce = null;
+      void this.refreshManagedPaths();
+    }, MANAGED_PATH_POLL_DEBOUNCE_MS);
+    this.pathPollDebounce.unref?.();
+  }
+
+  private startPathPolling(): void {
+    if (this.pathPollTimer || !this.windowFocused || this.managedSessionIds.size === 0) return;
+    this.pathPollTimer = setInterval(() => {
+      void this.refreshManagedPaths();
+    }, MANAGED_PATH_POLL_INTERVAL_MS);
+    // Background upkeep should never be the reason the process stays alive.
+    this.pathPollTimer.unref?.();
+    void this.refreshManagedPaths();
+  }
+
+  private stopPathPolling(): void {
+    if (this.pathPollTimer) {
+      clearInterval(this.pathPollTimer);
+      this.pathPollTimer = null;
+    }
+    if (this.pathPollDebounce) {
+      clearTimeout(this.pathPollDebounce);
+      this.pathPollDebounce = null;
+    }
+  }
+
+  /**
+   * Report the current directory of every managed pane that has moved.
+   *
+   * This stands in for the `pwd-changed` event Ghostty raises for direct
+   * terminals. Downstream nothing can tell the two apart, so directory
+   * inheritance for new tabs keeps working against the same store field it
+   * always has. Best effort by design: the cost of a failure is one stale
+   * inherited directory, so a tmux hiccup is swallowed rather than surfaced.
+   */
+  private async refreshManagedPaths(): Promise<void> {
+    if (!this.managedTmux || this.managedSessionIds.size === 0) return;
+    if (this.pathPollInFlight) {
+      this.pathPollRepeat = true;
+      return;
+    }
+
+    this.pathPollInFlight = true;
+    try {
+      const paths = await this.managedTmux.listSessionPaths();
+      for (const [surfaceId, sessionId] of this.managedSessionIds) {
+        const path = paths.get(sessionId);
+        if (!path || this.reportedPaths.get(surfaceId) === path) continue;
+        this.reportedPaths.set(surfaceId, path);
+        this.callbacks.onPwdChanged?.(surfaceId, path);
+      }
+    } catch {
+      // Left to the next refresh.
+    } finally {
+      this.pathPollInFlight = false;
+      if (this.pathPollRepeat) {
+        this.pathPollRepeat = false;
+        void this.refreshManagedPaths();
+      }
+    }
   }
 
   showSurface(surfaceId: string): void {
@@ -352,6 +467,9 @@ export class TerminalManager {
 
   destroyAll(): void {
     if (!this.terminal) return;
+    this.stopPathPolling();
+    this.managedSessionIds.clear();
+    this.reportedPaths.clear();
     this.terminal.destroy();
     this.terminal = null;
     // The private tmux server deliberately outlives the app. Destroying the
