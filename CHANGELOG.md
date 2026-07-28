@@ -6,6 +6,26 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.2.1 - 2026-07-28
+
+### Summary
+
+- Fix two regressions from v0.2.0: switching workspaces or tabs could leave two panes flip-flopping between each other until the app was unusable, and sustained use drove the window server and the system cursor service to pegged CPU. Both scale with the retained-surface budget v0.2.0 introduced, so they got worse the longer Devspace stayed open.
+
+### Highlights
+
+**Switching**
+
+- Fixed switching a workspace or tab flip-flopping between two panes at IPC speed and never settling. Native surfaces notify the renderer when they gain focus, including for focus the renderer itself requested; when the active tab moved on in between, acting on that echo dragged the selection back, which re-armed the previous pane and started the cycle over. A notification naming a pane that is not on screen cannot have come from a click, so it is now discarded. Measured over a four-second idle window after a burst of switching: 964 reconciles and 241 focus requests before, none of either after.
+- Fixed the workspace focus sync comparing against a state snapshot taken before its own writes, so the group and tab checks ran against stale values.
+- Re-activating the tab that is already active no longer replaces the pane-group map, which was waking every workspace-store subscriber for nothing.
+
+**Performance**
+
+- Fixed hidden background terminals driving the process-wide mouse cursor. Every cursor change round-trips to the window server, and Devspace keeps terminals alive and rendering off screen; cursor shape now comes only from a surface that is actually visible, and hiding the pointer only from the one taking keystrokes.
+- Fixed unbalanced cursor hide and unhide calls, which are reference counted and could leave the pointer stuck invisible or spin the cursor service.
+- Fixed a bounds update that changed nothing still forcing a layout pass, tracking-area rebuild and repaint — for every retained surface, several times a second — and fixed tracking areas being rebuilt on every layout pass rather than once.
+
 ## v0.2.0 - 2026-07-28
 
 ### Summary
