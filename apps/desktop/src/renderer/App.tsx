@@ -8,6 +8,7 @@ import { useNativeViewStore, initNativeViewSubscriptions } from "./store/native-
 import { useTheme } from "./hooks/useTheme";
 import { useActiveDrag, useDndOrchestrator } from "./hooks/useDndOrchestrator";
 import { useModifierHeld, type HeldModifier } from "./hooks/useModifierHeld";
+import { useNativeViewDragShield } from "./hooks/useNativeViewDragShield";
 import { useAppShortcuts } from "./hooks/useAppShortcuts";
 import { useBrowserBridge } from "./hooks/useBrowserBridge";
 import { useTerminalEvents } from "./hooks/useTerminalEvents";
@@ -81,8 +82,12 @@ export default function App() {
     window.api?.editor?.setKeepServerRunning(keepVscodeServerRunning);
   }, [keepVscodeServerRunning]);
 
-  // During pane-affecting drags, hide native views so DOM drop indicators
-  // are visible above them.
+  // During pane-affecting drags, hide native views so DOM drop indicators are
+  // visible above them — and so the views stop swallowing the pointer events
+  // the drag depends on. The shield starts the hide on the first pointer move,
+  // before dnd-kit's activation distance is met; this effect holds it for the
+  // rest of the drag and lifts it on drop.
+  useNativeViewDragShield();
   const setDragHidesViews = useNativeViewStore((s) => s.setDragHidesViews);
   useEffect(() => {
     const needsHide = activeDrag?.type === "group-tab" || activeDrag?.type === "sidebar-workspace";

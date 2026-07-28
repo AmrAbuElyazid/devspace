@@ -86,6 +86,15 @@ export type EditorCliStatus =
       attempted?: string;
     };
 
+/**
+ * Result of starting an embedded tool pane (editor, T3 Code).
+ *
+ * `cancelled` is distinct from `error` on purpose: it means a newer start or a
+ * stop for the same pane superseded this one while the server was coming up.
+ * That is routine, and the pane must not show a failure for it.
+ */
+export type EmbeddedToolStartResult = { url: string } | { error: string } | { cancelled: true };
+
 export interface DevspaceBridge {
   platform: string;
   app: {
@@ -143,6 +152,8 @@ export interface DevspaceBridge {
     onNativeModifierChanged: (
       callback: (modifier: "command" | "control" | null) => void,
     ) => () => void;
+    /** Mouse released over a native pane view, where the renderer can't see it. */
+    onNativePointerRelease: (callback: () => void) => () => void;
     onOpenEditor: (callback: (folderPath: string) => void) => () => void;
   };
   dialog: {
@@ -173,7 +184,7 @@ export interface DevspaceBridge {
       paneId: string,
       folderPath?: string,
       configuredCli?: string,
-    ) => Promise<{ url: string } | { error: string }>;
+    ) => Promise<EmbeddedToolStartResult>;
     stop: (paneId: string) => Promise<void>;
     setKeepServerRunning: (keep: boolean) => void;
   };
@@ -195,7 +206,7 @@ export interface DevspaceBridge {
   };
   t3code: {
     isAvailable: () => Promise<boolean>;
-    start: (paneId: string) => Promise<{ url: string } | { error: string }>;
+    start: (paneId: string) => Promise<EmbeddedToolStartResult>;
     stop: (paneId: string) => Promise<void>;
   };
   browser: BrowserBridge;

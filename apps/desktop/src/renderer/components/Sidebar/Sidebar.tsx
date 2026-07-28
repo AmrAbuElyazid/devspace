@@ -8,6 +8,7 @@ import { useWorkspaceStore } from "@/store/workspace-store";
 import { useSettingsStore } from "@/store/settings-store";
 import { resolveDisplayString } from "../../../shared/shortcuts";
 import { useActiveDrag, useDropIntent } from "@/hooks/useDndOrchestrator";
+import { acquireNativeViewShield, releaseNativeViewShield } from "@/hooks/useNativeViewDragShield";
 import { findSidebarNode } from "@/lib/sidebar-tree";
 import type { ContextMenuItem } from "../../../shared/types";
 import type { SidebarContainer } from "@/types/dnd";
@@ -146,9 +147,23 @@ export default function Sidebar() {
   const pinnedRootInsertClass = getRootInsertClass("pinned", pinnedSidebarNodes.length);
   const mainRootInsertClass = getRootInsertClass("main", sidebarTree.length);
 
+  // Dragging the divider right sweeps the cursor straight across the panes.
+  // Native views swallow every mouse event inside their bounds, so listening on
+  // `document` used to lose the release and leave the sidebar stuck in resize
+  // mode. Pointer capture keeps the events coming to the divider itself, and
+  // the shield takes the views out of the way for the duration.
   const handleResizeStart = useCallback(
-    (e: React.MouseEvent) => {
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.isPrimary === false || e.button !== 0) return;
       e.preventDefault();
+
+      // Capture routes the rest of this pointer's stream to the divider, so
+      // there is no need to filter by pointerId below.
+      const divider = e.currentTarget;
+      const { pointerId } = e;
+      divider.setPointerCapture?.(pointerId);
+      acquireNativeViewShield();
+
       resizeRef.current = {
         startX: e.clientX,
         startWidth: sidebarWidth,
@@ -157,24 +172,33 @@ export default function Sidebar() {
       setLiveSidebarWidth(sidebarWidth);
       setIsResizing(true);
 
-      const onMouseMove = (ev: MouseEvent) => {
+      const onPointerMove = (ev: PointerEvent) => {
         if (!resizeRef.current) return;
         const delta = ev.clientX - resizeRef.current.startX;
         const nextWidth = clampSidebarWidth(resizeRef.current.startWidth + delta);
         resizeRef.current.currentWidth = nextWidth;
         setLiveSidebarWidth(nextWidth);
       };
-      const onMouseUp = () => {
+
+      const onPointerRelease = () => {
         const nextWidth = resizeRef.current?.currentWidth;
         if (nextWidth !== undefined) setSidebarWidth(nextWidth);
         setIsResizing(false);
         setLiveSidebarWidth(null);
         resizeRef.current = null;
-        document.removeEventListener("mousemove", onMouseMove);
-        document.removeEventListener("mouseup", onMouseUp);
+        divider.removeEventListener("pointermove", onPointerMove);
+        divider.removeEventListener("pointerup", onPointerRelease);
+        divider.removeEventListener("pointercancel", onPointerRelease);
+        // pointerup releases capture implicitly; releasing again would throw.
+        if (divider.hasPointerCapture?.(pointerId)) {
+          divider.releasePointerCapture(pointerId);
+        }
+        releaseNativeViewShield();
       };
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
+
+      divider.addEventListener("pointermove", onPointerMove);
+      divider.addEventListener("pointerup", onPointerRelease);
+      divider.addEventListener("pointercancel", onPointerRelease);
     },
     [sidebarWidth, setSidebarWidth],
   );
@@ -527,7 +551,7 @@ export default function Sidebar() {
               "hover:bg-brand/40 transition-colors",
               isResizing && "bg-brand/60",
             )}
-            onMouseDown={handleResizeStart}
+            onPointerDown={handleResizeStart}
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize sidebar"
