@@ -441,10 +441,13 @@
 /* ─── Chrome rows ────────────────────────────────────────────────────
    Every selectable row in the app chrome — sidebar workspaces and
    folders, settings nav entries — is the same object: a rounded row
-   that washes on hover, tints on active, and grows a brand bar on its
-   leading edge when it is the current one. Encoding it once here keeps
-   the three call sites from drifting apart, which is what happened when
-   each of them hand-rolled its own opacity ramp.
+   that washes on hover and takes an amber tint when it is the current
+   one. Encoding it once here keeps the call sites from drifting apart,
+   which is what happened when each hand-rolled its own opacity ramp.
+
+   The tint is the only marker. An earlier version also drew a brand bar
+   down the leading edge; against a rounded, already-tinted row it just
+   added a hard vertical line to an otherwise soft list.
 */
 .chrome-row {
   position: relative;
@@ -460,13 +463,9 @@
   background-color: var(--row-hover);
   color: var(--foreground);
 }
-/* The leading brand bar is an inset shadow rather than a pseudo-element:
-   ::before and ::after on these rows are already spoken for by the
-   drag insertion lines, and the two would overwrite each other. */
 .chrome-row[data-active="true"] {
   background-color: var(--row-active);
   color: var(--foreground);
-  box-shadow: inset 2px 0 0 var(--brand);
 }
 .chrome-row[data-selected="true"] {
   background-color: var(--row-selected);

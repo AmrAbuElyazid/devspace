@@ -51,10 +51,12 @@ export function QuickLaunchGrid() {
   return (
     <div
       className={cn(
-        "no-drag flex gap-1 p-1 rounded-xl",
-        "bg-elevated/50 border border-border",
-        // Compact: center icons inside the pill at their intrinsic
-        // width. Expanded: tiles distribute evenly across the pill.
+        // No enclosing pill: the tiles are already legible as a group by
+        // proximity, and the border around them was one more box in a column
+        // that had too many.
+        "no-drag flex gap-1",
+        // Compact: center icons at their intrinsic width. Expanded: tiles
+        // distribute evenly across the sidebar.
         "justify-center @min-[300px]/sidebar:justify-stretch @min-[300px]/sidebar:gap-0.5",
       )}
       role="toolbar"

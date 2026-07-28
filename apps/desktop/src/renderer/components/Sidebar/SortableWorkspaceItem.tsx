@@ -159,25 +159,25 @@ export function SortableWorkspaceItem({
         insertClass,
       )}
     >
-      {/* Pane icon, or a check once the row joins a multi-selection — the
-          badge slot is the same size either way so rows never reflow. */}
-      <div
+      {/* Pane icon, or a check once the row joins a multi-selection. The slot
+          keeps its size either way so rows never reflow. It used to be a
+          bordered chip, which read as a button you could press — the icon now
+          carries the row's state by colour alone. */}
+      <span
         className={cn(
-          "shrink-0 inline-flex items-center justify-center size-6 rounded-md border",
+          "shrink-0 inline-flex items-center justify-center size-3.5",
           "transition-colors duration-100",
           isSelected || isActive
-            ? "text-brand bg-brand-soft border-brand-edge"
-            : "border-border bg-elevated/50 text-muted-foreground group-hover/ws:text-foreground",
+            ? "text-brand"
+            : "text-muted-foreground group-hover/ws:text-foreground",
         )}
       >
         {isSelected ? (
-          <Check size={13} strokeWidth={2.4} />
+          <Check size={14} strokeWidth={2.4} />
         ) : PaneIcon ? (
-          <PaneIcon width={13} height={13} />
-        ) : (
-          <span className="size-[13px]" />
-        )}
-      </div>
+          <PaneIcon width={14} height={14} />
+        ) : null}
+      </span>
 
       <div className="flex-1 min-w-0 flex flex-col gap-px">
         {isEditing ? (
@@ -204,10 +204,8 @@ export function SortableWorkspaceItem({
       {shortcutHint ? (
         <Kbd
           className={cn(
-            "animate-hint shrink-0 h-[18px] min-w-[18px] px-1.5 text-ui-micro font-mono border",
-            isActive
-              ? "text-brand bg-brand-soft border-brand-edge"
-              : "text-muted-foreground bg-elevated/50 border-border",
+            "animate-hint shrink-0 h-auto bg-transparent px-0 text-ui-micro font-mono",
+            isActive ? "text-brand" : "text-muted-foreground",
           )}
         >
           {shortcutHint}
@@ -228,7 +226,7 @@ export function SortableWorkspaceItem({
             "transition-[opacity,color,background-color]",
           )}
         >
-          <X size={11} strokeWidth={2.4} />
+          <X size={12} strokeWidth={2.2} />
         </button>
       ) : null}
     </div>

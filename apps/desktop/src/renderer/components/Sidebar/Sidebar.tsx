@@ -443,18 +443,22 @@ export default function Sidebar() {
             </HintTooltip>
           </div>
 
-          {/* Quick launch */}
-          <div className="px-3 pt-1 pb-3">
+          {/* Quick launch. Everything below the header shares one left rhythm:
+              containers inset 8px, so every hover/active rectangle in the
+              column starts at the same x, and their content at 18px. */}
+          <div className="px-2 pt-1 pb-2">
             <QuickLaunchGrid />
           </div>
 
           {/* Search */}
-          <div className="px-3 pb-3">
+          <div className="px-2 pb-2">
             <div
               className={cn(
-                "no-drag relative flex items-center h-8 rounded-lg gap-2 px-3",
-                "bg-elevated/60 border border-border",
-                "focus-within:border-brand-edge focus-within:bg-elevated",
+                "no-drag relative flex items-center h-8 rounded-lg gap-2 px-2.5",
+                // A filled well rather than an outlined box; the outline only
+                // appears once you're typing in it.
+                "bg-elevated/50 hover:bg-elevated/80",
+                "focus-within:bg-elevated focus-within:ring-1 focus-within:ring-brand-edge",
                 "transition-colors",
               )}
             >
@@ -475,14 +479,14 @@ export default function Sidebar() {
               />
               {searchQuery ? (
                 <button
-                  className={cn(iconButtonClass, "size-4 shrink-0")}
+                  className={cn(iconButtonClass, "size-5 shrink-0 -mr-1")}
                   aria-label="Clear search"
                   onClick={() => setSearchQuery("")}
                 >
-                  <X size={9} />
+                  <X size={12} strokeWidth={2.2} />
                 </button>
               ) : (
-                <Kbd className="no-drag h-[18px] min-w-[18px] px-1.5 text-ui-micro font-mono shrink-0">
+                <Kbd className="no-drag h-auto shrink-0 bg-transparent px-0 text-ui-micro font-mono">
                   /
                 </Kbd>
               )}
@@ -520,7 +524,7 @@ export default function Sidebar() {
                 className={cn(iconButtonClass, "size-5")}
                 aria-label="New folder"
               >
-                <FolderPlus size={11} strokeWidth={1.8} />
+                <FolderPlus size={12} strokeWidth={1.8} />
               </button>
             </HintTooltip>
             <HintTooltip
@@ -572,7 +576,7 @@ export default function Sidebar() {
                     depth={0}
                   />
                   {sidebarTree.length === 0 ? (
-                    <p className="px-2 py-3 text-ui-xs text-muted-foreground select-none">
+                    <p className="px-2.5 py-3 text-ui-xs text-muted-foreground select-none">
                       No workspaces yet — drop a tab here or press{" "}
                       {resolveDisplayString("new-workspace")}.
                     </p>
@@ -637,9 +641,9 @@ export default function Sidebar() {
               className={cn("chrome-row chrome-focus no-drag h-8 gap-2.5 px-2.5 text-ui-sm")}
               title={`Settings (${resolveDisplayString("toggle-settings")})`}
             >
-              <Settings size={13} strokeWidth={1.6} className="text-muted-foreground" />
+              <Settings size={14} strokeWidth={1.8} className="shrink-0 text-muted-foreground" />
               <span className="flex-1 text-left">Settings</span>
-              <Kbd className="h-[18px] min-w-[18px] px-1.5 text-ui-micro font-mono">
+              <Kbd className="h-auto bg-transparent px-0 text-ui-micro font-mono">
                 {resolveDisplayString("toggle-settings")}
               </Kbd>
             </button>
@@ -691,7 +695,7 @@ function SectionHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between px-4 pt-3 pb-1.5 select-none">
+    <div className="flex items-center justify-between px-4.5 pt-3 pb-1 select-none">
       <div className="inline-flex items-baseline gap-2">
         <span className="text-ui-micro font-mono uppercase tracking-[0.16em] text-muted-foreground">
           {label}

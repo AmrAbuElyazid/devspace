@@ -88,26 +88,26 @@ export function SortableFolderItem({
         {...attributes}
         {...listeners}
         className={cn(
-          "chrome-row chrome-focus no-drag group/folder gap-2 h-8 px-2.5 cursor-default select-none",
+          // gap-1.5 around a 12px chevron and a 14px folder puts the label at
+          // the same x as a workspace label one level in, so a folder and its
+          // contents read as one column rather than two.
+          "chrome-row chrome-focus no-drag group/folder gap-1.5 h-8 px-2.5 cursor-default select-none",
           "text-ui-sm",
           showDragOver && "drop-into-folder",
           insertClass,
         )}
       >
         <ChevronRight
-          size={10}
-          strokeWidth={2.4}
+          size={12}
+          strokeWidth={2.2}
           className={cn(
-            "shrink-0 transition-transform duration-150 text-muted-foreground",
+            "shrink-0 text-muted-foreground transition-transform duration-150",
             isExpanded && "rotate-90",
           )}
         />
         <FolderIcon
-          size={12}
-          className={cn(
-            "shrink-0 transition-colors",
-            isExpanded ? "text-brand" : "text-muted-foreground",
-          )}
+          size={14}
+          className="shrink-0 text-muted-foreground transition-colors group-hover/folder:text-foreground"
         />
         {isEditing ? (
           <InlineRenameInput
@@ -133,12 +133,12 @@ export function SortableFolderItem({
               onAddWorkspace();
             }}
             className={cn(
-              "chrome-focus shrink-0 inline-flex items-center justify-center size-[18px] rounded-md",
+              "chrome-focus shrink-0 inline-flex items-center justify-center size-5 rounded-md",
               "text-muted-foreground opacity-0 group-hover/folder:opacity-100 focus-visible:opacity-100",
               "hover:text-foreground hover:bg-row-hover transition-[opacity,color,background-color]",
             )}
           >
-            <Plus size={11} strokeWidth={2.2} />
+            <Plus size={12} strokeWidth={2.2} />
           </button>
         )}
       </div>
@@ -153,8 +153,8 @@ export function SortableFolderItem({
           />
           {folder.children.length === 0 && (
             <div
-              style={{ marginLeft: (depth + 1) * 14 + 18 }}
-              className="px-2 py-1 text-ui-micro text-muted-foreground italic select-none"
+              style={{ marginLeft: (depth + 1) * 14 }}
+              className="px-2.5 py-1 text-ui-micro text-muted-foreground select-none"
             >
               Drop workspaces here
             </div>

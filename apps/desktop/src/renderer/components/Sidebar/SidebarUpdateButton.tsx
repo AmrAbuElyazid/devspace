@@ -81,18 +81,22 @@ export function SidebarUpdateButton() {
         disabled={disabled}
         aria-label={getSidebarUpdateTooltip(state)}
         className={cn(
-          "no-drag w-full flex items-center gap-2 h-8 px-2 rounded-md",
-          "text-ui-sm font-medium border transition-colors",
+          "no-drag w-full flex items-center gap-2.5 h-8 px-2.5 rounded-lg",
+          "text-ui-sm font-medium transition-colors",
           isError
-            ? "bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/15"
-            : "bg-brand-soft text-foreground border-brand-edge hover:bg-brand-soft/80",
+            ? "bg-destructive/10 text-destructive hover:bg-destructive/15"
+            : "bg-brand-soft text-foreground hover:bg-brand-soft/70",
           disabled && "opacity-60 cursor-not-allowed",
         )}
       >
         {action === "install" ? (
-          <RotateCw size={12} strokeWidth={1.8} className={cn(isError ? "" : "text-brand")} />
+          <RotateCw
+            size={14}
+            strokeWidth={1.8}
+            className={cn("shrink-0", isError ? "" : "text-brand")}
+          />
         ) : (
-          <Download size={12} className={cn(isError ? "" : "text-brand")} />
+          <Download size={14} className={cn("shrink-0", isError ? "" : "text-brand")} />
         )}
         <span className="truncate text-left flex-1">{getSidebarUpdateLabel(state)}</span>
       </button>
