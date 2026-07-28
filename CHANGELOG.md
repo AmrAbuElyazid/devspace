@@ -6,6 +6,46 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.3.0 - 2026-07-29
+
+### Summary
+
+- Rebuild the app chrome: a sidebar that drops its borders and gains multi-select and bulk actions, Settings as a modal you can close without reaching for the window's close button, and one source of truth for the macOS traffic lights. A minor rather than a patch release: the sidebar gains real features, and the chrome IPC changed with it.
+
+### Highlights
+
+**Window chrome**
+
+- The macOS traffic lights are positioned from one place. Three components each ran their own fullscreen round-trip while the main process derived the native button position from a sidebar flag it was told about separately, so the buttons sat off-centre whenever the two disagreed. The renderer now reports the height of whichever bar owns the top-left corner and the main process centres the cluster inside it, clamping anything implausible.
+
+**Settings**
+
+- Settings is a centred card rather than a full-window page. Its only close affordance used to sit a few pixels from the native red traffic light, so people aimed for one and hit the other and quit the app. Dismissing it is now the header ✕, a Done button, a click outside, or Escape. The strip behind the title bar stays draggable so the window can still be moved while it is open.
+- Settings takes keyboard focus when it opens, keeps Tab inside itself, and gives focus back on close. It claimed to be a modal before while Tab walked straight out into the application behind it.
+- Added "Kill all" for detached managed tmux sessions, and replaced the blocking browser confirm on a single kill with the app's own dialog.
+
+**Workspaces and folders**
+
+- Workspaces and folders can be multi-selected with ⌘ and ⇧ and acted on together. A plain click still just opens a workspace, so nothing changes until you ask for a selection.
+- Added Duplicate, for one workspace or a selection. A copy re-mints anything naming a live resource — a managed tmux session, a note — so it never shares a shell or a document with its original, while the directory, URL and folder carry over.
+- Folders can be deleted with everything inside them, nested folders included, shutting down the terminals still running in them. That is offered separately from "Remove Folder Only", which dissolves the folder and keeps its workspaces where they were.
+- The sidebar drop zone fills the rail instead of stopping where the list does, so a tab dragged into the empty space below the workspaces lands.
+
+**Tabs**
+
+- Tabs have a right-click menu: rename, duplicate, close, close others, close to the right, close all.
+
+**Appearance**
+
+- Sidebar rows lost their chrome. The active workspace was marked three times over — a bar down the leading edge, a row tint, and an amber-bordered chip around its icon — on a rounded row in a soft list. The tint is the only marker now, and the pane icon sits bare. The quick-launch pill, the search field and the update button lost their borders too, and everything below the header shares one left rhythm.
+- Chrome text was set in fourteen hand-picked pixel values between 9 and 15px, often two of them a half-pixel apart in the same component. It now resolves to six size tokens. The near-duplicate hover and border tokens are gone, and the four drifted copies of the "this pane can't run" card became one.
+
+**Fixes**
+
+- Fixed tooltips rendering their label in the same colour as their own background. The custom type scale was unknown to the class merger, which files an unrecognised `text-*` as a colour, so a size and a colour on the same element looked like two colours and one was dropped. The same collision was silently eating either the size or the colour wherever both appeared.
+- Fixed sidebar tooltips vanishing instead of being clipped when they were wider than the rail. Everything to the right of the sidebar is a native view painted above the web contents. Tooltips are now confined to the rail and wrap rather than run off it.
+- Fixed shortcut hints disappearing part-way through a run of ⌘1, ⌘2, ⌘1. A browser pane reported the modifier as released whenever it lost focus, which happens on every workspace switch while ⌘ is still held, and nothing brought the hints back.
+
 ## v0.2.1 - 2026-07-28
 
 ### Summary
