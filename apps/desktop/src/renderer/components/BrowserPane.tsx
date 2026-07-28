@@ -45,7 +45,7 @@ function NavButton({
       aria-label={ariaLabel}
       className={cn(
         "inline-flex items-center justify-center size-7 rounded-md shrink-0",
-        "text-muted-foreground hover:text-foreground hover:bg-hover",
+        "text-muted-foreground hover:text-foreground hover:bg-row-hover",
         "disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
         "transition-colors",
       )}
@@ -91,7 +91,7 @@ export default function BrowserPane({
   return (
     <div className="flex flex-col h-full w-full bg-background">
       {/* Toolbar */}
-      <div className="flex items-center gap-1 shrink-0 h-9 px-1.5 bg-rail border-b border-hairline relative z-[2]">
+      <div className="flex items-center gap-1 shrink-0 h-9 px-1.5 bg-rail border-b border-border relative z-[2]">
         <HintTooltip content="Back" shortcut={resolveDisplayString("browser-back")}>
           <NavButton
             onClick={() => void window.api.browser.back(paneId)}
@@ -133,7 +133,7 @@ export default function BrowserPane({
           className={cn(
             "flex-1 min-w-0 h-7 px-2.5 rounded-md",
             "bg-surface border border-border/70",
-            "font-mono text-[11.5px] text-foreground placeholder:text-muted-foreground/60",
+            "font-mono text-ui-xs text-foreground placeholder:text-muted-foreground/60",
             "outline-none",
             "focus:border-brand-edge focus:ring-2 focus:ring-brand-soft",
             "transition-colors",

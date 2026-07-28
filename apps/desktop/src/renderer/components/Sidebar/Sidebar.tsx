@@ -1,21 +1,30 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { Plus, ChevronLeft, FolderPlus, Search, X, Settings } from "lucide-react";
+import { Plus, ChevronLeft, Copy, FolderPlus, Search, Trash2, X, Settings } from "lucide-react";
 
 import appIconUrl from "@/assets/app-icon.png";
 
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { useSettingsStore } from "@/store/settings-store";
+import { useTrafficLightGutter } from "@/store/window-chrome-store";
 import { resolveDisplayString } from "../../../shared/shortcuts";
 import { useActiveDrag, useDropIntent } from "@/hooks/useDndOrchestrator";
 import { acquireNativeViewShield, releaseNativeViewShield } from "@/hooks/useNativeViewDragShield";
-import { findSidebarNode } from "@/lib/sidebar-tree";
+import {
+  collectWorkspaceIds,
+  findFolder,
+  findSidebarNode,
+  folderSelectionKey,
+  partitionSelectionKeys,
+  workspaceSelectionKey,
+} from "@/lib/sidebar-tree";
 import type { ContextMenuItem } from "../../../shared/types";
 import type { SidebarContainer } from "@/types/dnd";
 
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { HintTooltip } from "@/components/ui/hint-tooltip";
+import { TooltipBoundaryProvider } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
@@ -23,23 +32,31 @@ import { SidebarTreeLevel } from "./SidebarTreeLevel";
 import { SidebarProvider, type SidebarContextValue } from "./SidebarContext";
 import { QuickLaunchGrid } from "./QuickLaunchGrid";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
+import { useSidebarSelection } from "./useSidebarSelection";
 
 function clampSidebarWidth(width: number): number {
   return Math.max(180, Math.min(420, width));
 }
+
+const iconButtonClass = cn(
+  "no-drag chrome-focus inline-flex items-center justify-center rounded-md",
+  "text-muted-foreground hover:text-foreground hover:bg-row-hover transition-colors",
+);
 
 export default function Sidebar() {
   const workspaces = useWorkspaceStore((s) => s.workspaces);
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId);
   const addWorkspace = useWorkspaceStore((s) => s.addWorkspace);
   const defaultPaneType = useSettingsStore((s) => s.defaultPaneType);
-  const removeWorkspace = useWorkspaceStore((s) => s.removeWorkspace);
+  const removeWorkspaces = useWorkspaceStore((s) => s.removeWorkspaces);
+  const duplicateWorkspace = useWorkspaceStore((s) => s.duplicateWorkspace);
   const renameWorkspace = useWorkspaceStore((s) => s.renameWorkspace);
   const setActiveWorkspace = useWorkspaceStore((s) => s.setActiveWorkspace);
   const pinnedSidebarNodes = useWorkspaceStore((s) => s.pinnedSidebarNodes);
   const sidebarTree = useWorkspaceStore((s) => s.sidebarTree);
   const addFolder = useWorkspaceStore((s) => s.addFolder);
   const removeFolder = useWorkspaceStore((s) => s.removeFolder);
+  const removeFolderWithContents = useWorkspaceStore((s) => s.removeFolderWithContents);
   const renameFolder = useWorkspaceStore((s) => s.renameFolder);
   const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed);
   const togglePinWorkspace = useWorkspaceStore((s) => s.togglePinWorkspace);
@@ -54,7 +71,7 @@ export default function Sidebar() {
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
   const toggleSettings = useSettingsStore((s) => s.toggleSettings);
 
-  const [isFullScreen, setIsFullScreen] = useState(false);
+  const trafficLightGutter = useTrafficLightGutter();
   const activeDrag = useActiveDrag();
   const dropIntent = useDropIntent();
   const [searchQuery, setSearchQuery] = useState("");
@@ -69,19 +86,10 @@ export default function Sidebar() {
     }
   }, [pendingEditId, pendingEditType, clearPendingEdit]);
 
-  useEffect(() => {
-    let cancelled = false;
-    void window.api.window.isFullScreen().then((fullScreen) => {
-      if (!cancelled) setIsFullScreen(fullScreen);
-    });
-    const unsubscribe = window.api.window.onFullScreenChange(setIsFullScreen);
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, []);
-
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  // Held as state, not a ref: the tooltip boundary below needs a render once
+  // the element exists.
+  const [asideEl, setAsideEl] = useState<HTMLElement | null>(null);
+  const [deleteTargets, setDeleteTargets] = useState<string[] | null>(null);
   const [isResizing, setIsResizing] = useState(false);
   const [liveSidebarWidth, setLiveSidebarWidth] = useState<number | null>(null);
   const resizeRef = useRef<{ startX: number; startWidth: number; currentWidth: number } | null>(
@@ -94,6 +102,31 @@ export default function Sidebar() {
     const q = searchQuery.toLowerCase();
     return new Set(workspaces.filter((ws) => ws.name.toLowerCase().includes(q)).map((ws) => ws.id));
   }, [searchQuery, workspaces]);
+
+  const selection = useSidebarSelection(
+    pinnedSidebarNodes,
+    sidebarTree,
+    filteredWorkspaceIds,
+    setActiveWorkspace,
+  );
+  const { selectedKeys, actionTargets, clear: clearSelection } = selection;
+  const selectedCount = selectedKeys.size;
+
+  // Escape has to listen on the window, not the sidebar: rows are plain divs
+  // with no tabIndex, so a handler on <aside> only ever fired when focus
+  // happened to be sitting in the search field.
+  useEffect(() => {
+    if (selectedCount === 0) return;
+    const handleEscape = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      // Settings owns Escape while it is open, and the selection is not
+      // visible behind it anyway.
+      if (useSettingsStore.getState().settingsOpen) return;
+      clearSelection();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [selectedCount, clearSelection]);
 
   const workspaceContainer = useCallback(
     (workspaceId: string): SidebarContainer => {
@@ -216,26 +249,103 @@ export default function Sidebar() {
     setEditingType(null);
   }, []);
 
+  const duplicateWorkspaces = useCallback(
+    (keys: string[]) => {
+      // Folders in the selection are skipped — duplicating a folder would mean
+      // copying every workspace in it, which is a different (and much heavier)
+      // action than the one this menu entry offers.
+      const created = partitionSelectionKeys(keys)
+        .workspaceIds.map((id) => duplicateWorkspace(id))
+        .filter((id): id is string => id !== null);
+      // Opening the copy is only sensible for a single duplicate. For a batch
+      // there is no one copy to land on, so the user stays where they were.
+      if (created.length === 1) setActiveWorkspace(created[0]!);
+      clearSelection();
+    },
+    [duplicateWorkspace, setActiveWorkspace, clearSelection],
+  );
+
+  /**
+   * What deleting these rows would actually remove. A selected folder takes
+   * everything inside it, so the counts the confirmation quotes have to be
+   * resolved through the tree rather than read off the selection.
+   */
+  const resolveDeletion = useCallback(
+    (keys: string[]) => {
+      const { workspaceIds, folderIds } = partitionSelectionKeys(keys);
+      const doomedWorkspaceIds = new Set(workspaceIds);
+      for (const folderId of folderIds) {
+        const folder =
+          findFolder(sidebarTree, folderId) ?? findFolder(pinnedSidebarNodes, folderId);
+        if (!folder) continue;
+        for (const id of collectWorkspaceIds(folder.children, true)) doomedWorkspaceIds.add(id);
+      }
+      return { workspaceCount: doomedWorkspaceIds.size, folderCount: folderIds.length };
+    },
+    [sidebarTree, pinnedSidebarNodes],
+  );
+
+  /**
+   * Deleting every workspace is allowed by the store — it mints a fresh one —
+   * but offering it as a menu entry reads like a way to empty the app, so the
+   * entry hides unless something would survive. Folder-only deletions (no
+   * workspaces at all) are always fine.
+   */
+  const canDelete = useCallback(
+    (keys: string[]) => {
+      const { workspaceCount } = resolveDeletion(keys);
+      return workspaceCount === 0 || workspaceCount < workspaces.length;
+    },
+    [resolveDeletion, workspaces.length],
+  );
+
+  const confirmDelete = useCallback(() => {
+    if (!deleteTargets) return;
+    const { workspaceIds, folderIds } = partitionSelectionKeys(deleteTargets);
+    // Folders first: each takes its own workspaces with it, so the loose list
+    // that follows is left with only what wasn't already inside one.
+    for (const folderId of folderIds) removeFolderWithContents(folderId);
+    removeWorkspaces(workspaceIds);
+    clearSelection();
+  }, [deleteTargets, removeFolderWithContents, removeWorkspaces, clearSelection]);
+
   const handleWorkspaceContextMenu = useCallback(
     async (e: React.MouseEvent, workspaceId: string) => {
       e.preventDefault();
       const ws = workspaces.find((w) => w.id === workspaceId);
       if (!ws) return;
+      const targets = actionTargets(workspaceSelectionKey(workspaceId));
       const isPinned = workspaceContainer(workspaceId) === "pinned";
-      const items: ContextMenuItem[] = [
-        { id: "rename", label: "Rename" },
-        { id: "pin", label: isPinned ? "Unpin" : "Pin" },
-        { id: "new-folder", label: "New Folder..." },
-        ...(workspaces.length > 1 ? [{ id: "delete", label: "Delete", destructive: true }] : []),
-      ];
+      const deletable = canDelete(targets);
+      const items: ContextMenuItem[] =
+        targets.length > 1
+          ? buildBulkMenuItems(targets, resolveDeletion(targets), deletable)
+          : [
+              { id: "rename", label: "Rename" },
+              { id: "duplicate", label: "Duplicate" },
+              { id: "pin", label: isPinned ? "Unpin" : "Pin" },
+              { id: "new-folder", label: "New Folder..." },
+              ...(deletable ? [{ id: "delete", label: "Delete", destructive: true }] : []),
+            ];
       const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY });
       if (!result) return;
       if (result === "rename") startEditingWorkspace(workspaceId);
+      else if (result === "duplicate") duplicateWorkspaces(targets);
       else if (result === "pin") togglePinWorkspace(workspaceId);
       else if (result === "new-folder") addFolder("New Folder");
-      else if (result === "delete") setDeleteTarget(workspaceId);
+      else if (result === "delete") setDeleteTargets(targets);
     },
-    [workspaces, workspaceContainer, startEditingWorkspace, addFolder, togglePinWorkspace],
+    [
+      workspaces,
+      actionTargets,
+      workspaceContainer,
+      canDelete,
+      resolveDeletion,
+      startEditingWorkspace,
+      duplicateWorkspaces,
+      addFolder,
+      togglePinWorkspace,
+    ],
   );
 
   const handleFolderContextMenu = useCallback(
@@ -243,14 +353,48 @@ export default function Sidebar() {
       e.preventDefault();
       const container = folderContainer(folderId);
       const isPinned = container === "pinned";
+      const targets = actionTargets(folderSelectionKey(folderId));
+      const deletable = canDelete(targets);
+
+      if (targets.length > 1) {
+        const bulkResult = await window.api.contextMenu.show(
+          buildBulkMenuItems(targets, resolveDeletion(targets), deletable),
+          { x: e.clientX, y: e.clientY },
+        );
+        if (bulkResult === "duplicate") duplicateWorkspaces(targets);
+        else if (bulkResult === "delete") setDeleteTargets(targets);
+        return;
+      }
+
+      // Two ways out of a folder that holds something: keep the workspaces and
+      // just dissolve the folder, or take the lot. Only one of them is
+      // destructive, and conflating them is how people lose work.
+      const { workspaceCount } = resolveDeletion(targets);
       const items: ContextMenuItem[] = [
         { id: "rename", label: "Rename Folder" },
         { id: "pin", label: isPinned ? "Unpin" : "Pin" },
         { id: "add-workspace", label: "Add Workspace" },
         { id: "add-subfolder", label: "Add Sub-folder" },
-        { id: "delete", label: "Delete Folder", destructive: true },
+        ...(workspaceCount > 0
+          ? [
+              { id: "delete", label: "Remove Folder Only" },
+              ...(deletable
+                ? [
+                    {
+                      id: "delete-contents",
+                      label: `Delete Folder and ${workspaceCount} Workspace${workspaceCount === 1 ? "" : "s"}`,
+                      destructive: true,
+                    },
+                  ]
+                : []),
+            ]
+          : [{ id: "delete", label: "Delete Folder", destructive: true }]),
       ];
       const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY });
+      if (result === "delete-contents") {
+        setDeleteTargets(targets);
+        return;
+      }
       if (result === "rename") startEditingFolder(folderId);
       else if (result === "pin") {
         if (isPinned) unpinFolder(folderId);
@@ -268,6 +412,10 @@ export default function Sidebar() {
     },
     [
       folderContainer,
+      actionTargets,
+      canDelete,
+      resolveDeletion,
+      duplicateWorkspaces,
       startEditingFolder,
       addWorkspace,
       addFolder,
@@ -291,6 +439,10 @@ export default function Sidebar() {
     [addWorkspace, defaultPaneType],
   );
 
+  const requestDelete = useCallback((workspaceId: string) => {
+    setDeleteTargets([workspaceId]);
+  }, []);
+
   const sidebarContextValue = useMemo<SidebarContextValue>(
     () => ({
       editingId,
@@ -303,12 +455,13 @@ export default function Sidebar() {
       onStopEditing: stopEditing,
       onContextMenuFolder: handleFolderContextMenu,
       onContextMenuWorkspace: handleWorkspaceContextMenu,
-      onSelectWorkspace: setActiveWorkspace,
+      onSelectWorkspace: selection.handleWorkspaceClick,
+      onSelectFolder: selection.handleFolderClick,
       onAddWorkspaceToFolder: handleAddWorkspaceToFolder,
       activeWorkspaceId,
+      selectedKeys,
       toggleFolderCollapsed,
-      deleteTarget,
-      setDeleteTarget,
+      onRequestDelete: requestDelete,
     }),
     [
       editingId,
@@ -321,22 +474,28 @@ export default function Sidebar() {
       stopEditing,
       handleFolderContextMenu,
       handleWorkspaceContextMenu,
-      setActiveWorkspace,
+      selection.handleWorkspaceClick,
+      selection.handleFolderClick,
       handleAddWorkspaceToFolder,
       activeWorkspaceId,
+      selectedKeys,
       toggleFolderCollapsed,
-      deleteTarget,
+      requestDelete,
     ],
   );
+
+  const pendingDeletion = deleteTargets ? resolveDeletion(deleteTargets) : null;
+  const selectedWorkspaceCount = partitionSelectionKeys(selectedKeys).workspaceIds.length;
 
   return (
     <SidebarProvider value={sidebarContextValue}>
       <aside
+        ref={setAsideEl}
         data-state={sidebarOpen ? "open" : "collapsed"}
         data-resizing={isResizing || undefined}
         className={cn(
-          "sidebar-bg relative flex flex-col shrink-0 overflow-hidden text-foreground",
-          "border-r border-border/60",
+          "relative flex flex-col shrink-0 overflow-hidden bg-rail text-foreground",
+          "border-r border-border",
           "@container/sidebar",
           "transition-[width,opacity] duration-200 ease-out",
           !sidebarOpen && "!w-0 opacity-0 pointer-events-none",
@@ -346,204 +505,262 @@ export default function Sidebar() {
           sidebarOpen ? { width: renderedSidebarWidth, minWidth: renderedSidebarWidth } : undefined
         }
       >
-        <div className="relative z-[1] flex flex-col h-full min-h-0">
-          {/* Header — drag region + traffic-light reserve when not fullscreen */}
-          <div
-            className={cn(
-              "drag-region flex items-center justify-between h-12 shrink-0",
-              isFullScreen ? "pl-3" : "pl-[88px]",
-              "pr-2",
-            )}
-          >
-            <span className="app-title no-drag select-none inline-flex items-center font-sans font-semibold text-[14.5px] leading-none tracking-tight">
-              <img
-                src={appIconUrl}
-                alt=""
-                aria-hidden
-                draggable={false}
-                className="app-title-icon h-[18px] w-auto -my-1 -mr-px shrink-0 select-none"
-              />
-              <span className="app-title-text app-title-text--ev">ev</span>
-              <span className="app-title-text app-title-text--space">space</span>
-            </span>
-            <HintTooltip
-              content="Hide sidebar"
-              shortcut={resolveDisplayString("toggle-sidebar")}
-              sideOffset={4}
-              align="end"
+        {/* Everything to the right of the sidebar is a native view painted
+            above the web contents, so a tooltip that spills past this edge
+            vanishes behind it rather than being merely clipped. Confining them
+            to the rail is the only way they stay visible. */}
+        <TooltipBoundaryProvider boundary={asideEl}>
+          <div className="relative z-[1] flex flex-col h-full min-h-0">
+            {/* Header — drag region. The left padding is whatever the main
+              process says the native traffic lights occupy, so it collapses to
+              nothing in fullscreen instead of leaving a hole. */}
+            <div
+              className="drag-region flex items-center justify-between h-12 shrink-0 pr-2"
+              style={{ paddingLeft: trafficLightGutter || 12 }}
             >
-              <button
-                type="button"
+              <span className="app-title no-drag select-none inline-flex items-center font-sans font-semibold text-ui-lg leading-none tracking-tight">
+                <img
+                  src={appIconUrl}
+                  alt=""
+                  aria-hidden
+                  draggable={false}
+                  className="app-title-icon h-[18px] w-auto -my-1 -mr-px shrink-0 select-none"
+                />
+                <span className="app-title-text app-title-text--ev">ev</span>
+                <span className="app-title-text app-title-text--space">space</span>
+              </span>
+              <HintTooltip
+                content="Hide sidebar"
+                shortcut={resolveDisplayString("toggle-sidebar")}
+                sideOffset={4}
+                align="end"
+              >
+                <button
+                  type="button"
+                  className={cn(iconButtonClass, "size-7")}
+                  onClick={toggleSidebar}
+                  aria-label="Toggle sidebar"
+                >
+                  <ChevronLeft size={14} strokeWidth={2.2} />
+                </button>
+              </HintTooltip>
+            </div>
+
+            {/* Quick launch. Everything below the header shares one left rhythm:
+              containers inset 8px, so every hover/active rectangle in the
+              column starts at the same x, and their content at 18px. */}
+            <div className="px-2 pt-1 pb-2">
+              <QuickLaunchGrid />
+            </div>
+
+            {/* Search */}
+            <div className="px-2 pb-2">
+              <div
                 className={cn(
-                  "no-drag inline-flex items-center justify-center size-[26px] rounded-[7px]",
-                  "text-muted-foreground/80 hover:text-foreground",
-                  "border border-foreground/[0.06] bg-foreground/[0.03] hover:bg-foreground/[0.07] hover:border-foreground/[0.1]",
+                  "no-drag relative flex items-center h-8 rounded-lg gap-2 px-2.5",
+                  // A filled well rather than an outlined box; the outline only
+                  // appears once you're typing in it.
+                  "bg-elevated/50 hover:bg-elevated/80",
+                  "focus-within:bg-elevated focus-within:ring-1 focus-within:ring-brand-edge",
                   "transition-colors",
                 )}
-                onClick={toggleSidebar}
-                aria-label="Toggle sidebar"
               >
-                <ChevronLeft size={14} strokeWidth={2.2} />
-              </button>
-            </HintTooltip>
-          </div>
+                <Search size={12} className="text-muted-foreground shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search workspaces"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setSearchQuery("");
+                  }}
+                  aria-label="Search workspaces"
+                  className={cn(
+                    "flex-1 min-w-0 bg-transparent border-0 outline-none",
+                    "text-ui-sm text-foreground placeholder:text-muted-foreground",
+                  )}
+                />
+                {searchQuery ? (
+                  <button
+                    className={cn(iconButtonClass, "size-5 shrink-0 -mr-1")}
+                    aria-label="Clear search"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    <X size={12} strokeWidth={2.2} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
 
-          {/* Quick launch */}
-          <div className="px-3 pt-1 pb-3">
-            <QuickLaunchGrid />
-          </div>
-
-          {/* Search — recessed input, theme-adaptive */}
-          <div className="px-3 pb-3">
-            <div
-              className={cn(
-                "no-drag group/search relative flex items-center h-8 rounded-lg gap-2 px-3",
-                "bg-foreground/[0.04] border border-foreground/[0.06]",
-                "shadow-[var(--bevel-recess)]",
-                "focus-within:border-brand-edge focus-within:ring-2 focus-within:ring-brand-soft",
-                "transition-colors",
-              )}
-            >
-              <Search size={12} className="text-muted-foreground shrink-0" />
-              <input
-                type="text"
-                placeholder="Search workspaces"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") setSearchQuery("");
-                }}
-                aria-label="Search workspaces"
-                className={cn(
-                  "flex-1 min-w-0 bg-transparent border-0 outline-none",
-                  "text-[12.5px] text-foreground placeholder:text-muted-foreground/65",
-                )}
-              />
-              {searchQuery ? (
-                <button
-                  className="no-drag inline-flex items-center justify-center size-4 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover shrink-0"
-                  aria-label="Clear search"
-                  onClick={() => setSearchQuery("")}
+            {/* Pinned section */}
+            {pinnedSidebarNodes.length > 0 && (
+              <>
+                <SectionHeader label="Pinned" />
+                <div
+                  ref={setPinnedRootRef}
+                  className={cn(
+                    "relative px-2 pb-2 flex flex-col gap-0.5",
+                    isRelevantDrag && isPinnedRootOver && "drop-into-folder",
+                    pinnedRootInsertClass,
+                  )}
                 >
-                  <X size={9} />
+                  <SidebarTreeLevel
+                    nodes={pinnedSidebarNodes}
+                    container="pinned"
+                    parentFolderId={null}
+                    depth={0}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Workspaces section */}
+            <SectionHeader label="Workspaces" count={workspaces.length}>
+              <HintTooltip content="New folder" sideOffset={4} align="end">
+                <button
+                  type="button"
+                  onClick={() => addFolder("New Folder")}
+                  className={cn(iconButtonClass, "size-5")}
+                  aria-label="New folder"
+                >
+                  <FolderPlus size={12} strokeWidth={1.8} />
                 </button>
-              ) : (
-                <Kbd className="no-drag h-[18px] min-w-[18px] px-1.5 text-[10px] font-mono opacity-70 shrink-0">
-                  /
+              </HintTooltip>
+              <HintTooltip
+                content="New workspace"
+                shortcut={resolveDisplayString("new-workspace")}
+                sideOffset={4}
+                align="end"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (defaultPaneType === "picker") {
+                      useSettingsStore
+                        .getState()
+                        .openPanePicker({ action: "new-workspace", container: "main" });
+                    } else {
+                      addWorkspace(undefined, null, "main", defaultPaneType);
+                    }
+                  }}
+                  className={cn(iconButtonClass, "size-5")}
+                  aria-label="New workspace"
+                >
+                  <Plus size={12} strokeWidth={2.2} />
+                </button>
+              </HintTooltip>
+            </SectionHeader>
+
+            {/* Workspace tree. The droppable stretches to the bottom of the
+              scroll viewport rather than hugging the rows, so the empty space
+              below the list is a drop target too. */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ScrollArea className="h-full">
+                <div className="flex min-h-full flex-col">
+                  <div
+                    ref={setMainRootRef}
+                    onClick={(e) => {
+                      if (e.target === e.currentTarget) clearSelection();
+                    }}
+                    className={cn(
+                      "relative flex-1 px-2 pb-3 flex flex-col gap-0.5",
+                      isRelevantDrag && isMainRootOver && "drop-into-folder",
+                      mainRootInsertClass,
+                    )}
+                  >
+                    <SidebarTreeLevel
+                      nodes={sidebarTree}
+                      container="main"
+                      parentFolderId={null}
+                      depth={0}
+                    />
+                    {sidebarTree.length === 0 ? (
+                      <p className="px-2.5 py-3 text-ui-xs text-muted-foreground select-none">
+                        No workspaces yet — drop a tab here or press{" "}
+                        {resolveDisplayString("new-workspace")}.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </ScrollArea>
+            </div>
+
+            {/* Bulk action bar — only present while a multi-selection exists. */}
+            {selectedCount > 0 ? (
+              <div className="shrink-0 border-t border-border px-2 py-2">
+                <div className="flex items-center gap-1 rounded-lg bg-brand-soft px-2 py-1.5">
+                  <span className="flex-1 text-ui-xs font-medium tabular-nums">
+                    {selectedCount} selected
+                  </span>
+                  {selectedWorkspaceCount > 0 ? (
+                    <HintTooltip
+                      content={
+                        selectedWorkspaceCount === selectedCount
+                          ? "Duplicate"
+                          : `Duplicate ${selectedWorkspaceCount} workspaces (folders are skipped)`
+                      }
+                      sideOffset={4}
+                      align="end"
+                    >
+                      <button
+                        type="button"
+                        className={cn(iconButtonClass, "size-6")}
+                        aria-label={`Duplicate ${selectedWorkspaceCount} workspaces`}
+                        onClick={() => duplicateWorkspaces([...selectedKeys])}
+                      >
+                        <Copy size={12} />
+                      </button>
+                    </HintTooltip>
+                  ) : null}
+                  {canDelete([...selectedKeys]) ? (
+                    <HintTooltip content="Delete" sideOffset={4} align="end">
+                      <button
+                        type="button"
+                        className={cn(
+                          iconButtonClass,
+                          "size-6 hover:text-destructive hover:bg-destructive/10",
+                        )}
+                        aria-label={`Delete ${selectedCount} items`}
+                        onClick={() => setDeleteTargets([...selectedKeys])}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </HintTooltip>
+                  ) : null}
+                  <HintTooltip content="Clear selection" sideOffset={4} align="end">
+                    <button
+                      type="button"
+                      className={cn(iconButtonClass, "size-6")}
+                      aria-label="Clear selection"
+                      onClick={clearSelection}
+                    >
+                      <X size={12} />
+                    </button>
+                  </HintTooltip>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Footer */}
+            <div className="shrink-0 border-t border-border px-2 py-2 flex flex-col gap-1">
+              <SidebarUpdateButton />
+              <button
+                type="button"
+                onClick={toggleSettings}
+                className={cn("chrome-row chrome-focus no-drag h-8 gap-2.5 px-2.5 text-ui-sm")}
+                title={`Settings (${resolveDisplayString("toggle-settings")})`}
+              >
+                <Settings size={14} strokeWidth={1.8} className="shrink-0 text-muted-foreground" />
+                <span className="flex-1 text-left">Settings</span>
+                <Kbd className="h-4 min-w-4 rounded-sm bg-foreground/10 px-1 text-ui-micro font-mono">
+                  {resolveDisplayString("toggle-settings")}
                 </Kbd>
-              )}
+              </button>
             </div>
           </div>
+        </TooltipBoundaryProvider>
 
-          {/* Pinned section */}
-          {pinnedSidebarNodes.length > 0 && (
-            <>
-              <SectionHeader label="Pinned" />
-              <div
-                ref={setPinnedRootRef}
-                className={cn(
-                  "relative px-2 pb-2 flex flex-col gap-1",
-                  isRelevantDrag && isPinnedRootOver && "drop-into-folder",
-                  pinnedRootInsertClass,
-                )}
-              >
-                <SidebarTreeLevel
-                  nodes={pinnedSidebarNodes}
-                  container="pinned"
-                  parentFolderId={null}
-                  depth={0}
-                />
-              </div>
-            </>
-          )}
-
-          {/* Workspaces section */}
-          <SectionHeader label="Workspaces" count={workspaces.length}>
-            <HintTooltip content="New folder" sideOffset={4} align="end">
-              <button
-                type="button"
-                onClick={() => addFolder("New Folder")}
-                className={cn(
-                  "no-drag inline-flex items-center justify-center size-[18px] rounded-[5px]",
-                  "text-muted-foreground/85 hover:text-foreground hover:bg-foreground/[0.06] transition-colors",
-                )}
-                aria-label="New folder"
-              >
-                <FolderPlus size={11} strokeWidth={1.8} />
-              </button>
-            </HintTooltip>
-            <HintTooltip
-              content="New workspace"
-              shortcut={resolveDisplayString("new-workspace")}
-              sideOffset={4}
-              align="end"
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  if (defaultPaneType === "picker") {
-                    useSettingsStore
-                      .getState()
-                      .openPanePicker({ action: "new-workspace", container: "main" });
-                  } else {
-                    addWorkspace(undefined, null, "main", defaultPaneType);
-                  }
-                }}
-                className={cn(
-                  "no-drag inline-flex items-center justify-center size-[18px] rounded-[5px]",
-                  "text-muted-foreground/85 hover:text-foreground hover:bg-foreground/[0.06] transition-colors",
-                )}
-                aria-label="New workspace"
-              >
-                <Plus size={12} strokeWidth={2.2} />
-              </button>
-            </HintTooltip>
-          </SectionHeader>
-
-          {/* Workspace tree */}
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <ScrollArea className="h-full">
-              <div
-                ref={setMainRootRef}
-                className={cn(
-                  "relative px-2 pb-3 flex flex-col gap-1",
-                  isRelevantDrag && isMainRootOver && "drop-into-folder",
-                  mainRootInsertClass,
-                )}
-              >
-                <SidebarTreeLevel
-                  nodes={sidebarTree}
-                  container="main"
-                  parentFolderId={null}
-                  depth={0}
-                />
-              </div>
-            </ScrollArea>
-          </div>
-
-          {/* Footer */}
-          <div className="shrink-0 border-t border-foreground/[0.06] px-2 py-2 flex flex-col gap-1">
-            <SidebarUpdateButton />
-            <button
-              type="button"
-              onClick={toggleSettings}
-              className={cn(
-                "no-drag group/settings flex items-center gap-2.5 h-8 px-2.5 rounded-[7px]",
-                "text-[12.5px] text-foreground/80 hover:text-foreground hover:bg-foreground/[0.05]",
-                "transition-colors",
-              )}
-              title={`Settings (${resolveDisplayString("toggle-settings")})`}
-            >
-              <Settings size={13} strokeWidth={1.6} className="text-muted-foreground/80" />
-              <span className="flex-1 text-left">Settings</span>
-              <Kbd className="h-[18px] min-w-[18px] px-1.5 text-[10px] font-mono opacity-60 group-hover/settings:opacity-100 transition-opacity">
-                {resolveDisplayString("toggle-settings")}
-              </Kbd>
-            </button>
-          </div>
-        </div>
-
-        {/* Resize handle (right edge, above frost) */}
+        {/* Resize handle (right edge) */}
         {sidebarOpen && (
           <div
             className={cn(
@@ -560,20 +777,81 @@ export default function Sidebar() {
 
         {/* Delete confirmation */}
         <ConfirmDialog
-          open={!!deleteTarget}
-          onOpenChange={() => setDeleteTarget(null)}
-          title="Delete workspace?"
-          description="This workspace and all its tabs will be permanently removed. This action cannot be undone."
+          open={pendingDeletion !== null}
+          onOpenChange={() => setDeleteTargets(null)}
+          title={describeDeletionTitle(pendingDeletion)}
+          description={describeDeletionBody(pendingDeletion)}
           confirmLabel="Delete"
           cancelLabel="Cancel"
           variant="destructive"
-          onConfirm={() => {
-            if (deleteTarget) removeWorkspace(deleteTarget);
-          }}
+          onConfirm={confirmDelete}
         />
       </aside>
     </SidebarProvider>
   );
+}
+
+interface DeletionScope {
+  workspaceCount: number;
+  folderCount: number;
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+/** The context menu shown when the right-clicked row is part of a selection. */
+function buildBulkMenuItems(
+  targets: string[],
+  scope: DeletionScope,
+  deletable: boolean,
+): ContextMenuItem[] {
+  const workspaceTargets = partitionSelectionKeys(targets).workspaceIds.length;
+  return [
+    ...(workspaceTargets > 0
+      ? [{ id: "duplicate", label: `Duplicate ${plural(workspaceTargets, "Workspace")}` }]
+      : []),
+    ...(deletable
+      ? [
+          {
+            id: "delete",
+            label:
+              scope.folderCount > 0
+                ? `Delete ${plural(targets.length, "Item")}`
+                : `Delete ${plural(targets.length, "Workspace")}`,
+            destructive: true,
+          },
+        ]
+      : []),
+  ];
+}
+
+function describeDeletionTitle(scope: DeletionScope | null): string {
+  if (!scope) return "Delete?";
+  if (scope.folderCount === 0) {
+    return scope.workspaceCount === 1
+      ? "Delete workspace?"
+      : `Delete ${scope.workspaceCount} workspaces?`;
+  }
+  if (scope.workspaceCount === 0) {
+    return scope.folderCount === 1 ? "Delete folder?" : `Delete ${scope.folderCount} folders?`;
+  }
+  return `Delete ${plural(scope.folderCount, "folder")} and ${plural(scope.workspaceCount, "workspace")}?`;
+}
+
+function describeDeletionBody(scope: DeletionScope | null): string {
+  if (!scope) return "";
+  const undone = "This action cannot be undone.";
+  if (scope.workspaceCount === 0) {
+    return `The ${scope.folderCount === 1 ? "folder is" : "folders are"} empty and will be removed. ${undone}`;
+  }
+  const workspaces =
+    scope.workspaceCount === 1
+      ? "One workspace and all its tabs"
+      : `${scope.workspaceCount} workspaces and all their tabs`;
+  const inside =
+    scope.folderCount > 0 ? " Everything inside the selected folders goes with them." : "";
+  return `${workspaces} will be permanently removed, shutting down any terminals still running in them.${inside} ${undone}`;
 }
 
 function SectionHeader({
@@ -586,18 +864,18 @@ function SectionHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between px-4 pt-3 pb-2 select-none">
+    <div className="flex items-center justify-between px-4.5 pt-3 pb-1 select-none">
       <div className="inline-flex items-baseline gap-2">
-        <span className="text-[9.5px] font-mono uppercase tracking-[0.18em] text-muted-foreground/55">
+        <span className="text-ui-micro font-mono uppercase tracking-[0.16em] text-muted-foreground">
           {label}
         </span>
         {typeof count === "number" ? (
-          <span className="text-[9.5px] font-mono tabular-nums text-muted-foreground/40">
+          <span className="text-ui-micro font-mono tabular-nums text-muted-foreground/60">
             {count}
           </span>
         ) : null}
       </div>
-      {children ? <div className="flex items-center gap-1">{children}</div> : null}
+      {children ? <div className="flex items-center gap-0.5">{children}</div> : null}
     </div>
   );
 }

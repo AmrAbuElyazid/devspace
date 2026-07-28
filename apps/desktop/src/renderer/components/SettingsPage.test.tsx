@@ -21,10 +21,6 @@ beforeEach(() => {
   root = createRoot(container);
 
   installMockWindowApi({
-    window: {
-      isFullScreen: vi.fn(async () => false),
-      onFullScreenChange: vi.fn(() => () => {}),
-    },
     editor: {
       getCliStatus: vi.fn(async () => ({
         path: "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
@@ -58,15 +54,61 @@ afterEach(async () => {
   container.remove();
 });
 
-test("renders settings as a fixed modal overlay", () => {
+test("renders settings as a centered modal card over a scrim", () => {
   const html = renderToStaticMarkup(<SettingsPage />);
 
   expect(html).toContain("fixed inset-0 z-50");
   expect(html).toContain('role="dialog"');
   expect(html).toContain('aria-modal="true"');
-  // Header reserves the macOS traffic-light gutter when not fullscreen via
-  // the `pl-[88px]` Tailwind utility.
-  expect(html).toContain("pl-[88px]");
+  // The card is bounded rather than full-bleed, so the close affordances sit
+  // next to the content instead of beside the native window buttons.
+  expect(html).toContain("max-w-3xl");
+  // A strip of the scrim stays draggable so the window can still be moved.
+  expect(html).toContain("drag-region");
+});
+
+test("offers close affordances on the card itself", async () => {
+  await act(async () => {
+    root?.render(<SettingsPage />);
+  });
+
+  const closeButton = container.querySelector<HTMLButtonElement>(
+    'button[aria-label="Close settings"]',
+  );
+  expect(closeButton).toBeTruthy();
+
+  const doneButton = Array.from(container.querySelectorAll("button")).find(
+    (button) => button.textContent === "Done",
+  );
+  expect(doneButton).toBeTruthy();
+
+  await act(async () => {
+    doneButton?.click();
+  });
+
+  expect(useSettingsStore.getState().settingsOpen).toBe(false);
+});
+
+test("closes when the scrim around the card is clicked", async () => {
+  await act(async () => {
+    root?.render(<SettingsPage />);
+  });
+
+  const dialog = container.querySelector('[role="dialog"]');
+  const scrim = dialog?.parentElement;
+  expect(scrim).toBeTruthy();
+
+  // A press that lands on the card must not close it…
+  await act(async () => {
+    dialog?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  });
+  expect(useSettingsStore.getState().settingsOpen).toBe(true);
+
+  // …but one that lands on the scrim itself does.
+  await act(async () => {
+    scrim?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  });
+  expect(useSettingsStore.getState().settingsOpen).toBe(false);
 });
 
 test("shows the resolved VS Code CLI path in settings", async () => {
@@ -178,10 +220,6 @@ test("shows a friendly private-release updater message and wraps the status text
     "Automatic updates aren't available for private GitHub releases in this build. Use View Releases to download the latest version manually.";
 
   installMockWindowApi({
-    window: {
-      isFullScreen: vi.fn(async () => false),
-      onFullScreenChange: vi.fn(() => () => {}),
-    },
     editor: {
       getCliStatus: vi.fn(async () => ({
         path: "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
@@ -223,4 +261,58 @@ test("shows a friendly private-release updater message and wraps the status text
     (span) => span.textContent === privateReleaseMessage,
   );
   expect(statusText).toBeTruthy();
+});
+
+test("focuses the card on open and keeps Tab inside it", async () => {
+  const outside = document.createElement("button");
+  outside.textContent = "behind the modal";
+  document.body.appendChild(outside);
+  outside.focus();
+
+  await act(async () => {
+    root?.render(<SettingsPage />);
+  });
+
+  const card = container.querySelector<HTMLElement>('[role="dialog"]');
+  expect(document.activeElement).toBe(card);
+
+  const focusable = Array.from(card!.querySelectorAll<HTMLElement>("button, input"));
+  const first = focusable[0]!;
+  const last = focusable[focusable.length - 1]!;
+
+  // Tab off the last control wraps to the first rather than escaping to the
+  // application behind the scrim.
+  last.focus();
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+  });
+  expect(document.activeElement).toBe(first);
+
+  // Shift-Tab off the first wraps backwards to the last.
+  await act(async () => {
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }),
+    );
+  });
+  expect(document.activeElement).toBe(last);
+
+  outside.remove();
+});
+
+test("returns focus to wherever it was when the modal closes", async () => {
+  const outside = document.createElement("button");
+  document.body.appendChild(outside);
+  outside.focus();
+
+  await act(async () => {
+    root?.render(<SettingsPage />);
+  });
+  expect(document.activeElement).not.toBe(outside);
+
+  await act(async () => {
+    root?.render(<div />);
+  });
+
+  expect(document.activeElement).toBe(outside);
+  outside.remove();
 });

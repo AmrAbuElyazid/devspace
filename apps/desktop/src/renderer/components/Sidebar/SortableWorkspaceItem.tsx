@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { useActiveDrag } from "@/hooks/useDndOrchestrator";
@@ -19,9 +19,10 @@ interface SortableWorkspaceItemProps {
   parentFolderId: string | null;
   depth: number;
   isActive: boolean;
+  isSelected: boolean;
   isEditing: boolean;
   modifierHeld: HeldModifier;
-  onSelect: () => void;
+  onSelect: (event: React.MouseEvent) => void;
   onStartEditing: () => void;
   onRename: (name: string) => void;
   onStopEditing: () => void;
@@ -35,6 +36,7 @@ export function SortableWorkspaceItem({
   parentFolderId,
   depth,
   isActive,
+  isSelected,
   isEditing,
   modifierHeld,
   onSelect,
@@ -142,49 +144,40 @@ export function SortableWorkspaceItem({
       }}
       data-sortable-id={`ws-${workspaceId}`}
       data-active={isActive || undefined}
-      onClick={() => {
-        if (!isEditing) onSelect();
+      data-selected={isSelected || undefined}
+      onClick={(e) => {
+        if (!isEditing) onSelect(e);
       }}
       onDoubleClick={onStartEditing}
       onContextMenu={onContextMenu}
       {...attributes}
       {...listeners}
       className={cn(
-        "no-drag relative group/ws flex items-center gap-2.5 h-9 px-2.5 rounded-[8px] cursor-default select-none",
-        "text-[12.5px] text-foreground/80",
-        "transition-[background-color,color,box-shadow] duration-100",
-        "hover:bg-foreground/[0.04] hover:text-foreground",
-        // Active state: adaptive neutral wash + theme-aware top inset
-        // bevel so the row reads as gently raised in dark, or quietly
-        // recessed in light. No gradient, no glow.
-        isActive &&
-          cn(
-            "text-foreground bg-foreground/[0.06] hover:bg-foreground/[0.06]",
-            "shadow-[var(--bevel-top)]",
-          ),
+        "chrome-row chrome-focus no-drag group/ws gap-2.5 h-9 px-2.5 cursor-default select-none",
+        "text-ui-sm",
         isTabDropTarget && "drop-into-folder",
         insertClass,
       )}
     >
-      {/* Pane icon chip — active state uses solid brand-soft bg + brand
-          edge border + thin top inset, no gradient. */}
-      <div
+      {/* Pane icon, or a check once the row joins a multi-selection. The slot
+          keeps its size either way so rows never reflow. It used to be a
+          bordered chip, which read as a button you could press — the icon now
+          carries the row's state by colour alone. */}
+      <span
         className={cn(
-          "shrink-0 inline-flex items-center justify-center size-[24px] rounded-[6px] border",
-          "transition-[background-color,color,border-color] duration-100",
-          isActive
-            ? cn(
-                "text-brand bg-brand-soft border-brand-edge",
-                "shadow-[inset_0_1px_0_oklch(0.7084_0.1523_71.24_/_0.22)]",
-              )
-            : cn(
-                "border-foreground/[0.06] bg-foreground/[0.04]",
-                "text-muted-foreground/85 group-hover/ws:text-foreground",
-              ),
+          "shrink-0 inline-flex items-center justify-center size-3.5",
+          "transition-colors duration-100",
+          isSelected || isActive
+            ? "text-brand"
+            : "text-muted-foreground group-hover/ws:text-foreground",
         )}
       >
-        {PaneIcon ? <PaneIcon width={13} height={13} /> : <span className="size-[13px]" />}
-      </div>
+        {isSelected ? (
+          <Check size={14} strokeWidth={2.4} />
+        ) : PaneIcon ? (
+          <PaneIcon width={14} height={14} />
+        ) : null}
+      </span>
 
       <div className="flex-1 min-w-0 flex flex-col gap-px">
         {isEditing ? (
@@ -195,21 +188,14 @@ export function SortableWorkspaceItem({
               onStopEditing();
             }}
             onCancel={onStopEditing}
-            className={cn("text-[12.5px]", isActive ? "font-medium" : "")}
+            className={cn("text-ui-sm", isActive && "font-medium")}
             aria-label="Rename workspace"
           />
         ) : (
-          <span
-            className={cn(
-              "truncate leading-tight tracking-[-0.005em]",
-              isActive ? "text-foreground font-[550]" : "",
-            )}
-          >
-            {name}
-          </span>
+          <span className={cn("truncate leading-tight", isActive && "font-medium")}>{name}</span>
         )}
         {!isEditing && metadata ? (
-          <span className="truncate leading-none text-[10px] font-mono text-muted-foreground/50">
+          <span className="truncate leading-none text-ui-micro font-mono text-muted-foreground">
             {metadata}
           </span>
         ) : null}
@@ -218,10 +204,10 @@ export function SortableWorkspaceItem({
       {shortcutHint ? (
         <Kbd
           className={cn(
-            "animate-hint shrink-0 h-[18px] min-w-[18px] px-1.5 text-[10px] font-mono border",
-            isActive
-              ? "text-brand bg-brand-soft border-brand-edge/60"
-              : "text-muted-foreground/75 bg-foreground/[0.05] border-foreground/[0.06]",
+            // A translucent foreground fill rather than a solid one, so the
+            // cap sits correctly on both a plain row and the amber active row.
+            "animate-hint shrink-0 h-4 min-w-4 rounded-sm bg-foreground/10 px-1 text-ui-micro font-mono",
+            isActive ? "text-brand" : "text-muted-foreground",
           )}
         >
           {shortcutHint}
@@ -236,13 +222,13 @@ export function SortableWorkspaceItem({
             onDelete();
           }}
           className={cn(
-            "shrink-0 inline-flex items-center justify-center size-5 rounded-[5px]",
-            "text-muted-foreground/55 opacity-0 group-hover/ws:opacity-100",
+            "chrome-focus shrink-0 inline-flex items-center justify-center size-5 rounded-md",
+            "text-muted-foreground opacity-0 group-hover/ws:opacity-100 focus-visible:opacity-100",
             "hover:text-destructive hover:bg-destructive/10",
             "transition-[opacity,color,background-color]",
           )}
         >
-          <X size={11} strokeWidth={2.4} />
+          <X size={12} strokeWidth={2.2} />
         </button>
       ) : null}
     </div>

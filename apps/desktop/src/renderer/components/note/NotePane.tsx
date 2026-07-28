@@ -228,7 +228,7 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
   if (loadState === "loading") {
     return (
       <div className="note-pane h-full w-full flex items-center justify-center bg-background">
-        <span className="text-[11.5px] font-mono text-muted-foreground">loading note…</span>
+        <span className="text-ui-xs font-mono text-muted-foreground">loading note…</span>
       </div>
     );
   }
@@ -236,7 +236,7 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
   if (loadState === "error") {
     return (
       <div className="note-pane h-full w-full flex items-center justify-center bg-background">
-        <span className="text-[12px] text-destructive">Failed to load note</span>
+        <span className="text-ui-sm text-destructive">Failed to load note</span>
       </div>
     );
   }
@@ -244,7 +244,7 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
   return (
     <div className="note-pane h-full w-full flex flex-col bg-background">
       {saveError && (
-        <div className="shrink-0 px-4 py-1.5 bg-destructive/10 text-destructive text-[11.5px] border-b border-destructive/20">
+        <div className="shrink-0 px-4 py-1.5 bg-destructive/10 text-destructive text-ui-xs border-b border-destructive/20">
           Save failed: {saveError}
         </div>
       )}

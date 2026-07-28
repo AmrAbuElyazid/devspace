@@ -82,13 +82,13 @@ export default function BrowserPermissionPrompt({
     <div
       role="dialog"
       aria-label={`${label} permission request`}
-      className="flex flex-wrap items-center gap-3 shrink-0 px-4 py-2.5 bg-rail border-b border-hairline"
+      className="flex flex-wrap items-center gap-3 shrink-0 px-4 py-2.5 bg-rail border-b border-border"
     >
       <div className="flex flex-col min-w-0 flex-1">
-        <span className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-brand">
+        <span className="text-ui-micro font-mono uppercase tracking-[0.12em] text-brand">
           Permission request
         </span>
-        <div className="text-[12px] text-foreground mt-0.5">
+        <div className="text-ui-sm text-foreground mt-0.5">
           <span className="font-medium">{request.origin}</span>{" "}
           <span className="text-muted-foreground">{description}</span>
         </div>

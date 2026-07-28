@@ -15,7 +15,7 @@ import { BrowserPaneManager } from "./browser/browser-pane-manager";
 import { BrowserHistoryService } from "./browser/browser-history-service";
 import { BrowserImportService } from "./browser/browser-import-service";
 import { installWindowZoomReset } from "./window-zoom";
-import { getTrafficLightPosition } from "./window-chrome";
+import { DEFAULT_TITLE_BAR_HEIGHT, getTrafficLightPosition } from "./window-chrome";
 import { installDynamicAppMenu } from "./app-menu";
 import { AppUpdater } from "./app-updater";
 import { IS_DEV, CLI_PORT, EDITOR_PARTITION } from "./dev-mode";
@@ -141,7 +141,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     titleBarStyle: "hiddenInset",
-    trafficLightPosition: getTrafficLightPosition(true),
+    trafficLightPosition: getTrafficLightPosition(DEFAULT_TITLE_BAR_HEIGHT),
     webPreferences: {
       preload: join(__dirname, "../preload/index.js"),
       contextIsolation: true,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   X,
   Terminal,
@@ -15,9 +15,12 @@ import {
 import { useSettingsStore } from "@/store/settings-store";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { useAppUpdateState } from "@/hooks/useAppUpdateState";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { releaseNativeFocus } from "@/lib/native-pane-focus";
 import { cn } from "@/lib/utils";
 import type { TerminalConfig } from "@/types/workspace";
 import type { AppUpdateState, EditorCliStatus, ManagedTerminalSession } from "../../shared/types";
+import { TITLE_BAR_HEIGHT_EXPANDED } from "../../shared/chrome";
 import {
   SHORTCUT_CATEGORIES,
   getVisibleShortcutsForCategory,
@@ -36,6 +39,7 @@ import { Separator } from "@/components/ui/separator";
 import { Kbd } from "@/components/ui/kbd";
 import { ShortcutRecorder } from "@/components/ui/shortcut-recorder";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import BrowserImportPanel from "./browser/BrowserImportPanel";
 
@@ -52,103 +56,114 @@ const NAV_ITEMS: Array<{ id: SettingsSection; label: string; icon: typeof Settin
 
 const RELEASES_URL = "https://github.com/AmrAbuElyazid/devspace/releases";
 
+/**
+ * Settings is a centered modal card rather than a full-window page.
+ *
+ * The full-window version put its only close affordance in the top-right of
+ * the *window*, a few pixels from the native red traffic light — people aimed
+ * for one and hit the other. Everything that dismisses the panel now lives on
+ * or immediately around the card: the header ✕, the footer Done button, a
+ * click on the scrim, and Escape (handled globally in `useAppShortcuts`).
+ */
 export default function SettingsPage() {
-  const [isFullScreen, setIsFullScreen] = useState(false);
   const [activeSection, setActiveSection] = useState<SettingsSection>("general");
   const setSettingsOpen = useSettingsStore((s) => s.setSettingsOpen);
+  const cardRef = useRef<HTMLDivElement>(null);
 
+  // A native pane may hold macOS first responder when settings opens, in which
+  // case the renderer sees no keys at all — including the Escape that closes
+  // this. Hand the keyboard back before trapping focus inside the card.
   useEffect(() => {
-    let cancelled = false;
-    void window.api.window.isFullScreen().then((fullScreen) => {
-      if (!cancelled) setIsFullScreen(fullScreen);
-    });
-    const unsubscribe = window.api.window.onFullScreenChange(setIsFullScreen);
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
+    releaseNativeFocus();
   }, []);
+  useFocusTrap(cardRef, true);
+
+  const close = useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
+
+  const handleScrimMouseDown = useCallback(
+    (event: React.MouseEvent) => {
+      // Only a press that both starts and lands on the scrim itself counts —
+      // a drag that began on a text selection inside the card must not close.
+      if (event.target === event.currentTarget) close();
+    },
+    [close],
+  );
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Settings"
-      className="fixed inset-0 z-50 flex flex-col overflow-hidden bg-background"
-    >
-      {/* Header — drag region for the title bar */}
-      <header
-        className={cn(
-          "drag-region flex items-center justify-between shrink-0 h-[52px] border-b border-hairline pr-3",
-          isFullScreen ? "pl-3" : "pl-[88px]",
-        )}
+    <div className="fixed inset-0 z-50 flex flex-col bg-background/70 backdrop-blur-md">
+      {/* The scrim would otherwise swallow the whole title bar, leaving no way
+          to move the window while settings is open. This strip stays draggable. */}
+      <div className="drag-region shrink-0" style={{ height: TITLE_BAR_HEIGHT_EXPANDED }} />
+      <div
+        className="no-drag flex min-h-0 flex-1 justify-center px-6 pt-1 pb-8"
+        onMouseDown={handleScrimMouseDown}
       >
-        <div className="flex items-baseline gap-2">
-          <span className="font-mono text-[10.5px] uppercase tracking-[0.16em] text-muted-foreground/80">
-            Devspace
-          </span>
-          <span className="font-mono text-[10.5px] text-muted-foreground/40">/</span>
-          <h1 className="text-[13px] font-medium text-foreground">Settings</h1>
-        </div>
-        <button
-          type="button"
-          onClick={() => setSettingsOpen(false)}
-          aria-label="Close settings"
-          className="no-drag inline-flex items-center justify-center size-7 rounded-md text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+        <div
+          ref={cardRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Settings"
+          tabIndex={-1}
+          className="flex w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-overlay outline-none"
         >
-          <X size={14} />
-        </button>
-      </header>
+          <header className="flex h-11 shrink-0 items-center justify-between border-b border-border pr-2 pl-4">
+            <h1 className="text-ui-lg font-medium text-foreground">Settings</h1>
+            <button
+              type="button"
+              onClick={close}
+              aria-label="Close settings"
+              className="chrome-focus inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-row-hover hover:text-foreground"
+            >
+              <X size={14} />
+            </button>
+          </header>
 
-      {/* Body */}
-      <div className="flex flex-1 min-h-0">
-        {/* Side nav */}
-        <nav
-          className={cn(
-            "shrink-0 flex flex-col gap-px py-3 pr-2",
-            "border-r border-hairline bg-rail/40",
-            isFullScreen ? "pl-3" : "pl-4",
-          )}
-          style={{ width: 196 }}
-        >
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon;
-            const active = activeSection === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveSection(item.id)}
-                className={cn(
-                  "no-drag relative flex items-center gap-2.5 h-8 px-2.5 rounded-md text-[12.5px] text-left",
-                  "transition-colors",
-                  active
-                    ? "bg-brand-soft text-foreground before:content-[''] before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[2px] before:bg-brand before:rounded-r-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-hover",
-                )}
-              >
-                <Icon
-                  size={13}
-                  className={cn("shrink-0", active ? "text-brand" : "text-muted-foreground/70")}
-                />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
+          <div className="flex min-h-0 flex-1">
+            <nav className="flex w-44 shrink-0 flex-col gap-0.5 border-r border-border bg-rail/50 p-2">
+              {NAV_ITEMS.map((item) => {
+                const Icon = item.icon;
+                const active = activeSection === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    data-active={active || undefined}
+                    onClick={() => setActiveSection(item.id)}
+                    className="chrome-row chrome-focus h-8 gap-2.5 px-2.5 text-left text-ui-sm"
+                  >
+                    <Icon
+                      size={13}
+                      className={cn("shrink-0", active ? "text-brand" : "text-muted-foreground")}
+                    />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </nav>
 
-        {/* Content */}
-        <div className="flex-1 min-w-0 min-h-0">
-          <ScrollArea className="h-full">
-            <div className="max-w-2xl mx-auto px-10 py-8">
-              {activeSection === "general" && <GeneralSection />}
-              {activeSection === "appearance" && <AppearanceSection />}
-              {activeSection === "terminal" && <TerminalSection />}
-              {activeSection === "editor" && <EditorSection />}
-              {activeSection === "browser" && <BrowserSection />}
-              {activeSection === "shortcuts" && <ShortcutSettingsSection />}
+            <div className="min-h-0 min-w-0 flex-1">
+              <ScrollArea className="h-full">
+                <div className="px-8 py-6">
+                  {activeSection === "general" && <GeneralSection />}
+                  {activeSection === "appearance" && <AppearanceSection />}
+                  {activeSection === "terminal" && <TerminalSection />}
+                  {activeSection === "editor" && <EditorSection />}
+                  {activeSection === "browser" && <BrowserSection />}
+                  {activeSection === "shortcuts" && <ShortcutSettingsSection />}
+                </div>
+              </ScrollArea>
             </div>
-          </ScrollArea>
+          </div>
+
+          <footer className="flex h-12 shrink-0 items-center justify-between border-t border-border px-4">
+            <span className="text-ui-xs text-muted-foreground">Changes save as you make them.</span>
+            <div className="flex items-center gap-2">
+              <Kbd className="h-5 px-1.5 font-mono text-ui-micro">esc</Kbd>
+              <Button size="sm" onClick={close}>
+                Done
+              </Button>
+            </div>
+          </footer>
         </div>
       </div>
     </div>
@@ -241,6 +256,8 @@ function TerminalSection() {
   const [externalSocketPath, setExternalSocketPath] = useState("");
   const [managedSessions, setManagedSessions] = useState<ManagedTerminalSession[]>([]);
   const [managedSessionError, setManagedSessionError] = useState<string | null>(null);
+  /** Session id awaiting confirmation, or "all" for the bulk kill. */
+  const [killTarget, setKillTarget] = useState<string | null>(null);
   const panes = useWorkspaceStore((state) => state.panes);
   const managedPaneSessionIds = useMemo(
     () =>
@@ -281,20 +298,26 @@ function TerminalSection() {
     state.openManagedTerminalSession(workspace.id, workspace.focusedGroupId, sessionId);
   }, []);
 
-  const handleKillSession = useCallback(
-    async (sessionId: string) => {
-      if (!window.confirm("Kill this detached terminal session and all processes running in it?")) {
-        return;
-      }
-      const result = await window.api.terminal.killManagedSession(sessionId);
-      if ("error" in result) {
-        setManagedSessionError(result.error);
-        return;
+  const killSessions = useCallback(
+    async (sessionIds: string[]) => {
+      for (const sessionId of sessionIds) {
+        const result = await window.api.terminal.killManagedSession(sessionId);
+        if ("error" in result) {
+          setManagedSessionError(result.error);
+          break;
+        }
       }
       await refreshManagedSessions();
     },
     [refreshManagedSessions],
   );
+
+  const confirmKill = useCallback(() => {
+    if (!killTarget) return;
+    const ids =
+      killTarget === "all" ? recoverableSessions.map((session) => session.sessionId) : [killTarget];
+    void killSessions(ids);
+  }, [killSessions, killTarget, recoverableSessions]);
 
   const openTerminalWithConfig = useCallback(
     (config: TerminalConfig) => {
@@ -362,18 +385,18 @@ function TerminalSection() {
           onChange={(v) => updateSetting("terminalCursorStyle", v)}
         />
       </SettingRow>
-      <div className="mt-6 border border-border rounded-md p-3 space-y-3">
+      <div className="mt-6 space-y-3 rounded-lg border border-border p-3">
         <div>
-          <div className="text-[12px] font-medium text-foreground">Terminal backends</div>
-          <div className="text-[10.5px] text-muted-foreground mt-0.5 leading-relaxed">
+          <div className="text-ui-sm font-medium text-foreground">Terminal backends</div>
+          <div className="mt-0.5 text-ui-micro leading-relaxed text-muted-foreground">
             New terminals use Devspace&apos;s isolated managed tmux server. Your own tmux server,
             configuration, and sessions remain separate.
           </div>
         </div>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <div className="text-[11.5px] text-foreground">Direct PTY</div>
-            <div className="text-[10px] text-muted-foreground">
+            <div className="text-ui-xs text-foreground">Direct PTY</div>
+            <div className="text-ui-micro text-muted-foreground">
               Compatibility mode; its process cannot be detached safely.
             </div>
           </div>
@@ -387,8 +410,8 @@ function TerminalSection() {
         </div>
         <Separator />
         <div>
-          <div className="text-[11.5px] text-foreground">Attach to your tmux</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">
+          <div className="text-ui-xs text-foreground">Attach to your tmux</div>
+          <div className="mt-0.5 text-ui-micro text-muted-foreground">
             Uses the tmux installed on your machine and never takes ownership of the session.
           </div>
         </div>
@@ -398,14 +421,14 @@ function TerminalSection() {
             onChange={(event) => setExternalSessionName(event.target.value)}
             placeholder="session name"
             aria-label="External tmux session name"
-            className="h-7 min-w-0 text-[11px] font-mono"
+            className="h-7 min-w-0 font-mono text-ui-xs"
           />
           <Input
             value={externalSocketPath}
             onChange={(event) => setExternalSocketPath(event.target.value)}
             placeholder="socket path (optional)"
             aria-label="External tmux socket path"
-            className="h-7 min-w-0 text-[11px] font-mono"
+            className="h-7 min-w-0 font-mono text-ui-xs"
           />
           <Button
             variant="outline"
@@ -418,30 +441,37 @@ function TerminalSection() {
         </div>
       </div>
       <div className="mt-6">
-        <div className="flex items-center justify-between mb-2">
+        <div className="mb-2 flex items-start justify-between gap-4">
           <div>
-            <div className="text-[12px] font-medium text-foreground">Detached sessions</div>
-            <div className="text-[10.5px] text-muted-foreground mt-0.5">
+            <div className="text-ui-sm font-medium text-foreground">Detached sessions</div>
+            <div className="mt-0.5 text-ui-micro text-muted-foreground">
               Closing a managed terminal tab keeps its processes alive until you recover or kill it.
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => void refreshManagedSessions()}>
-            Refresh
-          </Button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <Button variant="outline" size="sm" onClick={() => void refreshManagedSessions()}>
+              Refresh
+            </Button>
+            {recoverableSessions.length > 0 ? (
+              <Button variant="destructive" size="sm" onClick={() => setKillTarget("all")}>
+                Kill all
+              </Button>
+            ) : null}
+          </div>
         </div>
         {managedSessionError ? (
-          <div className="text-[11px] text-destructive py-2">{managedSessionError}</div>
+          <div className="py-2 text-ui-xs text-destructive">{managedSessionError}</div>
         ) : recoverableSessions.length === 0 ? (
-          <div className="text-[11px] text-muted-foreground border border-border rounded-md px-3 py-2.5">
+          <div className="rounded-md border border-border px-3 py-2.5 text-ui-xs text-muted-foreground">
             No detached managed sessions.
           </div>
         ) : (
-          <div className="border border-border rounded-md divide-y divide-border">
+          <div className="divide-y divide-border rounded-md border border-border">
             {recoverableSessions.map((session) => (
               <div key={session.sessionId} className="flex items-center gap-3 px-3 py-2">
                 <div className="min-w-0 flex-1">
-                  <div className="font-mono text-[11px] truncate">{session.sessionId}</div>
-                  <div className="text-[10px] text-muted-foreground">
+                  <div className="truncate font-mono text-ui-xs">{session.sessionId}</div>
+                  <div className="text-ui-micro text-muted-foreground">
                     {session.attachedClients > 0
                       ? `${session.attachedClients} attached client${session.attachedClients === 1 ? "" : "s"}`
                       : "detached"}
@@ -457,7 +487,7 @@ function TerminalSection() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => void handleKillSession(session.sessionId)}
+                  onClick={() => setKillTarget(session.sessionId)}
                 >
                   Kill
                 </Button>
@@ -466,6 +496,21 @@ function TerminalSection() {
           </div>
         )}
       </div>
+      <ConfirmDialog
+        open={killTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setKillTarget(null);
+        }}
+        title={
+          killTarget === "all"
+            ? `Kill ${recoverableSessions.length} detached session${recoverableSessions.length === 1 ? "" : "s"}?`
+            : "Kill this detached session?"
+        }
+        description="Every process still running inside will be terminated. This cannot be undone."
+        confirmLabel={killTarget === "all" ? "Kill all" : "Kill"}
+        variant="destructive"
+        onConfirm={confirmKill}
+      />
     </section>
   );
 }
@@ -490,9 +535,7 @@ function EditorSection() {
     <section>
       <SectionTitle>Editor</SectionTitle>
       <SettingRow label="Engine">
-        <span className="text-[11.5px] font-mono text-muted-foreground">
-          VS Code (code serve-web)
-        </span>
+        <span className="font-mono text-ui-xs text-muted-foreground">VS Code (code serve-web)</span>
       </SettingRow>
       <SettingRow
         label="VS Code CLI"
@@ -541,12 +584,12 @@ function UpdatesPanel() {
 
   return (
     <div className="flex w-full max-w-sm flex-col items-end gap-1.5 text-right">
-      <span className="font-mono text-[11.5px] text-foreground">
+      <span className="font-mono text-ui-xs text-foreground">
         {state?.currentVersion ?? "loading…"}
       </span>
       <span
         className={cn(
-          "text-[11px] text-right",
+          "text-right text-ui-xs",
           state?.status === "error"
             ? "text-destructive"
             : state?.status === "downloaded"
@@ -557,7 +600,7 @@ function UpdatesPanel() {
         {formatUpdateStatus(state)}
       </span>
       {state?.checkedAt ? (
-        <span className="text-[10.5px] font-mono text-muted-foreground/70">
+        <span className="font-mono text-ui-micro text-muted-foreground">
           last checked {new Date(state.checkedAt).toLocaleString()}
         </span>
       ) : null}
@@ -663,7 +706,7 @@ function ShortcutSettingsSection() {
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-5">
+      <div className="mb-5 flex items-center justify-between">
         <SectionTitle className="mb-0">Keyboard shortcuts</SectionTitle>
         {hasAnyOverrides && (
           <Button size="xs" variant="ghost" onClick={handleResetAll}>
@@ -676,13 +719,13 @@ function ShortcutSettingsSection() {
       <div className="relative mb-4">
         <Search
           size={11}
-          className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/70"
+          className="absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground"
         />
         <Input
           placeholder="Filter shortcuts…"
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          className="pl-7 h-8 text-[12px]"
+          className="h-8 pl-7 text-ui-sm"
         />
       </div>
 
@@ -699,10 +742,10 @@ function ShortcutSettingsSection() {
 
           return (
             <div key={cat.id}>
-              <h3 className="text-[9.5px] font-mono uppercase tracking-[0.12em] text-muted-foreground mb-2">
+              <h3 className="mb-2 font-mono text-ui-micro tracking-[0.16em] uppercase text-muted-foreground">
                 {cat.label}
               </h3>
-              <div className="rounded-lg border border-border bg-card overflow-hidden">
+              <div className="overflow-hidden rounded-lg border border-border bg-card">
                 {filteredDefs.map((def, i) => {
                   const current = resolveShortcut(def.action, overridesMap);
                   const conflict = findConflict(current, def.action, overridesMap);
@@ -712,10 +755,10 @@ function ShortcutSettingsSection() {
                       key={def.action}
                       className={cn(
                         "flex items-center justify-between gap-3 px-3.5 py-2",
-                        (i < filteredDefs.length - 1 || numberedBase) && "border-b border-hairline",
+                        (i < filteredDefs.length - 1 || numberedBase) && "border-b border-border",
                       )}
                     >
-                      <span className="text-[12.5px] text-foreground/85">{def.label}</span>
+                      <span className="text-ui-sm text-foreground">{def.label}</span>
                       <ShortcutRecorder
                         current={current}
                         defaultShortcut={def.defaultShortcut}
@@ -730,10 +773,10 @@ function ShortcutSettingsSection() {
                 {numberedBase &&
                   (!filterLower || `select ${cat.id.slice(0, -1)} 1-9`.includes(filterLower)) && (
                     <div className="flex items-center justify-between gap-3 px-3.5 py-2">
-                      <span className="text-[12.5px] text-foreground/85">
+                      <span className="text-ui-sm text-foreground">
                         Select {cat.id === "workspaces" ? "workspace" : "tab"} 1…9
                       </span>
-                      <Kbd className="h-5 px-1.5 text-[10px] font-mono">
+                      <Kbd className="h-5 px-1.5 font-mono text-ui-micro">
                         {getNumberedGroupDisplayString(numberedBase, overridesMap)}
                       </Kbd>
                     </div>
@@ -753,19 +796,19 @@ function EditorCliStatusText({ status }: { status: EditorCliStatus | null }) {
   if (!status) return null;
   if (status.path !== null) {
     return (
-      <span className="text-[10.5px] font-mono text-muted-foreground break-all text-right max-w-[260px]">
+      <span className="max-w-[260px] font-mono text-ui-micro break-all text-right text-muted-foreground">
         using {status.path} ({formatCliSource(status.source)})
       </span>
     );
   }
   if (status.reason === "configured-not-found") {
     return (
-      <span className="text-[10.5px] font-mono text-destructive break-all text-right max-w-[260px]">
+      <span className="max-w-[260px] font-mono text-ui-micro break-all text-right text-destructive">
         configured CLI not found: {status.attempted}
       </span>
     );
   }
-  return <span className="text-[10.5px] font-mono text-destructive">VS Code CLI not found.</span>;
+  return <span className="font-mono text-ui-micro text-destructive">VS Code CLI not found.</span>;
 }
 
 function formatCliSource(source: Extract<EditorCliStatus, { path: string }>["source"]) {
@@ -783,7 +826,7 @@ function formatCliSource(source: Extract<EditorCliStatus, { path: string }>["sou
 
 function SectionTitle({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <h2 className={cn("text-[15px] font-medium text-foreground mb-5", className)}>{children}</h2>
+    <h2 className={cn("mb-5 text-ui-lg font-medium text-foreground", className)}>{children}</h2>
   );
 }
 
@@ -799,15 +842,15 @@ function SettingRow({
   return (
     <>
       <div className="flex items-start justify-between gap-6 py-3">
-        <div className="flex flex-col gap-0.5 min-w-0 max-w-[60%]">
-          <Label className="text-[12.5px] font-medium text-foreground">{label}</Label>
+        <div className="flex min-w-0 max-w-[60%] flex-col gap-0.5">
+          <Label className="text-ui-sm font-medium text-foreground">{label}</Label>
           {description ? (
-            <span className="text-[11px] text-muted-foreground leading-snug">{description}</span>
+            <span className="text-ui-xs leading-snug text-muted-foreground">{description}</span>
           ) : null}
         </div>
         <div className="flex shrink-0 items-start justify-end">{children}</div>
       </div>
-      <Separator className="bg-hairline" />
+      <Separator />
     </>
   );
 }
@@ -822,7 +865,7 @@ function SegmentedControl<T extends string | number>({
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="inline-flex items-center gap-px p-0.5 rounded-md bg-surface border border-border/70">
+    <div className="inline-flex items-center gap-px rounded-md border border-border bg-elevated/50 p-0.5">
       {options.map((opt) => {
         const active = value === opt.value;
         return (
@@ -831,10 +874,10 @@ function SegmentedControl<T extends string | number>({
             type="button"
             onClick={() => onChange(opt.value)}
             className={cn(
-              "px-2.5 h-6 rounded text-[11.5px] transition-colors",
+              "chrome-focus h-6 rounded px-2.5 text-ui-xs transition-colors",
               active
-                ? "bg-card text-foreground font-medium shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
-                : "text-muted-foreground hover:text-foreground",
+                ? "bg-brand-soft font-medium text-foreground"
+                : "text-muted-foreground hover:bg-row-hover hover:text-foreground",
             )}
           >
             {opt.label}
@@ -890,10 +933,10 @@ function NumberInput({
         min={min}
         max={max}
         step={step}
-        className="w-20 h-7 text-[11.5px] font-mono"
+        className="h-7 w-20 font-mono text-ui-xs"
       />
       {suffix ? (
-        <span className="text-[10.5px] font-mono text-muted-foreground">{suffix}</span>
+        <span className="font-mono text-ui-micro text-muted-foreground">{suffix}</span>
       ) : null}
     </div>
   );
@@ -930,7 +973,7 @@ function TextInput({
       }}
       placeholder={placeholder}
       style={{ width }}
-      className="h-7 text-[11.5px] font-mono"
+      className="h-7 font-mono text-ui-xs"
     />
   );
 }
@@ -956,15 +999,13 @@ function InstallCliButton() {
 
   if (status === "done") {
     return (
-      <span className="text-[10.5px] font-mono text-status-success">
+      <span className="font-mono text-ui-micro text-status-success">
         installed at /usr/local/bin/devspace
       </span>
     );
   }
   if (status === "error") {
-    return (
-      <span className="text-[11px] text-destructive max-w-[260px] text-right">{errorMsg}</span>
-    );
+    return <span className="max-w-[260px] text-right text-ui-xs text-destructive">{errorMsg}</span>;
   }
   return (
     <Button size="sm" variant="outline" onClick={handleInstall} disabled={status === "installing"}>

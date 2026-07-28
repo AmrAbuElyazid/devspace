@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { ChevronRight, FolderClosed, FolderOpen, Plus } from "lucide-react";
+import { Check, ChevronRight, FolderClosed, FolderOpen, Plus } from "lucide-react";
 
 import { useActiveDrag } from "@/hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "@/hooks/useInsertionIndicator";
@@ -18,7 +18,8 @@ interface SortableFolderItemProps {
   parentFolderId: string | null;
   depth: number;
   isEditing: boolean;
-  onToggle: () => void;
+  isSelected: boolean;
+  onClick: (event: React.MouseEvent) => void;
   onAddWorkspace: () => void;
 }
 
@@ -28,7 +29,8 @@ export function SortableFolderItem({
   parentFolderId,
   depth,
   isEditing,
-  onToggle,
+  isSelected,
+  onClick,
   onAddWorkspace,
 }: SortableFolderItemProps) {
   const { filteredWorkspaceIds, onContextMenuFolder, onRenameFolder, onStopEditing } =
@@ -82,34 +84,38 @@ export function SortableFolderItem({
       <div
         ref={setFolderRef}
         data-sortable-id={`folder-${folder.id}`}
-        onClick={onToggle}
+        data-selected={isSelected || undefined}
+        onClick={onClick}
         onContextMenu={(e) => onContextMenuFolder(e, folder.id)}
         style={{ marginLeft: depth * 14 }}
         {...attributes}
         {...listeners}
         className={cn(
-          "no-drag relative group/folder flex items-center gap-2 h-8 px-2.5 rounded-[7px] cursor-default select-none",
-          "text-[12.5px] text-foreground/80 hover:text-foreground hover:bg-foreground/[0.04]",
-          "transition-colors duration-100",
+          // gap-1.5 around a 12px chevron and a 14px folder puts the label at
+          // the same x as a workspace label one level in, so a folder and its
+          // contents read as one column rather than two.
+          "chrome-row chrome-focus no-drag group/folder gap-1.5 h-8 px-2.5 cursor-default select-none",
+          "text-ui-sm",
           showDragOver && "drop-into-folder",
           insertClass,
         )}
       >
         <ChevronRight
-          size={10}
-          strokeWidth={2.4}
-          className={cn(
-            "shrink-0 transition-transform duration-150 text-muted-foreground/55",
-            isExpanded && "rotate-90 text-muted-foreground/80",
-          )}
-        />
-        <FolderIcon
           size={12}
+          strokeWidth={2.2}
           className={cn(
-            "shrink-0 transition-colors",
-            isExpanded ? "text-brand/90" : "text-muted-foreground/75",
+            "shrink-0 text-muted-foreground transition-transform duration-150",
+            isExpanded && "rotate-90",
           )}
         />
+        {isSelected ? (
+          <Check size={14} strokeWidth={2.4} className="shrink-0 text-brand" />
+        ) : (
+          <FolderIcon
+            size={14}
+            className="shrink-0 text-muted-foreground transition-colors group-hover/folder:text-foreground"
+          />
+        )}
         {isEditing ? (
           <InlineRenameInput
             initialValue={folder.name}
@@ -118,11 +124,11 @@ export function SortableFolderItem({
               onStopEditing();
             }}
             onCancel={onStopEditing}
-            className="text-[12.5px]"
+            className="text-ui-sm"
             aria-label="Rename folder"
           />
         ) : (
-          <span className="flex-1 truncate text-foreground/90 font-medium">{folder.name}</span>
+          <span className="flex-1 truncate font-medium">{folder.name}</span>
         )}
         {!isEditing && (
           <button
@@ -134,12 +140,12 @@ export function SortableFolderItem({
               onAddWorkspace();
             }}
             className={cn(
-              "shrink-0 inline-flex items-center justify-center size-[18px] rounded-[5px]",
-              "text-muted-foreground/65 opacity-0 group-hover/folder:opacity-100",
-              "hover:text-foreground hover:bg-foreground/[0.06] transition-[opacity,color,background-color]",
+              "chrome-focus shrink-0 inline-flex items-center justify-center size-5 rounded-md",
+              "text-muted-foreground opacity-0 group-hover/folder:opacity-100 focus-visible:opacity-100",
+              "hover:text-foreground hover:bg-row-hover transition-[opacity,color,background-color]",
             )}
           >
-            <Plus size={11} strokeWidth={2.2} />
+            <Plus size={12} strokeWidth={2.2} />
           </button>
         )}
       </div>
@@ -154,8 +160,8 @@ export function SortableFolderItem({
           />
           {folder.children.length === 0 && (
             <div
-              style={{ marginLeft: (depth + 1) * 14 + 18 }}
-              className="px-2 py-1 text-[10px] text-muted-foreground/50 italic select-none"
+              style={{ marginLeft: (depth + 1) * 14 }}
+              className="px-2.5 py-1 text-ui-micro text-muted-foreground select-none"
             >
               Drop workspaces here
             </div>

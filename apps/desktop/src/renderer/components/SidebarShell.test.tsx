@@ -7,6 +7,8 @@ import Sidebar from "./Sidebar";
 import { useSettingsStore } from "../store/settings-store";
 import { installMockWindowApi } from "../test-utils/mock-window-api";
 import { useWorkspaceStore } from "../store/workspace-store";
+import { useWindowChromeStore } from "../store/window-chrome-store";
+import { TRAFFIC_LIGHT_GUTTER } from "../../shared/chrome";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -22,8 +24,6 @@ const sidebarShellMocks = vi.hoisted(() => ({
   },
   setDroppableNodeRef: vi.fn(),
   contextMenuShow: vi.fn(),
-  isFullScreen: vi.fn(),
-  onFullScreenChange: vi.fn(),
 }));
 
 vi.mock("../App", () => ({
@@ -53,15 +53,21 @@ vi.mock("./Sidebar/SortableWorkspaceItem", () => ({
   SortableWorkspaceItem: ({
     workspaceId,
     isEditing,
+    isSelected,
+    onSelect,
     onContextMenu,
   }: {
     workspaceId: string;
     isEditing: boolean;
+    isSelected: boolean;
+    onSelect: (event: React.MouseEvent) => void;
     onContextMenu: (event: React.MouseEvent) => void;
   }) => (
     <div
       data-editing={isEditing || undefined}
+      data-selected={isSelected || undefined}
       data-workspace-id={workspaceId}
+      onClick={onSelect}
       onContextMenu={onContextMenu}
     >
       {workspaceId}
@@ -69,24 +75,43 @@ vi.mock("./Sidebar/SortableWorkspaceItem", () => ({
   ),
 }));
 
-vi.mock("./Sidebar/SortableFolderItem", () => ({
-  SortableFolderItem: ({
-    folder,
-    isEditing,
-    onAddWorkspace,
-  }: {
-    folder: { id: string; name: string };
-    isEditing: boolean;
-    onAddWorkspace: () => void;
-  }) => (
-    <div data-editing={isEditing || undefined} data-folder-id={folder.id}>
-      {folder.name}
-      <button aria-label={`add-workspace-${folder.id}`} onClick={onAddWorkspace} type="button">
-        add
-      </button>
-    </div>
-  ),
-}));
+// The real folder row reads its context-menu handler off SidebarContext rather
+// than taking it as a prop, so the stand-in has to do the same or right-click
+// would be untestable here.
+vi.mock("./Sidebar/SortableFolderItem", async () => {
+  const { useSidebarContext } = await import("./Sidebar/SidebarContext");
+  return {
+    SortableFolderItem: ({
+      folder,
+      isEditing,
+      isSelected,
+      onClick,
+      onAddWorkspace,
+    }: {
+      folder: { id: string; name: string };
+      isEditing: boolean;
+      isSelected: boolean;
+      onClick: (event: React.MouseEvent) => void;
+      onAddWorkspace: () => void;
+    }) => {
+      const { onContextMenuFolder } = useSidebarContext();
+      return (
+        <div
+          data-editing={isEditing || undefined}
+          data-selected={isSelected || undefined}
+          data-folder-id={folder.id}
+          onClick={onClick}
+          onContextMenu={(event) => onContextMenuFolder(event, folder.id)}
+        >
+          {folder.name}
+          <button aria-label={`add-workspace-${folder.id}`} onClick={onAddWorkspace} type="button">
+            add
+          </button>
+        </div>
+      );
+    },
+  };
+});
 
 vi.mock("./ui/button", () => ({
   Button: ({ children, onClick, className }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
@@ -101,6 +126,7 @@ vi.mock("./ui/tooltip", () => ({
   TooltipTrigger: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TooltipContent: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   TooltipProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipBoundaryProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("./ui/hint-tooltip", () => ({
@@ -135,10 +161,7 @@ beforeEach(() => {
   sidebarShellMocks.setDroppableNodeRef.mockReset();
   sidebarShellMocks.contextMenuShow.mockReset();
   sidebarShellMocks.contextMenuShow.mockResolvedValue(null);
-  sidebarShellMocks.isFullScreen.mockReset();
-  sidebarShellMocks.isFullScreen.mockResolvedValue(false);
-  sidebarShellMocks.onFullScreenChange.mockReset();
-  sidebarShellMocks.onFullScreenChange.mockReturnValue(() => {});
+  useWindowChromeStore.setState({ isFullScreen: false, trafficLightGutter: TRAFFIC_LIGHT_GUTTER });
 
   installMockWindowApi({
     terminal: {
@@ -146,8 +169,6 @@ beforeEach(() => {
     },
     window: {
       focusContent: vi.fn(),
-      isFullScreen: sidebarShellMocks.isFullScreen,
-      onFullScreenChange: sidebarShellMocks.onFullScreenChange,
     },
     contextMenu: {
       show: sidebarShellMocks.contextMenuShow,
@@ -252,22 +273,22 @@ test("picks up pending workspace edit requests from the store and clears the pen
   expect(container.innerHTML).toContain('data-editing="true"');
 });
 
-test("drops the reserved traffic-light gutter when the native window is fullscreen", async () => {
-  sidebarShellMocks.isFullScreen.mockResolvedValue(true);
-
+test("reserves the traffic-light gutter in the header and drops it in fullscreen", async () => {
   await act(async () => {
     root?.render(<Sidebar />);
   });
+
+  // The header is the first drag-region child of the sidebar.
+  const header = () => container.querySelector<HTMLElement>("aside .drag-region");
+  expect(header()?.style.paddingLeft).toBe(`${TRAFFIC_LIGHT_GUTTER}px`);
+
   await act(async () => {
-    await Promise.resolve();
+    useWindowChromeStore.setState({ isFullScreen: true });
   });
 
-  // The header is the first drag-region child of the sidebar; in fullscreen
-  // it drops the reserved 88px traffic-light gutter (pl-[88px] → pl-3).
-  const header = container.querySelector("aside .drag-region");
-  expect(header).toBeTruthy();
-  expect(header?.className).toContain("pl-3");
-  expect(header?.className).not.toContain("pl-[88px]");
+  // macOS hides the buttons in fullscreen, so the gutter collapses to the
+  // ordinary content inset instead of leaving a hole.
+  expect(header()?.style.paddingLeft).toBe("12px");
 });
 
 test("renders a restart-to-update pill above settings when an update is downloaded", async () => {
@@ -551,4 +572,191 @@ test("folder add-workspace routes directly to addWorkspace for concrete default 
   });
 
   expect(addWorkspace).toHaveBeenCalledWith(undefined, "folder-1", "main", "browser");
+});
+
+// ── Selection and context menus ───────────────────────────────────────────────
+
+/** Click a sidebar row, optionally with a selection modifier held. */
+async function clickRow(
+  selector: string,
+  modifiers: { metaKey?: boolean; shiftKey?: boolean } = {},
+): Promise<void> {
+  const row = container.querySelector(selector);
+  expect(row).toBeTruthy();
+  await act(async () => {
+    row?.dispatchEvent(new MouseEvent("click", { bubbles: true, ...modifiers }));
+  });
+}
+
+/** Right-click a row and return the menu items the main process was handed. */
+async function openContextMenu(selector: string): Promise<Array<{ id: string; label: string }>> {
+  const row = container.querySelector(selector);
+  expect(row).toBeTruthy();
+  await act(async () => {
+    row?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
+  });
+  const call = sidebarShellMocks.contextMenuShow.mock.calls.at(-1);
+  return (call?.[0] ?? []) as Array<{ id: string; label: string }>;
+}
+
+test("a plain click opens a workspace and leaves the bulk bar hidden", async () => {
+  const setActiveWorkspace = vi.fn();
+  useWorkspaceStore.setState({ setActiveWorkspace });
+
+  await act(async () => {
+    root?.render(<Sidebar />);
+  });
+  await clickRow('[data-workspace-id="beta"]');
+
+  expect(setActiveWorkspace).toHaveBeenCalledWith("beta");
+  expect(container.textContent).not.toContain("selected");
+});
+
+test("cmd-click marks rows and reveals the bulk action bar", async () => {
+  const setActiveWorkspace = vi.fn();
+  useWorkspaceStore.setState({ setActiveWorkspace });
+
+  await act(async () => {
+    root?.render(<Sidebar />);
+  });
+  await clickRow('[data-workspace-id="alpha"]', { metaKey: true });
+  await clickRow('[data-workspace-id="beta"]', { metaKey: true });
+
+  expect(setActiveWorkspace).not.toHaveBeenCalled();
+  expect(container.querySelectorAll('[data-selected="true"]').length).toBe(2);
+  expect(container.textContent).toContain("2 selected");
+});
+
+test("Escape clears the selection even when focus is outside the sidebar", async () => {
+  await act(async () => {
+    root?.render(<Sidebar />);
+  });
+  await clickRow('[data-workspace-id="alpha"]', { metaKey: true });
+  expect(container.textContent).toContain("1 selected");
+
+  await act(async () => {
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+
+  expect(container.textContent).not.toContain("selected");
+});
+
+test("the workspace menu acts on one row, and on the whole selection once it is in it", async () => {
+  await act(async () => {
+    root?.render(<Sidebar />);
+  });
+
+  const single = await openContextMenu('[data-workspace-id="alpha"]');
+  expect(single.map((item) => item.id)).toEqual([
+    "rename",
+    "duplicate",
+    "pin",
+    "new-folder",
+    "delete",
+  ]);
+
+  await clickRow('[data-workspace-id="alpha"]', { metaKey: true });
+  await clickRow('[data-workspace-id="beta"]', { metaKey: true });
+  const many = await openContextMenu('[data-workspace-id="alpha"]');
+  expect(many.map((item) => item.label)).toEqual(["Duplicate 2 Workspaces"]);
+  // Deleting both would empty the app, so the entry is withheld.
+  expect(many.some((item) => item.id === "delete")).toBe(false);
+});
+
+test("duplicating a single workspace opens the copy; duplicating several does not", async () => {
+  const duplicateWorkspace = vi.fn((id: string) => `${id}-copy`);
+  const setActiveWorkspace = vi.fn();
+  useWorkspaceStore.setState({ duplicateWorkspace, setActiveWorkspace });
+  sidebarShellMocks.contextMenuShow.mockResolvedValue("duplicate");
+
+  await act(async () => {
+    root?.render(<Sidebar />);
+  });
+
+  await openContextMenu('[data-workspace-id="alpha"]');
+  expect(duplicateWorkspace).toHaveBeenCalledWith("alpha");
+  expect(setActiveWorkspace).toHaveBeenCalledWith("alpha-copy");
+
+  duplicateWorkspace.mockClear();
+  setActiveWorkspace.mockClear();
+  await clickRow('[data-workspace-id="alpha"]', { metaKey: true });
+  await clickRow('[data-workspace-id="beta"]', { metaKey: true });
+  await openContextMenu('[data-workspace-id="alpha"]');
+
+  expect(duplicateWorkspace.mock.calls.flat().toSorted()).toEqual(["alpha", "beta"]);
+  // A batch has no single copy to land on, so the user stays put.
+  expect(setActiveWorkspace).not.toHaveBeenCalled();
+});
+
+test("a folder holding workspaces offers dissolve and delete-with-contents separately", async () => {
+  useWorkspaceStore.setState({
+    sidebarTree: [
+      {
+        type: "folder",
+        id: "folder-1",
+        name: "Folder One",
+        collapsed: false,
+        children: [{ type: "workspace", workspaceId: "beta" }],
+      },
+      { type: "workspace", workspaceId: "alpha" },
+    ],
+  });
+
+  await act(async () => {
+    root?.render(<Sidebar />);
+  });
+
+  const items = await openContextMenu('[data-folder-id="folder-1"]');
+  expect(items.map((item) => item.id)).toEqual([
+    "rename",
+    "pin",
+    "add-workspace",
+    "add-subfolder",
+    "delete",
+    "delete-contents",
+  ]);
+  expect(items.find((item) => item.id === "delete")?.label).toBe("Remove Folder Only");
+  expect(items.find((item) => item.id === "delete-contents")?.label).toBe(
+    "Delete Folder and 1 Workspace",
+  );
+});
+
+test("an empty folder collapses the two delete entries back into one", async () => {
+  useWorkspaceStore.setState({
+    sidebarTree: [
+      { type: "folder", id: "folder-1", name: "Folder One", collapsed: false, children: [] },
+      { type: "workspace", workspaceId: "alpha" },
+      { type: "workspace", workspaceId: "beta" },
+    ],
+  });
+
+  await act(async () => {
+    root?.render(<Sidebar />);
+  });
+
+  const items = await openContextMenu('[data-folder-id="folder-1"]');
+  expect(items.filter((item) => item.id.startsWith("delete")).map((item) => item.label)).toEqual([
+    "Delete Folder",
+  ]);
+});
+
+test("a folder joins the selection and the menu switches to mixed-item wording", async () => {
+  useWorkspaceStore.setState({
+    sidebarTree: [
+      { type: "folder", id: "folder-1", name: "Folder One", collapsed: false, children: [] },
+      { type: "workspace", workspaceId: "alpha" },
+      { type: "workspace", workspaceId: "beta" },
+    ],
+  });
+
+  await act(async () => {
+    root?.render(<Sidebar />);
+  });
+
+  await clickRow('[data-folder-id="folder-1"]', { metaKey: true });
+  await clickRow('[data-workspace-id="alpha"]', { metaKey: true });
+  expect(container.textContent).toContain("2 selected");
+
+  const items = await openContextMenu('[data-folder-id="folder-1"]');
+  expect(items.map((item) => item.label)).toEqual(["Duplicate 1 Workspace", "Delete 2 Items"]);
 });

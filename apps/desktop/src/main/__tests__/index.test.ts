@@ -274,6 +274,7 @@ async function loadIndexModule(options: LoadIndexOptions = {}) {
     installWindowZoomReset,
   }));
   vi.doMock("../window-chrome", () => ({
+    DEFAULT_TITLE_BAR_HEIGHT: 48,
     getTrafficLightPosition: vi.fn(() => ({ x: 16, y: 18 })),
   }));
   vi.doMock("../dev-mode", () => ({

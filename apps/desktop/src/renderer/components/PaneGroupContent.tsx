@@ -52,8 +52,8 @@ class NotePaneErrorBoundary extends Component<{ children: ReactNode }, { error: 
     if (this.state.error) {
       return (
         <div className="flex flex-col items-center justify-center h-full gap-2 p-5 text-center text-muted-foreground">
-          <span className="text-[13px] text-foreground">Note editor failed to load</span>
-          <span className="text-[11px] opacity-60 max-w-md">{this.state.error.message}</span>
+          <span className="text-ui text-foreground">Note editor failed to load</span>
+          <span className="text-ui-xs opacity-60 max-w-md">{this.state.error.message}</span>
           <Button
             variant="outline"
             size="sm"
@@ -76,9 +76,9 @@ function PanePlaceholder({ pane, message }: { pane: Pane; message?: string }): R
   return (
     <div className="absolute inset-0 z-[2] flex flex-col items-center justify-center gap-2 bg-background pointer-events-none">
       {Icon ? <Icon width={28} height={28} className="opacity-25" /> : null}
-      <span className="text-[12px] font-medium text-muted-foreground/70">{label}</span>
+      <span className="text-ui-sm font-medium text-muted-foreground/70">{label}</span>
       {message ? (
-        <span className="text-[10.5px] font-mono text-muted-foreground/60">{message}</span>
+        <span className="text-ui-micro font-mono text-muted-foreground/60">{message}</span>
       ) : null}
     </div>
   );
@@ -173,7 +173,7 @@ const PaneContent = memo(function PaneContent({
         <NotePaneErrorBoundary>
           <Suspense
             fallback={
-              <div className="flex h-full items-center justify-center gap-2 text-muted-foreground/70 text-[12px]">
+              <div className="flex h-full items-center justify-center gap-2 text-muted-foreground/70 text-ui-sm">
                 <Spinner className="size-3.5" />
                 Loading editor…
               </div>

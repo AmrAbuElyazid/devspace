@@ -63,9 +63,9 @@ export function registerSystemIpc(mainWindow: BrowserWindow, appUpdater?: AppUpd
     mainWindow.webContents.focus();
   });
 
-  safeOn("window:setSidebarOpen", (_event, open: unknown) => {
-    if (typeof open !== "boolean") return;
-    mainWindow.setWindowButtonPosition(getTrafficLightPosition(open));
+  safeOn("window:setTitleBarHeight", (_event, height: unknown) => {
+    if (typeof height !== "number" || !Number.isFinite(height)) return;
+    mainWindow.setWindowButtonPosition(getTrafficLightPosition(height));
   });
 
   safeOn("window:setThemeMode", (_event, themeMode: unknown) => {

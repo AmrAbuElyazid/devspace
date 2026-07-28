@@ -13,20 +13,29 @@ export interface SidebarContextValue {
 
   // Selection & filtering
   activeWorkspaceId: string;
+  /**
+   * Rows checked for a bulk action, as `SidebarSelectionKey`s so folders and
+   * workspaces can be marked together. Distinct from `activeWorkspaceId`:
+   * exactly one workspace is ever *open*, but any number can be *marked*.
+   */
+  selectedKeys: Set<string>;
   filteredWorkspaceIds: Set<string> | null;
-  onSelectWorkspace: (id: string) => void;
+  /** Click handler for a row — the event carries the ⌘/⇧ selection modifiers. */
+  onSelectWorkspace: (id: string, event: React.MouseEvent) => void;
 
   // Context menus
   onContextMenuFolder: (e: React.MouseEvent, folderId: string) => void;
   onContextMenuWorkspace: (e: React.MouseEvent, workspaceId: string) => void;
 
   // Folder operations
+  /** Click handler for a folder row; returns true if it changed the selection
+   *  rather than expanding or collapsing. */
+  onSelectFolder: (folderId: string, event: React.MouseEvent) => boolean;
   toggleFolderCollapsed: (folderId: string) => void;
   onAddWorkspaceToFolder: (folderId: string, container: SidebarContainer) => void;
 
-  // Delete state
-  deleteTarget: string | null;
-  setDeleteTarget: (id: string | null) => void;
+  /** Opens the delete confirmation for one workspace. */
+  onRequestDelete: (workspaceId: string) => void;
 }
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);

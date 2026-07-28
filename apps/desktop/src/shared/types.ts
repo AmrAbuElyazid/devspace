@@ -142,7 +142,9 @@ export interface DevspaceBridge {
     maximize: () => void;
     close: () => void;
     focusContent: () => void;
-    setSidebarOpen: (open: boolean) => void;
+    /** Reports the height of the bar occupying the top-left, so the native
+     *  window buttons can be centered inside it. */
+    setTitleBarHeight: (height: number) => void;
     setThemeMode: (themeMode: "system" | "dark" | "light") => void;
     isMaximized: () => Promise<boolean>;
     isFullScreen: () => Promise<boolean>;

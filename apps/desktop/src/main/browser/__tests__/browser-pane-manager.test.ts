@@ -283,7 +283,11 @@ test("blur clears pending pointer-driven focus forwarding", () => {
   listeners.get("blur")?.();
   listeners.get("focus")?.();
 
-  expect(rendererMessages).toEqual([{ channel: "window:nativeModifierChanged", payload: null }]);
+  // The focus that follows the blur must not be forwarded as pointer-driven,
+  // and the blur itself must stay silent: a pane blurs on every workspace
+  // switch, so reporting the modifier as released there killed the shortcut
+  // hints mid-⌘.
+  expect(rendererMessages).toEqual([]);
 });
 
 test("before-input-event routes app-owned shortcuts and modifier hints from webcontents", () => {

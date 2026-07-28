@@ -23,7 +23,7 @@ export default function BrowserSecurityIndicator({
       className={cn(
         "inline-flex items-center gap-1 h-7 px-2 rounded-md shrink-0",
         "bg-surface border border-border/70",
-        "text-[10.5px] font-mono uppercase tracking-wide",
+        "text-ui-micro font-mono uppercase tracking-wide",
         isCertError
           ? "text-destructive border-destructive/40"
           : isSecure

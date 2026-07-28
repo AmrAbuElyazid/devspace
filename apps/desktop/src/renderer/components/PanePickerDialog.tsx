@@ -151,15 +151,15 @@ function PanePickerDialogInner({
         className={cn(
           "w-[320px] max-w-[90vw] flex flex-col",
           "bg-popover text-popover-foreground border border-border rounded-xl",
-          "shadow-[var(--overlay-shadow)] overflow-hidden",
+          "shadow-overlay overflow-hidden",
         )}
       >
         {/* Heading bar */}
-        <div className="flex items-center justify-between px-3.5 py-2 border-b border-hairline">
-          <span className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground">
+        <div className="flex items-center justify-between px-3.5 py-2 border-b border-border">
+          <span className="text-ui-micro font-mono uppercase tracking-[0.12em] text-muted-foreground">
             {heading}
           </span>
-          <Kbd className="h-4 min-w-4 px-1 text-[9px] font-mono">Esc</Kbd>
+          <Kbd className="h-4 min-w-4 px-1 text-ui-micro font-mono">Esc</Kbd>
         </div>
 
         {/* Options */}
@@ -183,7 +183,7 @@ function PanePickerDialogInner({
                   "transition-colors duration-100",
                   isHighlighted
                     ? "bg-brand-soft text-foreground"
-                    : "text-foreground hover:bg-hover",
+                    : "text-foreground hover:bg-row-hover",
                 )}
               >
                 <Icon
@@ -195,28 +195,30 @@ function PanePickerDialogInner({
                   )}
                 />
                 <div className="flex-1 min-w-0">
-                  <div className="text-[12.5px] font-medium leading-tight">{opt.label}</div>
+                  <div className="text-ui-sm font-medium leading-tight">{opt.label}</div>
                   {showCwd ? (
-                    <div className="text-[10.5px] font-mono text-muted-foreground/70 mt-0.5 truncate">
+                    <div className="text-ui-micro font-mono text-muted-foreground/70 mt-0.5 truncate">
                       {formatCwd(inheritedCwd!)}
                     </div>
                   ) : null}
                 </div>
-                <Kbd className="shrink-0 h-4 min-w-4 px-1 text-[9px] font-mono">{opt.shortcut}</Kbd>
+                <Kbd className="shrink-0 h-4 min-w-4 px-1 text-ui-micro font-mono">
+                  {opt.shortcut}
+                </Kbd>
               </button>
             );
           })}
         </div>
 
         {/* Footer hints */}
-        <div className="flex items-center gap-3 px-3.5 py-1.5 border-t border-hairline text-[10px] font-mono text-muted-foreground">
+        <div className="flex items-center gap-3 px-3.5 py-1.5 border-t border-border text-ui-micro font-mono text-muted-foreground">
           <span className="inline-flex items-center gap-1">
-            <Kbd className="h-3.5 min-w-3.5 px-1 text-[9px]">↑</Kbd>
-            <Kbd className="h-3.5 min-w-3.5 px-1 text-[9px]">↓</Kbd>
+            <Kbd className="h-3.5 min-w-3.5 px-1 text-ui-micro">↑</Kbd>
+            <Kbd className="h-3.5 min-w-3.5 px-1 text-ui-micro">↓</Kbd>
             navigate
           </span>
           <span className="inline-flex items-center gap-1">
-            <Kbd className="h-3.5 px-1 text-[9px]">↵</Kbd> choose
+            <Kbd className="h-3.5 px-1 text-ui-micro">↵</Kbd> choose
           </span>
         </div>
       </div>

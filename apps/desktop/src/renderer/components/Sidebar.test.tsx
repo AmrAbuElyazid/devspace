@@ -20,11 +20,12 @@ function createTestContext(overrides: Partial<SidebarContextValue> = {}): Sideba
     onContextMenuFolder: noop,
     onContextMenuWorkspace: noop,
     onSelectWorkspace: noop,
+    onSelectFolder: () => false,
     onAddWorkspaceToFolder: noop,
     activeWorkspaceId: "ws-1",
+    selectedKeys: new Set<string>(),
     toggleFolderCollapsed: noop,
-    deleteTarget: null,
-    setDeleteTarget: noop,
+    onRequestDelete: noop,
     ...overrides,
   };
 }

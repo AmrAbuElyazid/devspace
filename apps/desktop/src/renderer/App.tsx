@@ -5,6 +5,7 @@ import { FolderClosed } from "lucide-react";
 import { useWorkspaceStore } from "./store/workspace-store";
 import { useSettingsStore } from "./store/settings-store";
 import { useNativeViewStore, initNativeViewSubscriptions } from "./store/native-view-store";
+import { initWindowChromeSubscriptions } from "./store/window-chrome-store";
 import { useTheme } from "./hooks/useTheme";
 import { useActiveDrag, useDndOrchestrator } from "./hooks/useDndOrchestrator";
 import { useModifierHeld, type HeldModifier } from "./hooks/useModifierHeld";
@@ -31,6 +32,7 @@ export function useModifierHeldContext(): HeldModifier {
 }
 
 initNativeViewSubscriptions();
+initWindowChromeSubscriptions();
 
 /**
  * Renders a single workspace layer. Reads its own root from the store so
@@ -101,10 +103,6 @@ export default function App() {
     });
   }, [openEditorTab]);
 
-  useEffect(() => {
-    window.api.window.setSidebarOpen(sidebarOpen);
-  }, [sidebarOpen]);
-
   return (
     <ModifierHeldContext.Provider value={modifierHeld}>
       <TooltipProvider delay={400}>
@@ -117,6 +115,10 @@ export default function App() {
           onDragEnd={dnd.onDragEnd}
           onDragCancel={dnd.onDragCancel}
         >
+          {/* `app-shell` carries no styles — it is the readiness selector the
+              e2e harness waits on before driving the renderer. Removing it
+              because nothing in the CSS referenced it took out every test that
+              launches the app. */}
           <div
             className="app-shell flex h-screen w-screen overflow-hidden bg-background text-foreground"
             data-dragging={activeDrag ? "true" : undefined}
@@ -182,9 +184,9 @@ export default function App() {
           toastOptions={{
             classNames: {
               toast:
-                "!bg-popover !text-popover-foreground !border !border-border !shadow-[var(--overlay-shadow)] !rounded-lg !text-[12px] !font-sans",
-              title: "!text-[12px] !font-medium",
-              description: "!text-[11px] !text-muted-foreground",
+                "!bg-popover !text-popover-foreground !border !border-border !shadow-overlay !rounded-lg !text-ui-sm !font-sans",
+              title: "!text-ui-sm !font-medium",
+              description: "!text-ui-xs !text-muted-foreground",
             },
           }}
         />

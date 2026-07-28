@@ -19,13 +19,17 @@ import {
   insertWorkspaceIntoSidebarState,
   resolveWorkspaceTabCreationContext,
 } from "../workspace-creation-state";
+import { cloneWorkspace, nextDuplicateName } from "../../lib/workspace-duplication";
+import { locateSidebarWorkspace } from "../../lib/sidebar-tree";
 import { attachWorkspaceDerivedState } from "../pane-ownership";
 import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type WorkspaceCrudSlice = Pick<
   WorkspaceState,
   | "addWorkspace"
+  | "duplicateWorkspace"
   | "removeWorkspace"
+  | "removeWorkspaces"
   | "renameWorkspace"
   | "setActiveWorkspace"
   | "setFocusedGroup"
@@ -75,6 +79,50 @@ export function createWorkspaceCrudSlice(
         });
       });
       return workspace.id;
+    },
+
+    duplicateWorkspace: (id) => {
+      const state = get();
+      const source = state.workspaces.find((workspace) => workspace.id === id);
+      if (!source) return null;
+
+      const clone = cloneWorkspace(state, id, nextDuplicateName(state.workspaces, source.name));
+      if (!clone) return null;
+
+      // Land the copy directly beneath its original, in the same folder and
+      // the same container, so it appears where the user is looking.
+      const pinnedLocation = locateSidebarWorkspace(state.pinnedSidebarNodes, id);
+      const location = pinnedLocation ?? locateSidebarWorkspace(state.sidebarTree, id);
+      const container = pinnedLocation ? ("pinned" as const) : ("main" as const);
+
+      set((currentState) => {
+        const nextSidebarState = insertWorkspaceIntoSidebarState(currentState, clone.workspace.id, {
+          container,
+          parentFolderId: location?.parentFolderId ?? null,
+          ...(location ? { insertIndex: location.index + 1 } : {}),
+        });
+
+        // Deliberately does not activate the copy: duplicating a selection of
+        // five would otherwise walk the user through all five and leave them
+        // on the last. Whether to open the copy is the caller's call.
+        return attachWorkspaceDerivedState(currentState, {
+          workspaces: [...currentState.workspaces, clone.workspace],
+          panes: { ...currentState.panes, ...clone.panes },
+          paneGroups: { ...currentState.paneGroups, ...clone.paneGroups },
+          sidebarTree: nextSidebarState.sidebarTree,
+          pinnedSidebarNodes: nextSidebarState.pinnedSidebarNodes,
+        });
+      });
+
+      return clone.workspace.id;
+    },
+
+    removeWorkspaces: (ids) => {
+      // Sequential single removals keep one code path for pane cleanup,
+      // active-workspace fallback and the "never leave zero workspaces"
+      // guarantee, instead of a parallel bulk implementation that would have
+      // to re-derive all three.
+      for (const id of ids) get().removeWorkspace(id);
     },
 
     removeWorkspace: (id) => {

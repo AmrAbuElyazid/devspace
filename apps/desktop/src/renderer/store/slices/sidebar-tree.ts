@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import type { SidebarNode } from "../../types/workspace";
 import {
+  collectWorkspaceIds,
   findSidebarNode,
   findFolder,
   removeSidebarNode,
@@ -18,6 +19,7 @@ type SidebarTreeSlice = Pick<
   | "reorderSidebarNode"
   | "addFolder"
   | "removeFolder"
+  | "removeFolderWithContents"
   | "renameFolder"
   | "toggleFolderCollapsed"
   | "expandFolder"
@@ -177,6 +179,26 @@ export function createSidebarTreeSlice(set: StoreSet, get: StoreGet): SidebarTre
       set((state) => ({
         sidebarTree: removeFolderPromoteChildren(state.sidebarTree, folderId),
         pinnedSidebarNodes: removeFolderPromoteChildren(state.pinnedSidebarNodes, folderId),
+      }));
+    },
+
+    removeFolderWithContents: (folderId) => {
+      const state = get();
+      const folder =
+        findFolder(state.sidebarTree, folderId) ?? findFolder(state.pinnedSidebarNodes, folderId);
+      if (!folder) return;
+
+      // Collapsed sub-folders count too: the user is deleting the container,
+      // not the part of it that happens to be on screen. Routing through
+      // removeWorkspaces keeps pane teardown and the never-zero-workspaces
+      // guarantee in the one place that implements them.
+      get().removeWorkspaces(collectWorkspaceIds(folder.children, true));
+
+      set((current) => ({
+        // Drop the whole subtree rather than promoting it — any sub-folders
+        // left behind are part of what was deleted.
+        sidebarTree: removeSidebarNode(current.sidebarTree, folderId, "folder")[0],
+        pinnedSidebarNodes: removeSidebarNode(current.pinnedSidebarNodes, folderId, "folder")[0],
       }));
     },
 
