@@ -8,6 +8,7 @@ import {
   getPerformanceSnapshot,
   getStoreState,
   launchApp,
+  listLiveManagedSessionIds,
   resetPerformanceCounters,
 } from "./helpers/app";
 
@@ -275,6 +276,15 @@ test.describe("Stress: hidden terminal retention", () => {
       expect(retainedHiddenSurfaces).toBe(INACTIVE_MANAGED_SURFACE_BUDGET);
       expect(afterHideNativeViews.visible.total).toBeLessThanOrEqual(1);
 
+      // The point of the whole retention design: client surfaces are bounded to
+      // the warm budget, but switching away from a workspace — and falling out
+      // of that budget — must never touch the tmux session behind a pane. A
+      // long-running dev server survives both.
+      const sessionsAfterHide = new Set(await listLiveManagedSessionIds(page));
+      expect(scenario.sessionIds.filter((sessionId) => !sessionsAfterHide.has(sessionId))).toEqual(
+        [],
+      );
+
       await page.evaluate((workspaceId) => {
         const store = (window as unknown as Record<string, unknown>).__DEVSPACE_STORE__;
         if (!store) {
@@ -295,25 +305,14 @@ test.describe("Stress: hidden terminal retention", () => {
 
       expect(destroyedOnWorkspaceRemoval).toBe(INACTIVE_MANAGED_SURFACE_BUDGET);
 
-      const managedSessions = await page.evaluate(async () => {
-        const api = (
-          window as unknown as {
-            api: {
-              terminal: {
-                listManagedSessions: () => Promise<
-                  { sessions: Array<{ sessionId: string }> } | { error: string }
-                >;
-              };
-            };
-          }
-        ).api;
-        return api.terminal.listManagedSessions();
-      });
-      if ("error" in managedSessions) {
-        throw new Error(managedSessions.error);
-      }
-      const liveSessionIds = new Set(managedSessions.sessions.map((session) => session.sessionId));
-      expect(scenario.sessionIds.every((sessionId) => liveSessionIds.has(sessionId))).toBe(true);
+      // Removing the workspace is the explicit teardown that is allowed to end
+      // the sessions, and it has to reap all of them — including the ones whose
+      // client surface had already been evicted, which own no surface to ride
+      // out on and would otherwise be orphaned on the tmux server forever.
+      const sessionsAfterRemoval = new Set(await listLiveManagedSessionIds(page));
+      expect(
+        scenario.sessionIds.filter((sessionId) => sessionsAfterRemoval.has(sessionId)),
+      ).toEqual([]);
 
       console.log(
         JSON.stringify(
