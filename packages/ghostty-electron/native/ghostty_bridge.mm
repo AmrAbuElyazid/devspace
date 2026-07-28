@@ -53,6 +53,9 @@ extern "C" CVReturn CVDisplayLinkCreateWithActiveCGDisplays(
 @property (nonatomic) double lastDomH;
 @end
 
+// Defined alongside the cursor action handling below.
+static void releaseCursorHiding();
+
 @implementation GhosttyView
 
 - (instancetype)initWithFrame:(NSRect)frame {
@@ -119,6 +122,9 @@ extern "C" CVReturn CVDisplayLinkCreateWithActiveCGDisplays(
     if (self.surface && self.lastFocusState) {
         self.lastFocusState = NO;
         ghostty_surface_set_focus(self.surface, false);
+        // This surface may have hidden the pointer while typing; the cursor is
+        // process-wide, so hand it back rather than leaving it hidden.
+        releaseCursorHiding();
     }
     return YES;
 }
@@ -136,13 +142,18 @@ extern "C" CVReturn CVDisplayLinkCreateWithActiveCGDisplays(
 - (BOOL)isOpaque { return NO; }
 
 - (void)updateTrackingAreas {
-    if (self.trackingArea) [self removeTrackingArea:self.trackingArea];
-    self.trackingArea = [[NSTrackingArea alloc]
-        initWithRect:self.bounds
-        options:(NSTrackingMouseMoved | NSTrackingActiveAlways |
-                 NSTrackingInVisibleRect | NSTrackingMouseEnteredAndExited)
-        owner:self userInfo:nil];
-    [self addTrackingArea:self.trackingArea];
+    // NSTrackingInVisibleRect makes AppKit keep the area synced to the visible
+    // rect on our behalf, so the area only ever needs to be built once.
+    // Rebuilding it on every layout pass — for every retained surface — is pure
+    // window-server churn.
+    if (!self.trackingArea) {
+        self.trackingArea = [[NSTrackingArea alloc]
+            initWithRect:self.bounds
+            options:(NSTrackingMouseMoved | NSTrackingActiveAlways |
+                     NSTrackingInVisibleRect | NSTrackingMouseEnteredAndExited)
+            owner:self userInfo:nil];
+        [self addTrackingArea:self.trackingArea];
+    }
     [super updateTrackingAreas];
 }
 
@@ -969,7 +980,11 @@ static void applyDomBounds(GhosttyView* view, double domX, double domY, double w
         view.lastDomW == w &&
         view.lastDomH == h &&
         NSEqualRects([view frame], nextFrame)) {
-        [view refreshSurfaceLayout];
+        // Nothing moved. Forcing a layout pass here would re-run
+        // layoutSubtreeIfNeeded, rebuild the tracking area and repaint the
+        // surface on every bounds push from the renderer — for every retained
+        // surface, several times a second. Restoring a stale hidden surface is
+        // already handled by evaluateVisibility's show path.
         return;
     }
 
@@ -1013,6 +1028,7 @@ static void evaluateVisibility(GhosttyView* view) {
     } else if (!shouldBeVisible && isCurrentlyVisible) {
         [view setHidden:YES];
         if (view.surface) ghostty_surface_set_occlusion(view.surface, false);
+        releaseCursorHiding();
     }
 }
 
@@ -1226,6 +1242,62 @@ static std::string findSurfaceId(ghostty_surface_t surface) {
     return "";
 }
 
+// The mouse cursor is a process-wide resource serviced by the window server:
+// every set/hide/unhide round-trips to it. Devspace keeps background terminals
+// alive and rendering, and each one's Ghostty core emits cursor actions
+// continuously while a TUI redraws. Applying those from a surface the user
+// cannot even see pegs the system cursor service, so gate on the target being
+// on screen.
+//
+// Visible rather than focused: in a split, the pane under the pointer is often
+// not the focused one, and it still legitimately owns the cursor shape.
+static bool targetSurfaceIsOnScreen(ghostty_target_s target) {
+    if (target.tag != GHOSTTY_TARGET_SURFACE) return false;
+
+    GhosttyView* view = nil;
+    {
+        std::lock_guard<std::mutex> lock(g_state.surfacesMutex);
+        for (auto& pair : g_state.surfaces) {
+            if (pair.second.surface == target.target.surface) {
+                view = pair.second;
+                break;
+            }
+        }
+    }
+
+    return view != nil && ![view isHidden];
+}
+
+// Hiding the pointer outright is a stronger claim than shaping it — Ghostty
+// emits it while you type — so only the surface taking the keystrokes may.
+static bool targetSurfaceIsFocused(ghostty_target_s target) {
+    if (target.tag != GHOSTTY_TARGET_SURFACE) return false;
+    GhosttyView* focused = focusedGhosttyView();
+    if (!focused || [focused isHidden] || !focused.surface) return false;
+    return focused.surface == target.target.surface;
+}
+
+// -[NSCursor hide]/-[NSCursor unhide] are reference counted; unbalanced calls
+// leave the pointer stuck invisible or spin the cursor service. Mirror the
+// state so we only ever issue a call that actually changes it.
+static bool g_cursorHidden = false;
+
+static void setCursorHidden(bool hidden) {
+    if (hidden == g_cursorHidden) return;
+    g_cursorHidden = hidden;
+    if (hidden) {
+        [NSCursor hide];
+    } else {
+        [NSCursor unhide];
+    }
+}
+
+// Called when the surface owning the cursor stops being focused or visible, so
+// a terminal that hid the pointer while typing can't leave it hidden globally.
+static void releaseCursorHiding() {
+    setCursorHidden(false);
+}
+
 static bool action_cb(ghostty_app_t app, ghostty_target_s target, ghostty_action_s action) {
     switch (action.tag) {
         case GHOSTTY_ACTION_SET_TITLE: {
@@ -1355,35 +1427,35 @@ static bool action_cb(ghostty_app_t app, ghostty_target_s target, ghostty_action
         }
 
         case GHOSTTY_ACTION_MOUSE_SHAPE: {
+            if (!targetSurfaceIsOnScreen(target)) return true;
+            NSCursor* next = nil;
             switch (action.action.mouse_shape) {
                 case GHOSTTY_MOUSE_SHAPE_TEXT:
-                    [[NSCursor IBeamCursor] set]; break;
+                    next = [NSCursor IBeamCursor]; break;
                 case GHOSTTY_MOUSE_SHAPE_POINTER:
-                    [[NSCursor pointingHandCursor] set]; break;
+                    next = [NSCursor pointingHandCursor]; break;
                 case GHOSTTY_MOUSE_SHAPE_DEFAULT:
                 default:
-                    [[NSCursor arrowCursor] set]; break;
+                    next = [NSCursor arrowCursor]; break;
             }
+            if (next && next != [NSCursor currentCursor]) [next set];
             return true;
         }
 
         case GHOSTTY_ACTION_MOUSE_VISIBILITY: {
-            if (action.action.mouse_visibility == GHOSTTY_MOUSE_HIDDEN) {
-                [NSCursor hide];
-            } else {
-                [NSCursor unhide];
-            }
+            if (!targetSurfaceIsFocused(target)) return true;
+            setCursorHidden(action.action.mouse_visibility == GHOSTTY_MOUSE_HIDDEN);
             return true;
         }
 
         case GHOSTTY_ACTION_MOUSE_OVER_LINK: {
             // Ghostty signals when hovering over a clickable link.
             // Update cursor accordingly.
-            if (action.action.mouse_over_link.url) {
-                [[NSCursor pointingHandCursor] set];
-            } else {
-                [[NSCursor IBeamCursor] set];
-            }
+            if (!targetSurfaceIsOnScreen(target)) return true;
+            NSCursor* next = action.action.mouse_over_link.url
+                ? [NSCursor pointingHandCursor]
+                : [NSCursor IBeamCursor];
+            if (next != [NSCursor currentCursor]) [next set];
             return true;
         }
 
