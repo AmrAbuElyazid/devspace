@@ -315,6 +315,171 @@ test("drag move skips re-rendering when the resolved drop intent is unchanged", 
   expect(renderCount).toBe(3);
 });
 
+test("drop intent is resolved from dnd-kit's pointer, not the reconstructed one", async () => {
+  const dragData = createGroupTabDrag();
+  const resolveIntent = vi.fn(() => null);
+
+  dndMocks.handlers.push({
+    id: "test-handler",
+    canHandle: () => true,
+    isValidTarget: () => true,
+    resolveIntent,
+    execute: () => false,
+  });
+
+  await act(async () => {
+    latestHook?.onDragStart({ active: { data: { current: dragData } } } as never);
+  });
+
+  // dnd-kit hands collision detection the true cursor position. Reconstructing
+  // it from activatorEvent + delta gives (45, 30) here — delta folds in
+  // auto-scroll compensation, so on a scrolling tab bar the two disagree and
+  // the wrong split edge gets picked.
+  await act(async () => {
+    latestHook?.collisionDetection({ pointerCoordinates: { x: 300, y: 400 } } as never);
+  });
+
+  await act(async () => {
+    latestHook?.onDragMove({
+      active: { data: { current: dragData } },
+      activatorEvent: new PointerEvent("pointermove", { clientX: 40, clientY: 20 }),
+      delta: { x: 5, y: 10 },
+      collisions: [createCollision("pane-drop")],
+    } as never);
+  });
+
+  expect(resolveIntent).toHaveBeenCalledWith(
+    expect.objectContaining({ pointer: { x: 300, y: 400 } }),
+  );
+});
+
+test("drag end re-resolves the intent from the drop instead of the last move", async () => {
+  const dragData = createGroupTabDrag();
+  const droppedIntent: DropIntent = {
+    kind: "split-group",
+    workspaceId: "workspace-1",
+    sourceGroupId: "group-1",
+    sourceTabId: "tab-1",
+    targetGroupId: "group-2",
+    side: "bottom",
+  };
+
+  // Resolves only once the pointer is actually over a pane. The last move
+  // produced nothing, which used to make the drop a silent no-op.
+  const resolveIntent = vi.fn(({ collisions }: { collisions: unknown[] }) =>
+    collisions.length > 0 ? droppedIntent : null,
+  );
+  const execute = vi.fn(() => true);
+
+  dndMocks.handlers.push({
+    id: "test-handler",
+    canHandle: () => true,
+    isValidTarget: () => true,
+    resolveIntent,
+    execute,
+  });
+
+  await act(async () => {
+    latestHook?.onDragStart({ active: { data: { current: dragData } } } as never);
+  });
+
+  await act(async () => {
+    latestHook?.onDragMove({
+      active: { data: { current: dragData } },
+      activatorEvent: new PointerEvent("pointermove", { clientX: 40, clientY: 20 }),
+      delta: { x: 5, y: 10 },
+      collisions: [],
+    } as never);
+  });
+
+  expect(latestDropIntent).toBeNull();
+
+  await act(async () => {
+    latestHook?.onDragEnd({
+      active: { data: { current: dragData } },
+      activatorEvent: new PointerEvent("pointerup", { clientX: 40, clientY: 20 }),
+      delta: { x: 5, y: 10 },
+      collisions: [createCollision("pane-drop")],
+    } as never);
+  });
+
+  expect(execute).toHaveBeenCalledWith(droppedIntent, expect.any(Function));
+});
+
+test("a release dnd-kit never handles cancels the stuck drag", async () => {
+  vi.useFakeTimers();
+
+  try {
+    dndMocks.handlers.push({
+      id: "test-handler",
+      canHandle: () => true,
+      isValidTarget: () => true,
+      resolveIntent: () => null,
+      execute: () => false,
+    });
+
+    await act(async () => {
+      latestHook?.onDragStart({
+        active: { data: { current: createGroupTabDrag() } },
+      } as never);
+    });
+
+    expect(latestActiveDrag).not.toBeNull();
+
+    // dnd-kit's own pointerup handler never runs — the release landed on a
+    // native view, or its sensor listeners are gone.
+    await act(async () => {
+      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    });
+
+    await act(async () => {
+      vi.runAllTimers();
+    });
+
+    expect(latestActiveDrag).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a release dnd-kit does handle is left alone", async () => {
+  vi.useFakeTimers();
+
+  try {
+    const dragData = createGroupTabDrag();
+    dndMocks.handlers.push({
+      id: "test-handler",
+      canHandle: () => true,
+      isValidTarget: () => true,
+      resolveIntent: () => null,
+      execute: () => false,
+    });
+
+    await act(async () => {
+      latestHook?.onDragStart({ active: { data: { current: dragData } } } as never);
+    });
+
+    // The watchdog listener is on the capture phase, so it sees the release
+    // first. It must not pre-empt the drop that is about to happen.
+    await act(async () => {
+      window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+      latestHook?.onDragEnd({ active: { data: { current: dragData } } } as never);
+    });
+
+    const cancelled = vi.fn();
+    document.addEventListener("keydown", cancelled);
+
+    await act(async () => {
+      vi.runAllTimers();
+    });
+
+    document.removeEventListener("keydown", cancelled);
+    expect(cancelled).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("drag end preserves the moved tab when splitting away the last tab in a source group", async () => {
   dndMocks.handlers.push(tabSplitHandler);
 

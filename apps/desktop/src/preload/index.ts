@@ -200,6 +200,15 @@ const bridge: DevspaceBridge = {
         ipcRenderer.removeListener("window:nativeModifierChanged", listener);
       };
     },
+    onNativePointerRelease: (callback) => {
+      const listener = (): void => {
+        callback();
+      };
+      ipcRenderer.on("window:nativePointerRelease", listener);
+      return () => {
+        ipcRenderer.removeListener("window:nativePointerRelease", listener);
+      };
+    },
     onOpenEditor: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, folderPath: string): void => {
         callback(folderPath);
