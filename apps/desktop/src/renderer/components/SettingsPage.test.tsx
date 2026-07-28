@@ -262,3 +262,57 @@ test("shows a friendly private-release updater message and wraps the status text
   );
   expect(statusText).toBeTruthy();
 });
+
+test("focuses the card on open and keeps Tab inside it", async () => {
+  const outside = document.createElement("button");
+  outside.textContent = "behind the modal";
+  document.body.appendChild(outside);
+  outside.focus();
+
+  await act(async () => {
+    root?.render(<SettingsPage />);
+  });
+
+  const card = container.querySelector<HTMLElement>('[role="dialog"]');
+  expect(document.activeElement).toBe(card);
+
+  const focusable = Array.from(card!.querySelectorAll<HTMLElement>("button, input"));
+  const first = focusable[0]!;
+  const last = focusable[focusable.length - 1]!;
+
+  // Tab off the last control wraps to the first rather than escaping to the
+  // application behind the scrim.
+  last.focus();
+  await act(async () => {
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+  });
+  expect(document.activeElement).toBe(first);
+
+  // Shift-Tab off the first wraps backwards to the last.
+  await act(async () => {
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }),
+    );
+  });
+  expect(document.activeElement).toBe(last);
+
+  outside.remove();
+});
+
+test("returns focus to wherever it was when the modal closes", async () => {
+  const outside = document.createElement("button");
+  document.body.appendChild(outside);
+  outside.focus();
+
+  await act(async () => {
+    root?.render(<SettingsPage />);
+  });
+  expect(document.activeElement).not.toBe(outside);
+
+  await act(async () => {
+    root?.render(<div />);
+  });
+
+  expect(document.activeElement).toBe(outside);
+  outside.remove();
+});

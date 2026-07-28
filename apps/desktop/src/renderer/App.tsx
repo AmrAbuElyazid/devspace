@@ -115,8 +115,12 @@ export default function App() {
           onDragEnd={dnd.onDragEnd}
           onDragCancel={dnd.onDragCancel}
         >
+          {/* `app-shell` carries no styles — it is the readiness selector the
+              e2e harness waits on before driving the renderer. Removing it
+              because nothing in the CSS referenced it took out every test that
+              launches the app. */}
           <div
-            className="flex h-screen w-screen overflow-hidden bg-background text-foreground"
+            className="app-shell flex h-screen w-screen overflow-hidden bg-background text-foreground"
             data-dragging={activeDrag ? "true" : undefined}
           >
             <Sidebar />

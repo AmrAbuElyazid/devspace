@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   X,
   Terminal,
@@ -15,6 +15,8 @@ import {
 import { useSettingsStore } from "@/store/settings-store";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { useAppUpdateState } from "@/hooks/useAppUpdateState";
+import { useFocusTrap } from "@/hooks/useFocusTrap";
+import { releaseNativeFocus } from "@/lib/native-pane-focus";
 import { cn } from "@/lib/utils";
 import type { TerminalConfig } from "@/types/workspace";
 import type { AppUpdateState, EditorCliStatus, ManagedTerminalSession } from "../../shared/types";
@@ -66,6 +68,15 @@ const RELEASES_URL = "https://github.com/AmrAbuElyazid/devspace/releases";
 export default function SettingsPage() {
   const [activeSection, setActiveSection] = useState<SettingsSection>("general");
   const setSettingsOpen = useSettingsStore((s) => s.setSettingsOpen);
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // A native pane may hold macOS first responder when settings opens, in which
+  // case the renderer sees no keys at all — including the Escape that closes
+  // this. Hand the keyboard back before trapping focus inside the card.
+  useEffect(() => {
+    releaseNativeFocus();
+  }, []);
+  useFocusTrap(cardRef, true);
 
   const close = useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
 
@@ -88,10 +99,12 @@ export default function SettingsPage() {
         onMouseDown={handleScrimMouseDown}
       >
         <div
+          ref={cardRef}
           role="dialog"
           aria-modal="true"
           aria-label="Settings"
-          className="flex w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-overlay"
+          tabIndex={-1}
+          className="flex w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-background shadow-overlay outline-none"
         >
           <header className="flex h-11 shrink-0 items-center justify-between border-b border-border pr-2 pl-4">
             <h1 className="text-ui-lg font-medium text-foreground">Settings</h1>

@@ -102,9 +102,11 @@ export function createWorkspaceCrudSlice(
           ...(location ? { insertIndex: location.index + 1 } : {}),
         });
 
+        // Deliberately does not activate the copy: duplicating a selection of
+        // five would otherwise walk the user through all five and leave them
+        // on the last. Whether to open the copy is the caller's call.
         return attachWorkspaceDerivedState(currentState, {
           workspaces: [...currentState.workspaces, clone.workspace],
-          activeWorkspaceId: clone.workspace.id,
           panes: { ...currentState.panes, ...clone.panes },
           paneGroups: { ...currentState.paneGroups, ...clone.paneGroups },
           sidebarTree: nextSidebarState.sidebarTree,

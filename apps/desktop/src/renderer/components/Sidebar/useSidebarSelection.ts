@@ -37,15 +37,33 @@ const isToggleModifier = (event: React.MouseEvent): boolean => event.metaKey || 
 export function useSidebarSelection(
   pinnedSidebarNodes: SidebarNode[],
   sidebarTree: SidebarNode[],
+  /** Active search result set, or null when the list is unfiltered. */
+  filteredWorkspaceIds: Set<string> | null,
   onActivateWorkspace: (workspaceId: string) => void,
 ): SidebarSelection {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(() => new Set());
   const [anchorKey, setAnchorKey] = useState<string | null>(null);
 
-  const visibleOrder = useMemo(
-    () => [...collectSelectionKeys(pinnedSidebarNodes), ...collectSelectionKeys(sidebarTree)],
-    [pinnedSidebarNodes, sidebarTree],
-  );
+  // Rows the search has hidden are not part of the order a shift-range runs
+  // along. Without this a range spanning a filtered list would quietly pick up
+  // workspaces that are not on screen — and then a bulk delete would take
+  // them.
+  const visibleOrder = useMemo(() => {
+    const keys = [
+      ...collectSelectionKeys(pinnedSidebarNodes),
+      ...collectSelectionKeys(sidebarTree),
+    ];
+    if (!filteredWorkspaceIds) return keys;
+    return keys.filter((key) => !key.startsWith("w:") || filteredWorkspaceIds.has(key.slice(2)));
+  }, [pinnedSidebarNodes, sidebarTree, filteredWorkspaceIds]);
+
+  // Narrowing or clearing the search changes what is on screen under a
+  // selection the user made against a different list. Rather than leave marks
+  // they cannot see, the selection resets whenever the filter does.
+  useEffect(() => {
+    setSelectedKeys((current) => (current.size === 0 ? current : new Set()));
+    setAnchorKey(null);
+  }, [filteredWorkspaceIds]);
 
   // Existence, not visibility: collapsing a folder must not silently drop the
   // rows inside it from the selection, but deleting one elsewhere must.

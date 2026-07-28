@@ -93,15 +93,36 @@ export default function Sidebar() {
   );
   const renderedSidebarWidth = liveSidebarWidth ?? sidebarWidth;
 
-  const selection = useSidebarSelection(pinnedSidebarNodes, sidebarTree, setActiveWorkspace);
-  const { selectedKeys, actionTargets, clear: clearSelection } = selection;
-  const selectedCount = selectedKeys.size;
-
   const filteredWorkspaceIds = useMemo(() => {
     if (!searchQuery.trim()) return null;
     const q = searchQuery.toLowerCase();
     return new Set(workspaces.filter((ws) => ws.name.toLowerCase().includes(q)).map((ws) => ws.id));
   }, [searchQuery, workspaces]);
+
+  const selection = useSidebarSelection(
+    pinnedSidebarNodes,
+    sidebarTree,
+    filteredWorkspaceIds,
+    setActiveWorkspace,
+  );
+  const { selectedKeys, actionTargets, clear: clearSelection } = selection;
+  const selectedCount = selectedKeys.size;
+
+  // Escape has to listen on the window, not the sidebar: rows are plain divs
+  // with no tabIndex, so a handler on <aside> only ever fired when focus
+  // happened to be sitting in the search field.
+  useEffect(() => {
+    if (selectedCount === 0) return;
+    const handleEscape = (event: KeyboardEvent): void => {
+      if (event.key !== "Escape") return;
+      // Settings owns Escape while it is open, and the selection is not
+      // visible behind it anyway.
+      if (useSettingsStore.getState().settingsOpen) return;
+      clearSelection();
+    };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [selectedCount, clearSelection]);
 
   const workspaceContainer = useCallback(
     (workspaceId: string): SidebarContainer => {
@@ -229,10 +250,15 @@ export default function Sidebar() {
       // Folders in the selection are skipped — duplicating a folder would mean
       // copying every workspace in it, which is a different (and much heavier)
       // action than the one this menu entry offers.
-      for (const id of partitionSelectionKeys(keys).workspaceIds) duplicateWorkspace(id);
+      const created = partitionSelectionKeys(keys)
+        .workspaceIds.map((id) => duplicateWorkspace(id))
+        .filter((id): id is string => id !== null);
+      // Opening the copy is only sensible for a single duplicate. For a batch
+      // there is no one copy to land on, so the user stays where they were.
+      if (created.length === 1) setActiveWorkspace(created[0]!);
       clearSelection();
     },
-    [duplicateWorkspace, clearSelection],
+    [duplicateWorkspace, setActiveWorkspace, clearSelection],
   );
 
   /**
@@ -473,9 +499,6 @@ export default function Sidebar() {
         style={
           sidebarOpen ? { width: renderedSidebarWidth, minWidth: renderedSidebarWidth } : undefined
         }
-        onKeyDown={(e) => {
-          if (e.key === "Escape" && selectedCount > 0) clearSelection();
-        }}
       >
         <div className="relative z-[1] flex flex-col h-full min-h-0">
           {/* Header — drag region. The left padding is whatever the main
