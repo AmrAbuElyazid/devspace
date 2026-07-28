@@ -7,13 +7,10 @@ import GroupTabBar from "./GroupTabBar";
 import { useSettingsStore } from "../store/settings-store";
 import { installMockWindowApi } from "../test-utils/mock-window-api";
 import { useWorkspaceStore } from "../store/workspace-store";
+import { useWindowChromeStore } from "../store/window-chrome-store";
+import { TRAFFIC_LIGHT_GUTTER } from "../../shared/chrome";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
-const groupTabBarShellMocks = vi.hoisted(() => ({
-  isFullScreen: vi.fn(),
-  onFullScreenChange: vi.fn(),
-}));
 
 let container: HTMLDivElement;
 let root: Root | null;
@@ -24,16 +21,11 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
 
-  groupTabBarShellMocks.isFullScreen.mockReset();
-  groupTabBarShellMocks.isFullScreen.mockResolvedValue(false);
-  groupTabBarShellMocks.onFullScreenChange.mockReset();
-  groupTabBarShellMocks.onFullScreenChange.mockReturnValue(() => {});
+  useWindowChromeStore.setState({ isFullScreen: false, trafficLightGutter: TRAFFIC_LIGHT_GUTTER });
 
   installMockWindowApi({
     window: {
       maximize: vi.fn(),
-      isFullScreen: groupTabBarShellMocks.isFullScreen,
-      onFullScreenChange: groupTabBarShellMocks.onFullScreenChange,
     },
   });
 
@@ -79,8 +71,6 @@ afterEach(async () => {
 });
 
 test("collapses the hidden traffic-light gutter for top-left controls in fullscreen", async () => {
-  groupTabBarShellMocks.isFullScreen.mockResolvedValue(true);
-
   await act(async () => {
     root?.render(
       <GroupTabBar
@@ -97,14 +87,17 @@ test("collapses the hidden traffic-light gutter for top-left controls in fullscr
       />,
     );
   });
-  await act(async () => {
-    await Promise.resolve();
-  });
 
   // The traffic-light gutter is the first drag-region inside the top-left
-  // group's tab bar; it carries data-fullscreen="true" while collapsed.
-  const trafficZone = container.querySelector("[data-fullscreen]");
-  expect(trafficZone?.getAttribute("data-fullscreen")).toBe("true");
-  // And it collapses to zero width when fullscreen.
-  expect((trafficZone as HTMLElement | null)?.style.width).toBe("0px");
+  // group's tab bar; windowed, it holds the buttons' width open.
+  const gutter = () => container.querySelector<HTMLElement>(".drag-region");
+  expect(gutter()?.style.width).toBe(`${TRAFFIC_LIGHT_GUTTER}px`);
+
+  await act(async () => {
+    useWindowChromeStore.setState({ isFullScreen: true });
+  });
+
+  // macOS hides the buttons in fullscreen, so the reserved space collapses
+  // instead of leaving a hole to the left of the first tab.
+  expect(gutter()?.style.width).toBe("0px");
 });

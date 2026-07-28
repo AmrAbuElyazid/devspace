@@ -6,8 +6,11 @@ import { useWorkspaceStore } from "@/store/workspace-store";
 import { collectGroupIds } from "@/lib/split-tree";
 import { useActiveDrag, useDropIntent } from "@/hooks/useDndOrchestrator";
 import { useSettingsStore } from "@/store/settings-store";
+import { useTrafficLightGutter } from "@/store/window-chrome-store";
 import { useModifierHeldContext } from "@/App";
 import { resolveDisplayString } from "../../shared/shortcuts";
+import { TITLE_BAR_HEIGHT_COMPACT } from "../../shared/chrome";
+import type { ContextMenuItem } from "../../shared/types";
 import { paneTypeIcons } from "@/lib/pane-type-meta";
 import { releaseNativeFocus } from "@/lib/native-pane-focus";
 import { cn } from "@/lib/utils";
@@ -47,6 +50,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
   showInsertBefore,
   showInsertAfter,
   isSidebarWorkspaceDrag,
+  onContextMenu,
 }: {
   tabId: string;
   paneId: string;
@@ -59,6 +63,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
   showInsertBefore: boolean;
   showInsertAfter: boolean;
   isSidebarWorkspaceDrag: boolean;
+  onContextMenu: (event: React.MouseEvent, tabId: string) => void;
 }) {
   const pane = useWorkspaceStore((s) => s.panes[paneId]);
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
@@ -140,15 +145,16 @@ const SortableGroupTab = memo(function SortableGroupTab({
           handleClose();
         }
       }}
+      onContextMenu={(e) => onContextMenu(e, tabId)}
       {...attributes}
       {...listeners}
       className={cn(
-        "no-drag relative group/tab inline-flex items-center gap-1.5 h-[22px] px-2 max-w-[180px]",
-        "rounded-[5px] cursor-default select-none shrink-0",
-        "text-[11px] text-muted-foreground transition-[background-color,color] duration-100",
-        "hover:bg-hover hover:text-foreground",
-        isActive && "bg-foreground/[0.07] text-foreground hover:bg-foreground/[0.07]",
-        isFocused && isActive && "bg-foreground/10 hover:bg-foreground/10",
+        "no-drag chrome-focus relative group/tab inline-flex items-center gap-1.5 h-[22px] px-2 max-w-[180px]",
+        "rounded-md cursor-default select-none shrink-0",
+        "text-ui-xs text-muted-foreground transition-[background-color,color] duration-100",
+        "hover:bg-row-hover hover:text-foreground",
+        isActive && "bg-row-hover text-foreground",
+        isFocused && isActive && "bg-row-active text-foreground hover:bg-row-active",
         isDropTarget && "bg-brand-soft outline outline-1 outline-brand-edge",
         showInsertBefore && "insert-before-x",
         showInsertAfter && "insert-after-x",
@@ -157,7 +163,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
       <Icon
         width={10}
         height={10}
-        className={cn("shrink-0", isActive ? "text-brand" : "text-muted-foreground/70")}
+        className={cn("shrink-0", isActive ? "text-brand" : "text-muted-foreground")}
       />
       {isEditing ? (
         <input
@@ -178,13 +184,13 @@ const SortableGroupTab = memo(function SortableGroupTab({
           onBlur={commitEdit}
           onClick={(e) => e.stopPropagation()}
           onDoubleClick={(e) => e.stopPropagation()}
-          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[11px] text-foreground p-0"
+          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-ui-xs text-foreground p-0"
         />
       ) : (
         <span className="truncate">{pane?.title ?? "Empty"}</span>
       )}
       {shortcutHint ? (
-        <Kbd className="animate-hint shrink-0 h-3.5 min-w-3.5 px-1 text-[9px] font-mono">
+        <Kbd className="animate-hint shrink-0 h-3.5 min-w-3.5 px-1 text-ui-micro font-mono">
           {shortcutHint}
         </Kbd>
       ) : (
@@ -196,9 +202,9 @@ const SortableGroupTab = memo(function SortableGroupTab({
             handleClose();
           }}
           className={cn(
-            "no-drag shrink-0 inline-flex items-center justify-center size-3.5 rounded-sm",
-            "text-muted-foreground/50 opacity-0 group-hover/tab:opacity-100",
-            "hover:text-foreground hover:bg-hover transition-[opacity,color]",
+            "no-drag chrome-focus shrink-0 inline-flex items-center justify-center size-3.5 rounded-sm",
+            "text-muted-foreground opacity-0 group-hover/tab:opacity-100 focus-visible:opacity-100",
+            "hover:text-foreground hover:bg-row-hover transition-[opacity,color]",
           )}
         >
           <X size={9} strokeWidth={2.4} />
@@ -216,10 +222,12 @@ export default memo(function GroupTabBar({
   isTopLeftGroup,
   dndEnabled,
 }: GroupTabBarProps) {
-  const [isFullScreen, setIsFullScreen] = useState(false);
   const addGroupTab = useWorkspaceStore((s) => s.addGroupTab);
   const closeGroup = useWorkspaceStore((s) => s.closeGroup);
   const addWorkspace = useWorkspaceStore((s) => s.addWorkspace);
+  const removeGroupTabs = useWorkspaceStore((s) => s.removeGroupTabs);
+  const duplicateGroupTab = useWorkspaceStore((s) => s.duplicateGroupTab);
+  const setActiveGroupTab = useWorkspaceStore((s) => s.setActiveGroupTab);
   const toggleSidebar = useSettingsStore((s) => s.toggleSidebar);
   const defaultPaneType = useSettingsStore((s) => s.defaultPaneType);
   const hasMultipleGroups = useWorkspaceStore((s) => {
@@ -230,39 +238,68 @@ export default memo(function GroupTabBar({
   const modifierHeld = useModifierHeldContext();
   const activeDrag = useActiveDrag();
   const dropIntent = useDropIntent();
+  // Only the top-left bar sits under the native window buttons; every other
+  // tab bar in the layout starts at its own left edge.
+  const trafficLightGutter = useTrafficLightGutter();
 
-  useEffect(() => {
-    if (!isTopLeftGroup) return;
-    let cancelled = false;
-    void window.api.window.isFullScreen().then((fullScreen) => {
-      if (!cancelled) setIsFullScreen(fullScreen);
-    });
-    const unsubscribe = window.api.window.onFullScreenChange(setIsFullScreen);
-    return () => {
-      cancelled = true;
-      unsubscribe();
-    };
-  }, [isTopLeftGroup]);
+  const handleTabContextMenu = useCallback(
+    async (event: React.MouseEvent, tabId: string) => {
+      event.preventDefault();
+      const index = group.tabs.findIndex((tab) => tab.id === tabId);
+      if (index === -1) return;
+      const others = group.tabs.filter((tab) => tab.id !== tabId).map((tab) => tab.id);
+      const toTheRight = group.tabs.slice(index + 1).map((tab) => tab.id);
+
+      const items: ContextMenuItem[] = [
+        { id: "rename", label: "Rename Tab" },
+        { id: "duplicate", label: "Duplicate Tab" },
+        { id: "close", label: "Close Tab" },
+        ...(others.length > 0 ? [{ id: "close-others", label: "Close Other Tabs" }] : []),
+        ...(toTheRight.length > 0 ? [{ id: "close-right", label: "Close Tabs to the Right" }] : []),
+        ...(others.length > 0
+          ? [{ id: "close-all", label: "Close All Tabs", destructive: true }]
+          : []),
+      ];
+
+      const result = await window.api.contextMenu.show(items, {
+        x: event.clientX,
+        y: event.clientY,
+      });
+      if (!result) return;
+      if (result === "rename") {
+        setActiveGroupTab(workspaceId, groupId, tabId);
+        useWorkspaceStore.setState({ pendingEditId: tabId, pendingEditType: "tab" });
+      } else if (result === "duplicate") duplicateGroupTab(workspaceId, groupId, tabId);
+      else if (result === "close") removeGroupTabs(workspaceId, groupId, [tabId]);
+      else if (result === "close-others") removeGroupTabs(workspaceId, groupId, others);
+      else if (result === "close-right") removeGroupTabs(workspaceId, groupId, toTheRight);
+      else if (result === "close-all") {
+        removeGroupTabs(
+          workspaceId,
+          groupId,
+          group.tabs.map((tab) => tab.id),
+        );
+      }
+    },
+    [group.tabs, groupId, workspaceId, duplicateGroupTab, removeGroupTabs, setActiveGroupTab],
+  );
 
   return (
     <div
       data-focused={isFocused || undefined}
+      style={{ height: TITLE_BAR_HEIGHT_COMPACT }}
       className={cn(
         "group/tabbar relative flex items-center gap-px shrink-0",
-        "h-[30px] px-1 pt-[2px]",
-        "bg-rail border-b border-hairline",
+        "px-1 pt-[2px]",
+        "bg-rail border-b border-border",
         "overflow-x-auto scrollbar-none select-none",
-        "data-[focused=true]:bg-[color-mix(in_srgb,var(--foreground)_4%,var(--rail))]",
+        "data-[focused=true]:bg-elevated/40",
       )}
     >
       {isTopLeftGroup && (
         <>
-          <div
-            className="drag-region shrink-0 h-full"
-            data-fullscreen={isFullScreen ? "true" : undefined}
-            style={{ width: isFullScreen ? 0 : 78 }}
-          />
-          <div className="flex items-center gap-px shrink-0 mr-1.5 pr-1.5 border-r border-hairline">
+          <div className="drag-region shrink-0 h-full" style={{ width: trafficLightGutter }} />
+          <div className="flex items-center gap-px shrink-0 mr-1.5 pr-1.5 border-r border-border">
             <HintTooltip
               content="Open sidebar"
               shortcut={resolveDisplayString("toggle-sidebar")}
@@ -272,7 +309,7 @@ export default memo(function GroupTabBar({
                 type="button"
                 onClick={toggleSidebar}
                 aria-label="Open sidebar"
-                className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+                className="no-drag chrome-focus inline-flex items-center justify-center size-5 rounded-md text-muted-foreground hover:text-foreground hover:bg-row-hover transition-colors"
               >
                 <Menu size={12} />
               </button>
@@ -294,7 +331,7 @@ export default memo(function GroupTabBar({
                   }
                 }}
                 aria-label="New workspace"
-                className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+                className="no-drag chrome-focus inline-flex items-center justify-center size-5 rounded-md text-muted-foreground hover:text-foreground hover:bg-row-hover transition-colors"
               >
                 <Plus size={12} strokeWidth={2.2} />
               </button>
@@ -332,6 +369,7 @@ export default memo(function GroupTabBar({
                 tabInsertIndex === group.tabs.length && tabIndex === group.tabs.length - 1
               }
               isSidebarWorkspaceDrag={activeDrag?.type === "sidebar-workspace"}
+              onContextMenu={handleTabContextMenu}
             />
           );
         })}
@@ -356,7 +394,7 @@ export default memo(function GroupTabBar({
             }
           }}
           aria-label="New tab"
-          className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+          className="no-drag chrome-focus inline-flex items-center justify-center size-5 rounded-md text-muted-foreground hover:text-foreground hover:bg-row-hover transition-colors"
         >
           <Plus size={12} strokeWidth={2.2} />
         </button>
@@ -364,7 +402,7 @@ export default memo(function GroupTabBar({
 
       <div
         className={cn(
-          "flex items-center gap-px shrink-0 ml-1 pl-1 border-l border-hairline",
+          "flex items-center gap-px shrink-0 ml-1 pl-1 border-l border-border",
           "opacity-0 group-hover/tabbar:opacity-100 transition-opacity",
           isFocused && "opacity-100",
         )}
@@ -381,7 +419,7 @@ export default memo(function GroupTabBar({
                 splitDirection: "horizontal",
               })
             }
-            className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+            className="no-drag chrome-focus inline-flex items-center justify-center size-5 rounded-md text-muted-foreground hover:text-foreground hover:bg-row-hover transition-colors"
           >
             <Columns2 size={11} />
           </button>
@@ -398,7 +436,7 @@ export default memo(function GroupTabBar({
                 splitDirection: "vertical",
               })
             }
-            className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-hover transition-colors"
+            className="no-drag chrome-focus inline-flex items-center justify-center size-5 rounded-md text-muted-foreground hover:text-foreground hover:bg-row-hover transition-colors"
           >
             <Rows2 size={11} />
           </button>
@@ -409,7 +447,7 @@ export default memo(function GroupTabBar({
               type="button"
               aria-label="Close split"
               onClick={() => closeGroup(workspaceId, groupId)}
-              className="no-drag inline-flex items-center justify-center size-5 rounded-sm text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+              className="no-drag chrome-focus inline-flex items-center justify-center size-5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
             >
               <X size={11} strokeWidth={2.2} />
             </button>
