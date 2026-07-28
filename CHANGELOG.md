@@ -6,6 +6,46 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.2.0 - 2026-07-28
+
+### Summary
+
+- Move terminals onto a managed tmux backend so shells survive pane teardown, and fix the drag-and-drop, layout, and persistence defects that surfaced alongside it. A minor rather than a patch release: the terminal backend is new, and pane lifecycle changed with it.
+
+### Highlights
+
+**Terminals**
+
+- Terminal sessions now run under a private tmux server and outlive the panes attached to them. A session is killed only when the workspace, tab, or pane is explicitly removed — switching workspaces or letting a pane fall out of the warm-surface budget leaves a running dev server alone. External tmux sessions are never touched.
+- Fixed a close notification from a replaced surface being able to destroy its replacement, killing a live shell and everything under it. An epoch now travels with the notification through every async hop, and a close naming an older incarnation is dropped.
+- Fixed every managed terminal tab being named after the machine's hostname. Tab titles are derived from the pane instead — the current directory at a prompt, the running command otherwise — and existing sessions started by an older build are healed in place rather than keeping the old format forever.
+- Fixed new tabs inheriting a stale directory. tmux consumes the escape sequence a shell uses to announce its directory, so the working directory is now read from tmux and fed into the same pipeline, and directory inheritance works again.
+- Fixed workspace restore spawning redundant tmux probes — one per managed pane, all in the same tick — by sharing the in-flight readiness check.
+
+**Drag and drop**
+
+- Fixed dropping a tab to create a split laying out at the wrong size and position when the split changed direction.
+- Fixed drags being swallowed, freezing mid-drag, or never starting. Native terminal and browser/editor views sit above the renderer and consume the pointer events a drag depends on; they are now hidden on the first pointer movement, before the drag threshold is reached.
+- Fixed drops landing on the wrong edge once the tab bar auto-scrolled, and drops being lost when the final pointer movement never arrived.
+- Fixed a drag left stuck after the pointer was released outside the window, over a native pane, or while the window lost focus.
+- Fixed the sidebar resize divider staying stuck in resize mode when released over a terminal.
+
+**Layout and persistence**
+
+- Split proportions are stored as percentages, so they survive restructuring and a window resize no longer rewrites the layout tree or emits a persistence patch per frame.
+- Fixed a persisted workspace that failed validation being cached anyway, which silently prevented every later change in that session from being saved.
+- Reduced the cost of a workspace patch from 112µs to 62µs, measured through the IPC handler on a 10-workspace / 60-group / 240-pane state over 2000 iterations.
+
+**Editor and embedded panes**
+
+- Fixed a routine superseded start showing a "Failed to start" card, and fixed panes that were left spinning forever after a rejected start.
+- Fixed an evicted inactive editor view immediately rebuilding itself, undoing the eviction. Restarts now wait until the pane is back on screen.
+
+**Other**
+
+- Fixed the Option key being dropped from key bindings that carry it (#3).
+- Fixed native panes recovering from blank states.
+
 ## v0.1.6 - 2026-05-05
 
 ### Summary
