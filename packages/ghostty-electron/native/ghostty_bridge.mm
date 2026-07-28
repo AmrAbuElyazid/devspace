@@ -748,24 +748,25 @@ static void resetModifierStateForFocusLoss() {
     key.composing = false;
     key.unshifted_codepoint = unshiftedCodepointFromEvent(event);
 
+    // key.mods always reports the physically-held modifiers. Translation only
+    // affects text and consumed_mods below — never which mods Ghostty sees as
+    // pressed. Using translatedMods here would strip the Alt bit under
+    // macos-option-as-alt and silently drop Option-as-Meta.
+    key.mods = originalMods;
+
     if (translatedMods != originalMods) {
-        // Mods were translated (e.g. Option treated as Alt via macos-option-as-alt).
-        // Use charactersIgnoringModifiers for text since the original characters
-        // would include the Option-modified glyph.
-        key.mods = translatedMods;
+        // Option translated to Alt: skip the Option-composed glyph and send the
+        // base character. Option isn't consumed, so only Shift can be.
         NSString* text = event.charactersIgnoringModifiers;
         if (text && text.length > 0 && !isPUA([text characterAtIndex:0])) {
             key.text = [text UTF8String];
-            // Only Shift can be consumed here (Option was stripped by translation)
             key.consumed_mods = (translatedMods & GHOSTTY_MODS_SHIFT)
                 ? GHOSTTY_MODS_SHIFT : GHOSTTY_MODS_NONE;
         } else {
             key.consumed_mods = GHOSTTY_MODS_NONE;
         }
     } else {
-        // No mod translation — use textForKeyEvent for proper handling
-        // of control characters, PUA filtering, etc.
-        key.mods = originalMods;
+        // No translation: textForKeyEvent handles control chars and PUA filtering.
         NSString* text = textForKeyEvent(event);
         if (text && shouldSendText(text)) {
             key.text = [text UTF8String];
