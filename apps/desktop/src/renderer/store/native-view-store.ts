@@ -283,6 +283,16 @@ function isNativeViewVisible(
   return false;
 }
 
+/**
+ * Whether the native surface for `paneId` is currently on screen.
+ *
+ * `reconcile()` updates the visible sets synchronously, so this always
+ * reflects the latest requested visibility rather than a frame-old value.
+ */
+export function isNativePaneOnScreen(paneId: string): boolean {
+  return isNativeViewVisible(useNativeViewStore.getState(), paneId);
+}
+
 function hasObservedVisibleElements(): boolean {
   return observedElements.size > 0;
 }

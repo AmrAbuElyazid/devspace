@@ -1,7 +1,10 @@
 import { collectGroupIds, useWorkspaceStore } from "../store/workspace-store";
 import { useBrowserStore } from "../store/browser-store";
-import { recordNativeFocusRequest } from "../store/native-view-store";
-import { useNativeViewStore } from "../store/native-view-store";
+import {
+  isNativePaneOnScreen,
+  recordNativeFocusRequest,
+  useNativeViewStore,
+} from "../store/native-view-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useTerminalStore } from "../store/terminal-store";
 import type { Pane, PaneGroup, Workspace } from "../types/workspace";
@@ -154,16 +157,44 @@ export function syncWorkspaceFocusForPane(paneId: string): void {
   const result = getWorkspaceGroupForPane(paneId);
   if (!result) return;
 
-  const state = useWorkspaceStore.getState();
-  if (state.activeWorkspaceId !== result.workspace.id) {
-    state.setActiveWorkspace(result.workspace.id);
+  const workspaceId = result.workspace.id;
+  const groupId = result.group.id;
+
+  // Re-read between mutations: each setter replaces the slices the next check
+  // reads, so `result`'s workspace/group snapshots go stale after the first
+  // write and would make the later comparisons fire against old values.
+  if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) {
+    useWorkspaceStore.getState().setActiveWorkspace(workspaceId);
   }
-  if (result.workspace.focusedGroupId !== result.group.id) {
-    state.setFocusedGroup(result.workspace.id, result.group.id);
+
+  const workspace = useWorkspaceStore
+    .getState()
+    .workspaces.find((candidate) => candidate.id === workspaceId);
+  if (workspace && workspace.focusedGroupId !== groupId) {
+    useWorkspaceStore.getState().setFocusedGroup(workspaceId, groupId);
   }
-  if (result.group.activeTabId !== result.tabId) {
-    state.setActiveGroupTab(result.workspace.id, result.group.id, result.tabId);
+
+  const group = useWorkspaceStore.getState().paneGroups[groupId];
+  if (group && group.activeTabId !== result.tabId) {
+    useWorkspaceStore.getState().setActiveGroupTab(workspaceId, groupId, result.tabId);
   }
+}
+
+/**
+ * Handles a focus notification pushed up from a native surface.
+ *
+ * Native surfaces also notify for focus *we* requested. When the active tab
+ * changes between our `terminal.focus()` call and its echo, acting on that
+ * echo drags the selection back to the previous pane — which re-arms that
+ * pane's auto-focus effect, whose echo drags it forward again. Two panes then
+ * ping-pong at IPC speed and never settle.
+ *
+ * A user can only click a surface that is on screen, so a notification naming
+ * a pane that is not currently visible is always a stale echo. Drop it.
+ */
+export function syncWorkspaceFocusForNativeNotification(paneId: string): void {
+  if (!isNativePaneOnScreen(paneId)) return;
+  syncWorkspaceFocusForPane(paneId);
 }
 
 export function releaseNativeFocus(): void {

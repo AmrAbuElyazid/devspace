@@ -8,7 +8,7 @@ import {
 } from "../lib/browser-context-menu";
 import { findWorkspaceIdForPane } from "../lib/browser-pane-routing";
 import { extractEditorFolderFromUrl } from "../lib/editor-url";
-import { syncWorkspaceFocusForPane } from "../lib/native-pane-focus";
+import { syncWorkspaceFocusForNativeNotification } from "../lib/native-pane-focus";
 import type { BrowserBridgeListeners, BrowserBridgeUnsubscribe } from "../../shared/types";
 
 const VSCODE_WEB_TITLE_SUFFIX = " - Visual Studio Code";
@@ -115,7 +115,7 @@ export function useBrowserBridge(): void {
         }
       },
       onFocused: (paneId) => {
-        syncWorkspaceFocusForPane(paneId);
+        syncWorkspaceFocusForNativeNotification(paneId);
       },
       onPermissionRequest: (request) => {
         setPendingPermissionRequest(request);

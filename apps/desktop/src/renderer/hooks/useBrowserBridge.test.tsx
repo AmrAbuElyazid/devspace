@@ -20,7 +20,7 @@ const browserBridgeMocks = vi.hoisted(() => ({
   updatePaneTitle: vi.fn(),
   updateBrowserPaneZoom: vi.fn(),
   openBrowserInGroup: vi.fn(),
-  syncWorkspaceFocusForPane: vi.fn(),
+  syncWorkspaceFocusForNativeNotification: vi.fn(),
   stateChangeHandler: null as null | ((state: BrowserRuntimeState) => void),
   contextMenuRequestHandler: null as
     | null
@@ -120,7 +120,8 @@ vi.mock("../lib/editor-url", () => ({
 }));
 
 vi.mock("../lib/native-pane-focus", () => ({
-  syncWorkspaceFocusForPane: browserBridgeMocks.syncWorkspaceFocusForPane,
+  syncWorkspaceFocusForNativeNotification:
+    browserBridgeMocks.syncWorkspaceFocusForNativeNotification,
 }));
 
 function HookHarness() {
@@ -142,7 +143,7 @@ beforeEach(async () => {
   browserBridgeMocks.updatePaneTitle.mockReset();
   browserBridgeMocks.updateBrowserPaneZoom.mockReset();
   browserBridgeMocks.openBrowserInGroup.mockReset();
-  browserBridgeMocks.syncWorkspaceFocusForPane.mockReset();
+  browserBridgeMocks.syncWorkspaceFocusForNativeNotification.mockReset();
   browserBridgeMocks.stateChangeHandler = null;
   browserBridgeMocks.contextMenuRequestHandler = null;
   browserBridgeMocks.permissionRequestHandler = null;
@@ -291,7 +292,7 @@ test("syncs workspace focus when a webcontents-based pane gains focus", async ()
     handler("pane-7");
   });
 
-  expect(browserBridgeMocks.syncWorkspaceFocusForPane).toHaveBeenCalledWith("pane-7");
+  expect(browserBridgeMocks.syncWorkspaceFocusForNativeNotification).toHaveBeenCalledWith("pane-7");
 });
 
 test("queues permission requests without denying an earlier pane", async () => {

@@ -163,6 +163,9 @@ export function createGroupTabsSlice(
     },
 
     setActiveGroupTab(workspaceId, groupId, tabId) {
+      const currentGroup = get().paneGroups[groupId];
+      if (currentGroup?.activeTabId === tabId) return;
+
       set((state) => {
         const workspace = state.workspaces.find((w) => w.id === workspaceId);
         if (!workspace || !treeHasGroup(workspace.root, groupId)) return state;
