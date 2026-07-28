@@ -11,6 +11,7 @@ import { AlertCircle } from "lucide-react";
 import { focusBrowserNativePane, hasEditableRendererFocus } from "@/lib/native-pane-focus";
 import { useNativeView } from "@/hooks/useNativeView";
 import {
+  discardEmbeddedToolViewIfCurrent,
   getEmbeddedToolViewSnapshot,
   markEmbeddedToolViewActive,
   markEmbeddedToolViewCreated,
@@ -140,6 +141,12 @@ export default function T3CodePane({
           return;
         }
         const result = await window.api.t3code.start(paneId);
+        if ("cancelled" in result) {
+          // Superseded in main. Not a failure — drop the pending record so the
+          // pane can start over rather than stranding on "pending".
+          discardEmbeddedToolViewIfCurrent(paneId, generation);
+          return;
+        }
         if ("error" in result) {
           markEmbeddedToolViewFailed(paneId, generation, result.error);
           if (!cancelled) setState({ status: "error", message: result.error });

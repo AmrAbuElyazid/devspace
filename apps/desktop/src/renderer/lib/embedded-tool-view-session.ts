@@ -112,6 +112,20 @@ export function markEmbeddedToolViewFailed(
   return true;
 }
 
+/**
+ * Drop a pending record whose start was superseded in main, leaving the pane
+ * free to start over. Unlike `markEmbeddedToolViewFailed` this is not a
+ * failure, so it records no error — and unlike `markEmbeddedToolViewDestroyed`
+ * it is generation-guarded, so a late cancellation can't discard a newer start
+ * that has already taken the pane over.
+ */
+export function discardEmbeddedToolViewIfCurrent(paneId: string, generation: number): boolean {
+  const record = embeddedToolViews.get(paneId);
+  if (!record || record.snapshot.generation !== generation) return false;
+  markEmbeddedToolViewDestroyed(paneId);
+  return true;
+}
+
 export function markEmbeddedToolViewActive(paneId: string): void {
   const record = embeddedToolViews.get(paneId);
   if (!record) return;
