@@ -326,6 +326,66 @@ test("a server that rejects the option refresh is still attachable", async () =>
   expect(runCommand.mock.calls.some(([, args]) => args.includes("new-session"))).toBe(true);
 });
 
+test("session directories are read from tmux in a single call", async () => {
+  const userDataPath = await makeTempDirectory();
+  const runCommand = vi.fn<TmuxCommandRunner>(async (_binary, args) => {
+    if (args[0] === "-V") return { exitCode: 0, stdout: "tmux 3.4\n", stderr: "" };
+    if (args.includes("list-sessions")) {
+      return {
+        exitCode: 0,
+        // A directory may end in a space, and tmux neither quotes nor escapes
+        // it — trimming the value would corrupt the path.
+        stdout: [
+          "devspace-pane_1\t/Users/amr/project",
+          "devspace-pane_2\t/tmp/trailing ",
+          "unrelated\t/etc",
+          "devspace-bad id\t/tmp/nope",
+          "",
+        ].join("\n"),
+        stderr: "",
+      };
+    }
+    return { exitCode: 0, stdout: "", stderr: "" };
+  });
+  const manager = new ManagedTmuxManager({
+    userDataPath,
+    resourcesPath: "/unused",
+    isPackaged: false,
+    env: { PATH: "/usr/bin" },
+    binaryPath: "/opt/devspace/bin/tmux",
+    runCommand,
+  });
+
+  await expect(manager.listSessionPaths()).resolves.toEqual(
+    new Map([
+      ["pane_1", "/Users/amr/project"],
+      ["pane_2", "/tmp/trailing "],
+    ]),
+  );
+  // One spawn regardless of how many terminals are open.
+  expect(runCommand.mock.calls.filter(([, args]) => args.includes("list-sessions"))).toHaveLength(
+    1,
+  );
+});
+
+test("no running server reports no directories rather than failing", async () => {
+  const userDataPath = await makeTempDirectory();
+  const runCommand = vi.fn<TmuxCommandRunner>(async (_binary, args) => {
+    if (args[0] === "-V") return { exitCode: 0, stdout: "tmux 3.4\n", stderr: "" };
+    return { exitCode: 1, stdout: "", stderr: "no server running\n" };
+  });
+  const manager = new ManagedTmuxManager({
+    userDataPath,
+    resourcesPath: "/unused",
+    isPackaged: false,
+    env: { PATH: "/usr/bin" },
+    binaryPath: "/opt/devspace/bin/tmux",
+    runCommand,
+  });
+
+  await expect(manager.listSessionPaths()).resolves.toEqual(new Map());
+});
+
 test("command quoting preserves single quotes without enabling shell interpolation", () => {
   expect(quoteCommandArgument("a'b;$HOME")).toBe("'a'\"'\"'b;$HOME'");
 });

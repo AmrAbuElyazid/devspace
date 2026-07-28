@@ -335,6 +335,40 @@ export class ManagedTmuxManager {
       });
   }
 
+  /**
+   * The working directory of every managed session, in one call.
+   *
+   * tmux swallows the OSC 7 escape a shell emits to announce its directory — it
+   * feeds `pane_current_path` from it and does not pass it on to the outer
+   * terminal. Ghostty therefore never raises `pwd-changed` for a managed pane,
+   * and the only place the live directory exists is inside tmux. Asking for
+   * every session at once keeps the polling behind directory inheritance down
+   * to a single process spawn no matter how many terminals are open.
+   */
+  async listSessionPaths(): Promise<Map<string, string>> {
+    await this.ensureReady();
+    const result = await this.run(["list-sessions", "-F", "#{session_name}\t#{pane_current_path}"]);
+    if (result.exitCode === 1) return new Map();
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr.trim() || "Unable to inspect managed terminal directories");
+    }
+
+    const paths = new Map<string, string>();
+    for (const line of result.stdout.split("\n")) {
+      const separator = line.indexOf("\t");
+      if (separator === -1) continue;
+      const name = line.slice(0, separator);
+      // Not trimmed: a directory name may legitimately end in a space, and tmux
+      // does not quote or escape it.
+      const path = line.slice(separator + 1);
+      if (!name.startsWith("devspace-") || !path) continue;
+      const sessionId = name.slice("devspace-".length);
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) continue;
+      paths.set(sessionId, path);
+    }
+    return paths;
+  }
+
   private async ensureSessionOnce(options: EnsureManagedSessionOptions): Promise<void> {
     await this.ensureReady();
     if (await this.hasSession(options.sessionId)) return;

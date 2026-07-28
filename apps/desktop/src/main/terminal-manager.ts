@@ -84,6 +84,25 @@ type TerminalCallback = {
   onSearchSelected?: (surfaceId: string, selected: number) => void;
 };
 
+/**
+ * How often managed session directories are re-read.
+ *
+ * This is the whole mechanism, not a safety net over some faster signal. The
+ * obvious candidate for one — refreshing when a managed pane's title changes,
+ * since that title is derived from its directory — does not work: tmux pushes
+ * a title to its client on a lazy redraw tick, measured at 5s to 15s apart,
+ * skipping directories that are passed through quickly and staying silent for
+ * the whole run of a foreground command. A title-driven refresh would
+ * therefore always land later than the poll that had already caught the same
+ * `cd`.
+ *
+ * So the interval is what the user feels before a new tab inherits the right
+ * directory, and it is deliberately tight: one `tmux list-sessions` costs
+ * roughly 4ms of wall time and 0.3ms of CPU regardless of how many sessions
+ * are open, which at this period is not measurable.
+ */
+const MANAGED_PATH_POLL_INTERVAL_MS = 5_000;
+
 export class TerminalManager {
   private terminal: GhosttyTerminal | null = null;
   private managedTmux: ManagedTmuxManager | null = null;
@@ -91,6 +110,14 @@ export class TerminalManager {
   private callbacks: TerminalCallback = {};
   /** Resolved path to Devspace's ZDOTDIR wrapper for zsh shell integration. */
   private shellIntegrationZshDir: string | null = null;
+  /** surfaceId → tmux session ID, for the managed panes currently attached. */
+  private readonly managedSessionIds = new Map<string, string>();
+  /** Last directory handed to the renderer, so unchanged ones stay quiet. */
+  private readonly reportedPaths = new Map<string, string>();
+  private pathPollTimer: NodeJS.Timeout | null = null;
+  private pathPollInFlight = false;
+  private pathPollRepeat = false;
+  private windowFocused = true;
 
   init(mainWindow: BrowserWindow): void {
     this.terminal = new GhosttyTerminal();
@@ -137,12 +164,31 @@ export class TerminalManager {
       }
     }
 
+    // Polling for managed directories is pointless while the user is elsewhere.
+    this.windowFocused = mainWindow.isFocused();
+    mainWindow.on("focus", () => {
+      this.windowFocused = true;
+      this.startPathPolling();
+      // Directories can have moved during however long the window was blurred.
+      void this.refreshManagedPaths();
+    });
+    mainWindow.on("blur", () => {
+      this.windowFocused = false;
+      this.stopPathPolling();
+    });
+
     // Wire up events to callbacks
     this.terminal.on("title-changed", (surfaceId, title) => {
       this.callbacks.onTitleChanged?.(surfaceId, title);
     });
 
     this.terminal.on("surface-closed", (surfaceId) => {
+      // Nothing else drops a managed pane whose session ended: the renderer
+      // leaves the dead pane on screen showing "the terminal session ended"
+      // until the user closes the tab, so without this the poll set keeps an
+      // entry for a session tmux no longer has — and never empties, which
+      // means the interval keeps running with no live terminal behind it.
+      this.forgetManagedSurface(surfaceId);
       this.callbacks.onSurfaceClosed?.(surfaceId);
     });
 
@@ -266,6 +312,16 @@ export class TerminalManager {
 
     if (this.surfaceGenerations.get(surfaceId) !== generation || !this.terminal) return;
 
+    if (options?.backend === "managed-tmux") {
+      this.managedSessionIds.set(surfaceId, options.sessionId);
+      this.startPathPolling();
+      // Explicitly, not left to the interval: `startPathPolling` is a no-op
+      // when the timer is already running, so every pane after the first —
+      // the whole burst of them on a session restore — would otherwise report
+      // nothing for a full interval.
+      void this.refreshManagedPaths();
+    }
+
     measureMainProcessOperation("terminal.createSurface", () => {
       this.terminal?.createSurface(
         surfaceId,
@@ -291,9 +347,78 @@ export class TerminalManager {
   destroySurface(surfaceId: string): void {
     if (!this.terminal) return;
     this.surfaceGenerations.set(surfaceId, (this.surfaceGenerations.get(surfaceId) ?? 0) + 1);
+    this.forgetManagedSurface(surfaceId);
     measureMainProcessOperation("terminal.destroySurface", () => {
       this.terminal?.destroySurface(surfaceId);
     });
+  }
+
+  /**
+   * Stop tracking a managed pane's directory.
+   *
+   * Never kills anything. The tmux session either ended on its own — which is
+   * how the surface came to close — or is being deliberately left running
+   * while its Ghostty client goes away. Either way there is no longer a pane
+   * on screen for a directory to be reported to.
+   */
+  private forgetManagedSurface(surfaceId: string): void {
+    if (!this.managedSessionIds.delete(surfaceId)) return;
+    this.reportedPaths.delete(surfaceId);
+    if (this.managedSessionIds.size === 0) this.stopPathPolling();
+  }
+
+  private startPathPolling(): void {
+    if (this.pathPollTimer || !this.windowFocused || this.managedSessionIds.size === 0) return;
+    this.pathPollTimer = setInterval(() => {
+      void this.refreshManagedPaths();
+    }, MANAGED_PATH_POLL_INTERVAL_MS);
+    // Background upkeep should never be the reason the process stays alive.
+    this.pathPollTimer.unref?.();
+  }
+
+  private stopPathPolling(): void {
+    if (!this.pathPollTimer) return;
+    clearInterval(this.pathPollTimer);
+    this.pathPollTimer = null;
+  }
+
+  /**
+   * Report the current directory of every managed pane that has moved.
+   *
+   * This stands in for the `pwd-changed` event Ghostty raises for direct
+   * terminals. Downstream nothing can tell the two apart, so directory
+   * inheritance for new tabs keeps working against the same store field it
+   * always has. Best effort by design: the cost of a failure is one stale
+   * inherited directory, so a tmux hiccup is swallowed rather than surfaced.
+   */
+  private async refreshManagedPaths(): Promise<void> {
+    if (!this.managedTmux || this.managedSessionIds.size === 0) return;
+    if (this.pathPollInFlight) {
+      this.pathPollRepeat = true;
+      return;
+    }
+
+    this.pathPollInFlight = true;
+    try {
+      const paths = await this.managedTmux.listSessionPaths();
+      for (const [surfaceId, sessionId] of this.managedSessionIds) {
+        const path = paths.get(sessionId);
+        if (!path || this.reportedPaths.get(surfaceId) === path) continue;
+        // Recorded only once it is actually out the door. Delivery is an IPC
+        // send that throws if the window went away mid-poll, and marking a
+        // path as reported before that would suppress every retry of it.
+        this.callbacks.onPwdChanged?.(surfaceId, path);
+        this.reportedPaths.set(surfaceId, path);
+      }
+    } catch {
+      // Left to the next refresh.
+    } finally {
+      this.pathPollInFlight = false;
+      if (this.pathPollRepeat) {
+        this.pathPollRepeat = false;
+        void this.refreshManagedPaths();
+      }
+    }
   }
 
   showSurface(surfaceId: string): void {
@@ -352,6 +477,9 @@ export class TerminalManager {
 
   destroyAll(): void {
     if (!this.terminal) return;
+    this.stopPathPolling();
+    this.managedSessionIds.clear();
+    this.reportedPaths.clear();
     this.terminal.destroy();
     this.terminal = null;
     // The private tmux server deliberately outlives the app. Destroying the
