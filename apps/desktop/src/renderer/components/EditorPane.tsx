@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, useCallback, type ReactElement } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactElement,
+} from "react";
 import { AlertCircle } from "lucide-react";
 
 import { focusBrowserNativePane, hasEditableRendererFocus } from "@/lib/native-pane-focus";
@@ -6,22 +13,30 @@ import { useNativeView } from "@/hooks/useNativeView";
 import { useSettingsStore } from "@/store/settings-store";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import type { EditorConfig } from "@/types/workspace";
+import {
+  getEmbeddedToolViewSnapshot,
+  markEmbeddedToolViewActive,
+  markEmbeddedToolViewCreated,
+  markEmbeddedToolViewDestroyed,
+  markEmbeddedToolViewFailed,
+  markEmbeddedToolViewInactive,
+  markEmbeddedToolViewReady,
+  subscribeEmbeddedToolView,
+} from "@/lib/embedded-tool-view-session";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 
-// Module-level tracking to survive React remounts (same pattern as TerminalPane)
-const startedEditors = new Set<string>();
-
 /** Call when an editor pane is destroyed externally. */
 export function markEditorDestroyed(paneId: string): void {
-  startedEditors.delete(paneId);
+  markEmbeddedToolViewDestroyed(paneId);
 }
 
 interface EditorPaneProps {
   paneId: string;
   config: EditorConfig;
   isFocused: boolean;
+  isActive?: boolean;
 }
 
 type EditorState =
@@ -31,7 +46,12 @@ type EditorState =
   | { status: "error"; message: string }
   | { status: "unavailable" };
 
-export default function EditorPane({ paneId, config, isFocused }: EditorPaneProps): ReactElement {
+export default function EditorPane({
+  paneId,
+  config,
+  isFocused,
+  isActive = true,
+}: EditorPaneProps): ReactElement {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const wasVisibleRef = useRef(false);
   const wasFocusedRef = useRef(false);
@@ -39,11 +59,20 @@ export default function EditorPane({ paneId, config, isFocused }: EditorPaneProp
   const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig);
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
   const vscodeCliPath = useSettingsStore((s) => s.vscodeCliPath);
+  const subscribeToView = useCallback(
+    (listener: () => void) => subscribeEmbeddedToolView(paneId, listener),
+    [paneId],
+  );
+  const readViewSession = useCallback(() => getEmbeddedToolViewSnapshot(paneId), [paneId]);
+  const viewSession = useSyncExternalStore(subscribeToView, readViewSession, readViewSession);
 
   // Determine initial state based on config
   const [state, setState] = useState<EditorState>(() => {
-    if (startedEditors.has(paneId)) {
+    if (viewSession.phase === "ready") {
       return { status: "running", folderPath: config.folderPath };
+    }
+    if (viewSession.phase === "error") {
+      return { status: "error", message: viewSession.error ?? "VS Code failed to start" };
     }
     // Skip availability check if we already have a folder (e.g. opened via CLI)
     if (config.folderPath) {
@@ -59,21 +88,33 @@ export default function EditorPane({ paneId, config, isFocused }: EditorPaneProp
     id: paneId,
     type: "browser",
     ref: placeholderRef,
-    enabled: state.status === "running",
+    enabled: state.status === "running" && viewSession.phase === "ready",
   });
 
   // Check availability on mount, then immediately transition to starting
   useEffect(() => {
     if (state.status !== "checking") return;
     let cancelled = false;
-    void window.api.editor.isAvailable(vscodeCliPath).then((available) => {
-      if (cancelled) return;
-      if (!available) {
-        setState({ status: "unavailable" });
-      } else {
-        setState({ status: "starting", folderPath: config.folderPath });
-      }
-    });
+    void window.api.editor
+      .isAvailable(vscodeCliPath)
+      .then((available) => {
+        if (cancelled) return;
+        if (!available) {
+          setState({ status: "unavailable" });
+        } else {
+          setState({ status: "starting", folderPath: config.folderPath });
+        }
+      })
+      .catch((error: unknown) => {
+        // Nothing re-runs this effect while the status stays "checking", so a
+        // rejected invoke has to move the pane out of it or the spinner never
+        // stops.
+        if (cancelled) return;
+        setState({
+          status: "error",
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
     return () => {
       cancelled = true;
     };
@@ -83,6 +124,35 @@ export default function EditorPane({ paneId, config, isFocused }: EditorPaneProp
   // the entire `state` object which is a new reference on every setState).
   const stateStatus = state.status;
   const stateFolderPath = "folderPath" in state ? state.folderPath : undefined;
+
+  useEffect(() => {
+    if (viewSession.phase === "ready" && stateStatus !== "running") {
+      setState({ status: "running", folderPath: stateFolderPath ?? config.folderPath });
+      return;
+    }
+    if (viewSession.phase === "error" && stateStatus !== "error") {
+      setState({ status: "error", message: viewSession.error ?? "VS Code failed to start" });
+      return;
+    }
+    if (viewSession.phase === "missing" && stateStatus === "running") {
+      setState({ status: "starting", folderPath: stateFolderPath ?? config.folderPath });
+    }
+  }, [config.folderPath, stateFolderPath, stateStatus, viewSession.error, viewSession.phase]);
+
+  useEffect(() => {
+    return () => {
+      markEmbeddedToolViewInactive(paneId);
+    };
+  }, [paneId]);
+
+  useEffect(() => {
+    if (!isActive) {
+      markEmbeddedToolViewInactive(paneId);
+      return;
+    }
+
+    markEmbeddedToolViewActive(paneId);
+  }, [isActive, paneId, viewSession.phase]);
 
   useEffect(() => {
     if (previousCliPathRef.current === null) {
@@ -96,12 +166,13 @@ export default function EditorPane({ paneId, config, isFocused }: EditorPaneProp
     }
 
     previousCliPathRef.current = vscodeCliPath;
+    markEmbeddedToolViewDestroyed(paneId);
     setState(
       config.folderPath
         ? { status: "starting", folderPath: config.folderPath }
         : { status: "checking" },
     );
-  }, [config.folderPath, state.status, vscodeCliPath]);
+  }, [config.folderPath, paneId, state.status, vscodeCliPath]);
 
   useEffect(() => {
     const wasVisible = wasVisibleRef.current;
@@ -122,44 +193,81 @@ export default function EditorPane({ paneId, config, isFocused }: EditorPaneProp
 
   // Start the VS Code server
   useEffect(() => {
+    // Evicting an inactive view flips this pane back to "starting", so without
+    // this guard the pane immediately rebuilds the view the warm-view budget
+    // just reclaimed, only for the next eviction pass to reclaim it again. The
+    // restart is deferred until the pane is actually on screen. (The code-server
+    // process behind it is reference-counted in main and is unaffected either
+    // way — only the WebContentsView churns.)
+    if (!isActive) return;
     if (stateStatus !== "starting") return;
-    if (startedEditors.has(paneId)) {
+    if (viewSession.phase === "ready") {
       setState({ status: "running", folderPath: stateFolderPath });
+      return;
+    }
+    if (viewSession.phase === "pending") return;
+    if (viewSession.phase === "error") {
+      setState({ status: "error", message: viewSession.error ?? "VS Code failed to start" });
       return;
     }
 
     let cancelled = false;
+    const generation = markEmbeddedToolViewCreated(paneId, () => {
+      void window.api.browser.destroy(paneId);
+    });
 
     void (async () => {
-      const result = await window.api.editor.start(paneId, stateFolderPath, vscodeCliPath);
+      try {
+        const result = await window.api.editor.start(paneId, stateFolderPath, vscodeCliPath);
 
-      if (cancelled) return;
+        if ("error" in result) {
+          markEmbeddedToolViewFailed(paneId, generation, result.error);
+          if (!cancelled) setState({ status: "error", message: result.error });
+          return;
+        }
 
-      if ("error" in result) {
-        setState({ status: "error", message: result.error });
-        return;
+        markEmbeddedToolViewReady(paneId, generation);
+        if (cancelled) return;
+
+        if (stateFolderPath) {
+          const folderName = stateFolderPath.split("/").pop() || stateFolderPath;
+          updatePaneTitle(paneId, `VC: ${folderName}`);
+          updatePaneConfig(paneId, { folderPath: stateFolderPath });
+        } else {
+          updatePaneTitle(paneId, "VS Code");
+        }
+        setState({ status: "running", folderPath: stateFolderPath });
+      } catch (error) {
+        // A rejected invoke leaves the session in "pending", and this effect
+        // returns early on "pending", so nothing would ever retry it — the pane
+        // would spin forever. Record the failure so the error UI (and its retry)
+        // can take over.
+        const message = error instanceof Error ? error.message : String(error);
+        markEmbeddedToolViewFailed(paneId, generation, message);
+        if (!cancelled) setState({ status: "error", message });
       }
-
-      startedEditors.add(paneId);
-      if (stateFolderPath) {
-        const folderName = stateFolderPath.split("/").pop() || stateFolderPath;
-        updatePaneTitle(paneId, `VC: ${folderName}`);
-        updatePaneConfig(paneId, { folderPath: stateFolderPath });
-      } else {
-        updatePaneTitle(paneId, "VS Code");
-      }
-      setState({ status: "running", folderPath: stateFolderPath });
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [paneId, stateStatus, stateFolderPath, updatePaneConfig, updatePaneTitle, vscodeCliPath]);
+  }, [
+    isActive,
+    paneId,
+    stateStatus,
+    stateFolderPath,
+    updatePaneConfig,
+    updatePaneTitle,
+    viewSession.error,
+    viewSession.phase,
+    vscodeCliPath,
+  ]);
 
   // Retry on error
   const handleRetry = useCallback(() => {
+    markEmbeddedToolViewDestroyed(paneId);
     setState({ status: "starting", folderPath: config.folderPath });
-  }, [config.folderPath]);
+  }, [config.folderPath, paneId]);
 
   if (state.status === "unavailable") {
     return (

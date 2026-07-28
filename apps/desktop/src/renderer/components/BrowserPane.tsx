@@ -18,6 +18,7 @@ interface BrowserPaneProps {
   workspaceId: string;
   config: BrowserConfig;
   isFocused: boolean;
+  isActive?: boolean;
 }
 
 /** Tiny helper for the browser toolbar's icon buttons — tightly tuned for
@@ -59,6 +60,7 @@ export default function BrowserPane({
   workspaceId,
   config,
   isFocused,
+  isActive = true,
 }: BrowserPaneProps): ReactElement {
   const {
     activePermissionRequest,
@@ -71,6 +73,7 @@ export default function BrowserPane({
     handleAddressBarSubmit,
     handleCloseFindBar,
     handleDismissPermissionPrompt,
+    handleFailureRetry,
     handleKeyDown,
     handlePermissionDecision,
     handleReloadOrStop,
@@ -83,7 +86,7 @@ export default function BrowserPane({
     placeholderRef,
     securityLabel,
     setInputUrl,
-  } = useBrowserPaneController({ paneId, workspaceId, config, isFocused });
+  } = useBrowserPaneController({ paneId, workspaceId, config, isFocused, isActive });
 
   return (
     <div className="flex flex-col h-full w-full bg-background">
@@ -192,10 +195,7 @@ export default function BrowserPane({
       {/* Native WebContentsView slot */}
       <div className="relative flex-1 min-h-0">
         {failure && (
-          <BrowserPaneStatusSurface
-            failure={failure}
-            onPrimaryAction={() => void window.api.browser.reload(paneId)}
-          />
+          <BrowserPaneStatusSurface failure={failure} onPrimaryAction={handleFailureRetry} />
         )}
         <div
           ref={placeholderRef}

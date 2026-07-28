@@ -25,7 +25,9 @@ vi.mock("./GroupTabBar", () => ({
 }));
 
 vi.mock("./TerminalPane", () => ({
-  default: ({ paneId }: { paneId: string }) => <div data-testid={`terminal-${paneId}`} />,
+  default: ({ paneId, isActive }: { paneId: string; isActive: boolean }) => (
+    <div data-testid={`terminal-${paneId}`} data-active={isActive} />
+  ),
 }));
 
 vi.mock("./EditorPane", () => ({
@@ -33,7 +35,9 @@ vi.mock("./EditorPane", () => ({
 }));
 
 vi.mock("./BrowserPane", () => ({
-  default: ({ paneId }: { paneId: string }) => <div data-testid={`browser-${paneId}`} />,
+  default: ({ paneId, isActive }: { paneId: string; isActive: boolean }) => (
+    <div data-testid={`browser-${paneId}`} data-active={isActive} />
+  ),
 }));
 
 vi.mock("./T3CodePane", () => ({
@@ -210,7 +214,7 @@ test("renders a leader placeholder when the active native pane is temporarily hi
   expect(container.textContent).toContain("Leader active");
 });
 
-test("mounts only the active tab layer for the focused group", async () => {
+test("keeps recently used tab controllers mounted while activating only the selected layer", async () => {
   useWorkspaceStore.setState({
     panes: {
       "pane-1": {
@@ -284,6 +288,12 @@ test("mounts only the active tab layer for the focused group", async () => {
     );
   });
 
-  expect(container.innerHTML).not.toContain('data-testid="terminal-pane-1"');
+  expect(container.innerHTML).toContain('data-testid="terminal-pane-1"');
+  expect(
+    container.querySelector('[data-testid="terminal-pane-1"]')?.getAttribute("data-active"),
+  ).toBe("false");
   expect(container.innerHTML).toContain('data-testid="browser-pane-2"');
+  expect(
+    container.querySelector('[data-testid="browser-pane-2"]')?.getAttribute("data-active"),
+  ).toBe("true");
 });

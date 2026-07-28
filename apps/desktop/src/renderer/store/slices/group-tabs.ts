@@ -13,6 +13,7 @@ import {
   createPane,
   createPaneGroupFromTabs,
   createPaneWithInheritedConfig,
+  findNearestTerminalCwd,
 } from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
 import { appendPaneToGroupState } from "../group-tab-append-state";
@@ -25,6 +26,8 @@ import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 type GroupTabsSlice = Pick<
   WorkspaceState,
   | "addGroupTab"
+  | "openTerminalWithConfig"
+  | "openManagedTerminalSession"
   | "removeGroupTab"
   | "setActiveGroupTab"
   | "reorderGroupTabs"
@@ -67,6 +70,65 @@ export function createGroupTabsSlice(
       get().recordTabActivation(groupId, appendedState.newTab.id);
     },
 
+    openTerminalWithConfig(workspaceId, groupId, config) {
+      const state = get();
+      const workspace = state.workspaces.find((candidate) => candidate.id === workspaceId);
+      const group = state.paneGroups[groupId];
+      if (!workspace || !group || !treeHasGroup(workspace.root, groupId)) return;
+
+      const inheritedCwd = findNearestTerminalCwd(
+        state.panes,
+        state.paneGroups,
+        groupId,
+        workspace,
+      );
+      const pane = createPane("terminal", {
+        ...config,
+        ...(config.cwd ? {} : inheritedCwd ? { cwd: inheritedCwd } : {}),
+      });
+      const appendedState = appendPaneToGroupState({
+        state: { panes: state.panes, paneGroups: state.paneGroups },
+        group,
+        pane,
+        tabId: nanoid(),
+      });
+
+      set((current) =>
+        attachWorkspaceDerivedState(current, {
+          panes: appendedState.panes,
+          paneGroups: appendedState.paneGroups,
+        }),
+      );
+      get().recordTabActivation(groupId, appendedState.newTab.id);
+    },
+
+    openManagedTerminalSession(workspaceId, groupId, sessionId) {
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) return;
+      const state = get();
+      const existingPane = Object.values(state.panes).find(
+        (pane) =>
+          pane.type === "terminal" &&
+          pane.config.backend === "managed-tmux" &&
+          pane.config.sessionId === sessionId,
+      );
+      if (existingPane) {
+        const owner = state.paneOwnersByPaneId[existingPane.id];
+        const ownerGroup = owner ? state.paneGroups[owner.groupId] : undefined;
+        const ownerTab = ownerGroup?.tabs.find((tab) => tab.paneId === existingPane.id);
+        if (owner && ownerTab) {
+          state.setActiveWorkspace(owner.workspaceId);
+          get().setActiveGroupTab(owner.workspaceId, owner.groupId, ownerTab.id);
+          get().setFocusedGroup(owner.workspaceId, owner.groupId);
+        }
+        return;
+      }
+
+      get().openTerminalWithConfig(workspaceId, groupId, {
+        backend: "managed-tmux",
+        sessionId,
+      });
+    },
+
     removeGroupTab(workspaceId, groupId, tabId) {
       const state = get();
       const ws = state.workspaces.find((w) => w.id === workspaceId);
@@ -91,7 +153,6 @@ export function createGroupTabsSlice(
         removedTabId: tabId,
         resolution,
         nextPanes,
-        removedGroupTabHistoryMode: "empty",
       });
 
       set(nextState);

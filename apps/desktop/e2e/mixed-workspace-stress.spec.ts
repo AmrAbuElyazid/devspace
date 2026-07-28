@@ -1,5 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { mkdtemp, rm } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
+  cleanupManagedTmuxSessions,
   getPerformanceSnapshot,
   getNativeViewSnapshot,
   getStoreState,
@@ -9,7 +13,10 @@ import {
 
 test.describe("Stress: mixed workspace remounting", () => {
   test("cycles mixed workspaces without leaking visible native panes", async () => {
-    const { app, page } = await launchApp();
+    const userDataPath = await mkdtemp(join(tmpdir(), "ds-mixed-"));
+    const { app, page } = await launchApp({
+      env: { DEVSPACE_USER_DATA_PATH: userDataPath },
+    });
 
     try {
       await resetPerformanceCounters(page);
@@ -119,14 +126,21 @@ test.describe("Stress: mixed workspace remounting", () => {
       expect(snapshotAfterCycles.counters.visibleBoundsSyncPasses).toBeGreaterThan(0);
 
       const performanceSnapshot = await getPerformanceSnapshot(page);
-      expect(performanceSnapshot.nativeViews.timings.reconcile.count).toBeGreaterThan(0);
-      expect(performanceSnapshot.nativeViews.timings.visibleBoundsSync.count).toBeGreaterThan(0);
+      expect(performanceSnapshot.nativeViews.timings.reconcile?.count ?? 0).toBeGreaterThan(0);
+      expect(performanceSnapshot.nativeViews.timings.visibleBoundsSync?.count ?? 0).toBeGreaterThan(
+        0,
+      );
       expect(performanceSnapshot.main.process.memory.rss).toBeGreaterThan(0);
       expect(
         performanceSnapshot.main.operations["terminal.setVisibleSurfaces"]?.count ?? 0,
       ).toBeGreaterThan(0);
     } finally {
-      await app.close();
+      try {
+        await cleanupManagedTmuxSessions(page);
+      } finally {
+        await app.close();
+      }
+      await rm(userDataPath, { recursive: true, force: true });
     }
   });
 });

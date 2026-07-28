@@ -35,6 +35,8 @@ import TerminalPane from "./TerminalPane";
 
 const NotePane = lazy(() => import("./note/NotePane"));
 
+const MAX_WARM_REACT_TAB_LAYERS = 6;
+
 class NotePaneErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   override state: { error: Error | null } = { error: null };
 
@@ -126,12 +128,14 @@ const PaneContent = memo(function PaneContent({
   paneConfig,
   workspaceId,
   isFocused,
+  isActive,
 }: {
   paneId: string;
   paneType: PaneType;
   paneConfig: unknown;
   workspaceId: string;
   isFocused: boolean;
+  isActive: boolean;
 }): ReactElement {
   switch (paneType) {
     case "terminal":
@@ -140,6 +144,7 @@ const PaneContent = memo(function PaneContent({
           paneId={paneId}
           config={(paneConfig as TerminalConfig) ?? {}}
           isFocused={isFocused}
+          isActive={isActive}
         />
       );
     case "editor":
@@ -148,6 +153,7 @@ const PaneContent = memo(function PaneContent({
           paneId={paneId}
           config={(paneConfig as EditorConfig) ?? {}}
           isFocused={isFocused}
+          isActive={isActive}
         />
       );
     case "browser":
@@ -157,10 +163,11 @@ const PaneContent = memo(function PaneContent({
           workspaceId={workspaceId}
           config={(paneConfig as BrowserConfig) ?? { url: "https://www.google.com" }}
           isFocused={isFocused}
+          isActive={isActive}
         />
       );
     case "t3code":
-      return <T3CodePane paneId={paneId} isFocused={isFocused} />;
+      return <T3CodePane paneId={paneId} isFocused={isFocused} isActive={isActive} />;
     case "note":
       return (
         <NotePaneErrorBoundary>
@@ -189,12 +196,14 @@ const TabLayer = memo(function TabLayer({
   isFocused,
   showDragPlaceholder,
   showLeaderPlaceholder,
+  isActive,
 }: {
   tab: PaneGroupTab;
   workspaceId: string;
   isFocused: boolean;
   showDragPlaceholder: boolean;
   showLeaderPlaceholder: boolean;
+  isActive: boolean;
 }): ReactElement | null {
   const pane = useWorkspaceStore((s) => s.panes[tab.paneId]);
   if (!pane) return null;
@@ -205,7 +214,8 @@ const TabLayer = memo(function TabLayer({
 
   return (
     <div
-      data-active
+      data-active={isActive || undefined}
+      aria-hidden={!isActive}
       onMouseDownCapture={handleActivate}
       onFocusCapture={handleActivate}
       className="absolute inset-0 hidden data-[active]:block z-[1]"
@@ -215,7 +225,8 @@ const TabLayer = memo(function TabLayer({
         paneType={pane.type}
         paneConfig={pane.config}
         workspaceId={workspaceId}
-        isFocused={isFocused}
+        isFocused={isFocused && isActive}
+        isActive={isActive}
       />
       {showDragPlaceholder ? <PanePlaceholder pane={pane} /> : null}
       {!showDragPlaceholder && showLeaderPlaceholder ? (
@@ -226,7 +237,7 @@ const TabLayer = memo(function TabLayer({
 });
 
 interface PaneGroupContentProps {
-  activeTab: PaneGroupTab | null;
+  activeTabId: string;
   dragHidesViews: boolean;
   dndEnabled: boolean;
   groupId: string;
@@ -234,11 +245,12 @@ interface PaneGroupContentProps {
   isFocused: boolean;
   previewSide: "left" | "right" | "top" | "bottom" | null;
   temporarilyHiddenPaneId: string | null;
+  tabs: PaneGroupTab[];
   workspaceId: string;
 }
 
 export default memo(function PaneGroupContent({
-  activeTab,
+  activeTabId,
   dragHidesViews,
   dndEnabled,
   groupId,
@@ -246,8 +258,23 @@ export default memo(function PaneGroupContent({
   isFocused,
   previewSide,
   temporarilyHiddenPaneId,
+  tabs,
   workspaceId,
 }: PaneGroupContentProps): ReactElement {
+  const warmTabIdsRef = useRef<string[]>([]);
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
+  const currentTabIds = new Set(tabs.map((tab) => tab.id));
+  const nextWarmTabIds = [
+    ...(activeTab ? [activeTab.id] : []),
+    ...warmTabIdsRef.current.filter((tabId) => tabId !== activeTab?.id && currentTabIds.has(tabId)),
+  ].slice(0, MAX_WARM_REACT_TAB_LAYERS);
+  warmTabIdsRef.current = nextWarmTabIds;
+  const tabById = new Map(tabs.map((tab) => [tab.id, tab]));
+  const warmTabs = nextWarmTabIds.flatMap((tabId) => {
+    const tab = tabById.get(tabId);
+    return tab ? [tab] : [];
+  });
+
   return (
     <div className="relative flex-1 min-h-0 overflow-hidden bg-background">
       {hasDragOverlay && (
@@ -258,16 +285,20 @@ export default memo(function PaneGroupContent({
           previewSide={previewSide}
         />
       )}
-      {activeTab ? (
-        <TabLayer
-          key={activeTab.paneId}
-          tab={activeTab}
-          workspaceId={workspaceId}
-          isFocused={isFocused}
-          showDragPlaceholder={dragHidesViews && hasDragOverlay}
-          showLeaderPlaceholder={temporarilyHiddenPaneId === activeTab.paneId}
-        />
-      ) : null}
+      {warmTabs.map((tab) => {
+        const isActive = tab.id === activeTab?.id;
+        return (
+          <TabLayer
+            key={tab.id}
+            tab={tab}
+            workspaceId={workspaceId}
+            isFocused={isFocused}
+            isActive={isActive}
+            showDragPlaceholder={isActive && dragHidesViews && hasDragOverlay}
+            showLeaderPlaceholder={isActive && temporarilyHiddenPaneId === tab.paneId}
+          />
+        );
+      })}
     </div>
   );
 });

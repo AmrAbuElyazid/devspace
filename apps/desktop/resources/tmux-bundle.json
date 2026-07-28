@@ -1,0 +1,30 @@
+{
+  "architecture": "arm64",
+  "minimumMacOSVersion": "14.0",
+  "tmux": {
+    "version": "3.4",
+    "homebrewRevision": "3.4_1",
+    "source": "https://github.com/tmux/tmux/releases/tag/3.4",
+    "license": "ISC"
+  },
+  "dependencies": [
+    {
+      "name": "libevent",
+      "version": "2.1.12_1",
+      "source": "https://github.com/libevent/libevent/releases/tag/release-2.1.12-stable",
+      "license": "BSD-3-Clause"
+    },
+    {
+      "name": "ncurses",
+      "version": "6.5",
+      "source": "https://invisible-island.net/ncurses/announce.html#h2-overview",
+      "license": "X11"
+    },
+    {
+      "name": "utf8proc",
+      "version": "2.9.0",
+      "source": "https://github.com/JuliaStrings/utf8proc/releases/tag/v2.9.0",
+      "license": "MIT"
+    }
+  ]
+}

@@ -10,6 +10,13 @@ import { VSCODE_PORT, DATA_DIR_SUFFIX } from "./dev-mode";
 const VSCODE_SERVER_BASE_PATH = `/devspace-vscode${DATA_DIR_SUFFIX}`;
 const VSCODE_CONNECTION_TOKEN_FILENAME = "connection-token";
 const VSCODE_PID_FILENAME = "server.pid";
+const OWNERSHIP_RECORD_VERSION = 1;
+
+interface ManagedProcessOwnership {
+  version: typeof OWNERSHIP_RECORD_VERSION;
+  listenerPid: number;
+  processGroupId?: number;
+}
 
 function createConnectionToken(): string {
   return randomBytes(24).toString("base64url");
@@ -104,6 +111,18 @@ function getProcessCommand(pid: number): string | null {
   }
 }
 
+function getProcessGroupId(pid: number): number | null {
+  try {
+    const output = execFileSync("ps", ["-p", String(pid), "-o", "pgid="], {
+      encoding: "utf-8",
+    }).trim();
+    const processGroupId = Number.parseInt(output, 10);
+    return Number.isSafeInteger(processGroupId) && processGroupId > 1 ? processGroupId : null;
+  } catch {
+    return null;
+  }
+}
+
 export function resolveVscodeCli(configuredCli?: string): EditorCliStatus {
   const normalizedConfiguredCli = normalizeConfiguredCli(configuredCli);
   if (normalizedConfiguredCli) {
@@ -177,6 +196,8 @@ export class VscodeServerManager {
   private connectionTokenFilePath: string;
   private connectionToken: string;
   private pidFilePath: string;
+  /** Process group created by this app instance. Never inferred by name alone. */
+  private ownedProcessGroupId: number | null = null;
 
   /**
    * Serialization lock for start(). All calls chain through this promise so
@@ -230,6 +251,10 @@ export class VscodeServerManager {
     configuredCli?: string,
   ): Promise<{ url: string; port: number }> {
     const key = folder ?? VscodeServerManager.NO_FOLDER_KEY;
+
+    if (!this.serverProcess && this.folders.size === 0) {
+      await this.reconcileStaleManagedProcesses();
+    }
 
     // Adopted servers are not child processes, so revalidate cached folder entries
     // against the current fixed-port owner before reusing them.
@@ -291,7 +316,9 @@ export class VscodeServerManager {
       ],
       {
         stdio: ["ignore", "pipe", "pipe"],
-        detached: false,
+        // Give the wrapper and descendants a dedicated process group so a
+        // verified Devspace-owned tree can be stopped together.
+        detached: true,
       },
     );
 
@@ -311,6 +338,7 @@ export class VscodeServerManager {
     });
 
     this.serverProcess = child;
+    this.ownedProcessGroupId = child.pid ?? null;
 
     try {
       const listenerPid = await waitForPid(() => this.resolveManagedListeningPid());
@@ -374,6 +402,7 @@ export class VscodeServerManager {
     }
 
     this.folders.clear();
+    this.ownedProcessGroupId = null;
     this.removePidFile();
   }
 
@@ -404,8 +433,8 @@ export class VscodeServerManager {
     if (this.folders.size === 0) {
       console.log(`[vscode-server] no remaining consumers, stopping server`);
       this.startLock = this.startLock.then(
-        () => this.stopManagedServer(),
-        () => this.stopManagedServer(),
+        () => (this.folders.size === 0 ? this.stopManagedServer() : undefined),
+        () => (this.folders.size === 0 ? this.stopManagedServer() : undefined),
       );
     }
   }
@@ -430,7 +459,15 @@ export class VscodeServerManager {
   private writePidFile(pid: number | undefined): void {
     if (pid === undefined) return;
     try {
-      writeFileSync(this.pidFilePath, `${pid}\n`, { encoding: "utf-8", mode: 0o600 });
+      const ownership: ManagedProcessOwnership = {
+        version: OWNERSHIP_RECORD_VERSION,
+        listenerPid: pid,
+        ...(this.ownedProcessGroupId ? { processGroupId: this.ownedProcessGroupId } : {}),
+      };
+      writeFileSync(this.pidFilePath, `${JSON.stringify(ownership)}\n`, {
+        encoding: "utf-8",
+        mode: 0o600,
+      });
     } catch (err) {
       console.warn("[vscode-server] failed to write pid file:", err);
     }
@@ -451,10 +488,10 @@ export class VscodeServerManager {
 
   private isExpectedManagedServerProcess(pid: number): boolean {
     const command = getProcessCommand(pid);
-    if (!command) {
-      return false;
-    }
+    return command !== null && this.isExpectedManagedServerCommand(command);
+  }
 
+  private isExpectedManagedServerCommand(command: string): boolean {
     return (
       command.includes("code-tunnel serve-web") &&
       command.includes("--host 127.0.0.1") &&
@@ -463,6 +500,83 @@ export class VscodeServerManager {
       command.includes(`--connection-token-file ${this.connectionTokenFilePath}`) &&
       command.includes(`--server-data-dir ${this.serverDataDir}`)
     );
+  }
+
+  private readOwnershipRecord(): ManagedProcessOwnership | null {
+    try {
+      const raw = readFileSync(this.pidFilePath, "utf-8").trim();
+      // Upgrade the legacy listener-only pid file conservatively.
+      if (/^\d+$/.test(raw)) {
+        const listenerPid = Number.parseInt(raw, 10);
+        return Number.isSafeInteger(listenerPid) && listenerPid > 1
+          ? { version: OWNERSHIP_RECORD_VERSION, listenerPid }
+          : null;
+      }
+
+      const parsed = JSON.parse(raw) as Partial<ManagedProcessOwnership>;
+      if (
+        parsed.version !== OWNERSHIP_RECORD_VERSION ||
+        !Number.isSafeInteger(parsed.listenerPid) ||
+        (parsed.listenerPid ?? 0) <= 1
+      ) {
+        return null;
+      }
+      if (
+        parsed.processGroupId !== undefined &&
+        (!Number.isSafeInteger(parsed.processGroupId) || parsed.processGroupId <= 1)
+      ) {
+        return null;
+      }
+      return parsed as ManagedProcessOwnership;
+    } catch {
+      return null;
+    }
+  }
+
+  private discoverExpectedManagedServerPids(): number[] {
+    try {
+      const output = execFileSync("ps", ["-axo", "pid=,command="], { encoding: "utf-8" });
+      const pids: number[] = [];
+      for (const line of output.split("\n")) {
+        const match = line.match(/^\s*(\d+)\s+(.+)$/);
+        if (!match || !this.isExpectedManagedServerCommand(match[2]!)) continue;
+        const pid = Number.parseInt(match[1]!, 10);
+        if (Number.isSafeInteger(pid) && pid > 1) pids.push(pid);
+      }
+      return [...new Set(pids)];
+    } catch {
+      return [];
+    }
+  }
+
+  private getVerifiedOwnedProcessGroup(record: ManagedProcessOwnership): number | null {
+    if (!record.processGroupId || !this.isExpectedManagedServerProcess(record.listenerPid)) {
+      return null;
+    }
+    return getProcessGroupId(record.listenerPid) === record.processGroupId
+      ? record.processGroupId
+      : null;
+  }
+
+  private async reconcileStaleManagedProcesses(): Promise<void> {
+    const currentListenerPid = this.resolveManagedListeningPid();
+    const ownership = this.readOwnershipRecord();
+    const stalePids = new Set(this.discoverExpectedManagedServerPids());
+    if (ownership && this.isExpectedManagedServerProcess(ownership.listenerPid)) {
+      stalePids.add(ownership.listenerPid);
+    }
+    if (currentListenerPid !== null) stalePids.delete(currentListenerPid);
+
+    for (const pid of stalePids) {
+      console.log(`[vscode-server] stopping verified stale managed process (pid ${pid})`);
+      await this.gracefulKillPid(pid, 500);
+    }
+
+    if (currentListenerPid === null && stalePids.size > 0) {
+      this.removePidFile();
+    } else if (ownership && !this.isExpectedManagedServerProcess(ownership.listenerPid)) {
+      this.removePidFile();
+    }
   }
 
   private removePidFile(): void {
@@ -519,6 +633,22 @@ export class VscodeServerManager {
     const child = this.serverProcess;
     this.serverProcess = null;
     const listenerPid = this.resolveManagedListeningPid();
+    const ownership = this.readOwnershipRecord();
+    const verifiedRecordedPid =
+      ownership && this.isExpectedManagedServerProcess(ownership.listenerPid)
+        ? ownership.listenerPid
+        : null;
+    const verifiedProcessGroup = ownership
+      ? this.getVerifiedOwnedProcessGroup(ownership)
+      : this.ownedProcessGroupId;
+
+    if (verifiedProcessGroup !== null && verifiedProcessGroup > 1) {
+      console.log(`[vscode-server] stopping managed process group ${verifiedProcessGroup}`);
+      await this.gracefulKillPid(-verifiedProcessGroup, timeoutMs);
+      this.ownedProcessGroupId = null;
+      this.removePidFile();
+      return;
+    }
 
     if (child) {
       console.log(`[vscode-server] stopping wrapper process (SIGTERM)`);
@@ -530,6 +660,22 @@ export class VscodeServerManager {
       await this.gracefulKillPid(listenerPid, timeoutMs);
     }
 
+    if (
+      verifiedRecordedPid !== null &&
+      verifiedRecordedPid !== listenerPid &&
+      verifiedRecordedPid !== child?.pid
+    ) {
+      console.log(`[vscode-server] stopping recorded managed process (pid ${verifiedRecordedPid})`);
+      await this.gracefulKillPid(verifiedRecordedPid, timeoutMs);
+    }
+
+    for (const pid of this.discoverExpectedManagedServerPids()) {
+      if (pid === listenerPid || pid === verifiedRecordedPid || pid === child?.pid) continue;
+      console.log(`[vscode-server] stopping verified managed process (pid ${pid})`);
+      await this.gracefulKillPid(pid, timeoutMs);
+    }
+
+    this.ownedProcessGroupId = null;
     this.removePidFile();
   }
 

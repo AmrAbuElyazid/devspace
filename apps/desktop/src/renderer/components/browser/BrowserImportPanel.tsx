@@ -61,6 +61,9 @@ export default function BrowserImportPanel() {
   const [selectedProfilePath, setSelectedProfilePath] = useState("");
   const [importState, setImportState] = useState<ImportState>({ status: "idle" });
   const [clearState, setClearState] = useState<ClearState>({ status: "idle" });
+  const [cacheSize, setCacheSize] = useState<number | null>(null);
+  const [cacheSizeError, setCacheSizeError] = useState<string | null>(null);
+  const [measuringCache, setMeasuringCache] = useState(false);
 
   const hasProfiles = BROWSERS_WITH_PROFILES.has(browser);
 
@@ -146,6 +149,7 @@ export default function BrowserImportPanel() {
     try {
       const result = await window.api.browser.clearBrowsingData(target);
       if (result.ok) {
+        if (target === "cache" || target === "everything") setCacheSize(0);
         setClearState({
           status: "success",
           message:
@@ -164,6 +168,23 @@ export default function BrowserImportPanel() {
         status: "error",
         message: error instanceof Error ? error.message : "Failed to clear browsing data.",
       });
+    }
+  }
+
+  async function handleMeasureCache() {
+    setMeasuringCache(true);
+    setCacheSizeError(null);
+    try {
+      const result = await window.api.browser.getCacheSize();
+      if ("error" in result) {
+        setCacheSizeError(result.error);
+      } else {
+        setCacheSize(result.bytes);
+      }
+    } catch (error) {
+      setCacheSizeError(error instanceof Error ? error.message : "Unable to measure cache.");
+    } finally {
+      setMeasuringCache(false);
     }
   }
 
@@ -294,6 +315,23 @@ export default function BrowserImportPanel() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
+            <div>
+              <div className="text-[11.5px] text-foreground">Browser cache usage</div>
+              <div className="text-[10px] text-muted-foreground">
+                {cacheSize === null ? "Not measured" : formatByteSize(cacheSize)}
+                {cacheSizeError ? ` · ${cacheSizeError}` : ""}
+              </div>
+            </div>
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={measuringCache}
+              onClick={() => void handleMeasureCache()}
+            >
+              {measuringCache ? "Measuring…" : "Measure"}
+            </Button>
+          </div>
           {clearState.status === "confirm" ? (
             <div
               className={cn(
@@ -373,6 +411,13 @@ export default function BrowserImportPanel() {
       </Card>
     </div>
   );
+}
+
+function formatByteSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
 function StatusMessage({ state }: { state: ImportState }) {

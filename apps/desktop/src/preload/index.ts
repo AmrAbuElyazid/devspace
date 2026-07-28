@@ -41,8 +41,11 @@ const bridge: DevspaceBridge = {
   },
 
   terminal: {
-    create: (surfaceId, options) => ipcRenderer.invoke("terminal:create", surfaceId, options),
+    create: (surfaceId, options, generation) =>
+      ipcRenderer.invoke("terminal:create", surfaceId, options, generation),
     destroy: (surfaceId) => ipcRenderer.invoke("terminal:destroy", surfaceId),
+    killManagedSession: (sessionId) => ipcRenderer.invoke("terminal:killManagedSession", sessionId),
+    listManagedSessions: () => ipcRenderer.invoke("terminal:listManagedSessions"),
     show: (surfaceId) => ipcRenderer.invoke("terminal:show", surfaceId),
     hide: (surfaceId) => ipcRenderer.invoke("terminal:hide", surfaceId),
     focus: (surfaceId) => ipcRenderer.send("terminal:focus", surfaceId),
@@ -65,8 +68,12 @@ const bridge: DevspaceBridge = {
       };
     },
     onClosed: (callback) => {
-      const listener = (_event: Electron.IpcRendererEvent, surfaceId: string): void => {
-        callback(surfaceId);
+      const listener = (
+        _event: Electron.IpcRendererEvent,
+        surfaceId: string,
+        generation: number | null,
+      ): void => {
+        callback(surfaceId, generation);
       };
       ipcRenderer.on("terminal:closed", listener);
       return () => {
@@ -256,6 +263,7 @@ const bridge: DevspaceBridge = {
   workspaceState: {
     load: () => ipcRenderer.invoke("workspaceState:load"),
     save: (snapshot) => ipcRenderer.invoke("workspaceState:save", snapshot),
+    patch: (patch) => ipcRenderer.invoke("workspaceState:patch", patch),
     saveSync: (snapshot) => {
       ipcRenderer.sendSync("workspaceState:saveSync", snapshot);
     },
@@ -297,6 +305,7 @@ const bridge: DevspaceBridge = {
       ipcRenderer.invoke("browser:import", browser, profilePath, mode),
     detectAccess: (browser, mode) => ipcRenderer.invoke("browser:detectAccess", browser, mode),
     clearBrowsingData: (target) => ipcRenderer.invoke("browser:clearData", target),
+    getCacheSize: () => ipcRenderer.invoke("browser:getCacheSize"),
     onStateChange: (callback) => {
       const listener = (
         _event: Electron.IpcRendererEvent,

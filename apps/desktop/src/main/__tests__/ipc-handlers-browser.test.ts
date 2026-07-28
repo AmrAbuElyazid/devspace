@@ -129,6 +129,7 @@ const browserImportServiceMock = {
   },
   detectAccess: async () => ({ ok: true }),
   clearBrowsingData: async () => ({ ok: true }),
+  getCacheSize: async () => 4096,
 };
 
 const browserSessionManagerMock = {
@@ -166,6 +167,10 @@ test("browser create IPC only forwards allowlisted URLs", async () => {
   await handlers.get("browser:create")?.({}, "pane-2", "javascript:alert(1)");
 
   expect(controllerCalls).toEqual([["createPane", "pane-1", "https://example.com/"]]);
+});
+
+test("browser cache size IPC reports usage without clearing it", async () => {
+  await expect(handlers.get("browser:getCacheSize")?.({})).resolves.toEqual({ bytes: 4096 });
 });
 
 test("browser navigate IPC rejects unsupported URL schemes", async () => {

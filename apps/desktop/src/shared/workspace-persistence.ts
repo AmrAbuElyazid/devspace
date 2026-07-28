@@ -1,6 +1,25 @@
-interface PersistedTerminalConfig {
+interface PersistedDirectTerminalConfig {
   cwd?: string;
+  backend?: "direct";
 }
+
+interface PersistedManagedTmuxTerminalConfig {
+  cwd?: string;
+  backend: "managed-tmux";
+  sessionId: string;
+}
+
+interface PersistedExternalTmuxTerminalConfig {
+  cwd?: string;
+  backend: "external-tmux";
+  sessionName: string;
+  socketPath?: string;
+}
+
+type PersistedTerminalConfig =
+  | PersistedDirectTerminalConfig
+  | PersistedManagedTmuxTerminalConfig
+  | PersistedExternalTmuxTerminalConfig;
 
 interface PersistedBrowserConfig {
   url: string;
@@ -74,4 +93,83 @@ export interface PersistedWorkspaceState {
   paneGroups: Record<string, PersistedPaneGroup>;
   pinnedSidebarNodes: PersistedSidebarNode[];
   sidebarTree: PersistedSidebarNode[];
+}
+
+export interface PersistedWorkspaceListPatch {
+  upsert: PersistedWorkspace[];
+  removeIds: string[];
+  orderedIds?: string[];
+}
+
+export interface PersistedPaneRecordPatch {
+  upsert: PersistedPane[];
+  removeIds: string[];
+}
+
+export interface PersistedPaneGroupRecordPatch {
+  upsert: PersistedPaneGroup[];
+  removeIds: string[];
+}
+
+/**
+ * A renderer-to-main persistence delta. Unspecified fields retain their
+ * current value. Entity patches are applied atomically and the resulting full
+ * graph is validated before it is written to SQLite.
+ */
+export interface PersistedWorkspacePatch {
+  workspaces?: PersistedWorkspaceListPatch;
+  activeWorkspaceId?: string;
+  panes?: PersistedPaneRecordPatch;
+  paneGroups?: PersistedPaneGroupRecordPatch;
+  pinnedSidebarNodes?: PersistedSidebarNode[];
+  sidebarTree?: PersistedSidebarNode[];
+}
+
+function applyRecordPatch<T extends { id: string }>(
+  current: Record<string, T>,
+  patch: { upsert: T[]; removeIds: string[] },
+): Record<string, T> {
+  // Spreading walks the record once. Going through Object.entries and a Map
+  // would walk it three times to reach the same object with the same key
+  // order: deleting drops a key, and assigning an existing one keeps its
+  // position, exactly as the Map did.
+  const next = { ...current };
+  for (const id of patch.removeIds) delete next[id];
+  for (const entity of patch.upsert) next[entity.id] = entity;
+  return next;
+}
+
+export function applyPersistedWorkspacePatch(
+  current: PersistedWorkspaceState,
+  patch: PersistedWorkspacePatch,
+): PersistedWorkspaceState {
+  let workspaces = current.workspaces;
+
+  if (patch.workspaces) {
+    const workspaceById = new Map(current.workspaces.map((workspace) => [workspace.id, workspace]));
+    for (const id of patch.workspaces.removeIds) workspaceById.delete(id);
+    for (const workspace of patch.workspaces.upsert) {
+      workspaceById.set(workspace.id, workspace);
+    }
+
+    if (patch.workspaces.orderedIds) {
+      workspaces = patch.workspaces.orderedIds.flatMap((id) => {
+        const workspace = workspaceById.get(id);
+        return workspace ? [workspace] : [];
+      });
+    } else {
+      workspaces = [...workspaceById.values()];
+    }
+  }
+
+  return {
+    workspaces,
+    activeWorkspaceId: patch.activeWorkspaceId ?? current.activeWorkspaceId,
+    panes: patch.panes ? applyRecordPatch(current.panes, patch.panes) : current.panes,
+    paneGroups: patch.paneGroups
+      ? applyRecordPatch(current.paneGroups, patch.paneGroups)
+      : current.paneGroups,
+    pinnedSidebarNodes: patch.pinnedSidebarNodes ?? current.pinnedSidebarNodes,
+    sidebarTree: patch.sidebarTree ?? current.sidebarTree,
+  };
 }

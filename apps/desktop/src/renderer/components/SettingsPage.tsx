@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   X,
   Terminal,
@@ -13,9 +13,11 @@ import {
 } from "lucide-react";
 
 import { useSettingsStore } from "@/store/settings-store";
+import { useWorkspaceStore } from "@/store/workspace-store";
 import { useAppUpdateState } from "@/hooks/useAppUpdateState";
 import { cn } from "@/lib/utils";
-import type { AppUpdateState, EditorCliStatus } from "../../shared/types";
+import type { TerminalConfig } from "@/types/workspace";
+import type { AppUpdateState, EditorCliStatus, ManagedTerminalSession } from "../../shared/types";
 import {
   SHORTCUT_CATEGORIES,
   getVisibleShortcutsForCategory,
@@ -234,6 +236,99 @@ function TerminalSection() {
   const terminalScrollback = useSettingsStore((s) => s.terminalScrollback);
   const terminalCursorStyle = useSettingsStore((s) => s.terminalCursorStyle);
   const updateSetting = useSettingsStore((s) => s.updateSetting);
+  const setSettingsOpen = useSettingsStore((s) => s.setSettingsOpen);
+  const [externalSessionName, setExternalSessionName] = useState("");
+  const [externalSocketPath, setExternalSocketPath] = useState("");
+  const [managedSessions, setManagedSessions] = useState<ManagedTerminalSession[]>([]);
+  const [managedSessionError, setManagedSessionError] = useState<string | null>(null);
+  const panes = useWorkspaceStore((state) => state.panes);
+  const managedPaneSessionIds = useMemo(
+    () =>
+      Object.values(panes).flatMap((pane) =>
+        pane.type === "terminal" && pane.config.backend === "managed-tmux"
+          ? [pane.config.sessionId]
+          : [],
+      ),
+    [panes],
+  );
+  const managedPaneSessionKey = managedPaneSessionIds.join(",");
+
+  const refreshManagedSessions = useCallback(async () => {
+    const result = await window.api.terminal.listManagedSessions();
+    if ("error" in result) {
+      setManagedSessionError(result.error);
+      return;
+    }
+    setManagedSessionError(null);
+    setManagedSessions(result.sessions);
+  }, []);
+
+  useEffect(() => {
+    void refreshManagedSessions();
+  }, [refreshManagedSessions, managedPaneSessionKey]);
+
+  const managedPaneSessionIdSet = new Set(managedPaneSessionIds);
+  const recoverableSessions = managedSessions.filter(
+    (session) => !managedPaneSessionIdSet.has(session.sessionId),
+  );
+
+  const handleRecoverSession = useCallback((sessionId: string) => {
+    const state = useWorkspaceStore.getState();
+    const workspace = state.workspaces.find(
+      (candidate) => candidate.id === state.activeWorkspaceId,
+    );
+    if (!workspace?.focusedGroupId) return;
+    state.openManagedTerminalSession(workspace.id, workspace.focusedGroupId, sessionId);
+  }, []);
+
+  const handleKillSession = useCallback(
+    async (sessionId: string) => {
+      if (!window.confirm("Kill this detached terminal session and all processes running in it?")) {
+        return;
+      }
+      const result = await window.api.terminal.killManagedSession(sessionId);
+      if ("error" in result) {
+        setManagedSessionError(result.error);
+        return;
+      }
+      await refreshManagedSessions();
+    },
+    [refreshManagedSessions],
+  );
+
+  const openTerminalWithConfig = useCallback(
+    (config: TerminalConfig) => {
+      const state = useWorkspaceStore.getState();
+      const workspace = state.workspaces.find(
+        (candidate) => candidate.id === state.activeWorkspaceId,
+      );
+      if (!workspace?.focusedGroupId) return;
+      state.openTerminalWithConfig(workspace.id, workspace.focusedGroupId, config);
+      setSettingsOpen(false);
+    },
+    [setSettingsOpen],
+  );
+
+  const handleAttachExternalTmux = useCallback(() => {
+    const sessionName = externalSessionName.trim();
+    const socketPath = externalSocketPath.trim();
+    if (
+      !sessionName ||
+      sessionName.includes("\0") ||
+      sessionName.includes("\r") ||
+      sessionName.includes("\n") ||
+      socketPath.includes("\0") ||
+      socketPath.includes("\r") ||
+      socketPath.includes("\n")
+    ) {
+      return;
+    }
+    openTerminalWithConfig({
+      backend: "external-tmux",
+      sessionName,
+      ...(socketPath ? { socketPath } : {}),
+    });
+  }, [externalSessionName, externalSocketPath, openTerminalWithConfig]);
 
   return (
     <section>
@@ -267,6 +362,110 @@ function TerminalSection() {
           onChange={(v) => updateSetting("terminalCursorStyle", v)}
         />
       </SettingRow>
+      <div className="mt-6 border border-border rounded-md p-3 space-y-3">
+        <div>
+          <div className="text-[12px] font-medium text-foreground">Terminal backends</div>
+          <div className="text-[10.5px] text-muted-foreground mt-0.5 leading-relaxed">
+            New terminals use Devspace&apos;s isolated managed tmux server. Your own tmux server,
+            configuration, and sessions remain separate.
+          </div>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-[11.5px] text-foreground">Direct PTY</div>
+            <div className="text-[10px] text-muted-foreground">
+              Compatibility mode; its process cannot be detached safely.
+            </div>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => openTerminalWithConfig({ backend: "direct" })}
+          >
+            Open direct terminal
+          </Button>
+        </div>
+        <Separator />
+        <div>
+          <div className="text-[11.5px] text-foreground">Attach to your tmux</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">
+            Uses the tmux installed on your machine and never takes ownership of the session.
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Input
+            value={externalSessionName}
+            onChange={(event) => setExternalSessionName(event.target.value)}
+            placeholder="session name"
+            aria-label="External tmux session name"
+            className="h-7 min-w-0 text-[11px] font-mono"
+          />
+          <Input
+            value={externalSocketPath}
+            onChange={(event) => setExternalSocketPath(event.target.value)}
+            placeholder="socket path (optional)"
+            aria-label="External tmux socket path"
+            className="h-7 min-w-0 text-[11px] font-mono"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!externalSessionName.trim()}
+            onClick={handleAttachExternalTmux}
+          >
+            Attach
+          </Button>
+        </div>
+      </div>
+      <div className="mt-6">
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <div className="text-[12px] font-medium text-foreground">Detached sessions</div>
+            <div className="text-[10.5px] text-muted-foreground mt-0.5">
+              Closing a managed terminal tab keeps its processes alive until you recover or kill it.
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void refreshManagedSessions()}>
+            Refresh
+          </Button>
+        </div>
+        {managedSessionError ? (
+          <div className="text-[11px] text-destructive py-2">{managedSessionError}</div>
+        ) : recoverableSessions.length === 0 ? (
+          <div className="text-[11px] text-muted-foreground border border-border rounded-md px-3 py-2.5">
+            No detached managed sessions.
+          </div>
+        ) : (
+          <div className="border border-border rounded-md divide-y divide-border">
+            {recoverableSessions.map((session) => (
+              <div key={session.sessionId} className="flex items-center gap-3 px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <div className="font-mono text-[11px] truncate">{session.sessionId}</div>
+                  <div className="text-[10px] text-muted-foreground">
+                    {session.attachedClients > 0
+                      ? `${session.attachedClients} attached client${session.attachedClients === 1 ? "" : "s"}`
+                      : "detached"}
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleRecoverSession(session.sessionId)}
+                >
+                  Open
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => void handleKillSession(session.sessionId)}
+                >
+                  Kill
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

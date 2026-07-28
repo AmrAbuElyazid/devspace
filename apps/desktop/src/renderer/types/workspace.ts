@@ -1,8 +1,28 @@
 export type PaneType = "terminal" | "browser" | "editor" | "t3code" | "note";
 
-export interface TerminalConfig {
+export interface DirectTerminalConfig {
   cwd?: string;
+  /** Missing on panes created before managed sessions were introduced. */
+  backend?: "direct";
 }
+
+export interface ManagedTmuxTerminalConfig {
+  cwd?: string;
+  backend: "managed-tmux";
+  sessionId: string;
+}
+
+export interface ExternalTmuxTerminalConfig {
+  cwd?: string;
+  backend: "external-tmux";
+  sessionName: string;
+  socketPath?: string;
+}
+
+export type TerminalConfig =
+  | DirectTerminalConfig
+  | ManagedTmuxTerminalConfig
+  | ExternalTmuxTerminalConfig;
 
 export interface BrowserConfig {
   url: string;
@@ -19,15 +39,27 @@ export interface NoteConfig {
   noteId: string;
 }
 
-export type PaneConfig = TerminalConfig | BrowserConfig | EditorConfig | T3CodeConfig | NoteConfig;
+export interface PaneConfigByType {
+  terminal: TerminalConfig;
+  browser: BrowserConfig;
+  editor: EditorConfig;
+  t3code: T3CodeConfig;
+  note: NoteConfig;
+}
+
+export type PaneConfig = PaneConfigByType[PaneType];
+
+export type PaneOfType<T extends PaneType> = T extends PaneType
+  ? {
+      id: string;
+      title: string;
+      type: T;
+      config: PaneConfigByType[T];
+    }
+  : never;
 
 /** Discriminated union coupling `type` with the correct `config` shape. */
-export type Pane =
-  | { id: string; title: string; type: "terminal"; config: TerminalConfig }
-  | { id: string; title: string; type: "browser"; config: BrowserConfig }
-  | { id: string; title: string; type: "editor"; config: EditorConfig }
-  | { id: string; title: string; type: "t3code"; config: T3CodeConfig }
-  | { id: string; title: string; type: "note"; config: NoteConfig };
+export type Pane = PaneOfType<PaneType>;
 
 export type SplitDirection = "horizontal" | "vertical";
 

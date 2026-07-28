@@ -209,6 +209,11 @@ export class BrowserImportService {
     return clearSessionBrowsingData(session, this.deps.historyService, target);
   }
 
+  async getCacheSize(): Promise<number> {
+    const session = this.deps.sessionManager.getSession();
+    return session.getCacheSize();
+  }
+
   // -----------------------------------------------------------------------
   // Chromium import (Chrome, Arc)
   // -----------------------------------------------------------------------

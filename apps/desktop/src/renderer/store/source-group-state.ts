@@ -31,7 +31,6 @@ interface ApplySourceGroupResolutionOptions {
   nextPaneGroups?: WorkspaceState["paneGroups"];
   nextTabHistoryByGroupId?: WorkspaceState["tabHistoryByGroupId"];
   nextRecentTabTraversalByGroupId?: WorkspaceState["recentTabTraversalByGroupId"];
-  removedGroupTabHistoryMode?: "delete" | "empty";
 }
 
 export function applySourceGroupTabRemovalResolution({
@@ -45,7 +44,6 @@ export function applySourceGroupTabRemovalResolution({
   nextPaneGroups = state.paneGroups,
   nextTabHistoryByGroupId = state.tabHistoryByGroupId,
   nextRecentTabTraversalByGroupId = state.recentTabTraversalByGroupId,
-  removedGroupTabHistoryMode = "delete",
 }: ApplySourceGroupResolutionOptions): SourceGroupStateSlice {
   const panes = { ...nextPanes };
   const paneGroups = { ...nextPaneGroups };
@@ -79,11 +77,7 @@ export function applySourceGroupTabRemovalResolution({
             }
           : workspace,
       );
-      if (removedGroupTabHistoryMode === "empty") {
-        tabHistoryByGroupId[sourceGroupId] = [];
-      } else {
-        delete tabHistoryByGroupId[sourceGroupId];
-      }
+      delete tabHistoryByGroupId[sourceGroupId];
       recentTabTraversalByGroupId = removeGroupRecentState(
         recentTabTraversalByGroupId,
         sourceGroupId,

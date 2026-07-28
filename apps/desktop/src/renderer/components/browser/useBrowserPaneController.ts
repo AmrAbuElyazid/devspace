@@ -5,13 +5,20 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent,
 } from "react";
 import { getAddressBarSubmitValue, normalizeBrowserInput } from "../../lib/browser-url";
 import {
+  getBrowserPaneSessionSnapshot,
   hasCreatedBrowserPane,
+  markBrowserPaneActive,
   markBrowserPaneCreated,
   markBrowserPaneDestroyed,
+  markBrowserPaneFailed,
+  markBrowserPaneInactive,
+  markBrowserPaneReady,
+  subscribeBrowserPane,
 } from "../../lib/browser-pane-session";
 import { useNativeView } from "../../hooks/useNativeView";
 import { useBrowserStore } from "../../store/browser-store";
@@ -28,17 +35,16 @@ interface UseBrowserPaneControllerArgs {
   workspaceId: string;
   config: BrowserConfig;
   isFocused: boolean;
+  isActive: boolean;
 }
 
 export function useBrowserPaneController({
   paneId,
   config,
   isFocused,
+  isActive,
 }: UseBrowserPaneControllerArgs) {
-  const [paneReady, setPaneReady] = useState(() => hasCreatedBrowserPane(paneId));
   const placeholderRef = useRef<HTMLDivElement>(null);
-  const createAttemptRef = useRef(0);
-  const unmountedRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId]);
   const pendingPermissionRequest = useBrowserStore((s) => s.pendingPermissionRequest);
@@ -53,7 +59,24 @@ export function useBrowserPaneController({
     [config.url],
   );
   const [inputUrl, setInputUrl] = useState(initialUrl);
-  const failure = runtimeState?.failure ?? null;
+  const subscribeToPane = useCallback(
+    (listener: () => void) => subscribeBrowserPane(paneId, listener),
+    [paneId],
+  );
+  const readPaneSession = useCallback(() => getBrowserPaneSessionSnapshot(paneId), [paneId]);
+  const paneSession = useSyncExternalStore(subscribeToPane, readPaneSession, readPaneSession);
+  const creationFailure = useMemo(
+    () =>
+      paneSession.phase === "error"
+        ? {
+            kind: "crash" as const,
+            detail: paneSession.error ?? "Browser pane failed to start.",
+            url: initialUrl,
+          }
+        : null,
+    [initialUrl, paneSession.error, paneSession.phase],
+  );
+  const failure = runtimeState?.failure ?? creationFailure;
   const wasVisibleRef = useRef(false);
   const wasFocusedRef = useRef(false);
   const activePermissionRequest =
@@ -61,42 +84,62 @@ export function useBrowserPaneController({
 
   useEffect(() => {
     return () => {
-      unmountedRef.current = true;
+      markBrowserPaneInactive(paneId, (stalePaneId) => {
+        void window.api.browser.destroy(stalePaneId);
+        useBrowserStore.getState().clearRuntimeState(stalePaneId);
+      });
     };
-  }, []);
+  }, [paneId]);
+
+  useEffect(() => {
+    if (!isActive) {
+      markBrowserPaneInactive(paneId, (stalePaneId) => {
+        void window.api.browser.destroy(stalePaneId);
+        useBrowserStore.getState().clearRuntimeState(stalePaneId);
+      });
+      return;
+    }
+
+    markBrowserPaneActive(paneId);
+  }, [isActive, paneId, paneSession.phase]);
 
   // Queue native browser creation during layout so the create IPC is already
   // in flight before useNativeView's registration effect can reconcile.
   useLayoutEffect(() => {
-    if (paneReady) {
-      return;
-    }
+    if (!isActive || paneSession.phase !== "missing" || hasCreatedBrowserPane(paneId)) return;
 
-    if (hasCreatedBrowserPane(paneId)) {
-      setPaneReady(true);
-      return;
-    }
+    const generation = markBrowserPaneCreated(paneId);
 
-    const attemptId = ++createAttemptRef.current;
-    markBrowserPaneCreated(paneId);
-    setPaneReady(true);
-
-    void window.api.browser.create(paneId, initialUrl).catch(() => {
-      if (!unmountedRef.current && createAttemptRef.current === attemptId) {
-        markBrowserPaneDestroyed(paneId);
-      }
-    });
-  }, [initialUrl, paneId, paneReady]);
+    void window.api.browser
+      .create(paneId, initialUrl)
+      .then(() => {
+        markBrowserPaneReady(
+          paneId,
+          (stalePaneId) => {
+            void window.api.browser.destroy(stalePaneId);
+            useBrowserStore.getState().clearRuntimeState(stalePaneId);
+          },
+          generation,
+        );
+      })
+      .catch((error: unknown) => {
+        markBrowserPaneFailed(
+          paneId,
+          generation,
+          error instanceof Error ? error.message : String(error),
+        );
+      });
+  }, [initialUrl, isActive, paneId, paneSession.phase]);
 
   const { isVisible } = useNativeView({
     id: paneId,
     type: "browser",
     ref: placeholderRef,
-    enabled: paneReady && failure === null,
+    enabled: paneSession.phase === "ready" && failure === null,
   });
 
   useEffect(() => {
-    if (runtimeState) {
+    if (runtimeState || paneSession.phase !== "ready") {
       return;
     }
 
@@ -116,7 +159,7 @@ export function useBrowserPaneController({
     return () => {
       cancelled = true;
     };
-  }, [paneId, runtimeState, upsertRuntimeState]);
+  }, [paneId, paneSession.phase, runtimeState, upsertRuntimeState]);
 
   useEffect(() => {
     if (runtimeState?.url) {
@@ -254,6 +297,15 @@ export function useBrowserPaneController({
     }
   }, [closeFindBar, failure, isVisible, paneId]);
 
+  const handleFailureRetry = useCallback(() => {
+    if (creationFailure) {
+      markBrowserPaneDestroyed(paneId);
+      useBrowserStore.getState().clearRuntimeState(paneId);
+      return;
+    }
+    void window.api.browser.reload(paneId);
+  }, [creationFailure, paneId]);
+
   return {
     activePermissionRequest,
     canGoBack,
@@ -265,6 +317,7 @@ export function useBrowserPaneController({
     handleAddressBarSubmit,
     handleCloseFindBar,
     handleDismissPermissionPrompt,
+    handleFailureRetry,
     handleKeyDown,
     handlePermissionDecision,
     handleReloadOrStop,

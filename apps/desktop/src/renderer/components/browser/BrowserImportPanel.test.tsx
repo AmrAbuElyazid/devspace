@@ -21,4 +21,6 @@ test("BrowserImportPanel renders clear browsing data section", () => {
   expect(html).toContain("Clear history");
   expect(html).toContain("Clear cache");
   expect(html).toContain("Clear everything");
+  expect(html).toContain("Browser cache usage");
+  expect(html).toContain("Measure");
 });

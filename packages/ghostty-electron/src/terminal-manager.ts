@@ -34,7 +34,9 @@ export interface GhosttyTerminalConfig {
  */
 export class GhosttyTerminal {
   private bridge: GhosttyNativeBridge | null = null;
-  private activeSurfaces = new Set<string>();
+  /** Live surface ID -> epoch of the incarnation currently mounted under it. */
+  private activeSurfaces = new Map<string, number>();
+  private surfaceEpochCounter = 0;
   private listeners = new Map<string, Set<(...args: any[]) => void>>();
   private lastTitlesBySurface = new Map<string, string>();
   private lastPwdsBySurface = new Map<string, string>();
@@ -79,16 +81,23 @@ export class GhosttyTerminal {
       );
     });
 
-    this.bridge.setCallback("surface-closed", (surfaceId: unknown) => {
-      if (typeof surfaceId === "string") {
-        if (!this.activeSurfaces.has(surfaceId)) {
-          return;
-        }
-        this.bridge?.destroySurface(surfaceId);
-        this.activeSurfaces.delete(surfaceId);
-        this.clearSurfaceEventCache(surfaceId);
-        this.emit("surface-closed", surfaceId);
-      }
+    this.bridge.setCallback("surface-closed", (surfaceId: unknown, epoch: unknown) => {
+      if (typeof surfaceId !== "string") return;
+
+      // Surface IDs are pane IDs and are reused when a pane's surface is
+      // recreated, so an ID match alone does not prove this close belongs to
+      // the surface that is mounted right now. Requiring the epoch to match
+      // keeps a close queued by a previous incarnation from tearing down its
+      // replacement. Dropping a stale close only leaks a surface; acting on
+      // one kills a live shell and every process running under it, so an
+      // unrecognised epoch is always ignored.
+      const activeEpoch = this.activeSurfaces.get(surfaceId);
+      if (activeEpoch === undefined || epoch !== activeEpoch) return;
+
+      this.bridge?.destroySurface(surfaceId);
+      this.activeSurfaces.delete(surfaceId);
+      this.clearSurfaceEventCache(surfaceId);
+      this.emit("surface-closed", surfaceId);
     });
 
     this.bridge.setCallback("surface-focused", (surfaceId: unknown) => {
@@ -175,9 +184,10 @@ export class GhosttyTerminal {
    */
   createSurface(surfaceId: string, options?: CreateSurfaceOptions): void {
     if (!this.bridge) return;
-    this.bridge.createSurface(surfaceId, options);
+    const epoch = ++this.surfaceEpochCounter;
+    this.bridge.createSurface(surfaceId, options, epoch);
     this.clearSurfaceEventCache(surfaceId);
-    this.activeSurfaces.add(surfaceId);
+    this.activeSurfaces.set(surfaceId, epoch);
   }
 
   /**
@@ -261,7 +271,7 @@ export class GhosttyTerminal {
     if (!this.bridge) return;
 
     const bridge = this.bridge;
-    const activeSurfaceIds = Array.from(this.activeSurfaces);
+    const activeSurfaceIds = Array.from(this.activeSurfaces.keys());
 
     this.activeSurfaces.clear();
     this.listeners.clear();

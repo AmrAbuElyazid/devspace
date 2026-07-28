@@ -49,6 +49,22 @@ export async function launchApp(options: LaunchAppOptions = {}): Promise<{
   return { app, page };
 }
 
+/** Kill every session owned by a disposable E2E user-data directory. */
+export async function cleanupManagedTmuxSessions(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const listed = await window.api.terminal.listManagedSessions();
+    if ("error" in listed) throw new Error(listed.error);
+
+    for (const session of listed.sessions) {
+      const result = await window.api.terminal.killManagedSession(session.sessionId);
+      if ("error" in result) throw new Error(result.error);
+    }
+  });
+
+  // Let tmux remove its private socket before the test deletes userData.
+  await page.waitForTimeout(100);
+}
+
 /**
  * Read the CLI auth token for the dev port.
  *
@@ -168,6 +184,14 @@ export async function getPerformanceSnapshot(page: Page): Promise<{
       }
     >;
   };
+  terminalSurfaces: {
+    total: number;
+    active: number;
+    ready: number;
+    inactivePersistent: number;
+    byBackend: Record<string, number>;
+    lifecycle: Record<string, number>;
+  };
 }> {
   return page.evaluate(async () => {
     const profiling = (window as unknown as Record<string, unknown>).__DEVSPACE_PERF__;
@@ -217,6 +241,14 @@ export async function getPerformanceSnapshot(page: Page): Promise<{
             lastDurationMs: number;
           }
         >;
+      };
+      terminalSurfaces: {
+        total: number;
+        active: number;
+        ready: number;
+        inactivePersistent: number;
+        byBackend: Record<string, number>;
+        lifecycle: Record<string, number>;
       };
     }>;
   });

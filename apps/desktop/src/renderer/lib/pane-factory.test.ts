@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   createDefaultWorkspaceBundle,
+  createPane,
   createPaneGroupFromTabs,
   createPaneWithInheritedConfig,
   findNearestTerminalCwd,
@@ -56,6 +57,45 @@ function makeWorkspace(overrides: Partial<Workspace> = {}): Workspace {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+describe("createPane", () => {
+  test.each([
+    ["browser", { url: "about:blank" }],
+    ["editor", {}],
+    ["t3code", {}],
+  ] as const)("creates valid default config for %s panes", (type, expectedConfig) => {
+    expect(createPane(type).config).toEqual(expectedConfig);
+  });
+
+  test("creates a managed terminal session id by default", () => {
+    const first = createPane("terminal");
+    const second = createPane("terminal");
+
+    expect(first.config.backend).toBe("managed-tmux");
+    expect(second.config.backend).toBe("managed-tmux");
+    if (first.config.backend !== "managed-tmux" || second.config.backend !== "managed-tmux") {
+      throw new Error("expected managed terminals");
+    }
+    expect(first.config.sessionId).toBeTruthy();
+    expect(first.config.sessionId).not.toBe(second.config.sessionId);
+  });
+
+  test("creates a unique note id by default", () => {
+    const first = createPane("note");
+    const second = createPane("note");
+
+    expect(first.config.noteId).toBeTruthy();
+    expect(second.config.noteId).toBeTruthy();
+    expect(first.config.noteId).not.toBe(second.config.noteId);
+  });
+
+  test("merges type-specific overrides over defaults", () => {
+    expect(createPane("browser", { url: "https://example.com", zoom: 1.25 }).config).toEqual({
+      url: "https://example.com",
+      zoom: 1.25,
+    });
+  });
+});
 
 describe("findNearestTerminalCwd", () => {
   test("tier 1: returns CWD from active tab in specified group", () => {
@@ -184,7 +224,11 @@ describe("createPaneWithInheritedConfig", () => {
     const pane = createPaneWithInheritedConfig("terminal", panes, paneGroups, "g-1", workspace);
 
     expect(pane.type).toBe("terminal");
-    expect(pane.config).toEqual({ cwd: "/projects/a" });
+    expect(pane.config).toMatchObject({ backend: "managed-tmux", cwd: "/projects/a" });
+    if (pane.type !== "terminal" || pane.config.backend !== "managed-tmux") {
+      throw new Error("expected managed terminal pane");
+    }
+    expect(pane.config.sessionId).toBeTruthy();
   });
 
   test("creates note panes with a generated note id", () => {

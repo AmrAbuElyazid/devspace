@@ -47,14 +47,14 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
-  markT3CodeDestroyed("pane-1");
-
   if (root) {
     await act(async () => {
       root?.unmount();
       root = null;
     });
   }
+
+  markT3CodeDestroyed("pane-1");
 
   container.remove();
 });
@@ -82,4 +82,78 @@ test("focuses the native t3code view when an already-visible pane becomes focuse
 
   expect(t3CodePaneMocks.browserSetFocus).toHaveBeenCalledTimes(1);
   expect(t3CodePaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
+});
+
+test("surfaces a pending T3 start failure after the pane remounts", async () => {
+  let resolveStart: ((value: { error: string }) => void) | null = null;
+  t3CodePaneMocks.start.mockReturnValue(
+    new Promise((resolve) => {
+      resolveStart = resolve;
+    }),
+  );
+
+  await act(async () => {
+    root?.render(<T3CodePane paneId="pane-1" isFocused={true} />);
+  });
+  await flushAsyncEffects();
+  expect(t3CodePaneMocks.start).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    root?.unmount();
+    root = null;
+  });
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<T3CodePane paneId="pane-1" isFocused={true} />);
+  });
+
+  expect(t3CodePaneMocks.start).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    resolveStart?.({ error: "t3 failed" });
+    await Promise.resolve();
+  });
+
+  expect(container.textContent).toContain("Failed to start");
+  expect(container.textContent).toContain("t3 failed");
+});
+
+test("an inactive pane does not rebuild the view its eviction just reclaimed", async () => {
+  await act(async () => {
+    root?.render(<T3CodePane paneId="pane-1" isFocused={true} />);
+  });
+  await flushAsyncEffects();
+  expect(t3CodePaneMocks.start).toHaveBeenCalledTimes(1);
+
+  // Deactivating and then evicting drops the pane back to "starting". While it
+  // is off screen that must not trigger another start, or the pane and the
+  // warm-view budget fight each other forever.
+  await act(async () => {
+    root?.render(<T3CodePane paneId="pane-1" isFocused={false} isActive={false} />);
+  });
+  await act(async () => {
+    markT3CodeDestroyed("pane-1");
+  });
+  await flushAsyncEffects();
+
+  expect(t3CodePaneMocks.start).toHaveBeenCalledTimes(1);
+
+  // Coming back on screen restarts it.
+  await act(async () => {
+    root?.render(<T3CodePane paneId="pane-1" isFocused={true} isActive={true} />);
+  });
+  await flushAsyncEffects();
+
+  expect(t3CodePaneMocks.start).toHaveBeenCalledTimes(2);
+});
+
+test("a rejected start invoke shows the error instead of spinning forever", async () => {
+  t3CodePaneMocks.start.mockRejectedValue(new Error("IPC channel closed"));
+
+  await act(async () => {
+    root?.render(<T3CodePane paneId="pane-1" isFocused={true} />);
+  });
+  await flushAsyncEffects();
+
+  expect(container.textContent).toContain("Failed to start");
+  expect(container.textContent).toContain("IPC channel closed");
 });

@@ -2,7 +2,14 @@ import { app, type BrowserWindow } from "electron";
 import { existsSync } from "fs";
 import { join, resolve } from "path";
 import { GhosttyTerminal, type ReservedShortcut, type TerminalBounds } from "ghostty-electron";
+import type { TerminalCreateOptions } from "../shared/types";
 import { resolveDevelopmentPath } from "./dev-paths";
+import {
+  buildExternalTmuxAttachCommand,
+  ManagedTmuxManager,
+  resolveExternalTmuxBinary,
+  type ManagedTmuxSession,
+} from "./managed-tmux";
 import { measureMainProcessOperation } from "./performance-monitor";
 
 function bashSingleQuote(value: string): string {
@@ -79,6 +86,8 @@ type TerminalCallback = {
 
 export class TerminalManager {
   private terminal: GhosttyTerminal | null = null;
+  private managedTmux: ManagedTmuxManager | null = null;
+  private readonly surfaceGenerations = new Map<string, number>();
   private callbacks: TerminalCallback = {};
   /** Resolved path to Devspace's ZDOTDIR wrapper for zsh shell integration. */
   private shellIntegrationZshDir: string | null = null;
@@ -102,6 +111,18 @@ export class TerminalManager {
         );
 
     this.terminal.init({ windowHandle: handle, nativeAddonPath });
+    const tmuxResourcesPath = app.isPackaged
+      ? process.resourcesPath
+      : resolveDevelopmentPath("apps/desktop/resources", {
+          appPath: app.getAppPath(),
+          cwd: process.cwd(),
+          moduleDir: __dirname,
+        });
+    this.managedTmux = new ManagedTmuxManager({
+      userDataPath: app.getPath("userData"),
+      resourcesPath: tmuxResourcesPath,
+      isPackaged: app.isPackaged,
+    });
 
     // Resolve shell integration wrapper path (set up in index.ts).
     // Devspace's .zshenv wrapper sources Ghostty's shell integration
@@ -198,33 +219,78 @@ export class TerminalManager {
     this.callbacks.onSearchSelected = callback;
   }
 
-  createSurface(
-    surfaceId: string,
-    options?: { cwd?: string; envVars?: Record<string, string> },
-  ): void {
+  async createSurface(surfaceId: string, options?: TerminalCreateOptions): Promise<void> {
     if (!this.terminal) return;
+    const generation = (this.surfaceGenerations.get(surfaceId) ?? 0) + 1;
+    this.surfaceGenerations.set(surfaceId, generation);
+
+    // Inject shell integration env vars based on user's shell (zsh, bash, fish).
+    const shellName = detectShellName();
+    const envVars = buildShellIntegrationEnvVars(
+      shellName,
+      {
+        zshDir: this.shellIntegrationZshDir,
+        ghosttyResourcesDir: process.env.GHOSTTY_RESOURCES_DIR || null,
+      },
+      options?.envVars,
+    );
+    const nativeOptions: {
+      cwd?: string;
+      envVars?: Record<string, string>;
+      command?: string;
+    } = {};
+    if (options?.cwd) nativeOptions.cwd = options.cwd;
+    if (Object.keys(envVars).length > 0) nativeOptions.envVars = envVars;
+
+    if (options?.backend === "managed-tmux") {
+      if (!this.managedTmux) {
+        throw new Error("Managed terminal sessions are not initialized");
+      }
+      await this.managedTmux.ensureSession({
+        sessionId: options.sessionId,
+        envVars,
+        ...(options.cwd ? { cwd: options.cwd } : {}),
+      });
+      nativeOptions.command = this.managedTmux.buildAttachCommand(options.sessionId);
+    } else if (options?.backend === "external-tmux") {
+      const binaryPath = resolveExternalTmuxBinary();
+      if (!binaryPath) {
+        throw new Error("Attaching to an external session requires tmux on the host PATH");
+      }
+      nativeOptions.command = buildExternalTmuxAttachCommand({
+        binaryPath,
+        sessionName: options.sessionName,
+        ...(options.socketPath ? { socketPath: options.socketPath } : {}),
+      });
+    }
+
+    if (this.surfaceGenerations.get(surfaceId) !== generation || !this.terminal) return;
 
     measureMainProcessOperation("terminal.createSurface", () => {
-      // Inject shell integration env vars based on user's shell (zsh, bash, fish).
-      const shellName = detectShellName();
-      const envVars = buildShellIntegrationEnvVars(
-        shellName,
-        {
-          zshDir: this.shellIntegrationZshDir,
-          ghosttyResourcesDir: process.env.GHOSTTY_RESOURCES_DIR || null,
-        },
-        options?.envVars,
+      this.terminal?.createSurface(
+        surfaceId,
+        Object.keys(nativeOptions).length > 0 ? nativeOptions : undefined,
       );
-
-      // Only pass envVars if we actually have entries
-      const merged = Object.keys(envVars).length > 0 ? { ...options, envVars } : options;
-
-      this.terminal?.createSurface(surfaceId, merged);
     });
+  }
+
+  async killManagedSession(sessionId: string): Promise<boolean> {
+    if (!this.managedTmux) {
+      throw new Error("Managed terminal sessions are not initialized");
+    }
+    return this.managedTmux.killSession(sessionId);
+  }
+
+  async listManagedSessions(): Promise<ManagedTmuxSession[]> {
+    if (!this.managedTmux) {
+      throw new Error("Managed terminal sessions are not initialized");
+    }
+    return this.managedTmux.listSessions();
   }
 
   destroySurface(surfaceId: string): void {
     if (!this.terminal) return;
+    this.surfaceGenerations.set(surfaceId, (this.surfaceGenerations.get(surfaceId) ?? 0) + 1);
     measureMainProcessOperation("terminal.destroySurface", () => {
       this.terminal?.destroySurface(surfaceId);
     });
@@ -288,5 +354,9 @@ export class TerminalManager {
     if (!this.terminal) return;
     this.terminal.destroy();
     this.terminal = null;
+    // The private tmux server deliberately outlives the app. Destroying the
+    // Ghostty clients detaches them without terminating managed sessions.
+    this.managedTmux = null;
+    this.surfaceGenerations.clear();
   }
 }

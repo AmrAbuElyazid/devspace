@@ -123,6 +123,14 @@ const terminalManagerMock = {
 
     terminalCalls.push(["createSurface", surfaceId, options]);
   },
+  killManagedSession: (sessionId: string) => {
+    terminalCalls.push(["killManagedSession", sessionId]);
+    return true;
+  },
+  listManagedSessions: () => {
+    terminalCalls.push(["listManagedSessions"]);
+    return [{ sessionId: "session_1", attachedClients: 0, createdAt: 1 }];
+  },
   destroySurface: (surfaceId: string) => {
     terminalCalls.push(["destroySurface", surfaceId]);
   },
@@ -305,6 +313,7 @@ const browserImportServiceMock = {
     browserImportCalls.push(["clearBrowsingData", target]);
     return { ok: true };
   },
+  getCacheSize: async () => 8192,
 };
 
 const browserSessionManagerMock = {
@@ -436,6 +445,36 @@ test("terminal IPC sanitizes inputs and forwards lifecycle actions", async () =>
   ]);
 });
 
+test("terminal IPC validates managed metadata and exposes only explicit session killing", async () => {
+  const createResult = await callHandler("terminal:create", "surface-1", {
+    backend: "managed-tmux",
+    sessionId: "session_1",
+    cwd: "/tmp/project",
+  });
+  const invalidResult = await callHandler("terminal:create", "surface-2", {
+    backend: "managed-tmux",
+    sessionId: "bad/session",
+  });
+  const killResult = await callHandler("terminal:killManagedSession", "session_1");
+  const listResult = await callHandler("terminal:listManagedSessions");
+
+  expect(createResult).toEqual({ ok: true });
+  expect(invalidResult).toEqual({ error: "Invalid managed terminal session ID" });
+  expect(killResult).toEqual({ killed: true });
+  expect(listResult).toEqual({
+    sessions: [{ sessionId: "session_1", attachedClients: 0, createdAt: 1 }],
+  });
+  expect(terminalCalls).toEqual([
+    [
+      "createSurface",
+      "surface-1",
+      { backend: "managed-tmux", sessionId: "session_1", cwd: "/tmp/project" },
+    ],
+    ["killManagedSession", "session_1"],
+    ["listManagedSessions"],
+  ]);
+});
+
 test("terminal blur restores renderer focus and forwards native terminal events", () => {
   const focus = vi.fn();
 
@@ -454,7 +493,7 @@ test("terminal blur restores renderer focus and forwards native terminal events"
   expect(focus).toHaveBeenCalledTimes(1);
 });
 
-test("editor IPC replaces existing pane sessions and tracks trusted local origins", async () => {
+test("editor IPC replaces changed sessions and recreates evicted views idempotently", async () => {
   const first = await callHandler(
     "editor:start",
     "editor-pane-restart",
@@ -467,11 +506,18 @@ test("editor IPC replaces existing pane sessions and tracks trusted local origin
     "/tmp/project-b",
     "/custom/code",
   );
+  const resumed = await callHandler(
+    "editor:start",
+    "editor-pane-restart",
+    "/tmp/project-b",
+    "/custom/code",
+  );
   emitToChannel("editor:setKeepServerRunning", {}, true);
   await callHandler("editor:stop", "editor-pane-restart");
 
   expect(first).toEqual({ url: "http://127.0.0.1:18562?folder=%2Ftmp%2Fproject-a" });
   expect(second).toEqual({ url: "http://127.0.0.1:18562?folder=%2Ftmp%2Fproject-b" });
+  expect(resumed).toEqual({ url: "http://127.0.0.1:18562?folder=%2Ftmp%2Fproject-b" });
   expect(vscodeServerManagerMock.keepRunning).toBe(true);
   expect(editorCalls).toEqual([
     ["start", "/tmp/project-a", "/custom/code"],
@@ -498,21 +544,30 @@ test("editor IPC replaces existing pane sessions and tracks trusted local origin
       "http://127.0.0.1:18562?folder=%2Ftmp%2Fproject-b",
       "editor",
     ],
+    [
+      "createPane",
+      "editor-pane-restart",
+      "http://127.0.0.1:18562?folder=%2Ftmp%2Fproject-b",
+      "editor",
+    ],
     ["destroyPane", "editor-pane-restart"],
   ]);
 });
 
-test("t3code IPC manages trusted origins and pane teardown", async () => {
+test("t3code IPC recreates evicted views without incrementing server ownership", async () => {
   const result = await callHandler("t3code:start", "t3code-pane-1");
+  const resumed = await callHandler("t3code:start", "t3code-pane-1");
   await callHandler("t3code:stop", "t3code-pane-1");
 
   expect(result).toEqual({ url: "http://127.0.0.1:31415" });
+  expect(resumed).toEqual({ url: "http://127.0.0.1:31415" });
   expect(t3codeCalls).toEqual([["start"], ["release"]]);
   expect(browserSessionCalls).toEqual([
     ["registerTrustedLocalOrigin", "http://127.0.0.1:31415"],
     ["unregisterTrustedLocalOrigin", "http://127.0.0.1:31415"],
   ]);
   expect(browserPaneCalls).toEqual([
+    ["createPane", "t3code-pane-1", "http://127.0.0.1:31415", "t3code"],
     ["createPane", "t3code-pane-1", "http://127.0.0.1:31415", "t3code"],
     ["destroyPane", "t3code-pane-1"],
   ]);

@@ -36,6 +36,13 @@ const browserPaneMocks = vi.hoisted(() => ({
   >(() => () => {}),
   contextMenuRequestHandler: null as null | ((request: BrowserContextMenuRequest) => void),
   createdPanes: new Set<string>(),
+  paneSnapshots: new Map<
+    string,
+    { phase: "pending" | "ready" | "error"; generation: number; error: string | null }
+  >(),
+  paneListeners: new Map<string, Set<() => void>>(),
+  missingPaneSnapshot: { phase: "missing" as const, generation: 0, error: null },
+  readyPaneSnapshot: { phase: "ready" as const, generation: 1, error: null },
   workspaceState: {
     workspaces: [{ id: "workspace-1", focusedGroupId: "group-1" }],
   },
@@ -92,12 +99,52 @@ vi.mock("../store/workspace-store", () => ({
 }));
 
 vi.mock("../lib/browser-pane-session", () => ({
+  getBrowserPaneSessionSnapshot: (paneId: string) =>
+    browserPaneMocks.paneSnapshots.get(paneId) ??
+    (browserPaneMocks.createdPanes.has(paneId)
+      ? browserPaneMocks.readyPaneSnapshot
+      : browserPaneMocks.missingPaneSnapshot),
+  subscribeBrowserPane: (paneId: string, listener: () => void) => {
+    const listeners = browserPaneMocks.paneListeners.get(paneId) ?? new Set<() => void>();
+    listeners.add(listener);
+    browserPaneMocks.paneListeners.set(paneId, listeners);
+    return () => listeners.delete(listener);
+  },
   hasCreatedBrowserPane: (paneId: string) => browserPaneMocks.createdPanes.has(paneId),
   markBrowserPaneCreated: (paneId: string) => {
+    const generation = (browserPaneMocks.paneSnapshots.get(paneId)?.generation ?? 0) + 1;
     browserPaneMocks.createdPanes.add(paneId);
+    browserPaneMocks.paneSnapshots.set(paneId, {
+      phase: "pending",
+      generation,
+      error: null,
+    });
+    for (const listener of browserPaneMocks.paneListeners.get(paneId) ?? []) listener();
+    return generation;
   },
+  markBrowserPaneReady: (paneId: string, _destroy: unknown, generation: number) => {
+    if (browserPaneMocks.paneSnapshots.get(paneId)?.generation !== generation) return false;
+    browserPaneMocks.paneSnapshots.set(paneId, {
+      phase: "ready",
+      generation,
+      error: null,
+    });
+    for (const listener of browserPaneMocks.paneListeners.get(paneId) ?? []) listener();
+    return true;
+  },
+  markBrowserPaneFailed: (paneId: string, generation: number, error: string) => {
+    if (browserPaneMocks.paneSnapshots.get(paneId)?.generation !== generation) return false;
+    browserPaneMocks.createdPanes.delete(paneId);
+    browserPaneMocks.paneSnapshots.set(paneId, { phase: "error", generation, error });
+    for (const listener of browserPaneMocks.paneListeners.get(paneId) ?? []) listener();
+    return true;
+  },
+  markBrowserPaneActive: () => {},
+  markBrowserPaneInactive: () => {},
   markBrowserPaneDestroyed: (paneId: string) => {
     browserPaneMocks.createdPanes.delete(paneId);
+    browserPaneMocks.paneSnapshots.delete(paneId);
+    for (const listener of browserPaneMocks.paneListeners.get(paneId) ?? []) listener();
   },
 }));
 
@@ -165,6 +212,8 @@ beforeEach(() => {
     },
   );
   browserPaneMocks.createdPanes.clear();
+  browserPaneMocks.paneSnapshots.clear();
+  browserPaneMocks.paneListeners.clear();
 
   browserPaneMocks.browserStoreState = {
     runtimeByPaneId: {
@@ -286,11 +335,54 @@ test("reuses an existing browser pane across unmount and remount", async () => {
   expect(browserPaneMocks.createdPanes.has("pane-1")).toBe(true);
 });
 
+test("surfaces a pending browser creation failure after remount", async () => {
+  let rejectCreate: ((error: Error) => void) | null = null;
+  browserPaneMocks.browserCreate.mockReturnValue(
+    new Promise((_resolve, reject) => {
+      rejectCreate = reject;
+    }),
+  );
+
+  await act(async () => {
+    root?.render(
+      <BrowserPane
+        paneId="pane-1"
+        workspaceId="workspace-1"
+        config={{ url: "https://example.com/" }}
+        isFocused={true}
+      />,
+    );
+  });
+  expect(browserPaneMocks.browserCreate).toHaveBeenCalledTimes(1);
+
+  await act(async () => {
+    root?.unmount();
+    root = null;
+  });
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(
+      <BrowserPane
+        paneId="pane-1"
+        workspaceId="workspace-1"
+        config={{ url: "https://example.com/" }}
+        isFocused={true}
+      />,
+    );
+  });
+
+  expect(browserPaneMocks.browserCreate).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    rejectCreate?.(new Error("web contents failed"));
+    await Promise.resolve();
+  });
+
+  expect(container.querySelector('[data-testid="browser-status-surface"]')).toBeTruthy();
+});
+
 test("focuses the native browser view when it becomes visible", async () => {
-  browserPaneMocks.useNativeView
-    .mockReturnValueOnce({ isVisible: false })
-    .mockReturnValueOnce({ isVisible: false })
-    .mockReturnValueOnce({ isVisible: true });
+  let nativeVisible = false;
+  browserPaneMocks.useNativeView.mockImplementation(() => ({ isVisible: nativeVisible }));
 
   await act(async () => {
     root?.render(
@@ -304,6 +396,7 @@ test("focuses the native browser view when it becomes visible", async () => {
   });
 
   browserPaneMocks.browserSetFocus.mockClear();
+  nativeVisible = true;
 
   await act(async () => {
     root?.render(

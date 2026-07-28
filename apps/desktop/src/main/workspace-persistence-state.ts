@@ -41,41 +41,95 @@ export type PreparedWorkspaceSnapshot = {
   pinnedSidebarNodesJson: string;
 };
 
-export function prepareSnapshot(snapshot: PersistedWorkspaceState): PreparedWorkspaceSnapshot {
+export function prepareSnapshot(
+  snapshot: PersistedWorkspaceState,
+  previousState?: PersistedWorkspaceState | null,
+  previousSnapshot?: PreparedWorkspaceSnapshot | null,
+): PreparedWorkspaceSnapshot {
+  const previousWorkspaceRows = previousSnapshot
+    ? rowsById(previousSnapshot.workspaceRows)
+    : undefined;
+  const previousWorkspaces = previousState
+    ? new Map(previousState.workspaces.map((workspace) => [workspace.id, workspace]))
+    : undefined;
+  const previousPaneRows = previousSnapshot ? rowsById(previousSnapshot.paneRows) : undefined;
+  const previousPaneGroupRows = previousSnapshot
+    ? rowsById(previousSnapshot.paneGroupRows)
+    : undefined;
+
   return {
-    workspaceRows: snapshot.workspaces.map((workspace) => ({
-      id: workspace.id,
-      name: workspace.name,
-      focusedGroupId: workspace.focusedGroupId,
-      zoomedGroupId: workspace.zoomedGroupId,
-      lastActiveAt: workspace.lastActiveAt,
-      lastTerminalCwd: workspace.lastTerminalCwd ?? null,
-      rootJson: JSON.stringify(workspace.root),
-    })),
-    paneRows: Object.values(snapshot.panes).map((pane) => ({
-      id: pane.id,
-      type: pane.type,
-      title: pane.title,
-      configJson: JSON.stringify(pane.config),
-    })),
-    paneGroupRows: Object.values(snapshot.paneGroups).map((group) => ({
-      id: group.id,
-      activeTabId: group.activeTabId,
-      tabs: group.tabs.map((tab, position) => ({
-        id: tab.id,
-        groupId: group.id,
-        paneId: tab.paneId,
-        position,
-      })),
-    })),
+    workspaceRows: snapshot.workspaces.map((workspace) => {
+      const previousWorkspace = previousWorkspaces?.get(workspace.id);
+      const reusableRow = previousWorkspaceRows?.get(workspace.id);
+      if (workspace === previousWorkspace && reusableRow) return reusableRow;
+
+      return {
+        id: workspace.id,
+        name: workspace.name,
+        focusedGroupId: workspace.focusedGroupId,
+        zoomedGroupId: workspace.zoomedGroupId,
+        lastActiveAt: workspace.lastActiveAt,
+        lastTerminalCwd: workspace.lastTerminalCwd ?? null,
+        rootJson: JSON.stringify(workspace.root),
+      };
+    }),
+    paneRows: Object.values(snapshot.panes).map((pane) => {
+      const reusableRow = previousPaneRows?.get(pane.id);
+      if (pane === previousState?.panes[pane.id] && reusableRow) return reusableRow;
+
+      return {
+        id: pane.id,
+        type: pane.type,
+        title: pane.title,
+        configJson: JSON.stringify(pane.config),
+      };
+    }),
+    paneGroupRows: Object.values(snapshot.paneGroups).map((group) => {
+      const reusableRow = previousPaneGroupRows?.get(group.id);
+      if (group === previousState?.paneGroups[group.id] && reusableRow) return reusableRow;
+
+      return {
+        id: group.id,
+        activeTabId: group.activeTabId,
+        tabs: group.tabs.map((tab, position) => ({
+          id: tab.id,
+          groupId: group.id,
+          paneId: tab.paneId,
+          position,
+        })),
+      };
+    }),
     activeWorkspaceId: snapshot.activeWorkspaceId,
-    sidebarTreeJson: JSON.stringify(snapshot.sidebarTree),
-    pinnedSidebarNodesJson: JSON.stringify(snapshot.pinnedSidebarNodes),
+    sidebarTreeJson:
+      snapshot.sidebarTree === previousState?.sidebarTree && previousSnapshot
+        ? previousSnapshot.sidebarTreeJson
+        : JSON.stringify(snapshot.sidebarTree),
+    pinnedSidebarNodesJson:
+      snapshot.pinnedSidebarNodes === previousState?.pinnedSidebarNodes && previousSnapshot
+        ? previousSnapshot.pinnedSidebarNodesJson
+        : JSON.stringify(snapshot.pinnedSidebarNodes),
   };
 }
 
+/**
+ * Row-array identity -> its ID index.
+ *
+ * Each save indexes the same row arrays twice: `prepareSnapshot` indexes the
+ * previous snapshot's rows to reuse them, then `saveIncrementalWorkspaceSnapshot`
+ * indexes those same arrays again to diff against. The arrays are built once by
+ * `prepareSnapshot` and only ever read afterwards, so keying on their identity
+ * is safe — and it also carries each index forward to the next save, where
+ * today's `next` rows become tomorrow's `previous` rows.
+ */
+const rowIndexCache = new WeakMap<readonly { id: string }[], Map<string, { id: string }>>();
+
 function rowsById<Row extends { id: string }>(rows: Row[]): Map<string, Row> {
-  return new Map(rows.map((row) => [row.id, row]));
+  const cached = rowIndexCache.get(rows);
+  if (cached) return cached as Map<string, Row>;
+
+  const index = new Map(rows.map((row) => [row.id, row]));
+  rowIndexCache.set(rows, index);
+  return index;
 }
 
 function tabsEqual(previous: PreparedTabRow[], next: PreparedTabRow[]): boolean {
@@ -272,17 +326,18 @@ export function saveIncrementalWorkspaceSnapshot(
   const nextPanes = rowsById(next.paneRows);
   const previousGroups = rowsById(previous.paneGroupRows);
   const nextGroups = rowsById(next.paneGroupRows);
+  const workspaceOrderChanged =
+    previous.workspaceRows.length !== next.workspaceRows.length ||
+    previous.workspaceRows.some(
+      (workspace, index) => workspace.id !== next.workspaceRows[index]?.id,
+    );
 
-  for (const previousWorkspace of previous.workspaceRows) {
-    if (!nextWorkspaces.has(previousWorkspace.id)) {
-      statements.workspaces.delete.run({ $id: previousWorkspace.id });
-    }
-  }
-
-  for (const workspace of next.workspaceRows) {
-    const previousWorkspace = previousWorkspaces.get(workspace.id);
-    if (!previousWorkspace || !workspaceRowsEqual(previousWorkspace, workspace)) {
-      statements.workspaces.upsert.run({
+  if (workspaceOrderChanged) {
+    // Workspace order is represented by SQLite row order. Reinsert this small
+    // table when IDs move so a restart restores the renderer's exact order.
+    statements.workspaces.deleteAll.run();
+    for (const workspace of next.workspaceRows) {
+      statements.workspaces.insert.run({
         $id: workspace.id,
         $name: workspace.name,
         $focusedGroupId: workspace.focusedGroupId,
@@ -291,6 +346,27 @@ export function saveIncrementalWorkspaceSnapshot(
         $lastTerminalCwd: workspace.lastTerminalCwd,
         $rootJson: workspace.rootJson,
       });
+    }
+  } else {
+    for (const previousWorkspace of previous.workspaceRows) {
+      if (!nextWorkspaces.has(previousWorkspace.id)) {
+        statements.workspaces.delete.run({ $id: previousWorkspace.id });
+      }
+    }
+
+    for (const workspace of next.workspaceRows) {
+      const previousWorkspace = previousWorkspaces.get(workspace.id);
+      if (!previousWorkspace || !workspaceRowsEqual(previousWorkspace, workspace)) {
+        statements.workspaces.upsert.run({
+          $id: workspace.id,
+          $name: workspace.name,
+          $focusedGroupId: workspace.focusedGroupId,
+          $zoomedGroupId: workspace.zoomedGroupId,
+          $lastActiveAt: workspace.lastActiveAt,
+          $lastTerminalCwd: workspace.lastTerminalCwd,
+          $rootJson: workspace.rootJson,
+        });
+      }
     }
   }
 

@@ -29,6 +29,8 @@ export interface CreateSurfaceOptions {
   cwd?: string;
   /** Additional environment variables to set for the shell process. */
   envVars?: Record<string, string>;
+  /** Command launched for this surface through Ghostty's shell command path. */
+  command?: string;
 }
 
 /**

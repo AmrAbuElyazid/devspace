@@ -17,9 +17,14 @@ import {
 import { runWorkspaceMigrations } from "./workspace-persistence-migrations";
 
 export class WorkspacePersistenceStore {
+  private static readonly CHECKPOINT_INTERVAL = 100;
+
   private readonly filePath: string;
   private db: SqliteDatabase | null = null;
+  private hasLoaded = false;
+  private lastSavedState: PersistedWorkspaceState | null = null;
   private lastSavedSnapshot: PreparedWorkspaceSnapshot | null = null;
+  private savesSinceCheckpoint = 0;
   private statements: WorkspacePersistenceStatements | null = null;
 
   constructor(userDataPath: string) {
@@ -30,22 +35,46 @@ export class WorkspacePersistenceStore {
     this.getDb();
     try {
       const snapshot = loadPersistedWorkspaceState(this.getStatements());
+      this.hasLoaded = true;
       if (!snapshot) {
+        this.lastSavedState = null;
         this.lastSavedSnapshot = null;
         return null;
       }
 
+      this.lastSavedState = snapshot;
       this.lastSavedSnapshot = prepareSnapshot(snapshot);
       return snapshot;
     } catch (error) {
+      this.hasLoaded = true;
+      this.lastSavedState = null;
       this.lastSavedSnapshot = null;
       console.warn("[WorkspacePersistenceStore] Failed to read workspace state:", error);
       return null;
     }
   }
 
+  getCurrentSnapshot(): PersistedWorkspaceState | null {
+    return this.hasLoaded ? this.lastSavedState : this.load();
+  }
+
+  /**
+   * Drop the cached incremental baseline while keeping the store loaded.
+   *
+   * `load()` caches whatever it read before the caller has had a chance to
+   * validate it. When validation rejects that snapshot the cache has to go too,
+   * otherwise `getCurrentSnapshot()` keeps handing the rejected state to every
+   * later patch and none of them can ever be applied. Clearing it makes the
+   * next `save()` write a full snapshot, which overwrites the bad rows.
+   */
+  discardCachedSnapshot(): void {
+    this.hasLoaded = true;
+    this.lastSavedState = null;
+    this.lastSavedSnapshot = null;
+  }
+
   save(snapshot: PersistedWorkspaceState): void {
-    const nextSnapshot = prepareSnapshot(snapshot);
+    const nextSnapshot = prepareSnapshot(snapshot, this.lastSavedState, this.lastSavedSnapshot);
     const db = this.getDb();
     db.exec("BEGIN IMMEDIATE TRANSACTION");
 
@@ -57,10 +86,40 @@ export class WorkspacePersistenceStore {
       }
 
       db.exec("COMMIT");
+      this.hasLoaded = true;
+      this.lastSavedState = snapshot;
       this.lastSavedSnapshot = nextSnapshot;
     } catch (error) {
       db.exec("ROLLBACK");
       throw error;
+    }
+
+    this.savesSinceCheckpoint += 1;
+    if (this.savesSinceCheckpoint >= WorkspacePersistenceStore.CHECKPOINT_INTERVAL) {
+      this.savesSinceCheckpoint = 0;
+      try {
+        db.exec("PRAGMA wal_checkpoint(PASSIVE)");
+      } catch (error) {
+        console.warn("[WorkspacePersistenceStore] WAL checkpoint failed:", error);
+      }
+    }
+  }
+
+  close(): void {
+    if (!this.db) return;
+
+    try {
+      this.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+    } catch (error) {
+      console.warn("[WorkspacePersistenceStore] Final WAL checkpoint failed:", error);
+    } finally {
+      this.db.close();
+      this.db = null;
+      this.statements = null;
+      this.hasLoaded = false;
+      this.lastSavedState = null;
+      this.lastSavedSnapshot = null;
+      this.savesSinceCheckpoint = 0;
     }
   }
 

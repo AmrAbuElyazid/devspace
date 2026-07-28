@@ -1,4 +1,3 @@
-import { nanoid } from "nanoid";
 import type { SplitNode } from "../../types/workspace";
 import {
   collectGroupIds,
@@ -36,8 +35,6 @@ export function createSplitTreeSlice(
       if (paneType === "terminal") {
         const cwd = findNearestTerminalCwd(snapshot.panes, snapshot.paneGroups, groupId, ws);
         if (cwd) inheritedConfig = { cwd };
-      } else if (paneType === "note") {
-        inheritedConfig = { noteId: nanoid() };
       }
       const newPane = createPane(paneType, inheritedConfig);
       const newGroup = createPaneGroup(newPane);
@@ -120,10 +117,9 @@ export function createSplitTreeSlice(
             ),
             panes: newPanes,
             paneGroups: newPaneGroups,
-            tabHistoryByGroupId: {
-              ...state.tabHistoryByGroupId,
-              [groupId]: [],
-            },
+            tabHistoryByGroupId: Object.fromEntries(
+              Object.entries(state.tabHistoryByGroupId).filter(([id]) => id !== groupId),
+            ),
             recentTabTraversalByGroupId: clearRecentTabTraversal(
               state.recentTabTraversalByGroupId,
               groupId,

@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from "electron";
+import { mkdirSync } from "fs";
 import { join } from "path";
 import { randomBytes } from "crypto";
 import { createCliHttpServer, writeCliAuthTokenFile } from "./cli-server";
@@ -27,13 +28,18 @@ app.setName("devspace");
 
 const overriddenUserDataPath = process.env.DEVSPACE_USER_DATA_PATH?.trim();
 
+function configureStoragePaths(userDataPath: string): void {
+  const sessionDataPath = join(userDataPath, "session-data");
+  mkdirSync(sessionDataPath, { recursive: true });
+  app.setPath("userData", userDataPath);
+  app.setPath("sessionData", sessionDataPath);
+}
+
 if (overriddenUserDataPath) {
-  app.setPath("userData", overriddenUserDataPath);
-  app.setPath("sessionData", join(overriddenUserDataPath, "session-data"));
+  configureStoragePaths(overriddenUserDataPath);
 } else if (IS_DEV) {
   const devUserDataPath = join(app.getPath("appData"), "devspace-dev");
-  app.setPath("userData", devUserDataPath);
-  app.setPath("sessionData", join(devUserDataPath, "session-data"));
+  configureStoragePaths(devUserDataPath);
 }
 
 // Sync shell environment before app is ready (macOS GUI apps don't inherit login shell env)
