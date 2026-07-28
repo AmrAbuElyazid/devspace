@@ -24,6 +24,7 @@ import type { SidebarContainer } from "@/types/dnd";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { HintTooltip } from "@/components/ui/hint-tooltip";
+import { TooltipBoundaryProvider } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 
@@ -85,6 +86,9 @@ export default function Sidebar() {
     }
   }, [pendingEditId, pendingEditType, clearPendingEdit]);
 
+  // Held as state, not a ref: the tooltip boundary below needs a render once
+  // the element exists.
+  const [asideEl, setAsideEl] = useState<HTMLElement | null>(null);
   const [deleteTargets, setDeleteTargets] = useState<string[] | null>(null);
   const [isResizing, setIsResizing] = useState(false);
   const [liveSidebarWidth, setLiveSidebarWidth] = useState<number | null>(null);
@@ -486,6 +490,7 @@ export default function Sidebar() {
   return (
     <SidebarProvider value={sidebarContextValue}>
       <aside
+        ref={setAsideEl}
         data-state={sidebarOpen ? "open" : "collapsed"}
         data-resizing={isResizing || undefined}
         className={cn(
@@ -500,257 +505,260 @@ export default function Sidebar() {
           sidebarOpen ? { width: renderedSidebarWidth, minWidth: renderedSidebarWidth } : undefined
         }
       >
-        <div className="relative z-[1] flex flex-col h-full min-h-0">
-          {/* Header — drag region. The left padding is whatever the main
+        {/* Everything to the right of the sidebar is a native view painted
+            above the web contents, so a tooltip that spills past this edge
+            vanishes behind it rather than being merely clipped. Confining them
+            to the rail is the only way they stay visible. */}
+        <TooltipBoundaryProvider boundary={asideEl}>
+          <div className="relative z-[1] flex flex-col h-full min-h-0">
+            {/* Header — drag region. The left padding is whatever the main
               process says the native traffic lights occupy, so it collapses to
               nothing in fullscreen instead of leaving a hole. */}
-          <div
-            className="drag-region flex items-center justify-between h-12 shrink-0 pr-2"
-            style={{ paddingLeft: trafficLightGutter || 12 }}
-          >
-            <span className="app-title no-drag select-none inline-flex items-center font-sans font-semibold text-ui-lg leading-none tracking-tight">
-              <img
-                src={appIconUrl}
-                alt=""
-                aria-hidden
-                draggable={false}
-                className="app-title-icon h-[18px] w-auto -my-1 -mr-px shrink-0 select-none"
-              />
-              <span className="app-title-text app-title-text--ev">ev</span>
-              <span className="app-title-text app-title-text--space">space</span>
-            </span>
-            <HintTooltip
-              content="Hide sidebar"
-              shortcut={resolveDisplayString("toggle-sidebar")}
-              sideOffset={4}
-              align="end"
+            <div
+              className="drag-region flex items-center justify-between h-12 shrink-0 pr-2"
+              style={{ paddingLeft: trafficLightGutter || 12 }}
             >
-              <button
-                type="button"
-                className={cn(iconButtonClass, "size-7")}
-                onClick={toggleSidebar}
-                aria-label="Toggle sidebar"
+              <span className="app-title no-drag select-none inline-flex items-center font-sans font-semibold text-ui-lg leading-none tracking-tight">
+                <img
+                  src={appIconUrl}
+                  alt=""
+                  aria-hidden
+                  draggable={false}
+                  className="app-title-icon h-[18px] w-auto -my-1 -mr-px shrink-0 select-none"
+                />
+                <span className="app-title-text app-title-text--ev">ev</span>
+                <span className="app-title-text app-title-text--space">space</span>
+              </span>
+              <HintTooltip
+                content="Hide sidebar"
+                shortcut={resolveDisplayString("toggle-sidebar")}
+                sideOffset={4}
+                align="end"
               >
-                <ChevronLeft size={14} strokeWidth={2.2} />
-              </button>
-            </HintTooltip>
-          </div>
+                <button
+                  type="button"
+                  className={cn(iconButtonClass, "size-7")}
+                  onClick={toggleSidebar}
+                  aria-label="Toggle sidebar"
+                >
+                  <ChevronLeft size={14} strokeWidth={2.2} />
+                </button>
+              </HintTooltip>
+            </div>
 
-          {/* Quick launch. Everything below the header shares one left rhythm:
+            {/* Quick launch. Everything below the header shares one left rhythm:
               containers inset 8px, so every hover/active rectangle in the
               column starts at the same x, and their content at 18px. */}
-          <div className="px-2 pt-1 pb-2">
-            <QuickLaunchGrid />
-          </div>
-
-          {/* Search */}
-          <div className="px-2 pb-2">
-            <div
-              className={cn(
-                "no-drag relative flex items-center h-8 rounded-lg gap-2 px-2.5",
-                // A filled well rather than an outlined box; the outline only
-                // appears once you're typing in it.
-                "bg-elevated/50 hover:bg-elevated/80",
-                "focus-within:bg-elevated focus-within:ring-1 focus-within:ring-brand-edge",
-                "transition-colors",
-              )}
-            >
-              <Search size={12} className="text-muted-foreground shrink-0" />
-              <input
-                type="text"
-                placeholder="Search workspaces"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") setSearchQuery("");
-                }}
-                aria-label="Search workspaces"
-                className={cn(
-                  "flex-1 min-w-0 bg-transparent border-0 outline-none",
-                  "text-ui-sm text-foreground placeholder:text-muted-foreground",
-                )}
-              />
-              {/* No "/" hint here: nothing ever bound that key to focusing the
-                  search, so the cap was advertising a shortcut that did not
-                  exist. */}
-              {searchQuery ? (
-                <button
-                  className={cn(iconButtonClass, "size-5 shrink-0 -mr-1")}
-                  aria-label="Clear search"
-                  onClick={() => setSearchQuery("")}
-                >
-                  <X size={12} strokeWidth={2.2} />
-                </button>
-              ) : null}
+            <div className="px-2 pt-1 pb-2">
+              <QuickLaunchGrid />
             </div>
-          </div>
 
-          {/* Pinned section */}
-          {pinnedSidebarNodes.length > 0 && (
-            <>
-              <SectionHeader label="Pinned" />
+            {/* Search */}
+            <div className="px-2 pb-2">
               <div
-                ref={setPinnedRootRef}
                 className={cn(
-                  "relative px-2 pb-2 flex flex-col gap-0.5",
-                  isRelevantDrag && isPinnedRootOver && "drop-into-folder",
-                  pinnedRootInsertClass,
+                  "no-drag relative flex items-center h-8 rounded-lg gap-2 px-2.5",
+                  // A filled well rather than an outlined box; the outline only
+                  // appears once you're typing in it.
+                  "bg-elevated/50 hover:bg-elevated/80",
+                  "focus-within:bg-elevated focus-within:ring-1 focus-within:ring-brand-edge",
+                  "transition-colors",
                 )}
               >
-                <SidebarTreeLevel
-                  nodes={pinnedSidebarNodes}
-                  container="pinned"
-                  parentFolderId={null}
-                  depth={0}
-                />
-              </div>
-            </>
-          )}
-
-          {/* Workspaces section */}
-          <SectionHeader label="Workspaces" count={workspaces.length}>
-            <HintTooltip content="New folder" sideOffset={4} align="end">
-              <button
-                type="button"
-                onClick={() => addFolder("New Folder")}
-                className={cn(iconButtonClass, "size-5")}
-                aria-label="New folder"
-              >
-                <FolderPlus size={12} strokeWidth={1.8} />
-              </button>
-            </HintTooltip>
-            <HintTooltip
-              content="New workspace"
-              shortcut={resolveDisplayString("new-workspace")}
-              sideOffset={4}
-              align="end"
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  if (defaultPaneType === "picker") {
-                    useSettingsStore
-                      .getState()
-                      .openPanePicker({ action: "new-workspace", container: "main" });
-                  } else {
-                    addWorkspace(undefined, null, "main", defaultPaneType);
-                  }
-                }}
-                className={cn(iconButtonClass, "size-5")}
-                aria-label="New workspace"
-              >
-                <Plus size={12} strokeWidth={2.2} />
-              </button>
-            </HintTooltip>
-          </SectionHeader>
-
-          {/* Workspace tree. The droppable stretches to the bottom of the
-              scroll viewport rather than hugging the rows, so the empty space
-              below the list is a drop target too. */}
-          <div className="flex-1 min-h-0 overflow-hidden">
-            <ScrollArea className="h-full">
-              <div className="flex min-h-full flex-col">
-                <div
-                  ref={setMainRootRef}
-                  onClick={(e) => {
-                    if (e.target === e.currentTarget) clearSelection();
+                <Search size={12} className="text-muted-foreground shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Search workspaces"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setSearchQuery("");
                   }}
+                  aria-label="Search workspaces"
                   className={cn(
-                    "relative flex-1 px-2 pb-3 flex flex-col gap-0.5",
-                    isRelevantDrag && isMainRootOver && "drop-into-folder",
-                    mainRootInsertClass,
+                    "flex-1 min-w-0 bg-transparent border-0 outline-none",
+                    "text-ui-sm text-foreground placeholder:text-muted-foreground",
+                  )}
+                />
+                {searchQuery ? (
+                  <button
+                    className={cn(iconButtonClass, "size-5 shrink-0 -mr-1")}
+                    aria-label="Clear search"
+                    onClick={() => setSearchQuery("")}
+                  >
+                    <X size={12} strokeWidth={2.2} />
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Pinned section */}
+            {pinnedSidebarNodes.length > 0 && (
+              <>
+                <SectionHeader label="Pinned" />
+                <div
+                  ref={setPinnedRootRef}
+                  className={cn(
+                    "relative px-2 pb-2 flex flex-col gap-0.5",
+                    isRelevantDrag && isPinnedRootOver && "drop-into-folder",
+                    pinnedRootInsertClass,
                   )}
                 >
                   <SidebarTreeLevel
-                    nodes={sidebarTree}
-                    container="main"
+                    nodes={pinnedSidebarNodes}
+                    container="pinned"
                     parentFolderId={null}
                     depth={0}
                   />
-                  {sidebarTree.length === 0 ? (
-                    <p className="px-2.5 py-3 text-ui-xs text-muted-foreground select-none">
-                      No workspaces yet — drop a tab here or press{" "}
-                      {resolveDisplayString("new-workspace")}.
-                    </p>
-                  ) : null}
                 </div>
-              </div>
-            </ScrollArea>
-          </div>
+              </>
+            )}
 
-          {/* Bulk action bar — only present while a multi-selection exists. */}
-          {selectedCount > 0 ? (
-            <div className="shrink-0 border-t border-border px-2 py-2">
-              <div className="flex items-center gap-1 rounded-lg bg-brand-soft px-2 py-1.5">
-                <span className="flex-1 text-ui-xs font-medium tabular-nums">
-                  {selectedCount} selected
-                </span>
-                {selectedWorkspaceCount > 0 ? (
-                  <HintTooltip
-                    content={
-                      selectedWorkspaceCount === selectedCount
-                        ? "Duplicate"
-                        : `Duplicate ${selectedWorkspaceCount} workspaces (folders are skipped)`
+            {/* Workspaces section */}
+            <SectionHeader label="Workspaces" count={workspaces.length}>
+              <HintTooltip content="New folder" sideOffset={4} align="end">
+                <button
+                  type="button"
+                  onClick={() => addFolder("New Folder")}
+                  className={cn(iconButtonClass, "size-5")}
+                  aria-label="New folder"
+                >
+                  <FolderPlus size={12} strokeWidth={1.8} />
+                </button>
+              </HintTooltip>
+              <HintTooltip
+                content="New workspace"
+                shortcut={resolveDisplayString("new-workspace")}
+                sideOffset={4}
+                align="end"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (defaultPaneType === "picker") {
+                      useSettingsStore
+                        .getState()
+                        .openPanePicker({ action: "new-workspace", container: "main" });
+                    } else {
+                      addWorkspace(undefined, null, "main", defaultPaneType);
                     }
-                    sideOffset={4}
-                    align="end"
+                  }}
+                  className={cn(iconButtonClass, "size-5")}
+                  aria-label="New workspace"
+                >
+                  <Plus size={12} strokeWidth={2.2} />
+                </button>
+              </HintTooltip>
+            </SectionHeader>
+
+            {/* Workspace tree. The droppable stretches to the bottom of the
+              scroll viewport rather than hugging the rows, so the empty space
+              below the list is a drop target too. */}
+            <div className="flex-1 min-h-0 overflow-hidden">
+              <ScrollArea className="h-full">
+                <div className="flex min-h-full flex-col">
+                  <div
+                    ref={setMainRootRef}
+                    onClick={(e) => {
+                      if (e.target === e.currentTarget) clearSelection();
+                    }}
+                    className={cn(
+                      "relative flex-1 px-2 pb-3 flex flex-col gap-0.5",
+                      isRelevantDrag && isMainRootOver && "drop-into-folder",
+                      mainRootInsertClass,
+                    )}
                   >
+                    <SidebarTreeLevel
+                      nodes={sidebarTree}
+                      container="main"
+                      parentFolderId={null}
+                      depth={0}
+                    />
+                    {sidebarTree.length === 0 ? (
+                      <p className="px-2.5 py-3 text-ui-xs text-muted-foreground select-none">
+                        No workspaces yet — drop a tab here or press{" "}
+                        {resolveDisplayString("new-workspace")}.
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              </ScrollArea>
+            </div>
+
+            {/* Bulk action bar — only present while a multi-selection exists. */}
+            {selectedCount > 0 ? (
+              <div className="shrink-0 border-t border-border px-2 py-2">
+                <div className="flex items-center gap-1 rounded-lg bg-brand-soft px-2 py-1.5">
+                  <span className="flex-1 text-ui-xs font-medium tabular-nums">
+                    {selectedCount} selected
+                  </span>
+                  {selectedWorkspaceCount > 0 ? (
+                    <HintTooltip
+                      content={
+                        selectedWorkspaceCount === selectedCount
+                          ? "Duplicate"
+                          : `Duplicate ${selectedWorkspaceCount} workspaces (folders are skipped)`
+                      }
+                      sideOffset={4}
+                      align="end"
+                    >
+                      <button
+                        type="button"
+                        className={cn(iconButtonClass, "size-6")}
+                        aria-label={`Duplicate ${selectedWorkspaceCount} workspaces`}
+                        onClick={() => duplicateWorkspaces([...selectedKeys])}
+                      >
+                        <Copy size={12} />
+                      </button>
+                    </HintTooltip>
+                  ) : null}
+                  {canDelete([...selectedKeys]) ? (
+                    <HintTooltip content="Delete" sideOffset={4} align="end">
+                      <button
+                        type="button"
+                        className={cn(
+                          iconButtonClass,
+                          "size-6 hover:text-destructive hover:bg-destructive/10",
+                        )}
+                        aria-label={`Delete ${selectedCount} items`}
+                        onClick={() => setDeleteTargets([...selectedKeys])}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </HintTooltip>
+                  ) : null}
+                  <HintTooltip content="Clear selection" sideOffset={4} align="end">
                     <button
                       type="button"
                       className={cn(iconButtonClass, "size-6")}
-                      aria-label={`Duplicate ${selectedWorkspaceCount} workspaces`}
-                      onClick={() => duplicateWorkspaces([...selectedKeys])}
+                      aria-label="Clear selection"
+                      onClick={clearSelection}
                     >
-                      <Copy size={12} />
+                      <X size={12} />
                     </button>
                   </HintTooltip>
-                ) : null}
-                {canDelete([...selectedKeys]) ? (
-                  <HintTooltip content="Delete" sideOffset={4} align="end">
-                    <button
-                      type="button"
-                      className={cn(
-                        iconButtonClass,
-                        "size-6 hover:text-destructive hover:bg-destructive/10",
-                      )}
-                      aria-label={`Delete ${selectedCount} items`}
-                      onClick={() => setDeleteTargets([...selectedKeys])}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </HintTooltip>
-                ) : null}
-                <HintTooltip content="Clear selection" sideOffset={4} align="end">
-                  <button
-                    type="button"
-                    className={cn(iconButtonClass, "size-6")}
-                    aria-label="Clear selection"
-                    onClick={clearSelection}
-                  >
-                    <X size={12} />
-                  </button>
-                </HintTooltip>
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : null}
 
-          {/* Footer */}
-          <div className="shrink-0 border-t border-border px-2 py-2 flex flex-col gap-1">
-            <SidebarUpdateButton />
-            <button
-              type="button"
-              onClick={toggleSettings}
-              className={cn("chrome-row chrome-focus no-drag h-8 gap-2.5 px-2.5 text-ui-sm")}
-              title={`Settings (${resolveDisplayString("toggle-settings")})`}
-            >
-              <Settings size={14} strokeWidth={1.8} className="shrink-0 text-muted-foreground" />
-              <span className="flex-1 text-left">Settings</span>
-              <Kbd className="h-4 min-w-4 rounded-sm bg-foreground/10 px-1 text-ui-micro font-mono">
-                {resolveDisplayString("toggle-settings")}
-              </Kbd>
-            </button>
+            {/* Footer */}
+            <div className="shrink-0 border-t border-border px-2 py-2 flex flex-col gap-1">
+              <SidebarUpdateButton />
+              <button
+                type="button"
+                onClick={toggleSettings}
+                className={cn("chrome-row chrome-focus no-drag h-8 gap-2.5 px-2.5 text-ui-sm")}
+                title={`Settings (${resolveDisplayString("toggle-settings")})`}
+              >
+                <Settings size={14} strokeWidth={1.8} className="shrink-0 text-muted-foreground" />
+                <span className="flex-1 text-left">Settings</span>
+                <Kbd className="h-4 min-w-4 rounded-sm bg-foreground/10 px-1 text-ui-micro font-mono">
+                  {resolveDisplayString("toggle-settings")}
+                </Kbd>
+              </button>
+            </div>
           </div>
-        </div>
+        </TooltipBoundaryProvider>
 
         {/* Resize handle (right edge) */}
         {sidebarOpen && (
