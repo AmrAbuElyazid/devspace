@@ -55,7 +55,8 @@ test.describe("CLI: devspace code", () => {
         (p) => (p.config as { folderPath?: string }).folderPath === tempDir,
       );
       expect(newEditor).toBeDefined();
-      expect(newEditor!.title).toContain("VS Code:");
+      // Editor tabs are titled `VC: <folder>` — narrow enough to fit a tab.
+      expect(newEditor!.title).toContain("VC:");
     } finally {
       await app.close();
     }

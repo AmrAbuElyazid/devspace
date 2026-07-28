@@ -49,6 +49,15 @@ export async function launchApp(options: LaunchAppOptions = {}): Promise<{
   return { app, page };
 }
 
+/** Session IDs the managed tmux server currently has running. */
+export async function listLiveManagedSessionIds(page: Page): Promise<string[]> {
+  return page.evaluate(async () => {
+    const listed = await window.api.terminal.listManagedSessions();
+    if ("error" in listed) throw new Error(listed.error);
+    return listed.sessions.map((session) => session.sessionId);
+  });
+}
+
 /** Kill every session owned by a disposable E2E user-data directory. */
 export async function cleanupManagedTmuxSessions(page: Page): Promise<void> {
   await page.evaluate(async () => {
