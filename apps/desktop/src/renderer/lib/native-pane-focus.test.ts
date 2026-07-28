@@ -1,5 +1,9 @@
 import { beforeEach, expect, test } from "vitest";
-import { syncWorkspaceFocusForPane } from "./native-pane-focus";
+import {
+  syncWorkspaceFocusForNativeNotification,
+  syncWorkspaceFocusForPane,
+} from "./native-pane-focus";
+import { useNativeViewStore } from "../store/native-view-store";
 import { useWorkspaceStore } from "../store/workspace-store";
 import { buildPaneOwnersByPaneId } from "../store/pane-ownership";
 import type { Pane, PaneGroup, Workspace } from "../types/workspace";
@@ -93,5 +97,35 @@ test("syncWorkspaceFocusForPane ignores unknown panes", () => {
   expect(state.workspaces.find((workspace) => workspace.id === "workspace-2")?.focusedGroupId).toBe(
     "group-3",
   );
+  expect(state.paneGroups["group-2"]?.activeTabId).toBe("tab-3");
+});
+
+test("a focus notification from an on-screen pane still activates it", () => {
+  useNativeViewStore.setState({
+    views: { "pane-2": "browser" },
+    visibleTerminals: [],
+    visibleBrowsers: ["pane-2"],
+  });
+
+  syncWorkspaceFocusForNativeNotification("pane-2");
+
+  expect(useWorkspaceStore.getState().activeWorkspaceId).toBe("workspace-2");
+});
+
+test("a focus notification from an off-screen pane is dropped", () => {
+  // A surface echoes back the focus we asked for. If the active tab moved on
+  // in between, honouring the echo drags the selection back, which re-focuses
+  // the previous pane, whose echo drags it forward again — two panes ping-pong
+  // at IPC speed. Only a visible surface can have been clicked by the user.
+  useNativeViewStore.setState({
+    views: { "pane-2": "browser", "pane-4": "browser" },
+    visibleTerminals: [],
+    visibleBrowsers: ["pane-4"],
+  });
+
+  syncWorkspaceFocusForNativeNotification("pane-2");
+
+  const state = useWorkspaceStore.getState();
+  expect(state.activeWorkspaceId).toBe("workspace-1");
   expect(state.paneGroups["group-2"]?.activeTabId).toBe("tab-3");
 });

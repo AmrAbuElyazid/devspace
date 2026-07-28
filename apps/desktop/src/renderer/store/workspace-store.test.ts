@@ -475,6 +475,26 @@ test("activateRecentTab walks recent tabs per group and supports reverse travers
   nowSpy.mockRestore();
 });
 
+test("setActiveGroupTab is a no-op when the tab is already active", () => {
+  // Re-activating the active tab used to replace the paneGroups map anyway,
+  // waking every workspace-store subscriber for nothing. The native-view
+  // reconciler runs off that subscription, so redundant activations were fuel
+  // for the v0.2.0 switch feedback loop.
+  const wsId = setupWorkspace();
+  const groupId = getWorkspace(wsId)!.focusedGroupId!;
+  useWorkspaceStore.getState().addGroupTab(wsId, groupId);
+
+  const before = useWorkspaceStore.getState();
+  const activeTabId = before.paneGroups[groupId]!.activeTabId;
+
+  useWorkspaceStore.getState().setActiveGroupTab(wsId, groupId, activeTabId);
+
+  const after = useWorkspaceStore.getState();
+  expect(after.paneGroups).toBe(before.paneGroups);
+  expect(after.tabHistoryByGroupId).toBe(before.tabHistoryByGroupId);
+  expect(after.paneGroups[groupId]!.activeTabId).toBe(activeTabId);
+});
+
 test("removeGroupTab last tab with siblings removes group", () => {
   const wsId = setupWorkspace();
   const ws = getWorkspace(wsId);

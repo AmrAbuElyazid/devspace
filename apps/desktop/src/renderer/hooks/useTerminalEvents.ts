@@ -3,7 +3,10 @@ import { useWorkspaceStore } from "../store/workspace-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useTerminalStore } from "../store/terminal-store";
 import { markTerminalSurfaceDestroyed } from "../lib/terminal-surface-session";
-import { focusActiveNativePane, syncWorkspaceFocusForPane } from "../lib/native-pane-focus";
+import {
+  focusActiveNativePane,
+  syncWorkspaceFocusForNativeNotification,
+} from "../lib/native-pane-focus";
 
 /**
  * Manages terminal-related IPC event subscriptions:
@@ -50,7 +53,7 @@ export function useTerminalEvents(): void {
   // the native first responder.
   useEffect(() => {
     return window.api.terminal.onFocused((surfaceId) => {
-      syncWorkspaceFocusForPane(surfaceId);
+      syncWorkspaceFocusForNativeNotification(surfaceId);
     });
   }, []);
 

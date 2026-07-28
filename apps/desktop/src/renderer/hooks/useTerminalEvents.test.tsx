@@ -10,7 +10,7 @@ import { installMockWindowApi } from "../test-utils/mock-window-api";
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const terminalEventsMocks = vi.hoisted(() => ({
-  syncWorkspaceFocusForPane: vi.fn(),
+  syncWorkspaceFocusForNativeNotification: vi.fn(),
   focusActiveNativePane: vi.fn(),
   focusedHandler: null as null | ((surfaceId: string) => void),
   pwdHandler: null as null | ((surfaceId: string, pwd: string) => void),
@@ -25,7 +25,8 @@ const terminalEventsMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/native-pane-focus", () => ({
-  syncWorkspaceFocusForPane: terminalEventsMocks.syncWorkspaceFocusForPane,
+  syncWorkspaceFocusForNativeNotification:
+    terminalEventsMocks.syncWorkspaceFocusForNativeNotification,
   focusActiveNativePane: terminalEventsMocks.focusActiveNativePane,
 }));
 
@@ -42,7 +43,7 @@ beforeEach(async () => {
   document.body.appendChild(container);
   root = createRoot(container);
 
-  terminalEventsMocks.syncWorkspaceFocusForPane.mockReset();
+  terminalEventsMocks.syncWorkspaceFocusForNativeNotification.mockReset();
   terminalEventsMocks.focusActiveNativePane.mockReset();
   terminalEventsMocks.focusedHandler = null;
   terminalEventsMocks.pwdHandler = null;
@@ -79,7 +80,9 @@ test("terminal focus events sync the owning pane activation", async () => {
     terminalEventsMocks.focusedHandler?.("surface-2");
   });
 
-  expect(terminalEventsMocks.syncWorkspaceFocusForPane).toHaveBeenCalledWith("surface-2");
+  expect(terminalEventsMocks.syncWorkspaceFocusForNativeNotification).toHaveBeenCalledWith(
+    "surface-2",
+  );
 });
 
 test("empty terminal pwd events are ignored", async () => {

@@ -206,11 +206,11 @@ const TabLayer = memo(function TabLayer({
   isActive: boolean;
 }): ReactElement | null {
   const pane = useWorkspaceStore((s) => s.panes[tab.paneId]);
-  if (!pane) return null;
-
   const handleActivate = useCallback(() => {
     syncWorkspaceFocusForPane(tab.paneId);
   }, [tab.paneId]);
+
+  if (!pane) return null;
 
   return (
     <div
