@@ -6,7 +6,7 @@ import {
   useSyncExternalStore,
   type ReactElement,
 } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
 import { useNativeView } from "@/hooks/useNativeView";
 import { useTerminalStore } from "@/store/terminal-store";
@@ -25,6 +25,7 @@ import {
 import type { TerminalConfig } from "@/types/workspace";
 
 import { Button } from "@/components/ui/button";
+import { PaneStatusCard } from "@/components/ui/pane-status-card";
 
 import TerminalFindBar from "./terminal/TerminalFindBar";
 
@@ -173,24 +174,18 @@ export default function TerminalPane({
 
   if (createError) {
     return (
-      <div className="h-full w-full flex items-center justify-center p-6 bg-background">
-        <div className="flex flex-col items-start gap-3 max-w-md p-5 rounded-lg bg-card border border-border shadow-[var(--overlay-shadow)]">
-          <div className="inline-flex items-center gap-1.5 text-[9.5px] font-mono uppercase tracking-[0.12em] text-destructive">
-            <AlertTriangle size={11} />
-            {sessionClosed ? "Terminal closed" : "Terminal error"}
-          </div>
-          <div className="text-[14px] font-medium text-foreground leading-snug">
-            {sessionClosed ? "Terminal session ended" : "Terminal failed to start"}
-          </div>
-          <p className="text-[12px] text-muted-foreground leading-relaxed self-stretch">
-            {createError}
-          </p>
-          <Button size="sm" onClick={handleRetryCreate} className="mt-1">
-            <RefreshCw size={12} data-icon="inline-start" />
-            {sessionClosed ? "Restart" : "Retry"}
-          </Button>
-        </div>
-      </div>
+      <PaneStatusCard
+        eyebrow={sessionClosed ? "Terminal closed" : "Terminal error"}
+        title={sessionClosed ? "Terminal session ended" : "Terminal failed to start"}
+      >
+        <p className="text-ui-sm text-muted-foreground leading-relaxed self-stretch">
+          {createError}
+        </p>
+        <Button size="sm" onClick={handleRetryCreate} className="mt-1">
+          <RefreshCw size={12} data-icon="inline-start" />
+          {sessionClosed ? "Restart" : "Retry"}
+        </Button>
+      </PaneStatusCard>
     );
   }
 

@@ -38,7 +38,7 @@ function FindBarButton({
       aria-label={ariaLabel}
       className={cn(
         "inline-flex items-center justify-center size-6 rounded-md shrink-0",
-        "text-muted-foreground hover:text-foreground hover:bg-hover",
+        "text-muted-foreground hover:text-foreground hover:bg-row-hover",
         "disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
         "transition-colors",
       )}
@@ -126,7 +126,7 @@ export default function TerminalFindBar({
         : "";
 
   return (
-    <div className="flex items-center gap-1.5 shrink-0 h-9 px-2 bg-rail border-b border-hairline relative z-[2]">
+    <div className="flex items-center gap-1.5 shrink-0 h-9 px-2 bg-rail border-b border-border relative z-[2]">
       <input
         ref={inputRef}
         type="text"
@@ -137,12 +137,12 @@ export default function TerminalFindBar({
         className={cn(
           "flex-1 min-w-0 h-6 px-2 rounded-md",
           "bg-surface border border-border/70",
-          "text-[11px] text-foreground placeholder:text-muted-foreground/60",
+          "text-ui-xs text-foreground placeholder:text-muted-foreground/60",
           "outline-none focus:border-brand-edge focus:ring-2 focus:ring-brand-soft",
           "transition-colors",
         )}
       />
-      <div className="min-w-[68px] text-right text-[10.5px] font-mono text-muted-foreground tabular-nums">
+      <div className="min-w-[68px] text-right text-ui-micro font-mono text-muted-foreground tabular-nums">
         {matchDisplay}
       </div>
       <HintTooltip content="Previous match" shortcut="Shift+Enter">

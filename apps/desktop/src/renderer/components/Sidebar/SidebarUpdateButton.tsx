@@ -82,7 +82,7 @@ export function SidebarUpdateButton() {
         aria-label={getSidebarUpdateTooltip(state)}
         className={cn(
           "no-drag w-full flex items-center gap-2 h-8 px-2 rounded-md",
-          "text-[12px] font-medium border transition-colors",
+          "text-ui-sm font-medium border transition-colors",
           isError
             ? "bg-destructive/10 text-destructive border-destructive/30 hover:bg-destructive/15"
             : "bg-brand-soft text-foreground border-brand-edge hover:bg-brand-soft/80",

@@ -44,29 +44,55 @@
   /* Devspace extensions
      - rail        : the deepest background (sidebar + tab bar chrome)
      - surface     : a half-step elevated background (tooltips, mini-cards)
-     - hover       : the universal hover wash
+     - elevated    : one step above surface (inputs, tiles, inset wells)
      - brand       : the yellow itself, raw, for icons / dots / dividers
      - brand-soft  : 8–10% yellow wash for active states
      - brand-edge  : 25% yellow border for selected/active outlines
      - status-*    : success / warning / info dots
-     - hairline    : even-fainter border for inner separators */
+
+     There is deliberately one border weight (--border) and one hover wash
+     (--row-hover) for the whole app. The earlier --hairline and --hover pair
+     sat a percent or two away from them, which read as noise rather than
+     hierarchy and left every new surface guessing which one to reach for. */
   --color-rail: var(--rail);
   --color-surface: var(--surface);
-  --color-surface-2: var(--surface-2);
-  --color-hover: var(--hover);
+  --color-elevated: var(--elevated);
   --color-brand: var(--brand);
   --color-brand-soft: var(--brand-soft);
   --color-brand-edge: var(--brand-edge);
-  --color-hairline: var(--hairline);
   --color-status-success: var(--status-success);
   --color-status-warning: var(--status-warning);
   --color-status-info: var(--status-info);
+
+  /* Row states — one definition for every selectable list row in the app
+     (sidebar workspaces and folders, settings nav, tab strip). */
+  --color-row-hover: var(--row-hover);
+  --color-row-active: var(--row-active);
+  --color-row-selected: var(--row-selected);
+
+  /* UI type scale. Chrome text only ever picks one of these six sizes; the
+     `ui` prefix keeps them clear of Tailwind's content-oriented text-* scale,
+     which the note editor still uses. */
+  --text-ui-micro: 10px;
+  --text-ui-micro--line-height: 1.4;
+  --text-ui-xs: 11px;
+  --text-ui-xs--line-height: 1.45;
+  --text-ui-sm: 12px;
+  --text-ui-sm--line-height: 1.45;
+  --text-ui: 13px;
+  --text-ui--line-height: 1.45;
+  --text-ui-lg: 15px;
+  --text-ui-lg--line-height: 1.4;
+  --text-ui-xl: 18px;
+  --text-ui-xl--line-height: 1.35;
 
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
   --radius-xl: calc(var(--radius) + 6px);
   --radius-2xl: calc(var(--radius) + 12px);
+
+  --shadow-overlay: var(--overlay-shadow);
 
   --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", "JetBrains Mono", monospace;
@@ -104,18 +130,20 @@
   --ring: oklch(0.7084 0.1523 71.24);
 
   /* Devspace extensions */
-  --rail: oklch(0.97 0.005 95);
-  --surface: oklch(0.97 0.005 95);
-  --surface-2: oklch(0.93 0.006 95);
-  --hover: oklch(0.18 0.01 95 / 6%);
+  --rail: oklch(0.968 0.004 95);
+  --surface: oklch(0.975 0.004 95);
+  --elevated: oklch(0.93 0.006 95);
   --brand: oklch(0.7084 0.1523 71.24);
   --brand-soft: oklch(0.7084 0.1523 71.24 / 14%);
   --brand-edge: oklch(0.7084 0.1523 71.24 / 42%);
-  --hairline: oklch(0.18 0.01 95 / 5%);
   --status-success: oklch(0.65 0.17 145);
   --status-warning: oklch(0.78 0.15 75);
   --status-info: oklch(0.62 0.17 240);
   --overlay-shadow: 0 12px 40px -8px oklch(0 0 0 / 12%), 0 2px 8px -2px oklch(0 0 0 / 6%);
+
+  --row-hover: oklch(0.18 0.01 95 / 5%);
+  --row-active: oklch(0.7084 0.1523 71.24 / 12%);
+  --row-selected: oklch(0.7084 0.1523 71.24 / 20%);
 
   /* Sidebar (used by shadcn `sidebar` if installed; we still provide them) */
   --sidebar: var(--rail);
@@ -131,15 +159,6 @@
   --focus-border: var(--brand);
   --sash-hover-size: 3px;
   --separator-border: oklch(0.18 0.01 95 / 7%);
-
-  /* Bevel insets — adaptive theme-aware top/bottom edge shadows used
-     by tactile chrome (QL tiles, active rows, search bar). On light
-     mode the top edge is slightly darker (a recess) and the bottom is
-     a soft drop. On dark, the top is a subtle lift and the bottom is
-     a darker line. */
-  --bevel-top: inset 0 1px 0 oklch(0 0 0 / 4%);
-  --bevel-bottom: inset 0 -1px 0 oklch(0 0 0 / 5%);
-  --bevel-recess: inset 0 1px 2px oklch(0 0 0 / 6%);
 }
 
 /* ─── Dark theme (the primary surface) ───────────────────────────────
@@ -173,18 +192,20 @@
   --ring: oklch(0.7084 0.1523 71.24);
 
   /* Devspace extensions */
-  --rail: oklch(0.13 0.005 95);
+  --rail: oklch(0.145 0.004 95);
   --surface: oklch(0.21 0.006 95);
-  --surface-2: oklch(0.27 0.006 95); /* one step above surface for active rows */
-  --hover: oklch(1 0 0 / 6%);
+  --elevated: oklch(0.27 0.006 95);
   --brand: oklch(0.7084 0.1523 71.24);
   --brand-soft: oklch(0.7084 0.1523 71.24 / 14%);
   --brand-edge: oklch(0.7084 0.1523 71.24 / 38%);
-  --hairline: oklch(1 0 0 / 5%);
   --status-success: oklch(0.78 0.18 145);
   --status-warning: oklch(0.83 0.16 80);
   --status-info: oklch(0.7 0.17 240);
   --overlay-shadow: 0 16px 48px -8px oklch(0 0 0 / 50%), 0 2px 8px -2px oklch(0 0 0 / 30%);
+
+  --row-hover: oklch(1 0 0 / 6%);
+  --row-active: oklch(0.7084 0.1523 71.24 / 14%);
+  --row-selected: oklch(0.7084 0.1523 71.24 / 22%);
 
   --sidebar: var(--rail);
   --sidebar-foreground: var(--foreground);
@@ -198,11 +219,6 @@
   --focus-border: var(--brand);
   --sash-hover-size: 3px;
   --separator-border: oklch(1 0 0 / 6%);
-
-  /* Dark-mode bevels: top edge lifts, bottom edge sinks. */
-  --bevel-top: inset 0 1px 0 oklch(1 0 0 / 6%);
-  --bevel-bottom: inset 0 -1px 0 oklch(0 0 0 / 18%);
-  --bevel-recess: inset 0 1px 2px oklch(0 0 0 / 30%);
 }
 
 /* ─── Base layer ───────────────────────────────────────────────────── */
@@ -422,16 +438,46 @@
   }
 }
 
-/* ─── Sidebar atmosphere ─────────────────────────────────────────────
-   Single neutral-grey wash on the sidebar surface — slightly brighter
-   at the top so the chrome reads as illuminated from above, no color
-   tinting. Replaces the earlier colored frost system.
+/* ─── Chrome rows ────────────────────────────────────────────────────
+   Every selectable row in the app chrome — sidebar workspaces and
+   folders, settings nav entries — is the same object: a rounded row
+   that washes on hover, tints on active, and grows a brand bar on its
+   leading edge when it is the current one. Encoding it once here keeps
+   the three call sites from drifting apart, which is what happened when
+   each of them hand-rolled its own opacity ramp.
 */
-.sidebar-bg {
-  background: linear-gradient(180deg, oklch(0.18 0.003 270) 0%, oklch(0.145 0.003 270) 100%);
+.chrome-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  color: color-mix(in oklch, var(--foreground) 82%, transparent);
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
 }
-:root:not(.dark) .sidebar-bg {
-  background: linear-gradient(180deg, oklch(0.985 0.002 270) 0%, oklch(0.955 0.002 270) 100%);
+.chrome-row:hover {
+  background-color: var(--row-hover);
+  color: var(--foreground);
+}
+/* The leading brand bar is an inset shadow rather than a pseudo-element:
+   ::before and ::after on these rows are already spoken for by the
+   drag insertion lines, and the two would overwrite each other. */
+.chrome-row[data-active="true"] {
+  background-color: var(--row-active);
+  color: var(--foreground);
+  box-shadow: inset 2px 0 0 var(--brand);
+}
+.chrome-row[data-selected="true"] {
+  background-color: var(--row-selected);
+  color: var(--foreground);
+}
+
+/* Focus ring shared by every custom (non-shadcn) interactive element in
+   the chrome, so keyboard users get one consistent affordance. */
+.chrome-focus:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -1px;
 }
 
 /* ─── App title hover (Sidebar header) ────────────────────────────────

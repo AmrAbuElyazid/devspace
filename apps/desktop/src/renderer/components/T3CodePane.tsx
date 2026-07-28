@@ -6,8 +6,6 @@ import {
   useSyncExternalStore,
   type ReactElement,
 } from "react";
-import { AlertCircle } from "lucide-react";
-
 import { focusBrowserNativePane, hasEditableRendererFocus } from "@/lib/native-pane-focus";
 import { useNativeView } from "@/hooks/useNativeView";
 import {
@@ -24,6 +22,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { PaneStatusCard } from "@/components/ui/pane-status-card";
 
 export function markT3CodeDestroyed(paneId: string): void {
   markEmbeddedToolViewDestroyed(paneId);
@@ -178,9 +177,9 @@ export default function T3CodePane({
   if (state.status === "unavailable") {
     return (
       <PaneStatusCard eyebrow="T3 Code unavailable" title="CLI not found" tone="warning">
-        <p className="text-[12px] text-muted-foreground leading-relaxed">
+        <p className="text-ui-sm text-muted-foreground leading-relaxed">
           Install the T3 Code CLI with{" "}
-          <code className="px-1.5 py-0.5 rounded bg-surface font-mono text-[10.5px] text-foreground">
+          <code className="px-1.5 py-0.5 rounded bg-surface font-mono text-ui-micro text-foreground">
             npm install -g t3
           </code>
           .
@@ -192,7 +191,7 @@ export default function T3CodePane({
   if (state.status === "error") {
     return (
       <PaneStatusCard eyebrow="T3 Code error" title="Failed to start" tone="error">
-        <p className="text-[12px] text-muted-foreground leading-relaxed self-stretch">
+        <p className="text-ui-sm text-muted-foreground leading-relaxed self-stretch">
           {state.message}
         </p>
         <Button size="sm" onClick={handleRetry}>
@@ -206,7 +205,7 @@ export default function T3CodePane({
     return (
       <div className="h-full w-full flex flex-col items-center justify-center gap-2 bg-background">
         <Spinner className="size-4 text-muted-foreground" />
-        <p className="text-[11.5px] font-mono text-muted-foreground">starting t3 code…</p>
+        <p className="text-ui-xs font-mono text-muted-foreground">starting t3 code…</p>
       </div>
     );
   }
@@ -217,34 +216,5 @@ export default function T3CodePane({
       className="absolute inset-0 bg-background data-[hidden=true]:invisible"
       data-hidden={!isVisible ? "true" : undefined}
     />
-  );
-}
-
-function PaneStatusCard({
-  eyebrow,
-  title,
-  tone,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  tone: "warning" | "error";
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="h-full w-full flex items-center justify-center p-6 bg-background">
-      <div className="flex flex-col items-start gap-3 max-w-md p-5 rounded-lg bg-card border border-border shadow-[var(--overlay-shadow)]">
-        <div
-          className={`inline-flex items-center gap-1.5 text-[9.5px] font-mono uppercase tracking-[0.12em] ${
-            tone === "error" ? "text-destructive" : "text-status-warning"
-          }`}
-        >
-          <AlertCircle size={11} />
-          {eyebrow}
-        </div>
-        <div className="text-[14px] font-medium text-foreground leading-snug">{title}</div>
-        {children}
-      </div>
-    </div>
   );
 }

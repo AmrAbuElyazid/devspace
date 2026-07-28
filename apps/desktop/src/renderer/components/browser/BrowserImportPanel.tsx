@@ -193,15 +193,15 @@ export default function BrowserImportPanel() {
       {/* Import Browsing Data */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-[13px]">Import browsing data</CardTitle>
-          <CardDescription className="text-[11.5px]">
+          <CardTitle className="text-ui">Import browsing data</CardTitle>
+          <CardDescription className="text-ui-xs">
             Import cookies, history, or both from another browser.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex flex-wrap items-end gap-3">
             <div className="flex flex-col gap-1.5 min-w-[140px]">
-              <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              <Label className="text-ui-micro uppercase tracking-wide text-muted-foreground">
                 Source
               </Label>
               <Select
@@ -209,7 +209,7 @@ export default function BrowserImportPanel() {
                 onValueChange={(v) => setBrowser(v as BrowserImportSource)}
                 disabled={isImporting}
               >
-                <SelectTrigger className="h-7 text-[12px]">
+                <SelectTrigger className="h-7 text-ui-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -224,7 +224,7 @@ export default function BrowserImportPanel() {
 
             {hasProfiles && profiles.length > 0 ? (
               <div className="flex flex-col gap-1.5 min-w-[180px]">
-                <Label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                <Label className="text-ui-micro uppercase tracking-wide text-muted-foreground">
                   Profile
                 </Label>
                 <Select
@@ -232,7 +232,7 @@ export default function BrowserImportPanel() {
                   onValueChange={(v) => setSelectedProfilePath(v ?? "")}
                   disabled={profilesStatus === "loading" || isImporting}
                 >
-                  <SelectTrigger className="h-7 text-[12px]">
+                  <SelectTrigger className="h-7 text-ui-sm">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -248,7 +248,7 @@ export default function BrowserImportPanel() {
           </div>
 
           {hasProfiles && profiles.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-ui-xs text-muted-foreground">
               {profilesStatus === "loading"
                 ? `Looking for ${browserLabel(browser)} profiles…`
                 : profilesStatus === "error"
@@ -260,11 +260,11 @@ export default function BrowserImportPanel() {
           {browser === "safari" ? (
             <div
               className={cn(
-                "flex items-center justify-between gap-3 px-3 py-2 rounded-md border text-[11.5px]",
+                "flex items-center justify-between gap-3 px-3 py-2 rounded-md border text-ui-xs",
                 importState.status === "error" &&
                   importState.code === "SAFARI_FULL_DISK_ACCESS_REQUIRED"
                   ? "bg-status-warning/10 border-status-warning/30 text-foreground"
-                  : "bg-surface border-hairline text-muted-foreground",
+                  : "bg-surface border-border text-muted-foreground",
               )}
             >
               <span>Safari may require Full Disk Access.</span>
@@ -309,16 +309,16 @@ export default function BrowserImportPanel() {
       {/* Clear Browsing Data */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-[13px]">Clear browsing data</CardTitle>
-          <CardDescription className="text-[11.5px]">
+          <CardTitle className="text-ui">Clear browsing data</CardTitle>
+          <CardDescription className="text-ui-xs">
             Remove stored data from the in-app browser session.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
             <div>
-              <div className="text-[11.5px] text-foreground">Browser cache usage</div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-ui-xs text-foreground">Browser cache usage</div>
+              <div className="text-ui-micro text-muted-foreground">
                 {cacheSize === null ? "Not measured" : formatByteSize(cacheSize)}
                 {cacheSizeError ? ` · ${cacheSizeError}` : ""}
               </div>
@@ -336,7 +336,7 @@ export default function BrowserImportPanel() {
             <div
               className={cn(
                 "flex items-center justify-between gap-3 px-3 py-2.5 rounded-md border",
-                "bg-status-warning/10 border-status-warning/30 text-[12px] text-foreground",
+                "bg-status-warning/10 border-status-warning/30 text-ui-sm text-foreground",
               )}
             >
               <span>
@@ -434,7 +434,7 @@ function StatusInline({ status, message }: { status: string; message: string }) 
   return (
     <div
       className={cn(
-        "flex items-center gap-2 text-[11.5px] py-0.5",
+        "flex items-center gap-2 text-ui-xs py-0.5",
         status === "error" ? "text-destructive" : "text-muted-foreground",
       )}
     >

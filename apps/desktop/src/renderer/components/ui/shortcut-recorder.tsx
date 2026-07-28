@@ -103,7 +103,7 @@ export function ShortcutRecorder({
         className={cn(
           "inline-flex items-center justify-center min-w-[68px] h-6 px-2 rounded-md",
           "bg-surface border border-border text-foreground",
-          "text-[11px] font-mono whitespace-nowrap",
+          "text-ui-xs font-mono whitespace-nowrap",
           "transition-colors outline-none",
           "hover:border-border focus-visible:border-brand-edge focus-visible:ring-2 focus-visible:ring-brand-soft",
           recording &&
@@ -121,7 +121,7 @@ export function ShortcutRecorder({
           title="Reset to default"
           className={cn(
             "inline-flex items-center justify-center size-5 rounded-sm",
-            "text-muted-foreground hover:text-foreground hover:bg-hover",
+            "text-muted-foreground hover:text-foreground hover:bg-row-hover",
             "transition-colors",
           )}
         >

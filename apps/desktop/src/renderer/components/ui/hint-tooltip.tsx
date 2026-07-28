@@ -47,13 +47,13 @@ export function HintTooltip({
         side={side}
         sideOffset={sideOffset}
         align={align}
-        className="gap-2 px-2 py-1 text-[11px]"
+        className="gap-2 px-2 py-1 text-ui-xs"
       >
         <span>{content}</span>
         {tokens.length > 0 && (
           <KbdGroup className="gap-0.5">
             {tokens.map((t, i) => (
-              <Kbd key={i} className="h-4 min-w-4 px-1 text-[9px] font-mono">
+              <Kbd key={i} className="h-4 min-w-4 px-1 text-ui-micro font-mono">
                 {t}
               </Kbd>
             ))}
