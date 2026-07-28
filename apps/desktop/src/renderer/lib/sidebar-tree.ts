@@ -33,6 +33,49 @@ export function findSidebarNode(
 }
 
 /**
+ * Locate a workspace within a container's tree, reporting the folder it lives
+ * in and its position there — the two facts an insert needs to place a new
+ * node right beside it.
+ */
+export function locateSidebarWorkspace(
+  tree: SidebarNode[],
+  workspaceId: string,
+  parentFolderId: string | null = null,
+): { parentFolderId: string | null; index: number } | null {
+  for (let i = 0; i < tree.length; i++) {
+    const node = tree[i];
+    if (!node) continue;
+    if (node.type === "workspace" && node.workspaceId === workspaceId) {
+      return { parentFolderId, index: i };
+    }
+    if (node.type === "folder") {
+      const found = locateSidebarWorkspace(node.children, workspaceId, node.id);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * Every workspace id in a tree, in visual top-to-bottom order. Collapsed
+ * folders are skipped unless `includeCollapsed` is set, so the result matches
+ * what the user can actually see and shift-click across.
+ */
+export function collectWorkspaceIds(tree: SidebarNode[], includeCollapsed = false): string[] {
+  const ids: string[] = [];
+  for (const node of tree) {
+    if (node.type === "workspace") {
+      ids.push(node.workspaceId);
+      continue;
+    }
+    if (includeCollapsed || !node.collapsed) {
+      ids.push(...collectWorkspaceIds(node.children, includeCollapsed));
+    }
+  }
+  return ids;
+}
+
+/**
  * Find a folder by ID. Returns the folder node or null.
  */
 export function findFolder(

@@ -16,6 +16,7 @@ import {
   findNearestTerminalCwd,
 } from "../../lib/pane-factory";
 import { resolveSourceGroupAfterTabRemoval } from "../../lib/source-group-resolution";
+import { clonePane } from "../../lib/workspace-duplication";
 import { appendPaneToGroupState } from "../group-tab-append-state";
 import { buildDestinationGroupState } from "../group-tab-destination-state";
 import { attachWorkspaceDerivedState } from "../pane-ownership";
@@ -29,6 +30,8 @@ type GroupTabsSlice = Pick<
   | "openTerminalWithConfig"
   | "openManagedTerminalSession"
   | "removeGroupTab"
+  | "removeGroupTabs"
+  | "duplicateGroupTab"
   | "setActiveGroupTab"
   | "reorderGroupTabs"
   | "moveTabToGroup"
@@ -160,6 +163,43 @@ export function createGroupTabsSlice(
       if (resolution.kind !== "group-removed" && resolution.srcGroup.activeTabId !== tabId) {
         get().recordTabActivation(groupId, resolution.srcGroup.activeTabId);
       }
+    },
+
+    removeGroupTabs(workspaceId, groupId, tabIds) {
+      // Sequential single removals so pane cleanup, group collapse and the
+      // active-tab fallback all stay in the one code path that already gets
+      // them right.
+      for (const tabId of tabIds) {
+        get().removeGroupTab(workspaceId, groupId, tabId);
+      }
+    },
+
+    duplicateGroupTab(workspaceId, groupId, tabId) {
+      const state = get();
+      const workspace = state.workspaces.find((candidate) => candidate.id === workspaceId);
+      if (!workspace || !treeHasGroup(workspace.root, groupId)) return;
+      const group = state.paneGroups[groupId];
+      if (!group) return;
+
+      const index = group.tabs.findIndex((tab) => tab.id === tabId);
+      const sourcePane = index === -1 ? undefined : state.panes[group.tabs[index]!.paneId];
+      if (!sourcePane) return;
+
+      const pane = clonePane(sourcePane);
+      const newTab: PaneGroupTab = { id: nanoid(), paneId: pane.id };
+      const tabs = [...group.tabs];
+      tabs.splice(index + 1, 0, newTab);
+
+      set((current) =>
+        attachWorkspaceDerivedState(current, {
+          panes: { ...current.panes, [pane.id]: pane },
+          paneGroups: {
+            ...current.paneGroups,
+            [groupId]: { ...group, tabs, activeTabId: newTab.id },
+          },
+        }),
+      );
+      get().recordTabActivation(groupId, newTab.id);
     },
 
     setActiveGroupTab(workspaceId, groupId, tabId) {

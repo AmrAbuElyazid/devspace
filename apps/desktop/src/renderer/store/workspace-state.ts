@@ -44,6 +44,13 @@ export interface WorkspaceState {
     defaultType?: PaneType,
   ) => string;
   removeWorkspace: (id: string) => void;
+  /** Removes several workspaces at once, honouring the never-zero guarantee. */
+  removeWorkspaces: (ids: string[]) => void;
+  /**
+   * Copies a workspace next to the original with its own panes and sessions.
+   * Returns the new workspace id, or null if the source no longer exists.
+   */
+  duplicateWorkspace: (id: string) => string | null;
   renameWorkspace: (id: string, name: string) => void;
   setActiveWorkspace: (id: string) => void;
   togglePinWorkspace: (id: string) => void;
@@ -87,6 +94,10 @@ export interface WorkspaceState {
   ) => void;
   openManagedTerminalSession: (workspaceId: string, groupId: string, sessionId: string) => void;
   removeGroupTab: (workspaceId: string, groupId: string, tabId: string) => void;
+  /** Closes several tabs in one gesture ("close others", "close to the right"). */
+  removeGroupTabs: (workspaceId: string, groupId: string, tabIds: string[]) => void;
+  /** Copies a tab into the same group, right after the original. */
+  duplicateGroupTab: (workspaceId: string, groupId: string, tabId: string) => void;
   setActiveGroupTab: (workspaceId: string, groupId: string, tabId: string) => void;
   reorderGroupTabs: (
     workspaceId: string,
