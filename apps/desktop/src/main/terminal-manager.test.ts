@@ -229,7 +229,13 @@ describe("managed directory tracking", () => {
       await manager.createSurface(surfaceId, { backend: "managed-tmux", sessionId });
       await settle();
     };
-    return { manager, managedTmux, pwdChanged, refresh, attach };
+    // What the `surface-closed` handler calls. Reached directly because the
+    // handler itself is wired inside `init`, which needs a real BrowserWindow.
+    const forget = (surfaceId: string) =>
+      (manager as unknown as { forgetManagedSurface: (id: string) => void }).forgetManagedSurface(
+        surfaceId,
+      );
+    return { manager, managedTmux, pwdChanged, refresh, attach, forget };
   }
 
   test("reports a managed pane's directory in place of the OSC 7 tmux swallowed", async () => {
@@ -284,6 +290,52 @@ describe("managed directory tracking", () => {
 
     await expect(refresh()).resolves.toBeUndefined();
     expect(pwdChanged).not.toHaveBeenCalled();
+  });
+
+  test("a pane attaching alongside others does not wait for the next tick", async () => {
+    const { pwdChanged, attach } = makeManager(
+      new Map([
+        ["session-1", "/tmp/one"],
+        ["session-2", "/tmp/two"],
+      ]),
+    );
+
+    await attach("surface-1", "session-1");
+    pwdChanged.mockClear();
+    // The interval is already running by now, so nothing about starting it
+    // will report this one — restoring a session opens panes in a burst.
+    await attach("surface-2", "session-2");
+
+    expect(pwdChanged).toHaveBeenCalledWith("surface-2", "/tmp/two");
+  });
+
+  test("a directory that never reached the renderer is retried", async () => {
+    const { pwdChanged, refresh, attach } = makeManager(new Map([["session-1", "/tmp/project"]]));
+    pwdChanged.mockImplementationOnce(() => {
+      throw new Error("window destroyed mid-poll");
+    });
+
+    await attach("surface-1", "session-1");
+    await refresh();
+
+    expect(pwdChanged).toHaveBeenCalledTimes(2);
+    expect(pwdChanged).toHaveBeenLastCalledWith("surface-1", "/tmp/project");
+  });
+
+  test("a session that ended stops being polled while its dead tab stays open", async () => {
+    const { managedTmux, refresh, attach, forget } = makeManager(
+      new Map([["session-1", "/tmp/project"]]),
+    );
+
+    await attach("surface-1", "session-1");
+    managedTmux.listSessionPaths.mockClear();
+
+    // The renderer keeps the pane on screen showing "the terminal session
+    // ended", so no destroy follows — the poll has to stop on its own.
+    forget("surface-1");
+    await refresh();
+
+    expect(managedTmux.listSessionPaths).not.toHaveBeenCalled();
   });
 
   test("direct terminals are left to Ghostty's own pwd tracking", async () => {
