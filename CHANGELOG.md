@@ -6,6 +6,19 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.3.1 - 2026-07-29
+
+### Summary
+
+- Fix new terminals dying with "missing or unsuitable terminal: xterm-256color" on Macs without Homebrew's ncurses installed. Terminals already open kept running, so the app looked healthy until you opened a new one. Present since v0.2.0 rather than new in v0.3.0, and reached by updating from v0.1.x, whose direct-PTY terminals never invoked tmux.
+
+### Highlights
+
+**Terminals**
+
+- Fixed the bundled tmux being unable to find a terminfo database. It links Homebrew's ncurses, and that build carries exactly one compiled-in search path: the Cellar directory of whichever machine produced the bundle. That directory exists on a build machine and on almost no user's. ncurses does not consult the system database at `/usr/share/terminfo` unless it is named explicitly, and the terminfo Devspace ships holds only Ghostty's own entries — so a common `TERM` resolved nowhere and tmux exited before a shell appeared. The system database is now on the search path.
+- Added the two checks that would have caught it. Everything in the test suite passed while this was broken, because it all runs on machines where the Homebrew path happens to exist; linker inspection could not see it either, since the path is a string compiled inside the library rather than a link. The bundle verifier now asserts the system database still carries what the tmux configuration depends on and that the search path still names it, and an end-to-end test asserts the search path itself rather than tmux merely succeeding.
+
 ## v0.3.0 - 2026-07-29
 
 ### Summary
