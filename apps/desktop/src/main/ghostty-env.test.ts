@@ -17,6 +17,45 @@ describe("configureGhosttyEnvironment", () => {
 
     expect(env.GHOSTTY_RESOURCES_DIR).toBe("/Applications/Devspace.app/Contents/Resources/ghostty");
     expect(env.TERMINFO).toBe("/Applications/Devspace.app/Contents/Resources/terminfo");
+    // Without the system database on the search path the bundled tmux cannot
+    // resolve xterm-256color on any Mac that lacks Homebrew's ncurses, and
+    // exits before a shell appears.
+    expect(env.TERMINFO_DIRS).toBe(
+      "/Applications/Devspace.app/Contents/Resources/terminfo:/usr/share/terminfo",
+    );
+  });
+
+  test("still exposes the system database when no terminfo is bundled", () => {
+    const env: NodeJS.ProcessEnv = {};
+
+    configureGhosttyEnvironment({
+      isPackaged: true,
+      resourcesPath: "/Applications/Devspace.app/Contents/Resources",
+      appPath: "/unused",
+      cwd: "/unused",
+      moduleDir: "/unused",
+      env,
+      pathExists: (path) => path === "/usr/share/terminfo",
+    });
+
+    expect(env.TERMINFO).toBe(undefined);
+    expect(env.TERMINFO_DIRS).toBe("/usr/share/terminfo");
+  });
+
+  test("leaves the search path unset when neither database is present", () => {
+    const env: NodeJS.ProcessEnv = {};
+
+    configureGhosttyEnvironment({
+      isPackaged: true,
+      resourcesPath: "/Applications/Devspace.app/Contents/Resources",
+      appPath: "/unused",
+      cwd: "/unused",
+      moduleDir: "/unused",
+      env,
+      pathExists: () => false,
+    });
+
+    expect("TERMINFO_DIRS" in env).toBe(false);
   });
 
   test("resolves development Ghostty resource paths when unset", () => {
@@ -48,6 +87,7 @@ describe("configureGhosttyEnvironment", () => {
     const env: NodeJS.ProcessEnv = {
       GHOSTTY_RESOURCES_DIR: "/custom/ghostty",
       TERMINFO: "/custom/terminfo",
+      TERMINFO_DIRS: "/custom/terminfo-dirs",
     };
     const resolveDevPath = vi.fn();
 
@@ -65,6 +105,7 @@ describe("configureGhosttyEnvironment", () => {
     expect(env).toEqual({
       GHOSTTY_RESOURCES_DIR: "/custom/ghostty",
       TERMINFO: "/custom/terminfo",
+      TERMINFO_DIRS: "/custom/terminfo-dirs",
     });
     expect(resolveDevPath).not.toHaveBeenCalled();
   });
