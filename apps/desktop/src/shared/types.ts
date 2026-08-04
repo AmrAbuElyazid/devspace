@@ -14,6 +14,7 @@ import type {
   BrowserStopFindAction,
   ClearBrowsingDataTarget,
 } from "./browser";
+import type { OverlayMenuRequest } from "./overlay";
 import type { ShortcutAction, StoredShortcut } from "./shortcuts";
 import type { PersistedWorkspacePatch, PersistedWorkspaceState } from "./workspace-persistence";
 import type { MainProcessPerformanceSnapshot } from "./performance";
@@ -172,6 +173,20 @@ export interface DevspaceBridge {
   };
   shell: {
     openExternal: (url: string) => void;
+  };
+  overlay: {
+    /**
+     * Opens a menu in a transparent view stacked above the pane views, so it
+     * is visible over live page content. Resolves with the chosen id, or null
+     * if dismissed.
+     */
+    showMenu: (request: OverlayMenuRequest) => Promise<string | null>;
+    resolveMenu: (token: number, id: string | null) => void;
+    /** Signals that the overlay is mounted and listening. */
+    notifyReady: () => void;
+    onMenu: (
+      callback: (payload: { token: number; request: OverlayMenuRequest }) => void,
+    ) => () => void;
   };
   contextMenu: {
     show: <T extends string>(

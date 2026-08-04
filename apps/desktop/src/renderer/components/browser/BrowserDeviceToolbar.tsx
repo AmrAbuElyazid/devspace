@@ -1,17 +1,9 @@
-import { useState, type ReactElement } from "react";
-import { Link, Link2Off, RotateCcw, X } from "lucide-react";
+import { useCallback, useState, type ReactElement } from "react";
+import { ChevronDown, Link, Link2Off, RotateCcw, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { HintTooltip } from "@/components/ui/hint-tooltip";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { showPaneOverlayMenu, type OverlayMenuItem } from "@/lib/pane-overlay-menu";
 import {
   BROWSER_DEVICE_TOOLBAR_HEIGHT,
   BROWSER_VIEWPORT_MAX_DIMENSION,
@@ -48,8 +40,6 @@ interface Props {
   fitScale: number;
   /** Pane width, used to drop labels on narrow panes rather than overflow. */
   paneWidth: number;
-  /** Raised while the preset popup is open, so the pane can yield its view. */
-  onPopupOpenChange: (open: boolean) => void;
   onChange: (next: BrowserViewportSetting) => void;
   onAspectRatioChange: (aspectRatio: number | null) => void;
   onExit: () => void;
@@ -69,7 +59,6 @@ export default function BrowserDeviceToolbar({
   aspectRatio,
   fitScale,
   paneWidth,
-  onPopupOpenChange,
   onChange,
   onAspectRatioChange,
   onExit,
@@ -127,25 +116,58 @@ export default function BrowserDeviceToolbar({
     });
   };
 
-  const selectPreset = (value: string | null): void => {
-    if (!value) return;
+  const selectPreset = useCallback(
+    (value: string | null): void => {
+      if (!value) return;
 
-    if (value === RESPONSIVE_VALUE) {
-      // Drop the preset id but keep the size — switching to Responsive should
-      // free the frame, not jump it somewhere else.
-      onChange({ kind: "device", width: setting.width, height: setting.height });
-      return;
-    }
+      if (value === RESPONSIVE_VALUE) {
+        // Drop the preset id but keep the size — switching to Responsive should
+        // free the frame, not jump it somewhere else.
+        onChange({ kind: "device", width: setting.width, height: setting.height });
+        return;
+      }
 
-    const preset = BROWSER_VIEWPORT_PRESETS.find((candidate) => candidate.id === value);
-    if (!preset) return;
+      const preset = BROWSER_VIEWPORT_PRESETS.find((candidate) => candidate.id === value);
+      if (!preset) return;
 
-    setDraft(null);
-    onChange({ kind: "device", width: preset.width, height: preset.height, presetId: preset.id });
-    if (aspectRatio !== null) {
-      onAspectRatioChange(preset.width / preset.height);
-    }
-  };
+      setDraft(null);
+      onChange({ kind: "device", width: preset.width, height: preset.height, presetId: preset.id });
+      if (aspectRatio !== null) {
+        onAspectRatioChange(preset.width / preset.height);
+      }
+    },
+    [aspectRatio, onAspectRatioChange, onChange, setting.height, setting.width],
+  );
+
+  const [presetMenuOpen, setPresetMenuOpen] = useState(false);
+
+  const openPresetMenu = useCallback(
+    async (event: React.MouseEvent<HTMLButtonElement>) => {
+      setPresetMenuOpen(true);
+      const items: OverlayMenuItem[] = [
+        { id: RESPONSIVE_VALUE, label: "Responsive", checked: selectedValue === RESPONSIVE_VALUE },
+      ];
+      for (const group of PRESET_GROUPS) {
+        group.presets.forEach((preset, index) => {
+          items.push({
+            id: preset.id,
+            label: preset.label,
+            detail: `${preset.width}×${preset.height}`,
+            checked: selectedValue === preset.id,
+            ...(index === 0 ? { groupLabel: group.label, separatorBefore: true } : {}),
+          });
+        });
+      }
+
+      const chosen = await showPaneOverlayMenu(event.currentTarget, items, {
+        minWidth: 240,
+        label: "Device preset",
+      });
+      setPresetMenuOpen(false);
+      if (chosen) selectPreset(chosen);
+    },
+    [selectPreset, selectedValue],
+  );
 
   const rotate = (): void => {
     setDraft(null);
@@ -195,38 +217,22 @@ export default function BrowserDeviceToolbar({
         <span className="shrink-0 text-ui-micro font-medium text-muted-foreground">Device</span>
       )}
 
-      <Select
-        items={SELECT_ITEMS}
-        value={selectedValue}
-        onValueChange={selectPreset}
-        onOpenChange={onPopupOpenChange}
+      <button
+        type="button"
+        aria-label="Device preset"
+        aria-haspopup="menu"
+        aria-expanded={presetMenuOpen}
+        onClick={openPresetMenu}
+        className={cn(
+          "chrome-focus flex h-6 shrink-0 items-center justify-between gap-1 rounded-md px-1.5",
+          "border border-border/70 bg-surface text-ui-xs text-foreground transition-colors",
+          "hover:bg-row-hover",
+          wideFields ? "w-40" : "w-28",
+        )}
       >
-        <SelectTrigger
-          size="sm"
-          aria-label="Device preset"
-          className={cn("h-6 shrink-0 text-ui-xs", wideFields ? "w-40" : "w-28")}
-        >
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent className="min-w-56">
-          <SelectItem value={RESPONSIVE_VALUE}>Responsive</SelectItem>
-          {PRESET_GROUPS.map((group) => (
-            <SelectGroup key={group.label}>
-              <SelectLabel>{group.label}</SelectLabel>
-              {group.presets.map((preset) => (
-                <SelectItem key={preset.id} value={preset.id}>
-                  <span className="flex w-full items-center justify-between gap-6">
-                    <span>{preset.label}</span>
-                    <span className="font-mono text-ui-micro tabular-nums text-muted-foreground">
-                      {preset.width}×{preset.height}
-                    </span>
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select>
+        <span className="truncate">{SELECT_ITEMS[selectedValue] ?? "Responsive"}</span>
+        <ChevronDown size={12} className="shrink-0 text-muted-foreground" />
+      </button>
 
       <div
         role="group"

@@ -542,6 +542,19 @@ body {
   animation-duration: 0s !important;
 }
 
+/* ─── Overlay document ────────────────────────────────────────────────
+   The overlay view loads this same bundle, so it inherits the app's opaque
+   body background and grain — which turns the "transparent" overlay into a
+   solid sheet covering the window. Strip both back to nothing; the only thing
+   that should paint in that view is the popup itself.
+*/
+html.overlay-root,
+html.overlay-root body,
+html.overlay-root #root {
+  background: transparent !important;
+  background-image: none !important;
+}
+
 /* ─── Scrollbars (webkit) ─────────────────────────────────────────── */
 
 ::-webkit-scrollbar {

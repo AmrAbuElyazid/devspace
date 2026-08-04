@@ -236,6 +236,17 @@ const bridge: DevspaceBridge = {
     openExternal: (url) => ipcRenderer.send("shell:openExternal", url),
   },
 
+  overlay: {
+    showMenu: (request) => ipcRenderer.invoke("overlay:showMenu", request),
+    resolveMenu: (token, id) => ipcRenderer.send("overlay:resolveMenu", token, id),
+    notifyReady: () => ipcRenderer.send("overlay:ready"),
+    onMenu: (callback) => {
+      const listener = (_event: unknown, payload: unknown) =>
+        callback(payload as Parameters<typeof callback>[0]);
+      ipcRenderer.on("overlay:menu", listener);
+      return () => ipcRenderer.removeListener("overlay:menu", listener);
+    },
+  },
   contextMenu: {
     show: (items, position) => ipcRenderer.invoke("contextMenu:show", items, position),
   },

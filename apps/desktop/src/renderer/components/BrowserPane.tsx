@@ -1,18 +1,12 @@
-import { useState, type ReactElement } from "react";
+import { useCallback, useState, type ReactElement } from "react";
 import {
   ArrowLeft,
   ArrowRight,
-  Code2,
-  ExternalLink,
-  Maximize2,
   Monitor,
   MoreHorizontal,
   RotateCw,
-  Search,
   Smartphone,
   X,
-  ZoomIn,
-  ZoomOut,
 } from "lucide-react";
 
 import { resolveDisplayString } from "../../shared/shortcuts";
@@ -21,15 +15,7 @@ import type { BrowserConfig } from "@/types/workspace";
 import { cn } from "@/lib/utils";
 
 import { HintTooltip } from "@/components/ui/hint-tooltip";
-import { useNativeViewSuppression } from "@/hooks/useNativeViewSuppression";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuShortcut,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { showPaneOverlayMenu } from "@/lib/pane-overlay-menu";
 
 import BrowserSecurityIndicator from "./browser/BrowserSecurityIndicator";
 import BrowserFindBar from "./browser/BrowserFindBar";
@@ -130,9 +116,60 @@ export default function BrowserPane({
   } = useBrowserPaneController({ paneId, workspaceId, config, isFocused, isActive });
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [devicePopupOpen, setDevicePopupOpen] = useState(false);
-  // Both open downward over the native view, which would otherwise swallow them.
-  useNativeViewSuppression(paneId, menuOpen || devicePopupOpen);
+
+  // The menu is drawn in a transparent view stacked above the pane, so the page
+  // stays visible underneath instead of being hidden for as long as it is open.
+  const handleOpenMenu = useCallback(
+    async (event: React.MouseEvent<HTMLButtonElement>) => {
+      setMenuOpen(true);
+      const action = await showPaneOverlayMenu(
+        event.currentTarget,
+        [
+          {
+            id: "zoom-in",
+            label: "Zoom in",
+            shortcut: resolveDisplayString("browser-zoom-in"),
+            disabled: userZoom >= 3,
+          },
+          {
+            id: "zoom-out",
+            label: "Zoom out",
+            shortcut: resolveDisplayString("browser-zoom-out"),
+            disabled: userZoom <= 0.25,
+          },
+          {
+            id: "zoom-reset",
+            label: "Reset zoom",
+            detail: `${Math.round(userZoom * 100)}%`,
+            disabled: userZoom === 1,
+          },
+          {
+            id: "find",
+            label: "Find in page",
+            shortcut: resolveDisplayString("browser-find"),
+            separatorBefore: true,
+          },
+          { id: "open-external", label: "Open in external browser" },
+          {
+            id: "devtools",
+            label: "Toggle DevTools",
+            shortcut: resolveDisplayString("browser-devtools"),
+            separatorBefore: true,
+          },
+        ],
+        { align: "end", minWidth: 240, label: "Browser menu" },
+      );
+      setMenuOpen(false);
+
+      if (action === "zoom-in") handleZoomIn();
+      else if (action === "zoom-out") handleZoomOut();
+      else if (action === "zoom-reset") handleZoomReset();
+      else if (action === "find") handleOpenFindBar();
+      else if (action === "open-external") window.api.shell.openExternal(currentUrl);
+      else if (action === "devtools") void window.api.browser.toggleDevTools(paneId);
+    },
+    [currentUrl, handleOpenFindBar, handleZoomIn, handleZoomOut, handleZoomReset, paneId, userZoom],
+  );
 
   const inDeviceMode = effectiveViewport.kind === "device";
 
@@ -256,64 +293,22 @@ export default function BrowserPane({
           </button>
         </HintTooltip>
 
-        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
-          <DropdownMenuTrigger
-            render={
-              <button
-                type="button"
-                aria-label="Browser menu"
-                className={cn(
-                  "chrome-focus inline-flex size-7 shrink-0 items-center justify-center rounded-md",
-                  "text-muted-foreground transition-colors hover:bg-row-hover hover:text-foreground",
-                  "aria-expanded:bg-row-hover aria-expanded:text-foreground",
-                )}
-              >
-                <MoreHorizontal size={15} />
-              </button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem onClick={handleZoomIn} disabled={userZoom >= 3}>
-              <ZoomIn />
-              Zoom in
-              <DropdownMenuShortcut>{resolveDisplayString("browser-zoom-in")}</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleZoomOut} disabled={userZoom <= 0.25}>
-              <ZoomOut />
-              Zoom out
-              <DropdownMenuShortcut>
-                {resolveDisplayString("browser-zoom-out")}
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleZoomReset} disabled={userZoom === 1}>
-              <Maximize2 />
-              Reset zoom
-              <DropdownMenuShortcut>{Math.round(userZoom * 100)}%</DropdownMenuShortcut>
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            <DropdownMenuItem onClick={handleOpenFindBar}>
-              <Search />
-              Find in page
-              <DropdownMenuShortcut>{resolveDisplayString("browser-find")}</DropdownMenuShortcut>
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => window.api.shell.openExternal(currentUrl)}>
-              <ExternalLink />
-              Open in external browser
-            </DropdownMenuItem>
-
-            <DropdownMenuSeparator />
-
-            <DropdownMenuItem onClick={() => void window.api.browser.toggleDevTools(paneId)}>
-              <Code2 />
-              Toggle DevTools
-              <DropdownMenuShortcut>
-                {resolveDisplayString("browser-devtools")}
-              </DropdownMenuShortcut>
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <HintTooltip content="Browser menu" dense>
+          <button
+            type="button"
+            aria-label="Browser menu"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={handleOpenMenu}
+            className={cn(
+              "chrome-focus inline-flex size-7 shrink-0 items-center justify-center rounded-md",
+              "text-muted-foreground transition-colors hover:bg-row-hover hover:text-foreground",
+              menuOpen && "bg-row-hover text-foreground",
+            )}
+          >
+            <MoreHorizontal size={15} />
+          </button>
+        </HintTooltip>
       </div>
 
       {isFindBarOpen && (
@@ -365,7 +360,6 @@ export default function BrowserPane({
             aspectRatio={aspectRatio}
             fitScale={layout.fitScale}
             paneWidth={panel.width}
-            onPopupOpenChange={setDevicePopupOpen}
             onChange={commitViewport}
             onAspectRatioChange={setAspectRatio}
             onExit={toggleDeviceMode}

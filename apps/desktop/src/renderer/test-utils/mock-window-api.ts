@@ -118,6 +118,12 @@ function createDefaultWindowApi(): DevspaceBridge {
     shell: {
       openExternal: vi.fn(),
     },
+    overlay: {
+      showMenu: vi.fn(async () => null),
+      resolveMenu: vi.fn(),
+      notifyReady: vi.fn(),
+      onMenu: vi.fn(() => () => {}),
+    },
     contextMenu: {
       show: vi.fn(async () => null) as DevspaceBridge["contextMenu"]["show"],
     },
