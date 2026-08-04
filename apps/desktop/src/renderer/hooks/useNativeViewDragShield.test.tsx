@@ -5,11 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { useNativeViewStore } from "../store/native-view-store";
 import { resetDndState, setDndState } from "./useDndOrchestrator";
-import {
-  acquireNativeViewShield,
-  releaseNativeViewShield,
-  useNativeViewDragShield,
-} from "./useNativeViewDragShield";
+import { useNativeViewDragShield } from "./useNativeViewDragShield";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -134,24 +130,4 @@ test("leaves the views hidden if a dnd-kit drag is under way", () => {
   pointer("pointerup", tabHandle);
 
   expect(setDragHidesViews).toHaveBeenCalledExactlyOnceWith(true);
-});
-
-test("an explicit hold keeps the views hidden until it is released", () => {
-  acquireNativeViewShield();
-  expect(setDragHidesViews).toHaveBeenCalledExactlyOnceWith(true);
-
-  releaseNativeViewShield();
-  expect(setDragHidesViews.mock.calls).toEqual([[true], [false]]);
-});
-
-test("a pointer release does not lift someone else's hold", () => {
-  acquireNativeViewShield();
-  pointer("pointerdown", tabHandle);
-  pointer("pointermove", tabHandle);
-  pointer("pointerup", tabHandle);
-
-  expect(setDragHidesViews.mock.calls).toEqual([[true], [true]]);
-
-  releaseNativeViewShield();
-  expect(setDragHidesViews.mock.calls).toEqual([[true], [true], [false]]);
 });

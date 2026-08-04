@@ -9,7 +9,6 @@ import { useSettingsStore } from "@/store/settings-store";
 import { useTrafficLightGutter } from "@/store/window-chrome-store";
 import { resolveDisplayString } from "../../../shared/shortcuts";
 import { useActiveDrag, useDropIntent } from "@/hooks/useDndOrchestrator";
-import { acquireNativeViewShield, releaseNativeViewShield } from "@/hooks/useNativeViewDragShield";
 import {
   collectWorkspaceIds,
   findFolder,
@@ -36,13 +35,10 @@ import {
 } from "@/lib/workspace-color";
 
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
+import { clampSidebarWidth } from "@/lib/sidebar-width";
 import { SidebarProvider, type SidebarContextValue } from "./SidebarContext";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import { useSidebarSelection } from "./useSidebarSelection";
-
-function clampSidebarWidth(width: number): number {
-  return Math.max(180, Math.min(420, width));
-}
 
 const iconButtonClass = cn(
   "no-drag chrome-focus inline-flex items-center justify-center rounded-md",
@@ -202,7 +198,6 @@ export default function Sidebar() {
       const divider = e.currentTarget;
       const { pointerId } = e;
       divider.setPointerCapture?.(pointerId);
-      acquireNativeViewShield();
 
       resizeRef.current = {
         startX: e.clientX,
@@ -233,7 +228,6 @@ export default function Sidebar() {
         if (divider.hasPointerCapture?.(pointerId)) {
           divider.releasePointerCapture(pointerId);
         }
-        releaseNativeViewShield();
       };
 
       divider.addEventListener("pointermove", onPointerMove);

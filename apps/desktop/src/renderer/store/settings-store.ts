@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+import { clampSidebarWidth } from "../lib/sidebar-width";
 import type { PaneType, SplitDirection } from "../types/workspace";
 
 /** The default pane type for new tabs, or 'picker' to always show the dialog. */
@@ -106,7 +107,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
 
       setSidebarWidth(width) {
-        set({ sidebarWidth: Math.max(160, Math.min(400, width)) });
+        set({ sidebarWidth: clampSidebarWidth(width) });
       },
 
       toggleSettings() {

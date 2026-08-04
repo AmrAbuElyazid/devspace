@@ -25,35 +25,16 @@ import { getActiveDrag } from "./useDndOrchestrator";
  */
 const SHIELDED_SORTABLE_PREFIXES = ["gtab-", "ws-"];
 
-/** Non-drag callers holding the shield open (e.g. the sidebar resize divider). */
-let shieldHolds = 0;
-
 function hideNativeViews(): void {
   useNativeViewStore.getState().setDragHidesViews(true);
 }
 
 function restoreNativeViewsIfIdle(): void {
-  if (shieldHolds > 0) return;
   // A dnd-kit drag is under way, so it owns the suppression now and App's
   // effect will lift it on drop. Restoring here would flash the views back in
   // mid-drag — and put them right back under the cursor.
   if (getActiveDrag()) return;
   useNativeViewStore.getState().setDragHidesViews(false);
-}
-
-/**
- * Hide the native views for a non-dnd-kit interaction that also needs a clear
- * pointer path across the workspace. Every acquire must be paired with a
- * release.
- */
-export function acquireNativeViewShield(): void {
-  shieldHolds += 1;
-  hideNativeViews();
-}
-
-export function releaseNativeViewShield(): void {
-  shieldHolds = Math.max(0, shieldHolds - 1);
-  restoreNativeViewsIfIdle();
 }
 
 function isShieldedDragHandle(target: EventTarget | null): boolean {
