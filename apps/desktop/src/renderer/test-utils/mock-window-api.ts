@@ -128,6 +128,7 @@ function createDefaultWindowApi(): DevspaceBridge {
     sidebarPeek: {
       setConfig: vi.fn(),
       activate: vi.fn(),
+      reportHeight: vi.fn(),
       onPanel: vi.fn(() => unsubscribe),
       onActivate: vi.fn(() => unsubscribe),
     },

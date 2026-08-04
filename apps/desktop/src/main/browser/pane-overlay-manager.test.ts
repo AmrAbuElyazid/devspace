@@ -256,6 +256,57 @@ test("hiding the panel tells the overlay to drop it, and leaves focus alone", as
   expect(window.focus).not.toHaveBeenCalled();
 });
 
+test("the window is trimmed to the height the card reports", async () => {
+  const { manager, surface } = harness;
+  const shown = manager.showPeek(PEEK_RECT, PEEK);
+  manager.handleOverlayReady();
+  await shown;
+
+  manager.setPeekHeight(180.2);
+
+  // Rounded up, so a fractional layout never clips the last row by a pixel.
+  expect(surface.setBounds).toHaveBeenLastCalledWith({ ...PEEK_RECT, height: 181 });
+});
+
+test("a card taller than the workspace is capped, not allowed to overflow it", async () => {
+  const { manager, surface } = harness;
+  const shown = manager.showPeek(PEEK_RECT, PEEK);
+  manager.handleOverlayReady();
+  await shown;
+
+  manager.setPeekHeight(PEEK_RECT.height + 500);
+
+  expect(surface.setBounds).toHaveBeenLastCalledWith(PEEK_RECT);
+});
+
+test("a nonsense height is ignored rather than collapsing the window", async () => {
+  const { manager, surface } = harness;
+  const shown = manager.showPeek(PEEK_RECT, PEEK);
+  manager.handleOverlayReady();
+  await shown;
+  surface.setBounds.mockClear();
+
+  for (const bad of [0, -10, Number.NaN, Number.POSITIVE_INFINITY, "200", null, undefined]) {
+    manager.setPeekHeight(bad);
+  }
+
+  expect(surface.setBounds).not.toHaveBeenCalled();
+});
+
+test("the next peek opens at full height rather than the last card's", async () => {
+  const { manager, surface } = harness;
+  const first = manager.showPeek(PEEK_RECT, PEEK);
+  manager.handleOverlayReady();
+  await first;
+  manager.setPeekHeight(120);
+  manager.hidePeek();
+  surface.setBounds.mockClear();
+
+  await manager.showPeek(PEEK_RECT, PEEK);
+
+  expect(surface.setBounds).toHaveBeenCalledWith(PEEK_RECT);
+});
+
 test("a hide during the overlay's first load cancels the show it raced", async () => {
   const { manager, surface, sent } = harness;
 

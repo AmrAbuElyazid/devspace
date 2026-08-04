@@ -55,6 +55,7 @@ export class PaneOverlayManager {
   private peekRect: Rectangle | null = null;
   private peekSnapshot = "";
   private peekToken = 0;
+  private peekContentHeight: number | null = null;
 
   constructor(private readonly deps: PaneOverlayManagerDeps) {}
 
@@ -122,7 +123,7 @@ export class PaneOverlayManager {
     // or a workspace rename lands without another mechanism. Both halves are
     // deduplicated rather than resent eleven times a second.
     const serialized = JSON.stringify(snapshot);
-    if (!this.peekOpen || !rectsEqual(this.peekRect, rect)) surface.setBounds(rect);
+    if (!this.peekOpen || !rectsEqual(this.peekRect, rect)) this.applyPeekBounds(rect);
     this.peekRect = rect;
     if (!this.peekOpen || serialized !== this.peekSnapshot) {
       surface.webContents.send("overlay:peek", snapshot);
@@ -147,6 +148,30 @@ export class PaneOverlayManager {
     this.closePeek();
   }
 
+  /**
+   * The height the panel's card actually wants, measured by the overlay.
+   *
+   * The window opens at the full height of the workspace and is trimmed to
+   * this. A card shorter than its window would otherwise leave a transparent
+   * strip below it that still swallows every click aimed at the pane behind.
+   */
+  setPeekHeight(height: unknown): void {
+    if (typeof height !== "number" || !Number.isFinite(height) || height <= 0) return;
+    const rounded = Math.ceil(height);
+    if (rounded === this.peekContentHeight) return;
+    this.peekContentHeight = rounded;
+    if (this.peekOpen && this.peekRect) this.applyPeekBounds(this.peekRect);
+  }
+
+  private applyPeekBounds(rect: Rectangle): void {
+    const surface = this.surface;
+    if (!surface || surface.isDestroyed()) return;
+    const height = this.peekContentHeight
+      ? Math.min(rect.height, this.peekContentHeight)
+      : rect.height;
+    surface.setBounds({ ...rect, height });
+  }
+
   /** Called from IPC when the overlay has mounted and is listening. */
   handleOverlayReady(): void {
     this.markReady?.();
@@ -168,6 +193,10 @@ export class PaneOverlayManager {
     this.peekOpen = false;
     this.peekRect = null;
     this.peekSnapshot = "";
+    // Forgotten rather than carried over: the next peek may hold a different
+    // number of rows, and opening at a stale short height would clip it until
+    // the overlay had re-measured.
+    this.peekContentHeight = null;
     const surface = this.surface;
     if (surface && !surface.isDestroyed()) {
       surface.webContents.send("overlay:peek", null);
