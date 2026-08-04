@@ -357,4 +357,8 @@ export function registerTerminalAndEditorIpc(
   terminalManager.onSearchSelected((surfaceId, selected) => {
     mainWindow.webContents.send("terminal:searchSelected", surfaceId, selected);
   });
+
+  terminalManager.onDevServerPortsChanged((ports) => {
+    mainWindow.webContents.send("terminal:devServerPorts", ports);
+  });
 }

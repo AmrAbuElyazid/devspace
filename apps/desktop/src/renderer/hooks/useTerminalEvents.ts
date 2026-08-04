@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useDevServerStore } from "../store/dev-server-store";
 import { useWorkspaceStore } from "../store/workspace-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useTerminalStore } from "../store/terminal-store";
@@ -90,6 +91,13 @@ export function useTerminalEvents(): void {
   useEffect(() => {
     return window.api.terminal.onSearchSelected((surfaceId, selected) => {
       useTerminalStore.getState().updateSearchSelected(surfaceId, selected);
+    });
+  }, []);
+
+  // Ports the main process found listening under each managed session.
+  useEffect(() => {
+    return window.api.terminal.onDevServerPorts((ports) => {
+      useDevServerStore.getState().setPorts(ports);
     });
   }, []);
 }

@@ -3,6 +3,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { Check } from "lucide-react";
 
 import { useWorkspaceStore } from "@/store/workspace-store";
+import { useDevServerStore } from "@/store/dev-server-store";
 import { useSettingsStore } from "@/store/settings-store";
 import { formatSidebarDirectory } from "@/lib/sidebar-directory";
 import { resolveWorkspaceColor, workspaceColorVar } from "@/lib/workspace-color";
@@ -52,6 +53,7 @@ export function SortableWorkspaceItem({
   );
   const color = workspaceColorVar(resolveWorkspaceColor(workspaceId, storedColor));
   const info = useWorkspaceStore((s) => s.workspaceSidebarMetadataByWorkspaceId[workspaceId]);
+  const ports = useDevServerStore((s) => s.portsByWorkspaceId[workspaceId]);
   const density = useSettingsStore((s) => s.sidebarDensity);
   const isCompact = density === "compact";
   const paneCount = info?.paneCount ?? 0;
@@ -212,6 +214,21 @@ export function SortableWorkspaceItem({
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5">
+        {/* Fixed order — port, then pane count — so the right edge of the list
+            stays a straight line however many rows are serving. */}
+        {ports && ports.length > 0 ? (
+          <span
+            title={
+              ports.length > 1
+                ? `Listening on ports ${ports.join(", ")}`
+                : `Listening on port ${ports[0]}`
+            }
+            className="flex items-center gap-1 rounded-[5px] bg-success/[0.14] py-px pr-[5px] pl-1 font-mono text-ui-micro leading-none text-success"
+          >
+            <span aria-hidden className="size-1.5 rounded-full bg-success" />:{ports[0]}
+            {ports.length > 1 ? <span className="opacity-60">+{ports.length - 1}</span> : null}
+          </span>
+        ) : null}
         {shortcutHint ? (
           <Kbd
             className={cn(

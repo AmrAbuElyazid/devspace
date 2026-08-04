@@ -88,6 +88,7 @@ function createDefaultWindowApi(): DevspaceBridge {
       onSearchEnd: vi.fn(() => unsubscribe),
       onSearchTotal: vi.fn(() => unsubscribe),
       onSearchSelected: vi.fn(() => unsubscribe),
+      onDevServerPorts: vi.fn(() => unsubscribe),
     },
     window: {
       minimize: vi.fn(),

@@ -55,6 +55,7 @@ const terminalManagerMock = {
   onSearchEnd: (..._args: unknown[]) => {},
   onSearchTotal: (..._args: unknown[]) => {},
   onSearchSelected: (..._args: unknown[]) => {},
+  onDevServerPortsChanged: (..._args: unknown[]) => {},
   destroyAll: () => {},
 };
 

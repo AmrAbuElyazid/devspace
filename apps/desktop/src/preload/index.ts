@@ -1,3 +1,4 @@
+import type { DevServerPorts } from "../shared/dev-server";
 import type { AppUpdateState, DevspaceBridge } from "../shared/types";
 import { DEFAULT_SHORTCUTS } from "../shared/shortcuts";
 import { getElectronBridge } from "./electron-bridge";
@@ -148,6 +149,15 @@ const bridge: DevspaceBridge = {
       ipcRenderer.on("terminal:searchSelected", listener);
       return () => {
         ipcRenderer.removeListener("terminal:searchSelected", listener);
+      };
+    },
+    onDevServerPorts: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, ports: DevServerPorts[]): void => {
+        callback(ports);
+      };
+      ipcRenderer.on("terminal:devServerPorts", listener);
+      return () => {
+        ipcRenderer.removeListener("terminal:devServerPorts", listener);
       };
     },
   },

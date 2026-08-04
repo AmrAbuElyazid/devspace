@@ -389,3 +389,57 @@ test("no running server reports no directories rather than failing", async () =>
 test("command quoting preserves single quotes without enabling shell interpolation", () => {
   expect(quoteCommandArgument("a'b;$HOME")).toBe("'a'\"'\"'b;$HOME'");
 });
+
+test("pane processes come back with the shell pid and foreground command", async () => {
+  const userDataPath = await makeTempDirectory();
+  const runCommand = vi.fn<TmuxCommandRunner>(async (_binary, args) => {
+    if (args[0] === "-V") return { exitCode: 0, stdout: "tmux 3.4\n", stderr: "" };
+    if (args.includes("list-panes")) {
+      return {
+        exitCode: 0,
+        stdout: [
+          "devspace-pane_1\t4321\tnode",
+          // A session split inside tmux reports one row per pane.
+          "devspace-pane_1\t4400\tzsh",
+          "unrelated\t9000\tvim",
+          "devspace-bad id\t9100\tzsh",
+          "devspace-pane_2\tnotapid\tzsh",
+          "",
+        ].join("\n"),
+        stderr: "",
+      };
+    }
+    return { exitCode: 0, stdout: "", stderr: "" };
+  });
+  const manager = new ManagedTmuxManager({
+    userDataPath,
+    resourcesPath: "/unused",
+    isPackaged: false,
+    env: { PATH: "/usr/bin" },
+    binaryPath: "/opt/devspace/bin/tmux",
+    runCommand,
+  });
+
+  await expect(manager.listPaneProcesses()).resolves.toEqual([
+    { sessionId: "pane_1", pid: 4321, command: "node" },
+    { sessionId: "pane_1", pid: 4400, command: "zsh" },
+  ]);
+});
+
+test("no running server reports no pane processes rather than failing", async () => {
+  const userDataPath = await makeTempDirectory();
+  const runCommand = vi.fn<TmuxCommandRunner>(async (_binary, args) => {
+    if (args[0] === "-V") return { exitCode: 0, stdout: "tmux 3.4\n", stderr: "" };
+    return { exitCode: 1, stdout: "", stderr: "no server running\n" };
+  });
+  const manager = new ManagedTmuxManager({
+    userDataPath,
+    resourcesPath: "/unused",
+    isPackaged: false,
+    env: { PATH: "/usr/bin" },
+    binaryPath: "/opt/devspace/bin/tmux",
+    runCommand,
+  });
+
+  await expect(manager.listPaneProcesses()).resolves.toEqual([]);
+});
