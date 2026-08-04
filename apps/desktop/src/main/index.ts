@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, screen } from "electron";
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { randomBytes } from "crypto";
@@ -11,6 +11,7 @@ import { VscodeServerManager } from "./vscode-server";
 import { T3CodeServerManager } from "./t3code-server";
 import { registerIpcHandlers } from "./ipc-handlers";
 import { PaneOverlayManager } from "./browser/pane-overlay-manager";
+import { SidebarPeekWatcher } from "./sidebar-peek-watcher";
 import { trustIpcWebContents } from "./ipc/shared";
 import { BrowserSessionManager } from "./browser/browser-session-manager";
 import { BrowserPaneManager } from "./browser/browser-pane-manager";
@@ -223,6 +224,10 @@ function createWindow(): void {
         fullscreenable: false,
         skipTaskbar: true,
         show: false,
+        // The surface is shown without focus, so without this macOS would spend
+        // the first click activating the window instead of delivering it — a
+        // hover panel the user has to click twice is a broken hover panel.
+        acceptFirstMouse: true,
         backgroundColor: "#00000000",
         webPreferences: {
           preload: join(__dirname, "../preload/index.js"),
@@ -243,7 +248,22 @@ function createWindow(): void {
     },
   });
 
+  // Watches for the cursor reaching the left edge while the sidebar is
+  // collapsed. It has to live out here: the collapsed sidebar leaves the
+  // renderer a couple of pixels of window it can still see mouse events in,
+  // and the native panes swallow the rest.
+  const sidebarPeekWatcher = new SidebarPeekWatcher({
+    getContentBounds: () => (window.isDestroyed() ? null : window.getContentBounds()),
+    getCursorPoint: () => screen.getCursorScreenPoint(),
+    isWindowFocused: () => !window.isDestroyed() && window.isFocused(),
+    show: (rect, config) => void paneOverlayManager.showPeek(rect, config.snapshot),
+    hide: () => paneOverlayManager.hidePeek(),
+  });
+  window.on("focus", () => sidebarPeekWatcher.setWindowFocused(true));
+  window.on("blur", () => sidebarPeekWatcher.setWindowFocused(false));
+
   window.on("closed", () => {
+    sidebarPeekWatcher.dispose();
     paneOverlayManager.destroy();
   });
 
@@ -258,6 +278,7 @@ function createWindow(): void {
     browserSessionManager,
     appUpdater,
     paneOverlayManager,
+    sidebarPeekWatcher,
   );
   installWindowZoomReset(window.webContents);
 

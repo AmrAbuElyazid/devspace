@@ -8,6 +8,7 @@ import type { BrowserSessionManager } from "./browser/browser-session-manager";
 import type { AppUpdaterLike } from "./app-updater";
 import { registerBrowserIpc } from "./ipc/browser";
 import type { PaneOverlayManager } from "./browser/pane-overlay-manager";
+import type { SidebarPeekWatcher } from "./sidebar-peek-watcher";
 import { registerSystemIpc } from "./ipc/system";
 import { registerTerminalAndEditorIpc } from "./ipc/terminal-editor";
 import { registerWorkspaceStateIpc } from "./ipc/workspace-state";
@@ -24,6 +25,7 @@ export function registerIpcHandlers(
   browserSessionManager?: BrowserSessionManager,
   appUpdater?: AppUpdaterLike,
   paneOverlayManager?: PaneOverlayManager,
+  sidebarPeekWatcher?: SidebarPeekWatcher,
 ): void {
   const trustedWebContents = mainWindow.webContents;
   trustIpcWebContents(trustedWebContents);
@@ -41,6 +43,12 @@ export function registerIpcHandlers(
     browserSessionManager,
   );
   registerSystemIpc(mainWindow, appUpdater);
-  registerBrowserIpc(mainWindow, browserPaneManager, browserImportService, paneOverlayManager);
+  registerBrowserIpc(
+    mainWindow,
+    browserPaneManager,
+    browserImportService,
+    paneOverlayManager,
+    sidebarPeekWatcher,
+  );
   registerWorkspaceStateIpc();
 }

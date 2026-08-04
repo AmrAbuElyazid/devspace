@@ -13,6 +13,7 @@ import { useNativeViewDragShield } from "./hooks/useNativeViewDragShield";
 import { useAppShortcuts } from "./hooks/useAppShortcuts";
 import { useBrowserBridge } from "./hooks/useBrowserBridge";
 import { useTerminalEvents } from "./hooks/useTerminalEvents";
+import { useSidebarPeek } from "./hooks/useSidebarPeek";
 
 import Sidebar from "./components/Sidebar";
 import SplitLayout from "./components/SplitLayout";
@@ -79,6 +80,7 @@ export default function App() {
   useAppShortcuts();
   useBrowserBridge();
   useTerminalEvents();
+  useSidebarPeek();
 
   useEffect(() => {
     window.api?.editor?.setKeepServerRunning(keepVscodeServerRunning);

@@ -125,6 +125,12 @@ function createDefaultWindowApi(): DevspaceBridge {
       notifyReady: vi.fn(),
       onMenu: vi.fn(() => () => {}),
     },
+    sidebarPeek: {
+      setConfig: vi.fn(),
+      activate: vi.fn(),
+      onPanel: vi.fn(() => unsubscribe),
+      onActivate: vi.fn(() => unsubscribe),
+    },
     contextMenu: {
       show: vi.fn(async () => null) as DevspaceBridge["contextMenu"]["show"],
     },

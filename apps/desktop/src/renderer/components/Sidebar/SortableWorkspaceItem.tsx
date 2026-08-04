@@ -1,11 +1,9 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { Check } from "lucide-react";
 
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { useDevServerStore } from "@/store/dev-server-store";
 import { useSettingsStore } from "@/store/settings-store";
-import { formatSidebarDirectory } from "@/lib/sidebar-directory";
 import { resolveWorkspaceColor, workspaceColorVar } from "@/lib/workspace-color";
 import { useActiveDrag } from "@/hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "@/hooks/useInsertionIndicator";
@@ -15,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 import { InlineRenameInput } from "@/components/ui/inline-rename-input";
 import { Kbd } from "@/components/ui/kbd";
+import { WorkspaceRow } from "./WorkspaceRow";
 
 interface SortableWorkspaceItemProps {
   workspaceId: string;
@@ -130,20 +129,19 @@ export function SortableWorkspaceItem({
         : "";
 
   return (
-    <div
+    <WorkspaceRow
       ref={setRef}
-      style={{
-        marginLeft: depth * 13,
-        opacity: isDragging ? 0.4 : undefined,
-        // Tinted with the workspace's own hue rather than one shared amber, so
-        // the active row reads as "this workspace" and not just "selected".
-        ...(isActive && !isSelected
-          ? { backgroundColor: `color-mix(in oklch, ${color} 16%, transparent)` }
-          : {}),
-      }}
+      name={name}
+      color={color}
+      directory={directory}
+      ports={ports}
+      paneCount={paneCount}
+      isActive={isActive}
+      isSelected={isSelected}
+      isCompact={isCompact}
+      depth={depth}
+      style={{ opacity: isDragging ? 0.4 : undefined }}
       data-sortable-id={`ws-${workspaceId}`}
-      data-active={isActive || undefined}
-      data-selected={isSelected || undefined}
       onClick={(e) => {
         if (!isEditing) onSelect(e);
       }}
@@ -151,32 +149,9 @@ export function SortableWorkspaceItem({
       onContextMenu={onContextMenu}
       {...attributes}
       {...listeners}
-      className={cn(
-        "group/ws relative flex items-center gap-2 rounded-md pr-2 pl-2.5",
-        "chrome-focus no-drag cursor-default select-none transition-colors duration-100",
-        isCompact ? "min-h-[26px]" : "min-h-9 py-1",
-        "hover:bg-row-hover",
-        isSelected && "bg-row-selected ring-1 ring-inset ring-brand-edge",
-        isTabDropTarget && "drop-into-folder",
-        insertClass,
-      )}
-    >
-      {/* Identity stripe. Two pixels of the workspace's own colour, hard against
-          the leading edge, so a row is recognisable before its name is read.
-          Colours land in the next change; until then every row is neutral. */}
-      <span
-        aria-hidden
-        style={{ backgroundColor: color }}
-        className={cn(
-          "absolute left-0 rounded-full transition-all",
-          isActive ? "inset-y-1 w-[2.5px] opacity-100" : "inset-y-[7px] w-0.5 opacity-80",
-        )}
-      />
-
-      {isSelected ? <Check size={13} strokeWidth={2.4} className="shrink-0 text-brand" /> : null}
-
-      <div className="flex min-w-0 flex-1 flex-col gap-px">
-        {isEditing ? (
+      className={cn(isTabDropTarget && "drop-into-folder", insertClass)}
+      nameSlot={
+        isEditing ? (
           <InlineRenameInput
             initialValue={name}
             onCommit={(newName) => {
@@ -187,49 +162,10 @@ export function SortableWorkspaceItem({
             className={cn("text-ui-sm", isActive && "font-medium")}
             aria-label="Rename workspace"
           />
-        ) : (
-          <span
-            className={cn(
-              "truncate leading-tight text-ui-sm",
-              isActive ? "font-medium text-foreground" : "text-foreground/[0.88]",
-            )}
-          >
-            {name}
-          </span>
-        )}
-        {/* Truncated from the left, because the tail of a path is what tells
-            two sibling worktrees apart. */}
-        {!isEditing && !isCompact && directory ? (
-          <span
-            title={directory}
-            // rtl puts the ellipsis on the left, so the tail of the path — the
-            // part that identifies it — survives. formatSidebarDirectory
-            // prefixes an LTR mark to stop the leading "~/" being reordered.
-            style={{ direction: "rtl" }}
-            className="truncate text-left font-mono text-ui-micro leading-none text-muted-foreground"
-          >
-            {formatSidebarDirectory(directory)}
-          </span>
-        ) : null}
-      </div>
-
-      <div className="flex shrink-0 items-center gap-1.5">
-        {/* Fixed order — port, then pane count — so the right edge of the list
-            stays a straight line however many rows are serving. */}
-        {ports && ports.length > 0 ? (
-          <span
-            title={
-              ports.length > 1
-                ? `Listening on ports ${ports.join(", ")}`
-                : `Listening on port ${ports[0]}`
-            }
-            className="flex items-center gap-1 rounded-[5px] bg-success/[0.14] py-px pr-[5px] pl-1 font-mono text-ui-micro leading-none text-success"
-          >
-            <span aria-hidden className="size-1.5 rounded-full bg-success" />:{ports[0]}
-            {ports.length > 1 ? <span className="opacity-60">+{ports.length - 1}</span> : null}
-          </span>
-        ) : null}
-        {shortcutHint ? (
+        ) : undefined
+      }
+      countSlot={
+        shortcutHint ? (
           <Kbd
             className={cn(
               // A translucent foreground fill rather than a solid one, so the
@@ -240,12 +176,8 @@ export function SortableWorkspaceItem({
           >
             {shortcutHint}
           </Kbd>
-        ) : paneCount > 0 ? (
-          <span className="min-w-2 text-right font-mono text-ui-micro tabular-nums text-muted-foreground">
-            {paneCount}
-          </span>
-        ) : null}
-      </div>
-    </div>
+        ) : undefined
+      }
+    />
   );
 }

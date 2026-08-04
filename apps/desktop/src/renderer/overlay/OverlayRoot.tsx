@@ -4,6 +4,8 @@ import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { OverlayMenuItem, OverlayMenuRequest } from "../../shared/overlay";
+import type { SidebarPeekSnapshot } from "../../shared/sidebar-peek";
+import { SidebarPeekPanel } from "./SidebarPeekPanel";
 
 /** Keeps the menu clear of the window edges. */
 const VIEWPORT_MARGIN = 8;
@@ -61,6 +63,7 @@ function MenuRow({
 
 export default function OverlayRoot(): ReactElement | null {
   const [menu, setMenu] = useState<ActiveMenu | null>(null);
+  const [peek, setPeek] = useState<SidebarPeekSnapshot | null>(null);
   const [activeIndex, setActiveIndex] = useState(-1);
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
@@ -84,6 +87,13 @@ export default function OverlayRoot(): ReactElement | null {
     // Only now is it safe for the main process to post a menu here.
     window.api.overlay.notifyReady();
     return dispose;
+  }, []);
+
+  useEffect(() => {
+    return window.api.sidebarPeek.onPanel((snapshot) => {
+      if (snapshot) document.documentElement.classList.toggle("dark", snapshot.dark);
+      setPeek(snapshot);
+    });
   }, []);
 
   // Measure after paint, then place. The menu's height depends on its content,
@@ -154,7 +164,13 @@ export default function OverlayRoot(): ReactElement | null {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeIndex, close, menu]);
 
-  if (!menu) return null;
+  // Mutually exclusive: the two want the same surface at different sizes, and
+  // the main process closes the panel before it posts a menu.
+  if (!menu) {
+    return peek ? (
+      <SidebarPeekPanel snapshot={peek} onActivate={window.api.sidebarPeek.activate} />
+    ) : null;
+  }
 
   const { items, minWidth, label, swatches } = menu.request;
 

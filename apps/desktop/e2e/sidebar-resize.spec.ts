@@ -1,25 +1,10 @@
 import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
-import { execFile } from "child_process";
 import { mkdtemp, rm } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
-import { promisify } from "util";
 
 import { cleanupManagedTmuxSessions, getNativeViewSnapshot, launchApp } from "./helpers/app";
-
-const execFileAsync = promisify(execFile);
-
-/**
- * A real OS-level cursor drag, built from a small CGEvent program.
- *
- * Playwright's own mouse actions are injected straight into Chromium, so they
- * never meet the AppKit hit-testing that decides whether a native pane
- * swallows a drag — which is the entire thing under test here. Needs
- * Accessibility permission for whatever runs the suite.
- *
- *   swiftc -O -o /tmp/devspace-mouse/drag e2e/fixtures/drag.swift
- */
-const DRAG = "/tmp/devspace-mouse/drag";
+import { requireCursorDriver } from "./helpers/cursor";
 
 async function sidebarWidth(page: Page): Promise<number> {
   return page.evaluate(() => {
@@ -35,9 +20,9 @@ async function openBrowserPane(page: Page): Promise<void> {
     };
     const state = store.getState();
     const workspaces = state.workspaces as { id: string; focusedGroupId?: string }[];
-    const workspace = workspaces.find((w) => w.id === state.activeWorkspaceId) ?? workspaces[0];
+    const workspace = workspaces.find((w) => w.id === state.activeWorkspaceId) ?? workspaces[0]!;
     const groupId =
-      workspace.focusedGroupId ?? Object.keys(state.paneGroups as Record<string, unknown>)[0];
+      workspace.focusedGroupId ?? Object.keys(state.paneGroups as Record<string, unknown>)[0]!;
     (state.splitGroup as (a: string, b: string, c: string) => void)(
       workspace.id,
       groupId,
@@ -74,6 +59,7 @@ async function placeWindow(
 test.describe("Sidebar resize", () => {
   test("a real cursor drag across the panes resizes without hiding them", async () => {
     test.setTimeout(120_000);
+    const drag = await requireCursorDriver();
     const userDataPath = await mkdtemp(join(tmpdir(), "ds-resize-"));
     let running: Awaited<ReturnType<typeof launchApp>> | null = null;
 
@@ -102,13 +88,7 @@ test.describe("Sidebar resize", () => {
 
       // Well past the 420px clamp, so the button comes up deep inside the pane
       // area rather than on the divider it was pressed on.
-      await execFileAsync(DRAG, [
-        String(bounds.x + before - 2),
-        String(y),
-        String(bounds.x + before + 460),
-        String(y),
-        "30",
-      ]);
+      await drag(bounds.x + before - 2, y, bounds.x + before + 460, y, 30);
       clearInterval(sampler);
       await page.waitForTimeout(400);
 
@@ -119,24 +99,12 @@ test.describe("Sidebar resize", () => {
 
       // Stuck-in-resize is the other failure mode: the divider keeps tracking
       // the cursor after a release the renderer never saw.
-      await execFileAsync(DRAG, [
-        String(bounds.x + 700),
-        String(y),
-        String(bounds.x + 900),
-        String(y),
-        "10",
-      ]);
+      await drag(bounds.x + 700, y, bounds.x + 900, y, 10);
       await page.waitForTimeout(300);
       expect(await sidebarWidth(page)).toBe(widened);
 
       // And back, so the drag is exercised in both directions.
-      await execFileAsync(DRAG, [
-        String(bounds.x + widened - 2),
-        String(y),
-        String(bounds.x + widened - 162),
-        String(y),
-        "20",
-      ]);
+      await drag(bounds.x + widened - 2, y, bounds.x + widened - 162, y, 20);
       await page.waitForTimeout(400);
       expect(await sidebarWidth(page)).toBe(widened - 160);
     } finally {

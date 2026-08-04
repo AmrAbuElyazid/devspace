@@ -25,6 +25,7 @@ function createHarness() {
     hide: vi.fn(),
     destroy: vi.fn(),
     setBounds: vi.fn(),
+    setFocusable: vi.fn(),
   };
   const window = {
     isDestroyed: () => false,
@@ -193,4 +194,92 @@ test("malformed requests are rejected before reaching the overlay", () => {
   expect(isOverlayMenuRequest({ anchor: REQUEST.anchor, items: [{ id: 1, label: "x" }] })).toBe(
     false,
   );
+});
+
+const PEEK_RECT = { x: 8, y: 38, width: 264, height: 754 };
+const PEEK = { dark: true, compact: false, rows: [] };
+
+test("the peek panel is shown non-focusable, at its own rect", async () => {
+  const { manager, surface, sent } = harness;
+
+  const shown = manager.showPeek(PEEK_RECT, PEEK);
+  manager.handleOverlayReady();
+  await shown;
+
+  expect(surface.setBounds).toHaveBeenCalledWith(PEEK_RECT);
+  // Non-focusable is what keeps a click on a row from taking the keyboard away
+  // from the terminal underneath.
+  expect(surface.setFocusable).toHaveBeenCalledWith(false);
+  expect(surface.focus).not.toHaveBeenCalled();
+  expect(sent.at(-1)).toEqual({ channel: "overlay:peek", payload: PEEK });
+});
+
+test("a repeat push with nothing new does not resend or re-place", async () => {
+  const { manager, surface, sent } = harness;
+  const shown = manager.showPeek(PEEK_RECT, PEEK);
+  manager.handleOverlayReady();
+  await shown;
+  surface.setBounds.mockClear();
+  const before = sent.length;
+
+  await manager.showPeek(PEEK_RECT, PEEK);
+
+  expect(surface.setBounds).not.toHaveBeenCalled();
+  expect(sent).toHaveLength(before);
+});
+
+test("a moved window re-places the open panel", async () => {
+  const { manager, surface } = harness;
+  const shown = manager.showPeek(PEEK_RECT, PEEK);
+  manager.handleOverlayReady();
+  await shown;
+  surface.setBounds.mockClear();
+
+  await manager.showPeek({ ...PEEK_RECT, x: 400 }, PEEK);
+
+  expect(surface.setBounds).toHaveBeenCalledWith({ ...PEEK_RECT, x: 400 });
+});
+
+test("hiding the panel tells the overlay to drop it and hands back the keyboard", async () => {
+  const { manager, surface, window, sent } = harness;
+  const shown = manager.showPeek(PEEK_RECT, PEEK);
+  manager.handleOverlayReady();
+  await shown;
+
+  manager.hidePeek();
+
+  expect(sent.at(-1)).toEqual({ channel: "overlay:peek", payload: null });
+  expect(surface.hide).toHaveBeenCalled();
+  expect(window.focus).toHaveBeenCalled();
+});
+
+test("a menu takes the surface from the panel", async () => {
+  const { manager, surface, sent } = harness;
+  const shownPeek = manager.showPeek(PEEK_RECT, PEEK);
+  manager.handleOverlayReady();
+  await shownPeek;
+
+  const menu = manager.showMenu(REQUEST);
+  await Promise.resolve();
+
+  expect(sent.some((entry) => entry.channel === "overlay:peek" && entry.payload === null)).toBe(
+    true,
+  );
+  expect(surface.setFocusable).toHaveBeenLastCalledWith(true);
+  manager.resolveMenu(tokenAt(sent, -1), "a");
+  await expect(menu).resolves.toBe("a");
+});
+
+test("the panel does not reopen over a menu that is still up", async () => {
+  const { manager, sent } = harness;
+  const menu = manager.showMenu(REQUEST);
+  manager.handleOverlayReady();
+  await Promise.resolve();
+  const before = sent.length;
+
+  await manager.showPeek(PEEK_RECT, PEEK);
+
+  expect(sent).toHaveLength(before);
+  manager.resolveMenu(tokenAt(sent, -1), null);
+  await menu;
 });

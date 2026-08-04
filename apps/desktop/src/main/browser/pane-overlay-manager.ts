@@ -1,12 +1,23 @@
-import type { BaseWindow, BrowserWindow } from "electron";
+import type { BaseWindow, BrowserWindow, Rectangle } from "electron";
 
 import type { OverlayMenuRequest } from "../../shared/overlay";
+import type { SidebarPeekSnapshot } from "../../shared/sidebar-peek";
 
 interface PaneOverlayManagerDeps {
   getWindow: () => BaseWindow | null;
   /** Creates the transparent child window, parented to the main window. */
   createSurface: () => BrowserWindow;
   loadOverlay: (surface: BrowserWindow) => void;
+}
+
+function rectsEqual(left: Rectangle | null, right: Rectangle): boolean {
+  return (
+    left !== null &&
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  );
 }
 
 interface PendingMenu {
@@ -40,6 +51,9 @@ export class PaneOverlayManager {
   private pending: PendingMenu | null = null;
   private nextToken = 1;
   private followListener: (() => void) | null = null;
+  private peekOpen = false;
+  private peekRect: Rectangle | null = null;
+  private peekSnapshot = "";
 
   constructor(private readonly deps: PaneOverlayManagerDeps) {}
 
@@ -50,12 +64,17 @@ export class PaneOverlayManager {
     // A second menu supersedes the first; the original caller gets null so its
     // await settles rather than hanging forever.
     this.settle(null);
+    // A menu and the peek panel want the same surface at different sizes, so
+    // the menu — which the user asked for explicitly — takes it.
+    this.closePeek();
 
     const surface = this.ensureSurface();
     await this.ready;
     if (surface.isDestroyed()) return null;
 
     this.syncBounds();
+    // Undoes the peek's non-focusable mode; a menu owns the keyboard.
+    surface.setFocusable(true);
     surface.showInactive();
     // Raised after showing: a surface shown while another app was frontmost can
     // otherwise sit below its own parent.
@@ -72,6 +91,55 @@ export class PaneOverlayManager {
     });
   }
 
+  /**
+   * Show the collapsed sidebar's hover panel at `rect`, in screen coordinates.
+   *
+   * Sized to the panel rather than the whole content rect, unlike a menu: the
+   * surface takes every mouse event inside its bounds, and a full-bleed one
+   * would make the panes unclickable for as long as the panel was up.
+   *
+   * Never focused. The panel is a glance, and stealing the keyboard from a
+   * terminal because the pointer drifted into a corner would be indefensible.
+   */
+  async showPeek(rect: Rectangle, snapshot: SidebarPeekSnapshot): Promise<void> {
+    // A menu is modal in spirit; it keeps the surface until it settles.
+    if (this.pending) return;
+    const parent = this.deps.getWindow();
+    if (!parent) return;
+
+    const surface = this.ensureSurface();
+    await this.ready;
+    if (surface.isDestroyed() || this.pending) return;
+
+    // Called on every watcher tick while the panel is up, so that a window move
+    // or a workspace rename lands without another mechanism. Both halves are
+    // deduplicated rather than resent eleven times a second.
+    const serialized = JSON.stringify(snapshot);
+    if (!this.peekOpen || !rectsEqual(this.peekRect, rect)) surface.setBounds(rect);
+    this.peekRect = rect;
+    if (!this.peekOpen || serialized !== this.peekSnapshot) {
+      surface.webContents.send("overlay:peek", snapshot);
+      this.peekSnapshot = serialized;
+    }
+    if (!this.peekOpen) {
+      // Non-focusable, which is what makes this a hover panel rather than a
+      // window: clicking a row neither activates the surface nor blurs the
+      // parent, so the terminal keeps the keyboard and — since the parent's
+      // blur is what stands the watcher down — the panel survives its own
+      // mouse-down long enough to see the click.
+      surface.setFocusable(false);
+      surface.showInactive();
+      // Raised after showing: a surface shown while another app was frontmost
+      // can otherwise sit below its own parent.
+      surface.moveTop();
+      this.peekOpen = true;
+    }
+  }
+
+  hidePeek(): void {
+    this.closePeek();
+  }
+
   /** Called from IPC when the overlay has mounted and is listening. */
   handleOverlayReady(): void {
     this.markReady?.();
@@ -85,8 +153,25 @@ export class PaneOverlayManager {
     this.settle(typeof id === "string" ? id : null);
   }
 
+  private closePeek(): void {
+    if (!this.peekOpen) return;
+    this.peekOpen = false;
+    this.peekRect = null;
+    this.peekSnapshot = "";
+    const surface = this.surface;
+    if (surface && !surface.isDestroyed()) {
+      surface.webContents.send("overlay:peek", null);
+      surface.hide();
+    }
+    // A click in the panel makes the surface key, so the keyboard has to be
+    // handed back or the terminal underneath stays inert.
+    const parent = this.deps.getWindow();
+    if (parent && !parent.isDestroyed()) parent.focus();
+  }
+
   destroy(): void {
     this.settle(null);
+    this.peekOpen = false;
     this.detachFollow();
 
     const surface = this.surface;
@@ -131,7 +216,9 @@ export class PaneOverlayManager {
     if (this.followListener) return;
 
     const onResize = (): void => {
-      if (this.surface?.isVisible()) this.syncBounds();
+      // Only a menu is sized to the window; the peek panel is re-placed by its
+      // own watcher, which knows the rect it wants.
+      if (this.pending && this.surface?.isVisible()) this.syncBounds();
     };
     parent.on("resize", onResize);
     this.followListener = () => parent.off("resize", onResize);

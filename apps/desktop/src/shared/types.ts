@@ -16,6 +16,7 @@ import type {
 } from "./browser";
 import type { DevServerPorts } from "./dev-server";
 import type { OverlayMenuRequest } from "./overlay";
+import type { SidebarPeekConfig, SidebarPeekSnapshot } from "./sidebar-peek";
 import type { ShortcutAction, StoredShortcut } from "./shortcuts";
 import type { PersistedWorkspacePatch, PersistedWorkspaceState } from "./workspace-persistence";
 import type { MainProcessPerformanceSnapshot } from "./performance";
@@ -194,6 +195,19 @@ export interface DevspaceBridge {
     onMenu: (
       callback: (payload: { token: number; request: OverlayMenuRequest }) => void,
     ) => () => void;
+  };
+  sidebarPeek: {
+    /**
+     * Tells the main process whether to watch the window's left edge, and what
+     * to draw when the cursor reaches it. Sent by the main renderer.
+     */
+    setConfig: (config: SidebarPeekConfig) => void;
+    /** Sent by the overlay renderer when a row in the panel is clicked. */
+    activate: (workspaceId: string) => void;
+    /** Subscribed by the overlay renderer. Null closes the panel. */
+    onPanel: (callback: (snapshot: SidebarPeekSnapshot | null) => void) => () => void;
+    /** Subscribed by the main renderer, to switch workspace on a panel click. */
+    onActivate: (callback: (workspaceId: string) => void) => () => void;
   };
   contextMenu: {
     show: <T extends string>(
