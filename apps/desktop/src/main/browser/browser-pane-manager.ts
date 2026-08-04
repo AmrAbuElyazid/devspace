@@ -55,6 +55,11 @@ import {
   setRuntimeStateFindQuery,
   setRuntimeStateZoom,
 } from "./browser-runtime-state";
+import {
+  INITIAL_BROWSER_CRASH_RECOVERY_STATE,
+  planBrowserCrashRecovery,
+  type BrowserCrashRecoveryState,
+} from "./browser-crash-recovery";
 import { measureMainProcessOperation } from "../performance-monitor";
 
 export class BrowserPaneManager implements BrowserPaneController {
@@ -63,6 +68,8 @@ export class BrowserPaneManager implements BrowserPaneController {
   private readonly historyTracker: BrowserPaneHistoryTracker;
   private readonly permissionTracker: BrowserPanePermissionTracker;
   private visiblePaneIds = new Set<string>();
+  private readonly crashRecovery = new Map<string, BrowserCrashRecoveryState>();
+  private readonly crashRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(private readonly deps: BrowserPaneManagerDeps) {
     this.panes = createBrowserPaneRegistry(deps.sendToRenderer);
@@ -107,6 +114,8 @@ export class BrowserPaneManager implements BrowserPaneController {
       this.visiblePaneIds.delete(paneId);
       this.permissionTracker.denyPendingForPane(paneId);
       this.historyTracker.deletePane(paneId);
+      this.clearCrashRecoveryTimer(paneId);
+      this.crashRecovery.delete(paneId);
       this.panes.unregister(paneId);
 
       destroyPaneView(pane);
@@ -231,10 +240,6 @@ export class BrowserPaneManager implements BrowserPaneController {
     });
   }
 
-  showContextMenu(_paneId: string, _position?: { x: number; y: number }): void {
-    // Placeholder for later browser context-menu wiring.
-  }
-
   executeScript(paneId: string, script: string): void {
     this.panes.withPane(paneId, (pane) => {
       executePaneScript(pane, script);
@@ -284,6 +289,51 @@ export class BrowserPaneManager implements BrowserPaneController {
       applyRuntimePatch: this.applyRuntimePatch.bind(this),
       applyFindResult: this.applyFindResult.bind(this),
       historyTracker: this.historyTracker,
+      recoverFromCrash: this.recoverFromCrash.bind(this),
     });
+  }
+
+  /**
+   * Schedule a backoff reload for a pane whose renderer died. Returns false
+   * when the retry budget is spent, leaving the caller to report the failure.
+   */
+  private recoverFromCrash(pane: BrowserPaneRecord): boolean {
+    const paneId = pane.runtimeState.paneId;
+    const plan = planBrowserCrashRecovery(
+      this.crashRecovery.get(paneId) ?? INITIAL_BROWSER_CRASH_RECOVERY_STATE,
+      Date.now(),
+    );
+
+    if (!plan) {
+      return false;
+    }
+
+    this.crashRecovery.set(paneId, plan.state);
+    this.clearCrashRecoveryTimer(paneId);
+
+    const url = pane.runtimeState.url;
+    const timer = setTimeout(() => {
+      this.crashRecoveryTimers.delete(paneId);
+      // The pane may have been destroyed, or navigated by the user, while the
+      // backoff was pending; withPane no-ops if it is gone.
+      this.panes.withPane(paneId, (current) => {
+        navigatePaneToUrl(current, url);
+      });
+    }, plan.delayMs);
+
+    // A pending reload must never hold the app open past quit.
+    timer.unref?.();
+    this.crashRecoveryTimers.set(paneId, timer);
+    return true;
+  }
+
+  private clearCrashRecoveryTimer(paneId: string): void {
+    const pending = this.crashRecoveryTimers.get(paneId);
+    if (pending === undefined) {
+      return;
+    }
+
+    clearTimeout(pending);
+    this.crashRecoveryTimers.delete(paneId);
   }
 }

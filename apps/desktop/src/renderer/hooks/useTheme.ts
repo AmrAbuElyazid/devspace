@@ -18,30 +18,53 @@ export function useTheme(): void {
     window.api.window.setThemeMode(themeMode);
 
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    let unsuppress: number | null = null;
 
     function apply(dark: boolean): void {
-      document.documentElement.classList.toggle("dark", dark);
+      const root = document.documentElement;
+      if (root.classList.contains("dark") === dark) {
+        // Effects re-run on every themeMode change, including light -> system
+        // when the OS is already light. Suppressing transitions for a swap
+        // that changes nothing would drop a frame of unrelated animation.
+        return;
+      }
+
+      // Every element carrying a color transition would otherwise cross-fade
+      // at once and smear the window through an intermediate palette. Hold
+      // transitions off across the swap and release them on the next frame,
+      // after the new custom properties have been painted.
+      root.classList.add("no-transitions");
+      root.classList.toggle("dark", dark);
+
+      if (unsuppress !== null) cancelAnimationFrame(unsuppress);
+      unsuppress = requestAnimationFrame(() => {
+        unsuppress = requestAnimationFrame(() => {
+          unsuppress = null;
+          root.classList.remove("no-transitions");
+        });
+      });
     }
 
-    if (themeMode === "dark") {
-      apply(true);
-      return;
-    }
-
-    if (themeMode === "light") {
-      apply(false);
-      return;
-    }
-
-    // System mode follows the OS preference.
-    apply(mq.matches);
-
-    // Listen for OS theme changes.
+    // Listen for OS theme changes. Only attached in system mode.
     function onChange(e: MediaQueryListEvent): void {
       apply(e.matches);
     }
 
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
+    if (themeMode === "system") {
+      apply(mq.matches);
+      mq.addEventListener("change", onChange);
+    } else {
+      apply(themeMode === "dark");
+    }
+
+    return () => {
+      mq.removeEventListener("change", onChange);
+      if (unsuppress === null) return;
+      // Tearing down mid-swap must not strand the suppression class on
+      // <html>, which would leave the whole app without transitions.
+      cancelAnimationFrame(unsuppress);
+      unsuppress = null;
+      document.documentElement.classList.remove("no-transitions");
+    };
   }, [themeMode]);
 }

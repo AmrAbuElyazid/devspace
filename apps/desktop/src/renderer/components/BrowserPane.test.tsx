@@ -291,7 +291,7 @@ test("creates the browser pane and renders the current security label", async ()
 
   expect(browserPaneMocks.browserCreate).toHaveBeenCalledWith("pane-1", "https://example.com/");
   expect(browserPaneMocks.browserGetRuntimeState).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("Secure connection");
+  expect(container.querySelector('[aria-label="Secure connection"]')).toBeTruthy();
   expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
 });
 
@@ -547,7 +547,7 @@ test("dismissing or allowing a permission request clears local state and resolve
   expect(browserPaneMocks.browserResolvePermission).toHaveBeenCalledWith("token-1", "allow-once");
 });
 
-test("opens the current page in the external browser from the toolbar", async () => {
+test("the toolbar exposes navigation, the address bar, and an overflow menu", async () => {
   await act(async () => {
     root?.render(
       <BrowserPane
@@ -559,12 +559,15 @@ test("opens the current page in the external browser from the toolbar", async ()
     );
   });
 
-  const externalButton = container.querySelector('button[aria-label="Open in external browser"]');
-  expect(externalButton).toBeTruthy();
+  // Guards the toolbar's shape. Secondary actions (zoom, find, open external,
+  // devtools) live behind the overflow now; base-ui's menu does not open under
+  // jsdom's synthetic events, so its contents are covered by the e2e drive
+  // rather than asserted here.
+  for (const label of ["Back", "Forward", "Reload", "Toggle device mode", "Browser menu"]) {
+    expect(container.querySelector(`button[aria-label="${label}"]`)).toBeTruthy();
+  }
+  expect(container.querySelector('input[aria-label="Address and search bar"]')).toBeTruthy();
 
-  await act(async () => {
-    externalButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-  });
-
-  expect(browserPaneMocks.shellOpenExternal).toHaveBeenCalledWith("https://example.com/");
+  // Zoom is a default 100%, so the inline readout stays out of the way.
+  expect(container.textContent).not.toContain("100%");
 });

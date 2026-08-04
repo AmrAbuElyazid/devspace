@@ -15,6 +15,9 @@ import {
   translateRendererBoundsToContentBounds,
 } from "../browser/browser-view-bounds";
 import { getSafeBrowserUrl, parseNativeViewBounds } from "../validation";
+import { resolveFaviconDataUrl } from "../browser/browser-favicon-service";
+import type { PaneOverlayManager } from "../browser/pane-overlay-manager";
+import { isOverlayMenuRequest } from "../../shared/overlay";
 import { safeHandle, safeOn } from "./shared";
 
 function parseBrowserImportMode(mode: unknown): BrowserImportMode | null {
@@ -41,7 +44,24 @@ export function registerBrowserIpc(
   mainWindow: BrowserWindow,
   browserPaneManager: BrowserPaneController,
   browserImportService?: BrowserImportService,
+  paneOverlayManager?: PaneOverlayManager,
 ): void {
+  // Menus drawn above the pane views. The renderer cannot paint over a
+  // WebContentsView, so it hands the menu here to be rendered in a transparent
+  // view stacked on top instead.
+  safeHandle("overlay:showMenu", async (_event, request: unknown) => {
+    if (!paneOverlayManager || !isOverlayMenuRequest(request)) return null;
+    return paneOverlayManager.showMenu(request);
+  });
+
+  safeOn("overlay:resolveMenu", (_event, token: unknown, id: unknown) => {
+    paneOverlayManager?.resolveMenu(token, id);
+  });
+
+  safeOn("overlay:ready", () => {
+    paneOverlayManager?.handleOverlayReady();
+  });
+
   safeHandle("browser:create", (_event, paneId: unknown, url: unknown) => {
     if (typeof paneId !== "string") return;
     const safeUrl = getSafeBrowserUrl(url);
@@ -151,19 +171,10 @@ export function registerBrowserIpc(
     browserPaneManager.toggleDevTools(paneId);
   });
 
-  safeHandle("browser:showContextMenu", (_event, paneId: unknown, position?: unknown) => {
-    if (typeof paneId !== "string") return;
-    if (position && (typeof position !== "object" || position === null)) return;
-
-    let nextPosition: { x: number; y: number } | undefined;
-    if (position && typeof position === "object" && position !== null) {
-      const next = position as Partial<{ x: number; y: number }>;
-      if (typeof next.x === "number" && typeof next.y === "number") {
-        nextPosition = { x: next.x, y: next.y };
-      }
-    }
-
-    browserPaneManager.showContextMenu(paneId, nextPosition);
+  // Resolved here rather than in the renderer: the renderer's CSP forbids
+  // remote images, and widening it would let any page fetch arbitrary URLs.
+  safeHandle("browser:resolveFavicon", async (_event, url: unknown) => {
+    return resolveFaviconDataUrl(url);
   });
 
   safeHandle("browser:resolvePermission", (_event, requestToken: unknown, decision: unknown) => {

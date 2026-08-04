@@ -21,7 +21,18 @@ import {
   subscribeBrowserPane,
 } from "../../lib/browser-pane-session";
 import { useNativeView } from "../../hooks/useNativeView";
+import { useBrowserViewportResize } from "../../hooks/useBrowserViewportResize";
 import { useBrowserStore } from "../../store/browser-store";
+import { useWorkspaceStore } from "../../store/workspace-store";
+import {
+  FILL_VIEWPORT,
+  parseBrowserViewportSetting,
+  resolveBrowserViewportLayout,
+  resolveResponsiveViewportSize,
+  type BrowserViewportLayout,
+  type BrowserViewportSetting,
+  type BrowserViewportSize,
+} from "../../lib/browser-viewport";
 import type { BrowserConfig } from "../../types/workspace";
 import type { BrowserPermissionDecision } from "../../../shared/browser";
 import {
@@ -45,19 +56,86 @@ export function useBrowserPaneController({
   isActive,
 }: UseBrowserPaneControllerArgs) {
   const placeholderRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig);
+  const [panel, setPanel] = useState<BrowserViewportSize>({ width: 0, height: 0 });
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId]);
   const pendingPermissionRequest = useBrowserStore((s) => s.pendingPermissionRequest);
   const isFindBarOpen = useBrowserStore((s) => s.findBarOpenByPaneId[paneId] ?? false);
   const addressBarFocusToken = useBrowserStore((s) => s.addressBarFocusTokenByPaneId[paneId] ?? 0);
   const findBarFocusToken = useBrowserStore((s) => s.findBarFocusTokenByPaneId[paneId] ?? 0);
   const closeFindBar = useBrowserStore((s) => s.closeFindBar);
+  const openFindBar = useBrowserStore((s) => s.openFindBar);
   const clearPendingPermissionRequest = useBrowserStore((s) => s.clearPendingPermissionRequest);
   const upsertRuntimeState = useBrowserStore((s) => s.upsertRuntimeState);
   const initialUrl = useMemo(
     () => normalizeBrowserInput(config.url || "about:blank"),
     [config.url],
   );
+
+  // ── Responsive / device mode ────────────────────────────────────────
+  // Validated rather than trusted: this comes back from persisted state, which
+  // is spread verbatim on load.
+  const viewport = useMemo(() => parseBrowserViewportSetting(config.viewport), [config.viewport]);
+  const commitViewport = useCallback(
+    (next: BrowserViewportSetting) => {
+      updatePaneConfig(paneId, { viewport: next });
+    },
+    [paneId, updatePaneConfig],
+  );
+
+  // Track the pane content box so the device frame can be centered in it and
+  // fit-scaled when the requested size does not fit.
+  useLayoutEffect(() => {
+    const element = contentRef.current;
+    if (!element) return;
+
+    const measure = (): void => {
+      const rect = element.getBoundingClientRect();
+      setPanel((current) => {
+        const width = Math.max(0, Math.round(rect.width));
+        const height = Math.max(0, Math.round(rect.height));
+        return current.width === width && current.height === height ? current : { width, height };
+      });
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  // Scale of the *committed* frame. Drags convert pointer distance to CSS px
+  // through this; deriving it from the live dragging size instead would move
+  // the mapping under the user as the frame crosses the fit-to-panel boundary.
+  const committedRenderScale = useMemo(
+    () => resolveBrowserViewportLayout(panel, viewport, config.zoom ?? 1).zoomFactor,
+    [config.zoom, panel, viewport],
+  );
+
+  const { activeDrag, effectiveViewport, handleResizeKeyDown, handleResizePointerDown } =
+    useBrowserViewportResize({
+      viewport,
+      panel,
+      renderScale: committedRenderScale,
+      aspectRatio,
+      onCommit: commitViewport,
+    });
+
+  const layout: BrowserViewportLayout = useMemo(
+    () => resolveBrowserViewportLayout(panel, effectiveViewport, config.zoom ?? 1),
+    [config.zoom, effectiveViewport, panel],
+  );
+
+  const toggleDeviceMode = useCallback(() => {
+    commitViewport(
+      viewport.kind === "device"
+        ? FILL_VIEWPORT
+        : { kind: "device", ...resolveResponsiveViewportSize(panel, config.zoom ?? 1) },
+    );
+  }, [commitViewport, config.zoom, panel, viewport.kind]);
   const [inputUrl, setInputUrl] = useState(initialUrl);
   const subscribeToPane = useCallback(
     (listener: () => void) => subscribeBrowserPane(paneId, listener),
@@ -172,11 +250,43 @@ export function useBrowserPaneController({
       return;
     }
 
-    const desiredZoom = config.zoom ?? 1;
-    if (Math.abs(runtimeState.currentZoom - desiredZoom) > 0.001) {
-      void window.api.browser.setZoom(paneId, desiredZoom);
+    // The factor pushed to Electron is the user's zoom times the fit-to-panel
+    // scale, which is what keeps the guest laying out at the requested device
+    // width even when the frame had to be shrunk to fit. In fill mode the fit
+    // scale is 1 and this is just the user's zoom.
+    if (Math.abs(runtimeState.currentZoom - layout.zoomFactor) > 0.001) {
+      void window.api.browser.setZoom(paneId, layout.zoomFactor);
     }
-  }, [config.zoom, paneId, runtimeState]);
+  }, [layout.zoomFactor, paneId, runtimeState]);
+
+  // A new browser tab opens on about:blank with nothing to look at, so put the
+  // caret in the address bar and let the user just type. A restored pane
+  // carries its own URL, which is what keeps this from firing on every session
+  // restore; a background tab is skipped so opening one cannot steal focus.
+  const didRequestInitialFocusRef = useRef(false);
+  useEffect(() => {
+    if (didRequestInitialFocusRef.current || paneSession.phase !== "ready") {
+      return;
+    }
+
+    if (initialUrl !== "about:blank") {
+      // Opened at a URL, or restored with one. Nothing to type.
+      didRequestInitialFocusRef.current = true;
+      return;
+    }
+
+    // Wait for focus rather than giving up on it. A pane can reach "ready"
+    // a render before its group is marked focused, and a tab opened in the
+    // background should still get a focused address bar when it is switched
+    // to. The initialUrl guard above closes this off the moment the pane
+    // navigates anywhere, so it cannot fire over a page the user is reading.
+    if (!isFocused || !isActive) {
+      return;
+    }
+
+    didRequestInitialFocusRef.current = true;
+    useBrowserStore.getState().requestAddressBarFocus(paneId);
+  }, [initialUrl, isActive, isFocused, paneId, paneSession.phase]);
 
   useEffect(() => {
     if (addressBarFocusToken === 0) {
@@ -289,6 +399,10 @@ export function useBrowserPaneController({
     [currentUrl, failure, handleAddressBarSubmit, isVisible, paneId],
   );
 
+  const handleOpenFindBar = useCallback(() => {
+    openFindBar(paneId);
+  }, [openFindBar, paneId]);
+
   const handleCloseFindBar = useCallback(() => {
     closeFindBar(paneId);
     void window.api.browser.stopFindInPage(paneId);
@@ -306,17 +420,46 @@ export function useBrowserPaneController({
     void window.api.browser.reload(paneId);
   }, [creationFailure, paneId]);
 
+  // ── Zoom ────────────────────────────────────────────────────────────
+  const userZoom = config.zoom ?? 1;
+  const setUserZoom = useCallback(
+    (next: number) => {
+      // Matches the app-level zoom shortcuts' range and step rounding.
+      updatePaneConfig(paneId, { zoom: Math.min(3, Math.max(0.25, Number(next.toFixed(2)))) });
+    },
+    [paneId, updatePaneConfig],
+  );
+  const handleZoomIn = useCallback(() => setUserZoom(userZoom + 0.1), [setUserZoom, userZoom]);
+  const handleZoomOut = useCallback(() => setUserZoom(userZoom - 0.1), [setUserZoom, userZoom]);
+  const handleZoomReset = useCallback(() => setUserZoom(1), [setUserZoom]);
+
   return {
+    activeDrag,
     activePermissionRequest,
+    aspectRatio,
     canGoBack,
     canGoForward,
+    contentRef,
     currentUrl,
+    effectiveViewport,
     failure,
+    handleResizeKeyDown,
+    handleResizePointerDown,
+    handleZoomIn,
+    handleZoomOut,
+    handleZoomReset,
+    layout,
+    panel,
+    setAspectRatio,
+    toggleDeviceMode,
+    userZoom,
+    commitViewport,
     findBarFocusToken,
     findState,
     handleAddressBarSubmit,
     handleCloseFindBar,
     handleDismissPermissionPrompt,
+    handleOpenFindBar,
     handleFailureRetry,
     handleKeyDown,
     handlePermissionDecision,

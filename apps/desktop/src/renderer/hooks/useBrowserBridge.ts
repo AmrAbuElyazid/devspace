@@ -23,6 +23,40 @@ function getDefaultEditorPaneTitle(folderPath?: string): string {
   return `VC: ${folderName}`;
 }
 
+/** Tab width is ~14 characters; past that the ellipsis carries no information. */
+const BROWSER_TITLE_MAX_LENGTH = 60;
+
+/**
+ * Tab label for a browser pane.
+ *
+ * Prefers the page's own title and falls back to the host, so a page that has
+ * not set one — or has not finished loading — still says where it is instead
+ * of sitting on the generic "Browser". Returns null when there is nothing
+ * better to show, leaving the existing title alone.
+ */
+export function getBrowserPaneTitle(runtimeTitle: string, url: string): string | null {
+  const title = runtimeTitle.trim();
+  if (title.length > 0 && title !== "about:blank") {
+    return title.length > BROWSER_TITLE_MAX_LENGTH
+      ? `${title.slice(0, BROWSER_TITLE_MAX_LENGTH - 1).trimEnd()}…`
+      : title;
+  }
+
+  // Chromium reports the raw URL as the title before a page commits one.
+  try {
+    const { hostname, protocol } = new URL(url);
+    if (hostname) {
+      return hostname.replace(/^www\./, "");
+    }
+    // about:blank and friends have no host and no title worth showing.
+    if (protocol === "about:") return null;
+  } catch {
+    // Not a parseable URL — nothing better than what the pane already has.
+  }
+
+  return null;
+}
+
 function getManagedEditorPaneTitle(
   currentTitle: string,
   folderPath: string | undefined,
@@ -95,12 +129,27 @@ export function useBrowserBridge(): void {
             updatePaneConfig(paneId, { url });
           },
           persistCommittedNavigation: state.isLoading === false,
-          persistZoomChange: (paneId, zoom) => {
-            updateBrowserPaneZoom(paneId, zoom);
-          },
+          // Zoom is not persisted from runtime state: pane config is the
+          // source of truth for the user's zoom, and the factor the main
+          // process reports includes device mode's fit-to-panel scale.
         });
 
         const pane = useWorkspaceStore.getState().panes[state.paneId];
+
+        if (pane?.type === "browser") {
+          const nextTitle = getBrowserPaneTitle(state.title, state.url);
+          if (nextTitle) {
+            updatePaneTitle(state.paneId, nextTitle);
+          }
+          // Chromium clears the favicon on every navigation before the next
+          // page reports one. Persisting that blank would flash the tab back
+          // to a globe mid-navigation, so only a real icon is written.
+          if (state.faviconUrl && state.faviconUrl !== pane.config.faviconUrl) {
+            updatePaneConfig(state.paneId, { faviconUrl: state.faviconUrl });
+          }
+          return;
+        }
+
         if (pane?.type !== "editor") {
           return;
         }
@@ -141,6 +190,11 @@ export function useBrowserBridge(): void {
           return;
         }
 
+        if (action === "page-copy-address") {
+          await writeClipboardText(request.pageUrl);
+          return;
+        }
+
         if (action === "page-open-external") {
           window.api.shell.openExternal(request.pageUrl);
           return;
@@ -161,15 +215,27 @@ export function useBrowserBridge(): void {
           return;
         }
 
+        if (action === "image-open-external" && request.imageUrl) {
+          window.api.shell.openExternal(request.imageUrl);
+          return;
+        }
+
+        if (action === "image-copy-address" && request.imageUrl) {
+          await writeClipboardText(request.imageUrl);
+          return;
+        }
+
         if (action === "selection-copy" && request.selectionText) {
           await writeClipboardText(request.selectionText);
           return;
         }
 
-        if (
-          action !== "link-open-new-tab" &&
-          !(action === "selection-search-web" && request.selectionText)
-        ) {
+        // Everything below opens a new browser pane in the focused group.
+        const opensNewTab =
+          (action === "link-open-new-tab" && request.linkUrl !== null) ||
+          (action === "image-open-new-tab" && request.imageUrl !== null) ||
+          (action === "selection-search-web" && request.selectionText !== null);
+        if (!opensNewTab) {
           return;
         }
 
@@ -193,9 +259,11 @@ export function useBrowserBridge(): void {
         const targetUrl =
           action === "link-open-new-tab"
             ? request.linkUrl
-            : request.selectionText
-              ? getBrowserContextMenuSearchUrl(request.selectionText)
-              : null;
+            : action === "image-open-new-tab"
+              ? request.imageUrl
+              : request.selectionText
+                ? getBrowserContextMenuSearchUrl(request.selectionText)
+                : null;
         if (!targetUrl) {
           return;
         }

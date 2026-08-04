@@ -14,6 +14,7 @@ import type {
   BrowserStopFindAction,
   ClearBrowsingDataTarget,
 } from "./browser";
+import type { OverlayMenuRequest } from "./overlay";
 import type { ShortcutAction, StoredShortcut } from "./shortcuts";
 import type { PersistedWorkspacePatch, PersistedWorkspaceState } from "./workspace-persistence";
 import type { MainProcessPerformanceSnapshot } from "./performance";
@@ -173,6 +174,20 @@ export interface DevspaceBridge {
   shell: {
     openExternal: (url: string) => void;
   };
+  overlay: {
+    /**
+     * Opens a menu in a transparent view stacked above the pane views, so it
+     * is visible over live page content. Resolves with the chosen id, or null
+     * if dismissed.
+     */
+    showMenu: (request: OverlayMenuRequest) => Promise<string | null>;
+    resolveMenu: (token: number, id: string | null) => void;
+    /** Signals that the overlay is mounted and listening. */
+    notifyReady: () => void;
+    onMenu: (
+      callback: (payload: { token: number; request: OverlayMenuRequest }) => void,
+    ) => () => void;
+  };
   contextMenu: {
     show: <T extends string>(
       items: ContextMenuItem<T>[],
@@ -243,7 +258,8 @@ export interface BrowserBridge {
   findInPage: (paneId: string, query: string, options?: BrowserFindInPageOptions) => Promise<void>;
   stopFindInPage: (paneId: string, action?: BrowserStopFindAction) => Promise<void>;
   toggleDevTools: (paneId: string) => Promise<void>;
-  showContextMenu: (paneId: string, position?: { x: number; y: number }) => Promise<void>;
+  /** Fetches a favicon in the main process and returns it as a data URL. */
+  resolveFavicon: (url: string) => Promise<string | null>;
   resolvePermission: (requestToken: string, decision: BrowserPermissionDecision) => Promise<void>;
   listProfiles: (browser: BrowserImportSource) => Promise<BrowserProfileDescriptor[]>;
   importBrowser: (
@@ -274,6 +290,14 @@ export interface ContextMenuItem<T extends string = string> {
   id: T;
   label: string;
   destructive?: boolean;
+  /**
+   * Render the entry greyed out and unclickable. Preferred over dropping the
+   * entry: a menu whose items move position depending on page state is harder
+   * to build muscle memory against than one with a stable shape.
+   */
+  disabled?: boolean;
+  /** Draw a divider above this entry. Ignored on the first entry. */
+  separatorBefore?: boolean;
 }
 
 declare global {

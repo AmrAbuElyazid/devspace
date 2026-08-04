@@ -142,7 +142,7 @@ export default function SettingsPage() {
             </nav>
 
             <div className="min-h-0 min-w-0 flex-1">
-              <ScrollArea className="h-full">
+              <ScrollArea className="h-full scroll-fade-top">
                 <div className="px-8 py-6">
                   {activeSection === "general" && <GeneralSection />}
                   {activeSection === "appearance" && <AppearanceSection />}
@@ -999,7 +999,7 @@ function InstallCliButton() {
 
   if (status === "done") {
     return (
-      <span className="font-mono text-ui-micro text-status-success">
+      <span className="font-mono text-ui-micro text-success-foreground">
         installed at /usr/local/bin/devspace
       </span>
     );

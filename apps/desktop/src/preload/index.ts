@@ -236,6 +236,17 @@ const bridge: DevspaceBridge = {
     openExternal: (url) => ipcRenderer.send("shell:openExternal", url),
   },
 
+  overlay: {
+    showMenu: (request) => ipcRenderer.invoke("overlay:showMenu", request),
+    resolveMenu: (token, id) => ipcRenderer.send("overlay:resolveMenu", token, id),
+    notifyReady: () => ipcRenderer.send("overlay:ready"),
+    onMenu: (callback) => {
+      const listener = (_event: unknown, payload: unknown) =>
+        callback(payload as Parameters<typeof callback>[0]);
+      ipcRenderer.on("overlay:menu", listener);
+      return () => ipcRenderer.removeListener("overlay:menu", listener);
+    },
+  },
   contextMenu: {
     show: (items, position) => ipcRenderer.invoke("contextMenu:show", items, position),
   },
@@ -305,8 +316,7 @@ const bridge: DevspaceBridge = {
     stopFindInPage: (paneId, action) =>
       ipcRenderer.invoke("browser:stopFindInPage", paneId, action),
     toggleDevTools: (paneId) => ipcRenderer.invoke("browser:toggleDevTools", paneId),
-    showContextMenu: (paneId, position) =>
-      ipcRenderer.invoke("browser:showContextMenu", paneId, position),
+    resolveFavicon: (url) => ipcRenderer.invoke("browser:resolveFavicon", url),
     resolvePermission: (requestToken, decision) =>
       ipcRenderer.invoke("browser:resolvePermission", requestToken, decision),
     listProfiles: (browser) => ipcRenderer.invoke("browser:listProfiles", browser),

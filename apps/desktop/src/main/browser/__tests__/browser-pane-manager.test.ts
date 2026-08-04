@@ -1029,10 +1029,75 @@ test("context-menu events emit a browser context-menu payload to the renderer", 
       target: "link",
       pageUrl: "https://example.com",
       linkUrl: "https://devspace.example/docs",
+      imageUrl: null,
       selectionText: null,
       canGoBack: true,
       canGoForward: false,
     },
+  });
+});
+
+test("right-clicking an image emits an image target with its source URL", () => {
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel: string, payload: unknown) => {
+      rendererMessages.push({ channel, payload });
+    },
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  listeners.get("context-menu")?.(
+    { preventDefault: () => {} },
+    { x: 12, y: 20, mediaType: "image", srcURL: "https://example.com/logo.png" },
+  );
+
+  expect(rendererMessages.at(-1)).toMatchObject({
+    channel: "browser:contextMenuRequested",
+    payload: { target: "image", imageUrl: "https://example.com/logo.png", linkUrl: null },
+  });
+});
+
+test("a selection inside a link takes precedence over the link target", () => {
+  const rendererMessages: Array<{ channel: string; payload: unknown }> = [];
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: (channel: string, payload: unknown) => {
+      rendererMessages.push({ channel, payload });
+    },
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  listeners.get("context-menu")?.(
+    { preventDefault: () => {} },
+    { x: 12, y: 20, linkURL: "https://devspace.example/docs", selectionText: "docs" },
+  );
+
+  expect(rendererMessages.at(-1)).toMatchObject({
+    channel: "browser:contextMenuRequested",
+    payload: { target: "selection", selectionText: "docs" },
   });
 });
 
@@ -1180,8 +1245,13 @@ test("retrying a navigation clears the last browser failure state", () => {
   expect(runtimeState?.failure).toBe(null);
 });
 
-test("render-process-gone marks the pane as crashed", () => {
+function createCrashTestManager(): {
+  listeners: Map<string, (...args: unknown[]) => void>;
+  loadedUrls: string[];
+  manager: BrowserPaneManager;
+} {
   const listeners = new Map<string, (...args: unknown[]) => void>();
+  const loadedUrls: string[] = [];
   const manager = new BrowserPaneManager({
     createView: () =>
       ({
@@ -1189,7 +1259,10 @@ test("render-process-gone marks the pane as crashed", () => {
           on: (event: string, listener: (...args: unknown[]) => void) => {
             listeners.set(event, listener);
           },
-          loadURL: () => Promise.resolve(),
+          loadURL: (url: string) => {
+            loadedUrls.push(url);
+            return Promise.resolve();
+          },
         },
       }) as never,
     addChildView: () => {},
@@ -1197,14 +1270,90 @@ test("render-process-gone marks the pane as crashed", () => {
     sendToRenderer: () => {},
   });
 
-  manager.createPane("pane-1", "https://example.com");
-  listeners.get("render-process-gone")?.({}, { reason: "crashed", exitCode: 9 });
+  return { listeners, loadedUrls, manager };
+}
 
-  expect(manager.getRuntimeState("pane-1")?.failure).toEqual({
-    kind: "crash",
-    detail: "crashed",
-    url: "https://example.com",
-  });
+test("a first render-process-gone reloads the pane instead of surfacing a failure", async () => {
+  vi.useFakeTimers();
+  try {
+    const { listeners, loadedUrls, manager } = createCrashTestManager();
+    manager.createPane("pane-1", "https://example.com");
+    loadedUrls.length = 0;
+
+    listeners.get("render-process-gone")?.({}, { reason: "crashed", exitCode: 9 });
+
+    // The pane reports as loading, not failed, while the reload is pending.
+    expect(manager.getRuntimeState("pane-1")?.failure).toBe(null);
+    expect(manager.getRuntimeState("pane-1")?.isLoading).toBe(true);
+    expect(loadedUrls).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(loadedUrls).toEqual(["https://example.com"]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("render-process-gone surfaces a crash once the retry budget is exhausted", async () => {
+  vi.useFakeTimers();
+  try {
+    const { listeners, manager } = createCrashTestManager();
+    manager.createPane("pane-1", "https://example.com");
+
+    // Three attempts are budgeted per rolling window; the fourth gives up.
+    for (const delay of [250, 500, 1_000]) {
+      listeners.get("render-process-gone")?.({}, { reason: "crashed", exitCode: 9 });
+      await vi.advanceTimersByTimeAsync(delay);
+      expect(manager.getRuntimeState("pane-1")?.failure).toBe(null);
+    }
+
+    listeners.get("render-process-gone")?.({}, { reason: "crashed", exitCode: 9 });
+
+    expect(manager.getRuntimeState("pane-1")?.failure).toEqual({
+      kind: "crash",
+      detail: "crashed",
+      url: "https://example.com",
+    });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a clean exit is not treated as a crash", async () => {
+  vi.useFakeTimers();
+  try {
+    const { listeners, loadedUrls, manager } = createCrashTestManager();
+    manager.createPane("pane-1", "https://example.com");
+    loadedUrls.length = 0;
+
+    listeners.get("render-process-gone")?.({}, { reason: "clean-exit", exitCode: 0 });
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    // Neither a failure card nor a recovery reload: a clean exit is a pane
+    // being torn down, and reloading one would resurrect it.
+    expect(manager.getRuntimeState("pane-1")?.failure).toBe(null);
+    expect(loadedUrls).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("destroying a pane cancels its pending crash reload", async () => {
+  vi.useFakeTimers();
+  try {
+    const { listeners, loadedUrls, manager } = createCrashTestManager();
+    manager.createPane("pane-1", "https://example.com");
+    loadedUrls.length = 0;
+
+    listeners.get("render-process-gone")?.({}, { reason: "crashed", exitCode: 9 });
+    manager.destroyPane("pane-1");
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    expect(loadedUrls).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("committed navigations are recorded in browser history with devspace source", () => {

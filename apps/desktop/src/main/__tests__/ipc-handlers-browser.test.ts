@@ -82,7 +82,6 @@ const browserPaneManagerMock = {
   findInPage: (..._args: unknown[]) => {},
   stopFindInPage: (..._args: unknown[]) => {},
   toggleDevTools: (..._args: unknown[]) => {},
-  showContextMenu: (..._args: unknown[]) => {},
   resolvePermission: (requestToken: string, decision: string) => {
     controllerCalls.push(["resolvePermission", requestToken, decision]);
   },

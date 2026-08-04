@@ -225,6 +225,7 @@ test("opens link context-menu targets in a new tab for the focused group", async
       target: "link",
       pageUrl: "https://example.com/",
       linkUrl: "https://devspace.dev/docs",
+      imageUrl: null,
       selectionText: null,
       canGoBack: true,
       canGoForward: false,
@@ -233,9 +234,9 @@ test("opens link context-menu targets in a new tab for the focused group", async
 
   expect(browserBridgeMocks.contextMenuShow).toHaveBeenCalledWith(
     [
-      { id: "link-open-new-tab", label: "Open in New Tab" },
-      { id: "link-open-external", label: "Open in External Browser" },
-      { id: "link-copy", label: "Copy Link" },
+      { id: "link-open-new-tab", label: "Open Link in New Tab" },
+      { id: "link-open-external", label: "Open Link in External Browser" },
+      { id: "link-copy", label: "Copy Link", separatorBefore: true },
     ],
     { x: 24, y: 48 },
   );
@@ -262,6 +263,7 @@ test("opens the current page in the external browser from the page context menu"
       target: "page",
       pageUrl: "https://example.com/",
       linkUrl: null,
+      imageUrl: null,
       selectionText: null,
       canGoBack: true,
       canGoForward: false,
@@ -270,15 +272,89 @@ test("opens the current page in the external browser from the page context menu"
 
   expect(browserBridgeMocks.contextMenuShow).toHaveBeenCalledWith(
     [
-      { id: "page-back", label: "Back" },
-      { id: "page-forward", label: "Forward" },
+      { id: "page-back", label: "Back", disabled: false },
+      { id: "page-forward", label: "Forward", disabled: true },
       { id: "page-reload", label: "Reload" },
+      { id: "page-copy-address", label: "Copy Page Address", separatorBefore: true },
       { id: "page-open-external", label: "Open in External Browser" },
-      { id: "page-inspect", label: "Inspect" },
+      { id: "page-inspect", label: "Inspect", separatorBefore: true },
     ],
     { x: 24, y: 48 },
   );
   expect(browserBridgeMocks.shellOpenExternal).toHaveBeenCalledWith("https://example.com/");
+});
+
+test("opens image context-menu targets in a new tab for the focused group", async () => {
+  browserBridgeMocks.contextMenuShow.mockResolvedValueOnce("image-open-new-tab");
+
+  const handler = browserBridgeMocks.contextMenuRequestHandler;
+  if (!handler) {
+    throw new Error("expected useBrowserBridge to register a context menu handler");
+  }
+
+  await act(async () => {
+    await handler({
+      paneId: "pane-1",
+      position: { x: 24, y: 48 },
+      target: "image",
+      pageUrl: "https://example.com/",
+      linkUrl: null,
+      imageUrl: "https://example.com/logo.png",
+      selectionText: null,
+      canGoBack: true,
+      canGoForward: false,
+    });
+  });
+
+  expect(browserBridgeMocks.contextMenuShow).toHaveBeenCalledWith(
+    [
+      { id: "image-open-new-tab", label: "Open Image in New Tab" },
+      { id: "image-open-external", label: "Open Image in External Browser" },
+      { id: "image-copy-address", label: "Copy Image Address", separatorBefore: true },
+    ],
+    { x: 24, y: 48 },
+  );
+  expect(browserBridgeMocks.openBrowserInGroup).toHaveBeenCalledWith(
+    "workspace-1",
+    "group-1",
+    "https://example.com/logo.png",
+  );
+});
+
+test("quotes the highlighted text in the selection context menu", async () => {
+  browserBridgeMocks.contextMenuShow.mockResolvedValueOnce(null);
+
+  const handler = browserBridgeMocks.contextMenuRequestHandler;
+  if (!handler) {
+    throw new Error("expected useBrowserBridge to register a context menu handler");
+  }
+
+  await act(async () => {
+    await handler({
+      paneId: "pane-1",
+      position: { x: 24, y: 48 },
+      target: "selection",
+      pageUrl: "https://example.com/",
+      linkUrl: null,
+      imageUrl: null,
+      // Collapses runs of whitespace, then breaks on a word boundary.
+      selectionText: "  structured   concurrency in Effect  ",
+      canGoBack: false,
+      canGoForward: false,
+    });
+  });
+
+  expect(browserBridgeMocks.contextMenuShow).toHaveBeenCalledWith(
+    [
+      { id: "selection-copy", label: "Copy" },
+      {
+        id: "selection-search-web",
+        label: "Search the Web for “structured concurrency…”",
+        separatorBefore: true,
+      },
+    ],
+    { x: 24, y: 48 },
+  );
 });
 
 test("syncs workspace focus when a webcontents-based pane gains focus", async () => {

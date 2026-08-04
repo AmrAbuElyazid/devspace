@@ -13,6 +13,7 @@ export function registerManagedBrowserPaneWebContentsListeners({
   getAppShortcutBindings,
   historyTracker,
   pane,
+  recoverFromCrash,
   sendToRenderer,
 }: {
   applyFindResult: (
@@ -23,6 +24,7 @@ export function registerManagedBrowserPaneWebContentsListeners({
   getAppShortcutBindings: BrowserPaneManagerDeps["getAppShortcutBindings"];
   historyTracker: BrowserPaneHistoryTracker;
   pane: BrowserPaneRecord;
+  recoverFromCrash: (pane: BrowserPaneRecord) => boolean;
   sendToRenderer: BrowserPaneManagerDeps["sendToRenderer"];
 }): void {
   registerBrowserPaneWebContentsListeners({
@@ -31,6 +33,7 @@ export function registerManagedBrowserPaneWebContentsListeners({
     getAppShortcutBindings,
     applyRuntimePatch,
     applyFindResult,
+    recoverFromCrash,
     syncNavigationState: syncPaneNavigationState,
     recordCommittedHistoryVisit: (nextPane, url) => {
       historyTracker.recordCommittedVisit(nextPane, url);

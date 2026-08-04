@@ -6,6 +6,36 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.4.0 - 2026-08-04
+
+### Summary
+
+- A design-system pass and a browser overhaul. Browser tabs now carry the page's own title and favicon instead of all reading "Browser"; the toolbar has been cut from eleven controls to five; there is a responsive device mode with presets and draggable resize rails; and menus opened from a pane now draw over the page instead of hiding it.
+
+### Highlights
+
+**Browser**
+
+- Added responsive device mode: device presets, a custom size, aspect-ratio lock, rotate, and draggable edge and corner rails with keyboard resizing. A frame larger than the pane scales down to fit while the page keeps laying out at the width you asked for, so media queries still fire at the breakpoint the device would actually hit — a viewport that quietly reflows to the pane is worse than no device mode at all.
+- Rebuilt the toolbar around the address bar. The security state moved into the field as a lock glyph, secondary actions moved into an overflow menu, and the zoom level only appears when it is not 100%. The old row gave eleven controls equal weight, three of them zoom, and squeezed the one thing anyone aims at.
+- Browser tabs take the page's title, falling back to the host while it loads, and show a loading spinner and then the site's favicon. Tabs previously sat on a generic "Browser" and a generic globe forever, which made a row of them unreadable.
+- Renaming a tab by hand now sticks. Terminal tabs too: an OSC title sequence no longer overwrites a name you typed.
+- A crashed browser pane reloads itself with backoff — three attempts per rolling 30 seconds — instead of going straight to a failure card. Most renderer crashes are transient and a reload fixes them.
+- A new blank tab puts the caret in the address bar so it is typeable on arrival.
+
+**Design**
+
+- Floating surfaces are now glass: menus, dialogs and backdrops sample what is behind them, tuned separately per theme, with an opaque fallback for when the GPU process falls back to software rendering.
+- Looping indicators are duty-cycled. A spinner that eases continuously asks the compositor for a frame every vsync for as long as it is on screen; a workspace with a few of them never let the GPU idle.
+- Status colors gained readable foreground partners, the sidebar gained a subtle grain, long lists fade under their sticky headers, and theme switching no longer smears the window through an intermediate palette.
+- Added reduced-motion and forced-colors passes. Reduced motion keeps a slow pulse on spinners rather than freezing them, since a frozen spinner is indistinguishable from a hung pane.
+
+**Fixes**
+
+- Tooltips in pane toolbars, find bars and the tab bar were invisible. They opened downward into a terminal or browser surface, which is an OS-level view composited above the app, so they were painted underneath it rather than merely clipped.
+- Menus opened from a browser toolbar no longer blank the page. They are drawn in a transparent view stacked above the pane instead of the pane hiding itself for as long as the menu is open.
+- Pressing Enter in the device-size fields applies the size. A field group with no submit button never receives implicit submission, so it silently did nothing.
+
 ## v0.3.1 - 2026-07-29
 
 ### Summary

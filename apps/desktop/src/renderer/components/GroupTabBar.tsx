@@ -11,7 +11,7 @@ import { useModifierHeldContext } from "@/App";
 import { resolveDisplayString } from "../../shared/shortcuts";
 import { TITLE_BAR_HEIGHT_COMPACT } from "../../shared/chrome";
 import type { ContextMenuItem } from "../../shared/types";
-import { paneTypeIcons } from "@/lib/pane-type-meta";
+import PaneTabIcon from "@/components/PaneTabIcon";
 import { releaseNativeFocus } from "@/lib/native-pane-focus";
 import { cn } from "@/lib/utils";
 import type { PaneGroup } from "@/types/workspace";
@@ -66,7 +66,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
   onContextMenu: (event: React.MouseEvent, tabId: string) => void;
 }) {
   const pane = useWorkspaceStore((s) => s.panes[paneId]);
-  const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
+  const renamePane = useWorkspaceStore((s) => s.renamePane);
   const pendingEditId = useWorkspaceStore((s) => s.pendingEditId);
   const pendingEditType = useWorkspaceStore((s) => s.pendingEditType);
   const clearPendingEdit = useWorkspaceStore((s) => s.clearPendingEdit);
@@ -103,9 +103,9 @@ const SortableGroupTab = memo(function SortableGroupTab({
 
   const commitEdit = useCallback(() => {
     const trimmed = editValue.trim();
-    if (trimmed && trimmed !== (pane?.title ?? "")) updatePaneTitle(paneId, trimmed);
+    if (trimmed && trimmed !== (pane?.title ?? "")) renamePane(paneId, trimmed);
     setIsEditing(false);
-  }, [editValue, pane?.title, paneId, updatePaneTitle]);
+  }, [editValue, pane?.title, paneId, renamePane]);
 
   const cancelEdit = useCallback(() => setIsEditing(false), []);
 
@@ -118,7 +118,6 @@ const SortableGroupTab = memo(function SortableGroupTab({
   }, [removeGroupTab, workspaceId, groupId, tabId]);
 
   const isDropTarget = isOver && !isDragging && isSidebarWorkspaceDrag;
-  const Icon = pane ? paneTypeIcons[pane.type] : paneTypeIcons.terminal;
 
   return (
     <div
@@ -160,11 +159,13 @@ const SortableGroupTab = memo(function SortableGroupTab({
         showInsertAfter && "insert-after-x",
       )}
     >
-      <Icon
-        width={10}
-        height={10}
-        className={cn("shrink-0", isActive ? "text-brand" : "text-muted-foreground")}
-      />
+      {pane ? (
+        <PaneTabIcon
+          pane={pane}
+          size={10}
+          className={isActive ? "text-brand" : "text-muted-foreground"}
+        />
+      ) : null}
       {isEditing ? (
         <input
           ref={inputRef}
@@ -303,7 +304,8 @@ export default memo(function GroupTabBar({
             <HintTooltip
               content="Open sidebar"
               shortcut={resolveDisplayString("toggle-sidebar")}
-              sideOffset={4}
+              side="right"
+              sideOffset={6}
             >
               <button
                 type="button"
@@ -317,7 +319,8 @@ export default memo(function GroupTabBar({
             <HintTooltip
               content="New workspace"
               shortcut={resolveDisplayString("new-workspace")}
-              sideOffset={4}
+              side="right"
+              sideOffset={6}
             >
               <button
                 type="button"
@@ -381,7 +384,12 @@ export default memo(function GroupTabBar({
         title="Drag window"
       />
 
-      <HintTooltip content="New tab" shortcut={resolveDisplayString("new-tab")} sideOffset={4}>
+      <HintTooltip
+        content="New tab"
+        shortcut={resolveDisplayString("new-tab")}
+        side="left"
+        sideOffset={6}
+      >
         <button
           type="button"
           onClick={() => {
@@ -407,7 +415,7 @@ export default memo(function GroupTabBar({
           isFocused && "opacity-100",
         )}
       >
-        <HintTooltip content="Split right" sideOffset={4}>
+        <HintTooltip content="Split right" side="left" sideOffset={6}>
           <button
             type="button"
             aria-label="Split right"
@@ -424,7 +432,7 @@ export default memo(function GroupTabBar({
             <Columns2 size={11} />
           </button>
         </HintTooltip>
-        <HintTooltip content="Split down" sideOffset={4}>
+        <HintTooltip content="Split down" side="left" sideOffset={6}>
           <button
             type="button"
             aria-label="Split down"
@@ -442,7 +450,7 @@ export default memo(function GroupTabBar({
           </button>
         </HintTooltip>
         {hasMultipleGroups && (
-          <HintTooltip content="Close split" sideOffset={4}>
+          <HintTooltip content="Close split" side="left" sideOffset={6}>
             <button
               type="button"
               aria-label="Close split"

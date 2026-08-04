@@ -1,3 +1,5 @@
+import type { BrowserViewportSetting } from "../lib/browser-viewport";
+
 export type PaneType = "terminal" | "browser" | "editor" | "t3code" | "note";
 
 export interface DirectTerminalConfig {
@@ -26,7 +28,21 @@ export type TerminalConfig =
 
 export interface BrowserConfig {
   url: string;
+  /**
+   * The user's zoom level. Authoritative — the factor handed to Electron also
+   * carries device mode's fit-to-panel scale, so it must not be read back from
+   * runtime state. See `resolveBrowserViewportLayout`.
+   */
   zoom?: number;
+  /** Responsive-design mode. Absent means fill the pane. */
+  viewport?: BrowserViewportSetting;
+  /**
+   * Source URL of the page's favicon. Persisted rather than kept in runtime
+   * state because a pane evicted past the warm limit — or restored from a
+   * previous session — has no runtime state, and its tab should not fall back
+   * to a generic globe just because its view is not currently alive.
+   */
+  faviconUrl?: string;
 }
 
 export interface EditorConfig {
@@ -53,6 +69,13 @@ export type PaneOfType<T extends PaneType> = T extends PaneType
   ? {
       id: string;
       title: string;
+      /**
+       * Set once the user renames the tab by hand, which pins the title
+       * against the live one its content reports. Without it a renamed
+       * browser tab is overwritten by the next page title, and a renamed
+       * terminal by the next OSC title sequence.
+       */
+      titleOverridden?: boolean;
       type: T;
       config: PaneConfigByType[T];
     }

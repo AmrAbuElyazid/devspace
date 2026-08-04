@@ -78,7 +78,6 @@ registerIpcHandlers(
     findInPage: () => {},
     stopFindInPage: () => {},
     toggleDevTools: () => {},
-    showContextMenu: () => {},
     resolvePermission: () => {},
   } as any,
   {

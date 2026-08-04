@@ -60,9 +60,18 @@
   --color-brand: var(--brand);
   --color-brand-soft: var(--brand-soft);
   --color-brand-edge: var(--brand-edge);
-  --color-status-success: var(--status-success);
-  --color-status-warning: var(--status-warning);
-  --color-status-info: var(--status-info);
+
+  /* Semantic status colors. Each ships a `-foreground` partner tuned for text
+     on a tinted wash of its own base — `text-success` on `bg-success/10` reads
+     at contrast, where `text-success` alone was too light in light mode. The
+     earlier `--status-*` trio had no such partner, so every call site invented
+     its own (`text-status-success/90`, `text-foreground` over a tint). */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
 
   /* Row states — one definition for every selectable list row in the app
      (sidebar workspaces and folders, settings nav, tab strip). */
@@ -96,6 +105,49 @@
 
   --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+
+  /* ─── Duty-cycled indicator motion ─────────────────────────────────
+     Long holds with stepped ramps. An indicator that eases continuously
+     asks the compositor for a fresh frame every vsync for as long as it
+     is on screen; a workspace with a few skeletons and a couple of live
+     status dots then never lets the GPU idle. Holding the value flat for
+     most of the cycle and stepping between the two levels cuts that to
+     roughly a dozen distinct frames per cycle, and at these amplitudes
+     the stepping is not perceptible. */
+  --animate-status-pulse: status-pulse 2s infinite;
+  --animate-skeleton-pulse: skeleton-pulse 2s infinite;
+
+  @keyframes status-pulse {
+    0%,
+    40% {
+      opacity: 1;
+      animation-timing-function: steps(6);
+    }
+    50%,
+    90% {
+      opacity: 0.45;
+      animation-timing-function: steps(6);
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes skeleton-pulse {
+    0%,
+    35% {
+      opacity: 1;
+      animation-timing-function: steps(8);
+    }
+    50%,
+    85% {
+      opacity: 0.4;
+      animation-timing-function: steps(8);
+    }
+    100% {
+      opacity: 1;
+    }
+  }
 }
 
 /* ─── Light theme ─────────────────────────────────────────────────────
@@ -104,6 +156,25 @@
 :root {
   color-scheme: light;
   --radius: 0.375rem; /* 6px */
+
+  /* ─── Geometry ──────────────────────────────────────────────────────
+     Semantic names for the handful of measurements the chrome actually
+     uses, so a toolbar, a popover and a sidebar row cannot quietly drift
+     a pixel apart from each other over successive edits. */
+  --control-radius: var(--radius);
+  --control-height: 1.75rem; /* 28px — the h-7 every dense control uses */
+  --chrome-inset: 0.375rem; /* padding inside rails and toolbars */
+  --overlay-inset: 0.625rem; /* padding inside popovers and menus */
+  --dialog-inset: 1rem; /* padding inside dialogs */
+
+  /* ─── Glass ─────────────────────────────────────────────────────────
+     Floating surfaces sample what is behind them instead of sitting on an
+     opaque slab. Kept as tokens rather than baked into each class so the
+     whole system can be dialled back in one place — and so opacity can be
+     exposed as a user setting later without touching component CSS. */
+  --glass-blur: 12px;
+  --glass-opacity: 82%;
+  --glass-saturation: 1.14;
 
   --background: oklch(0.99 0.003 95);
   --foreground: oklch(0.18 0.01 95);
@@ -136,9 +207,12 @@
   --brand: oklch(0.7084 0.1523 71.24);
   --brand-soft: oklch(0.7084 0.1523 71.24 / 14%);
   --brand-edge: oklch(0.7084 0.1523 71.24 / 42%);
-  --status-success: oklch(0.65 0.17 145);
-  --status-warning: oklch(0.78 0.15 75);
-  --status-info: oklch(0.62 0.17 240);
+  --success: oklch(0.65 0.17 145);
+  --success-foreground: oklch(0.45 0.13 145);
+  --warning: oklch(0.78 0.15 75);
+  --warning-foreground: oklch(0.48 0.12 75);
+  --info: oklch(0.62 0.17 240);
+  --info-foreground: oklch(0.46 0.16 240);
   --overlay-shadow: 0 12px 40px -8px oklch(0 0 0 / 12%), 0 2px 8px -2px oklch(0 0 0 / 6%);
 
   --row-hover: oklch(0.18 0.01 95 / 5%);
@@ -167,6 +241,13 @@
 */
 :root.dark {
   color-scheme: dark;
+
+  /* A dark backdrop carries less luminance into the blur, so the same
+     opacity reads as a flat slab. Blur harder and desaturate slightly to
+     keep the surface feeling like glass rather than paint. */
+  --glass-blur: 16px;
+  --glass-opacity: 76%;
+  --glass-saturation: 1.08;
 
   --background: oklch(0.16 0.005 95);
   --foreground: oklch(0.95 0.005 95);
@@ -198,9 +279,12 @@
   --brand: oklch(0.7084 0.1523 71.24);
   --brand-soft: oklch(0.7084 0.1523 71.24 / 14%);
   --brand-edge: oklch(0.7084 0.1523 71.24 / 38%);
-  --status-success: oklch(0.78 0.18 145);
-  --status-warning: oklch(0.83 0.16 80);
-  --status-info: oklch(0.7 0.17 240);
+  --success: oklch(0.78 0.18 145);
+  --success-foreground: oklch(0.84 0.15 145);
+  --warning: oklch(0.83 0.16 80);
+  --warning-foreground: oklch(0.88 0.13 80);
+  --info: oklch(0.7 0.17 240);
+  --info-foreground: oklch(0.79 0.14 240);
   --overlay-shadow: 0 16px 48px -8px oklch(0 0 0 / 50%), 0 2px 8px -2px oklch(0 0 0 / 30%);
 
   --row-hover: oklch(1 0 0 / 6%);
@@ -266,6 +350,179 @@
     background: var(--brand-soft);
     color: var(--foreground);
   }
+}
+
+/* ─── Glass ───────────────────────────────────────────────────────────
+   Three tiers, because "floating" is not one thing. A dropdown sits close
+   to its trigger and must stay legible over dense content, so it takes the
+   densest tint. A dialog owns the screen and can afford to be thinner. A
+   backdrop only needs to push the page away.
+
+   Every tier degrades to its opaque token under @supports at the bottom of
+   this block — backdrop-filter is unavailable when the GPU process falls
+   back to software rendering, and without the fallback these surfaces turn
+   into unreadable translucent sheets rather than merely losing their blur.
+
+   These live in @layer components, below utilities, so a call site can still
+   override any single property with a Tailwind class. Unlayered they would
+   outrank every utility and the escape hatch would be `!` everywhere.
+*/
+
+@layer components {
+  .glass-dropdown {
+    /* Elevated glass needs a denser tint than a broad ambient surface.
+       Nesting the tunable mix inside a fixed 18% popover tint keeps
+       high-contrast page content from blooming through a menu while still
+       letting --glass-opacity travel its full range. */
+    background: color-mix(
+      in oklch,
+      var(--popover) 18%,
+      color-mix(in oklch, var(--popover) var(--glass-opacity), transparent)
+    );
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    border: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
+    box-shadow: var(--overlay-shadow);
+  }
+
+  .glass-dialog {
+    background: color-mix(in oklch, var(--popover) var(--glass-opacity), transparent);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    border: 1px solid color-mix(in oklch, var(--foreground) 10%, transparent);
+    box-shadow: 0 24px 64px -24px oklch(0 0 0 / 40%);
+  }
+
+  .glass-backdrop {
+    background: color-mix(in oklch, var(--background) 55%, transparent);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+
+  /* A one-pixel top highlight is what sells glass in dark mode — it reads as
+     light catching the leading edge. In light mode the same highlight is
+     invisible against a bright backdrop, so it is dark-only. */
+  :root.dark .glass-dropdown {
+    border-color: oklch(1 0 0 / 8%);
+    box-shadow:
+      inset 0 1px oklch(1 0 0 / 4%),
+      0 18px 44px -18px oklch(0 0 0 / 80%);
+  }
+
+  :root.dark .glass-dialog {
+    border-color: oklch(1 0 0 / 8%);
+    box-shadow:
+      inset 0 1px oklch(1 0 0 / 4%),
+      0 24px 72px -20px oklch(0 0 0 / 90%);
+  }
+
+  :root.dark .glass-backdrop {
+    background: color-mix(in oklch, var(--background) 62%, transparent);
+  }
+
+  @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .glass-dropdown,
+    .glass-dialog {
+      background: var(--popover) !important;
+    }
+    .glass-backdrop {
+      background: color-mix(in oklch, var(--background) 80%, transparent);
+    }
+  }
+}
+
+/* ─── Surface grain ───────────────────────────────────────────────────
+   A fractal-noise texture that keeps large flat panels from reading as dead
+   plastic. Baked into each surface's own background rather than laid over
+   the viewport as a fixed overlay: an overlay spanning the window forces the
+   compositor to re-blend the full surface on every frame any animation
+   produces, which showed up as a constant idle GPU cost for a texture that
+   never moves. The 0.03 opacity lives in the SVG rect, not in a wrapper.
+*/
+@utility surface-grain {
+  background-image: var(--surface-grain);
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+:root {
+  --surface-grain: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+}
+
+body {
+  background-image: var(--surface-grain);
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* ─── Scroll fade ─────────────────────────────────────────────────────
+   Fades rows as they pass under a sticky header. A mask on the scroll
+   container fades the content itself, which keeps working when the header
+   and the list share one background — a gradient overlay in the header
+   only works when it has a solid color to fade to. The extra full-black
+   layers preserve the bottom of the list and the scrollbar gutter, which a
+   single top gradient would otherwise fade out too.
+*/
+@utility scroll-fade-top {
+  --scroll-fade-height: 2rem;
+  -webkit-mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      oklch(0 0 0 / 10%) 12%,
+      oklch(0 0 0 / 45%) 34%,
+      oklch(0 0 0 / 82%) 62%,
+      black 100%
+    ),
+    linear-gradient(black, black), linear-gradient(black, black);
+  -webkit-mask-position: top, bottom, right;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size:
+    100% var(--scroll-fade-height),
+    100% calc(100% - var(--scroll-fade-height)),
+    8px 100%;
+  mask-image:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      oklch(0 0 0 / 10%) 12%,
+      oklch(0 0 0 / 45%) 34%,
+      oklch(0 0 0 / 82%) 62%,
+      black 100%
+    ),
+    linear-gradient(black, black), linear-gradient(black, black);
+  mask-position: top, bottom, right;
+  mask-repeat: no-repeat;
+  mask-size:
+    100% var(--scroll-fade-height),
+    100% calc(100% - var(--scroll-fade-height)),
+    8px 100%;
+}
+
+/* ─── Theme swap ──────────────────────────────────────────────────────
+   Applied to <html> for one frame around a light/dark switch. Without it
+   every element with a color transition runs its own 120ms cross-fade at
+   once and the whole window smears through an intermediate palette; the
+   switch should read as instant. */
+.no-transitions,
+.no-transitions *,
+.no-transitions *::before,
+.no-transitions *::after {
+  transition-duration: 0s !important;
+  animation-duration: 0s !important;
+}
+
+/* ─── Overlay document ────────────────────────────────────────────────
+   The overlay view loads this same bundle, so it inherits the app's opaque
+   body background and grain — which turns the "transparent" overlay into a
+   solid sheet covering the window. Strip both back to nothing; the only thing
+   that should paint in that view is the popup itself.
+*/
+html.overlay-root,
+html.overlay-root body,
+html.overlay-root #root {
+  background: transparent !important;
+  background-image: none !important;
 }
 
 /* ─── Scrollbars (webkit) ─────────────────────────────────────────── */
@@ -521,5 +778,64 @@
   }
   .app-title:hover .app-title-icon {
     transform: none;
+  }
+}
+
+/* ─── Motion preferences ──────────────────────────────────────────────
+   Reduced motion is not "no feedback". Transitions collapse to near-zero
+   and looping indicators stop moving, but the elements that exist only to
+   say "something is happening" — spinners, skeletons, the browser loading
+   sliver — keep a slow opacity pulse. Freezing a spinner outright makes a
+   loading pane indistinguishable from a hung one.
+*/
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-spin,
+  [data-slot="skeleton"],
+  [data-browser-loading] {
+    animation: status-pulse 2s infinite !important;
+    animation-duration: 2s !important;
+    animation-iteration-count: infinite !important;
+    transform: none !important;
+  }
+}
+
+/* ─── Forced colors ───────────────────────────────────────────────────
+   In a forced-colors context the OS owns every color. Glass surfaces must
+   drop to the system canvas or their translucency renders as an unreadable
+   sheet, and the grain — a fixed-opacity black texture — has to go with it.
+*/
+@media (forced-colors: active) {
+  .glass-dropdown,
+  .glass-dialog,
+  .glass-backdrop {
+    background: Canvas !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    border-color: CanvasText;
+  }
+
+  body,
+  .surface-grain {
+    background-image: none;
+  }
+
+  .chrome-row[data-active="true"],
+  .chrome-row[data-selected="true"] {
+    background-color: Highlight;
+    color: HighlightText;
+    forced-color-adjust: none;
+  }
+
+  .chrome-focus:focus-visible {
+    outline-color: Highlight;
   }
 }

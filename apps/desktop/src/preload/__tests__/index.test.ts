@@ -67,7 +67,6 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
   await bridge.browser.forward("pane-1");
   await bridge.browser.toggleDevTools("pane-1");
   await bridge.browser.resetZoom("pane-1");
-  await bridge.browser.showContextMenu("pane-1", { x: 10, y: 20 });
   await bridge.browser.resolvePermission("token-1", "allow-for-session");
   await bridge.browser.importBrowser("chrome", "/tmp/Profile 1", "history");
   await bridge.browser.importBrowser("safari", null, "cookies");
@@ -128,7 +127,6 @@ test("preload bridge exposes spec-aligned browser and editor IPC methods", async
     ["browser:forward", "pane-1"],
     ["browser:toggleDevTools", "pane-1"],
     ["browser:resetZoom", "pane-1"],
-    ["browser:showContextMenu", "pane-1", { x: 10, y: 20 }],
     ["browser:resolvePermission", "token-1", "allow-for-session"],
     ["browser:import", "chrome", "/tmp/Profile 1", "history"],
     ["browser:import", "safari", null, "cookies"],

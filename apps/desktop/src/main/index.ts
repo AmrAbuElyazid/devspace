@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, WebContentsView } from "electron";
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { randomBytes } from "crypto";
@@ -10,6 +10,8 @@ import { TerminalManager } from "./terminal-manager";
 import { VscodeServerManager } from "./vscode-server";
 import { T3CodeServerManager } from "./t3code-server";
 import { registerIpcHandlers } from "./ipc-handlers";
+import { PaneOverlayManager } from "./browser/pane-overlay-manager";
+import { trustIpcWebContents } from "./ipc/shared";
 import { BrowserSessionManager } from "./browser/browser-session-manager";
 import { BrowserPaneManager } from "./browser/browser-pane-manager";
 import { BrowserHistoryService } from "./browser/browser-history-service";
@@ -202,6 +204,35 @@ function createWindow(): void {
   });
 
   terminalManager.init(window);
+  const paneOverlayManager = new PaneOverlayManager({
+    getWindow: () => (window.isDestroyed() ? null : window),
+    createView: () =>
+      new WebContentsView({
+        webPreferences: {
+          preload: join(__dirname, "../preload/index.js"),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: false,
+        },
+      }),
+    loadOverlay: (view) => {
+      // The overlay sends IPC back, so it has to be on the trusted list.
+      trustIpcWebContents(view.webContents);
+      const devUrl = getTrustedDevRendererUrl();
+      if (devUrl) {
+        void view.webContents.loadURL(`${devUrl}#overlay`);
+      } else {
+        void view.webContents.loadFile(join(__dirname, "../renderer/index.html"), {
+          hash: "overlay",
+        });
+      }
+    },
+  });
+
+  window.on("closed", () => {
+    paneOverlayManager.destroy();
+  });
+
   registerIpcHandlers(
     window,
     terminalManager,
@@ -212,6 +243,7 @@ function createWindow(): void {
     editorSessionManager,
     browserSessionManager,
     appUpdater,
+    paneOverlayManager,
   );
   installWindowZoomReset(window.webContents);
 

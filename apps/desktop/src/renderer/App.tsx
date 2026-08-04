@@ -23,7 +23,7 @@ import { TooltipProvider } from "./components/ui/tooltip";
 import { Toaster } from "./components/ui/sonner";
 
 import { findFolder } from "./lib/sidebar-tree";
-import { paneTypeIcons } from "./lib/pane-type-meta";
+import PaneTabIcon from "./components/PaneTabIcon";
 
 /** Context for which modifier key is currently held (for shortcut hint badges). */
 const ModifierHeldContext = createContext<HeldModifier>(null);
@@ -166,10 +166,9 @@ export default function App() {
                 const tab = group?.tabs.find((t) => t.id === activeDrag.tabId);
                 const pane = tab ? state.panes[tab.paneId] : null;
                 if (!pane) return null;
-                const Icon = paneTypeIcons[pane.type];
                 return (
                   <div className="drag-overlay-pill">
-                    {Icon ? <Icon width={12} height={12} className="text-brand" /> : null}
+                    <PaneTabIcon pane={pane} size={12} className="text-brand" />
                     <span>{pane.title}</span>
                   </div>
                 );

@@ -118,6 +118,12 @@ function createDefaultWindowApi(): DevspaceBridge {
     shell: {
       openExternal: vi.fn(),
     },
+    overlay: {
+      showMenu: vi.fn(async () => null),
+      resolveMenu: vi.fn(),
+      notifyReady: vi.fn(),
+      onMenu: vi.fn(() => () => {}),
+    },
     contextMenu: {
       show: vi.fn(async () => null) as DevspaceBridge["contextMenu"]["show"],
     },
@@ -168,7 +174,7 @@ function createDefaultWindowApi(): DevspaceBridge {
       findInPage: vi.fn(async () => {}),
       stopFindInPage: vi.fn(async () => {}),
       toggleDevTools: vi.fn(async () => {}),
-      showContextMenu: vi.fn(async () => {}),
+      resolveFavicon: vi.fn(async () => null),
       resolvePermission: vi.fn(async () => {}),
       listProfiles: vi.fn(async () => []),
       importBrowser: vi.fn(async () => ({
