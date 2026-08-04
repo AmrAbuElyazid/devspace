@@ -84,6 +84,34 @@ const normalizeZoom = (zoom: number): number => (Number.isFinite(zoom) && zoom >
 const clampDimension = (value: number): number =>
   Math.min(BROWSER_VIEWPORT_MAX_DIMENSION, Math.max(BROWSER_VIEWPORT_MIN_DIMENSION, value));
 
+/**
+ * Coerce a persisted viewport into something safe to lay out with.
+ *
+ * This value round-trips through workspace persistence, which spreads pane
+ * objects verbatim rather than validating fields. Everything else in this file
+ * clamps its inputs, but a stored `width: NaN` — from a corrupted file or an
+ * older build — would flow straight into the layout, where `Math.max(1, NaN)`
+ * is `NaN` and the pane hands NaN bounds to `setBounds`. Anything that is not a
+ * well-formed device setting falls back to filling the pane.
+ */
+export function parseBrowserViewportSetting(value: unknown): BrowserViewportSetting {
+  if (typeof value !== "object" || value === null) return FILL_VIEWPORT;
+
+  const setting = value as Partial<Extract<BrowserViewportSetting, { kind: "device" }>>;
+  if (setting.kind !== "device") return FILL_VIEWPORT;
+
+  const { width, height } = setting;
+  if (typeof width !== "number" || typeof height !== "number") return FILL_VIEWPORT;
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return FILL_VIEWPORT;
+
+  const clamped = clampBrowserViewportSize({ width, height });
+  return {
+    kind: "device",
+    ...clamped,
+    ...(typeof setting.presetId === "string" ? { presetId: setting.presetId } : {}),
+  };
+}
+
 /** Stable identity for a setting, for use as a React key or drag guard. */
 export function browserViewportKey(setting: BrowserViewportSetting): string {
   return setting.kind === "fill"

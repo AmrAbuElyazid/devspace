@@ -26,6 +26,7 @@ import { useBrowserStore } from "../../store/browser-store";
 import { useWorkspaceStore } from "../../store/workspace-store";
 import {
   FILL_VIEWPORT,
+  parseBrowserViewportSetting,
   resolveBrowserViewportLayout,
   resolveResponsiveViewportSize,
   type BrowserViewportLayout,
@@ -75,7 +76,9 @@ export function useBrowserPaneController({
   );
 
   // ── Responsive / device mode ────────────────────────────────────────
-  const viewport = config.viewport ?? FILL_VIEWPORT;
+  // Validated rather than trusted: this comes back from persisted state, which
+  // is spread verbatim on load.
+  const viewport = useMemo(() => parseBrowserViewportSetting(config.viewport), [config.viewport]);
   const commitViewport = useCallback(
     (next: BrowserViewportSetting) => {
       updatePaneConfig(paneId, { viewport: next });

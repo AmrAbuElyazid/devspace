@@ -8,6 +8,7 @@ import {
   BROWSER_VIEWPORT_RAIL_SIZE,
   browserViewportKey,
   clampBrowserViewportSize,
+  parseBrowserViewportSetting,
   resizeBrowserViewport,
   resolveBrowserViewportLayout,
   resolveDeviceViewportArea,
@@ -185,4 +186,40 @@ test("viewport keys distinguish settings", () => {
   expect(browserViewportKey({ kind: "device", width: 375, height: 667 })).not.toBe(
     browserViewportKey({ kind: "device", width: 375, height: 668 }),
   );
+});
+
+test("a persisted fill viewport parses back to fill", () => {
+  expect(parseBrowserViewportSetting({ kind: "fill" })).toEqual({ kind: "fill" });
+});
+
+test("a persisted device viewport round-trips, preset and all", () => {
+  expect(
+    parseBrowserViewportSetting({ kind: "device", width: 430, height: 932, presetId: "x" }),
+  ).toEqual({ kind: "device", width: 430, height: 932, presetId: "x" });
+});
+
+test("corrupted dimensions fall back to fill rather than laying out NaN", () => {
+  // Math.max(1, Math.round(NaN)) is NaN, which would reach setBounds.
+  for (const bad of [
+    { kind: "device", width: Number.NaN, height: 800 },
+    { kind: "device", width: 400, height: Number.POSITIVE_INFINITY },
+    { kind: "device", width: "400", height: 800 },
+    { kind: "device" },
+    { kind: "nonsense" },
+    null,
+    undefined,
+    "fill",
+  ]) {
+    expect(parseBrowserViewportSetting(bad)).toEqual({ kind: "fill" });
+  }
+});
+
+test("out-of-range persisted dimensions are clamped, not rejected", () => {
+  const parsed = parseBrowserViewportSetting({ kind: "device", width: 5, height: 99_999 });
+
+  expect(parsed).toEqual({
+    kind: "device",
+    width: BROWSER_VIEWPORT_MIN_DIMENSION,
+    height: BROWSER_VIEWPORT_MAX_DIMENSION,
+  });
 });

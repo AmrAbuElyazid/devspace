@@ -89,3 +89,11 @@ jobs:
 
       - name: Run tests
         run: bun run test
+
+      # The browser pane's chrome fails in ways unit tests cannot observe: the
+      # menu overlay lives in a second renderer process, so a broken IPC
+      # handshake or a lost z-order leaves the unit suite green while nothing
+      # renders. These drive the built app instead.
+      - name: Run browser pane end-to-end tests
+        run: bunx playwright test --config e2e/playwright.config.ts e2e/browser-pane.spec.ts
+        working-directory: apps/desktop
