@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 import type { PaneType, SplitDirection } from "../types/workspace";
 
 /** The default pane type for new tabs, or 'picker' to always show the dialog. */
-export type DefaultPaneType = PaneType | "picker";
+type DefaultPaneType = PaneType | "picker";
 type ThemeMode = "system" | "dark" | "light";
 
 export const DEFAULT_LEADER_TIMEOUT_MS = 2_000;
@@ -40,6 +40,9 @@ interface SettingsState {
   panePickerContext: PanePickerContext | null;
 
   /** Count of open overlays (dialogs, popovers) that should hide native views */
+  /** Row height in the sidebar. Comfortable shows each workspace's directory. */
+  sidebarDensity: "comfortable" | "compact";
+  setSidebarDensity: (density: "comfortable" | "compact") => void;
   overlayCount: number;
   /** True when any overlay is active (settings page or dialog/popover) */
   isOverlayActive: () => boolean;
@@ -73,6 +76,12 @@ export const useSettingsStore = create<SettingsState>()(
       sidebarWidth: 220,
       defaultPaneType: "terminal" as const,
       panePickerContext: null,
+      sidebarDensity: "comfortable" as const,
+
+      setSidebarDensity(density) {
+        set({ sidebarDensity: density });
+      },
+
       overlayCount: 0,
 
       isOverlayActive() {

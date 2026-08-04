@@ -34,7 +34,6 @@ export function SidebarTreeLevel({
     selectedKeys,
     onSelectFolder,
     toggleFolderCollapsed,
-    onRequestDelete,
   } = useSidebarContext();
 
   const sortableIds = nodes.map((n) =>
@@ -64,7 +63,6 @@ export function SidebarTreeLevel({
               onRename={(name) => onRenameWorkspace(node.workspaceId, name)}
               onStopEditing={onStopEditing}
               onContextMenu={(e) => onContextMenuWorkspace(e, node.workspaceId)}
-              onDelete={() => onRequestDelete(node.workspaceId)}
             />
           );
         }

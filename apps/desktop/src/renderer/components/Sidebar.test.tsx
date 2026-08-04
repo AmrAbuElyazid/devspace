@@ -25,7 +25,6 @@ function createTestContext(overrides: Partial<SidebarContextValue> = {}): Sideba
     activeWorkspaceId: "ws-1",
     selectedKeys: new Set<string>(),
     toggleFolderCollapsed: noop,
-    onRequestDelete: noop,
     ...overrides,
   };
 }

@@ -30,7 +30,6 @@ import { cn } from "@/lib/utils";
 
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
 import { SidebarProvider, type SidebarContextValue } from "./SidebarContext";
-import { QuickLaunchGrid } from "./QuickLaunchGrid";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import { useSidebarSelection } from "./useSidebarSelection";
 
@@ -439,10 +438,6 @@ export default function Sidebar() {
     [addWorkspace, defaultPaneType],
   );
 
-  const requestDelete = useCallback((workspaceId: string) => {
-    setDeleteTargets([workspaceId]);
-  }, []);
-
   const sidebarContextValue = useMemo<SidebarContextValue>(
     () => ({
       editingId,
@@ -461,7 +456,6 @@ export default function Sidebar() {
       activeWorkspaceId,
       selectedKeys,
       toggleFolderCollapsed,
-      onRequestDelete: requestDelete,
     }),
     [
       editingId,
@@ -480,7 +474,6 @@ export default function Sidebar() {
       activeWorkspaceId,
       selectedKeys,
       toggleFolderCollapsed,
-      requestDelete,
     ],
   );
 
@@ -545,13 +538,7 @@ export default function Sidebar() {
                 </button>
               </HintTooltip>
             </div>
-
-            {/* Quick launch. Everything below the header shares one left rhythm:
-              containers inset 8px, so every hover/active rectangle in the
-              column starts at the same x, and their content at 18px. */}
-            <div className="px-2 pt-1 pb-2">
-              <QuickLaunchGrid />
-            </div>
+            <div className="px-2 pt-1 pb-2"></div>
 
             {/* Search */}
             <div className="px-2 pb-2">
@@ -864,18 +851,14 @@ function SectionHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between px-4.5 pt-3 pb-1 select-none">
-      <div className="inline-flex items-baseline gap-2">
-        <span className="text-ui-micro font-mono uppercase tracking-[0.16em] text-muted-foreground">
-          {label}
-        </span>
-        {typeof count === "number" ? (
-          <span className="text-ui-micro font-mono tabular-nums text-muted-foreground/60">
-            {count}
-          </span>
-        ) : null}
-      </div>
-      {children ? <div className="flex items-center gap-0.5">{children}</div> : null}
+    <div className="flex h-6 items-center gap-1.5 px-1.5 mt-1 select-none text-muted-foreground">
+      <span className="flex-1 truncate text-ui-xs font-medium tracking-[0.06em] uppercase">
+        {label}
+      </span>
+      {typeof count === "number" ? (
+        <span className="shrink-0 font-mono text-ui-micro tabular-nums opacity-55">{count}</span>
+      ) : null}
+      {children ? <div className="flex shrink-0 items-center gap-0.5">{children}</div> : null}
     </div>
   );
 }

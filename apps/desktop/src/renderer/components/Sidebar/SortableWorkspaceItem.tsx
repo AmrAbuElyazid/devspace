@@ -1,11 +1,12 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { Check, X } from "lucide-react";
+import { Check } from "lucide-react";
 
 import { useWorkspaceStore } from "@/store/workspace-store";
+import { useSettingsStore } from "@/store/settings-store";
+import { formatSidebarDirectory } from "@/lib/sidebar-directory";
 import { useActiveDrag } from "@/hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "@/hooks/useInsertionIndicator";
-import { paneTypeIcons } from "@/lib/pane-type-meta";
 import type { HeldModifier } from "@/hooks/useModifierHeld";
 import type { SidebarContainer } from "@/types/dnd";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,6 @@ interface SortableWorkspaceItemProps {
   onRename: (name: string) => void;
   onStopEditing: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
-  onDelete: () => void;
 }
 
 export function SortableWorkspaceItem({
@@ -44,26 +44,13 @@ export function SortableWorkspaceItem({
   onRename,
   onStopEditing,
   onContextMenu,
-  onDelete,
 }: SortableWorkspaceItemProps) {
   const name = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.name ?? "");
-  const metadata = useWorkspaceStore(
-    (s) => s.workspaceSidebarMetadataByWorkspaceId[workspaceId] ?? "",
-  );
-  const canDelete = useWorkspaceStore((s) => s.workspaces.length > 1);
-
-  const focusedPaneType = useWorkspaceStore((s) => {
-    const ws = s.workspaces.find((w) => w.id === workspaceId);
-    if (!ws?.focusedGroupId) return null;
-    const group = s.paneGroups[ws.focusedGroupId];
-    if (!group?.activeTabId) return null;
-    const tab = group.tabs.find((t) => t.id === group.activeTabId);
-    if (!tab) return null;
-    const pane = s.panes[tab.paneId];
-    return pane?.type ?? null;
-  });
-
-  const PaneIcon = focusedPaneType ? (paneTypeIcons[focusedPaneType] ?? null) : null;
+  const info = useWorkspaceStore((s) => s.workspaceSidebarMetadataByWorkspaceId[workspaceId]);
+  const density = useSettingsStore((s) => s.sidebarDensity);
+  const isCompact = density === "compact";
+  const paneCount = info?.paneCount ?? 0;
+  const directory = info?.directory ?? null;
 
   const shortcutHint = useWorkspaceStore((s) => {
     if (modifierHeld !== "command") return null;
@@ -139,7 +126,7 @@ export function SortableWorkspaceItem({
     <div
       ref={setRef}
       style={{
-        marginLeft: depth * 14,
+        marginLeft: depth * 13,
         opacity: isDragging ? 0.4 : undefined,
       }}
       data-sortable-id={`ws-${workspaceId}`}
@@ -153,33 +140,30 @@ export function SortableWorkspaceItem({
       {...attributes}
       {...listeners}
       className={cn(
-        "chrome-row chrome-focus no-drag group/ws gap-2.5 h-9 px-2.5 cursor-default select-none",
-        "text-ui-sm",
+        "group/ws relative flex items-center gap-2 rounded-md pr-2 pl-2.5",
+        "chrome-focus no-drag cursor-default select-none transition-colors duration-100",
+        isCompact ? "min-h-[26px]" : "min-h-9 py-1",
+        "hover:bg-row-hover",
+        isActive && "bg-row-active",
+        isSelected && "bg-row-selected ring-1 ring-inset ring-brand-edge",
         isTabDropTarget && "drop-into-folder",
         insertClass,
       )}
     >
-      {/* Pane icon, or a check once the row joins a multi-selection. The slot
-          keeps its size either way so rows never reflow. It used to be a
-          bordered chip, which read as a button you could press — the icon now
-          carries the row's state by colour alone. */}
+      {/* Identity stripe. Two pixels of the workspace's own colour, hard against
+          the leading edge, so a row is recognisable before its name is read.
+          Colours land in the next change; until then every row is neutral. */}
       <span
+        aria-hidden
         className={cn(
-          "shrink-0 inline-flex items-center justify-center size-3.5",
-          "transition-colors duration-100",
-          isSelected || isActive
-            ? "text-brand"
-            : "text-muted-foreground group-hover/ws:text-foreground",
+          "absolute left-0 w-0.5 rounded-full bg-muted-foreground/45 transition-all",
+          isActive ? "inset-y-1 bg-brand" : "inset-y-[7px]",
         )}
-      >
-        {isSelected ? (
-          <Check size={14} strokeWidth={2.4} />
-        ) : PaneIcon ? (
-          <PaneIcon width={14} height={14} />
-        ) : null}
-      </span>
+      />
 
-      <div className="flex-1 min-w-0 flex flex-col gap-px">
+      {isSelected ? <Check size={13} strokeWidth={2.4} className="shrink-0 text-brand" /> : null}
+
+      <div className="flex min-w-0 flex-1 flex-col gap-px">
         {isEditing ? (
           <InlineRenameInput
             initialValue={name}
@@ -192,45 +176,49 @@ export function SortableWorkspaceItem({
             aria-label="Rename workspace"
           />
         ) : (
-          <span className={cn("truncate leading-tight", isActive && "font-medium")}>{name}</span>
+          <span
+            className={cn(
+              "truncate leading-tight text-ui-sm",
+              isActive ? "font-medium text-foreground" : "text-foreground/[0.88]",
+            )}
+          >
+            {name}
+          </span>
         )}
-        {!isEditing && metadata ? (
-          <span className="truncate leading-none text-ui-micro font-mono text-muted-foreground">
-            {metadata}
+        {/* Truncated from the left, because the tail of a path is what tells
+            two sibling worktrees apart. */}
+        {!isEditing && !isCompact && directory ? (
+          <span
+            title={directory}
+            // rtl puts the ellipsis on the left, so the tail of the path — the
+            // part that identifies it — survives. formatSidebarDirectory
+            // prefixes an LTR mark to stop the leading "~/" being reordered.
+            style={{ direction: "rtl" }}
+            className="truncate text-left font-mono text-ui-micro leading-none text-muted-foreground"
+          >
+            {formatSidebarDirectory(directory)}
           </span>
         ) : null}
       </div>
 
-      {shortcutHint ? (
-        <Kbd
-          className={cn(
-            // A translucent foreground fill rather than a solid one, so the
-            // cap sits correctly on both a plain row and the amber active row.
-            "animate-hint shrink-0 h-4 min-w-4 rounded-sm bg-foreground/10 px-1 text-ui-micro font-mono",
-            isActive ? "text-brand" : "text-muted-foreground",
-          )}
-        >
-          {shortcutHint}
-        </Kbd>
-      ) : canDelete && !isEditing ? (
-        <button
-          type="button"
-          aria-label="Delete workspace"
-          title="Delete workspace"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className={cn(
-            "chrome-focus shrink-0 inline-flex items-center justify-center size-5 rounded-md",
-            "text-muted-foreground opacity-0 group-hover/ws:opacity-100 focus-visible:opacity-100",
-            "hover:text-destructive hover:bg-destructive/10",
-            "transition-[opacity,color,background-color]",
-          )}
-        >
-          <X size={12} strokeWidth={2.2} />
-        </button>
-      ) : null}
+      <div className="flex shrink-0 items-center gap-1.5">
+        {shortcutHint ? (
+          <Kbd
+            className={cn(
+              // A translucent foreground fill rather than a solid one, so the
+              // cap sits correctly on both a plain row and the active row.
+              "animate-hint h-4 min-w-4 rounded-sm bg-foreground/10 px-1 font-mono text-ui-micro",
+              isActive ? "text-brand" : "text-muted-foreground",
+            )}
+          >
+            {shortcutHint}
+          </Kbd>
+        ) : paneCount > 0 ? (
+          <span className="min-w-2 text-right font-mono text-ui-micro tabular-nums text-muted-foreground">
+            {paneCount}
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }

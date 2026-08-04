@@ -35,7 +35,6 @@ export interface SidebarContextValue {
   onAddWorkspaceToFolder: (folderId: string, container: SidebarContainer) => void;
 
   /** Opens the delete confirmation for one workspace. */
-  onRequestDelete: (workspaceId: string) => void;
 }
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);
