@@ -37,9 +37,6 @@ export const PORT_SCAN_BURST_MS = [0, 1_200, 4_000] as const;
  */
 export const PORT_SCAN_IDLE_TICKS = 6;
 
-/** `pane_current_command` values that mean "sitting at a prompt". */
-const SHELL_COMMANDS = new Set(["zsh", "bash", "fish", "sh", "dash", "ksh", "nu", "tcsh", "csh"]);
-
 function signatureOf(panes: TmuxPaneProcess[]): string {
   return panes
     .map((pane) => `${pane.sessionId}:${pane.pid}:${pane.command}`)
@@ -108,10 +105,18 @@ export class DevServerScanner {
     await this.sweep();
   }
 
-  /** Drops every pending sweep. The scanner stays usable afterwards. */
+  /**
+   * Drops every pending sweep. The scanner stays usable afterwards.
+   *
+   * The last signature goes with them. A burst is cancelled when the window
+   * blurs, which routinely happens within the four seconds a server takes to
+   * bind — and a signature left behind would mark that command change as
+   * already handled, so refocusing would find nothing new and the port would
+   * not surface until the next idle sweep half a minute later.
+   */
   stop(): void {
-    for (const timer of this.burstTimers) clearTimeout(timer);
-    this.burstTimers.clear();
+    this.clearBurstTimers();
+    this.lastSignature = null;
   }
 
   /** Forgets what was last reported, so the next sweep emits unconditionally. */
@@ -122,8 +127,16 @@ export class DevServerScanner {
     this.idleTicks = 0;
   }
 
+  private clearBurstTimers(): void {
+    for (const timer of this.burstTimers) clearTimeout(timer);
+    this.burstTimers.clear();
+  }
+
   private scheduleBurst(): void {
-    this.stop();
+    // Only the timers. Clearing the signature here as well would make every
+    // burst forget the change it had just detected, so the next poll would
+    // rediscover the same command and burst again, forever.
+    this.clearBurstTimers();
     for (const delay of PORT_SCAN_BURST_MS) {
       if (delay === 0) {
         void this.sweep();
@@ -175,30 +188,25 @@ export class DevServerScanner {
       return;
     }
 
-    // Every session where the only thing running is the shell itself can be
-    // skipped: a prompt has no children, so it can hold no listener. Panes
-    // still count towards their session, so a split with one busy pane and one
-    // idle pane is scanned whole.
-    const busySessions = new Set(
-      panes.filter((pane) => !SHELL_COMMANDS.has(pane.command)).map((pane) => pane.sessionId),
-    );
-    for (const sessionId of rootsBySession.keys()) {
-      if (!busySessions.has(sessionId)) rootsBySession.delete(sessionId);
-    }
-    if (rootsBySession.size === 0) {
-      this.publish([]);
-      return;
-    }
-
     const { all, byKey } = collectSubtrees(
       parseProcessTable(await this.deps.readProcessTable()),
       rootsBySession,
     );
+
     if (all.size === 0) {
       this.publish([]);
       return;
     }
 
+    // Every pid under every pane, with no attempt to guess which of them could
+    // plausibly be serving. `pane_current_command` is only the *foreground*
+    // job, so skipping the panes it calls a shell would miss a server started
+    // with `vite &`, one backgrounded with Ctrl-Z, and one behind a
+    // `#!/bin/bash` wrapper — and would take the badge away from a running
+    // server the moment it was backgrounded. Skipping childless roots would
+    // miss an `exec`'d one. The whole probe measures at 36ms for a real
+    // workspace, and a sweep only happens on a command change or once every
+    // thirty seconds, so there is nothing here worth being clever about.
     const listeners = parseLsofListeners(await this.deps.readListeners([...all]));
     this.publish(attributePorts(byKey, listeners).filter((entry) => entry.ports.length > 0));
   }

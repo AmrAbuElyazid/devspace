@@ -54,6 +54,7 @@ export class PaneOverlayManager {
   private peekOpen = false;
   private peekRect: Rectangle | null = null;
   private peekSnapshot = "";
+  private peekToken = 0;
 
   constructor(private readonly deps: PaneOverlayManagerDeps) {}
 
@@ -107,9 +108,15 @@ export class PaneOverlayManager {
     const parent = this.deps.getWindow();
     if (!parent) return;
 
+    const token = ++this.peekToken;
     const surface = this.ensureSurface();
     await this.ready;
-    if (surface.isDestroyed() || this.pending) return;
+    // The very first peek of a session is what creates the surface, so this
+    // await is a whole renderer process starting — hundreds of milliseconds,
+    // during which the cursor has usually moved on. Without the token that
+    // hide is dropped (there is no open panel yet to take down) and the panel
+    // then appears with nothing left that will ever close it.
+    if (surface.isDestroyed() || this.pending || token !== this.peekToken) return;
 
     // Called on every watcher tick while the panel is up, so that a window move
     // or a workspace rename lands without another mechanism. Both halves are
@@ -154,6 +161,9 @@ export class PaneOverlayManager {
   }
 
   private closePeek(): void {
+    // Bumped even when nothing is open, so that a show still waiting on the
+    // overlay to mount is cancelled rather than landing after the fact.
+    this.peekToken += 1;
     if (!this.peekOpen) return;
     this.peekOpen = false;
     this.peekRect = null;
@@ -163,10 +173,10 @@ export class PaneOverlayManager {
       surface.webContents.send("overlay:peek", null);
       surface.hide();
     }
-    // A click in the panel makes the surface key, so the keyboard has to be
-    // handed back or the terminal underneath stays inert.
-    const parent = this.deps.getWindow();
-    if (parent && !parent.isDestroyed()) parent.focus();
+    // Deliberately no `parent.focus()` here. The panel is non-focusable, so it
+    // never took the keyboard and has none to hand back — and one of the ways
+    // in here is the parent's own blur, where grabbing focus would pull the
+    // app back in front of whatever the user just switched to.
   }
 
   destroy(): void {

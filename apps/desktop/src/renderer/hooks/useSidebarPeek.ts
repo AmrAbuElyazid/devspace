@@ -60,7 +60,20 @@ export function useSidebarPeek(): void {
       useWorkspaceStore.subscribe(push),
       useDevServerStore.subscribe(push),
     ];
+
+    // The theme is read off the `<html>` class, and in "system" mode that class
+    // is toggled by a matchMedia listener that writes to no store — so an OS
+    // appearance change would otherwise leave the panel rendering in the old
+    // theme until some unrelated mutation happened along. Watching the thing
+    // that is actually sampled covers the explicit setting too.
+    const themeObserver = new MutationObserver(push);
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
     return () => {
+      themeObserver.disconnect();
       for (const unsubscribe of unsubscribes) unsubscribe();
     };
   }, []);

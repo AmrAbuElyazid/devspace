@@ -240,7 +240,7 @@ test("a moved window re-places the open panel", async () => {
   expect(surface.setBounds).toHaveBeenCalledWith({ ...PEEK_RECT, x: 400 });
 });
 
-test("hiding the panel tells the overlay to drop it and hands back the keyboard", async () => {
+test("hiding the panel tells the overlay to drop it, and leaves focus alone", async () => {
   const { manager, surface, window, sent } = harness;
   const shown = manager.showPeek(PEEK_RECT, PEEK);
   manager.handleOverlayReady();
@@ -250,7 +250,36 @@ test("hiding the panel tells the overlay to drop it and hands back the keyboard"
 
   expect(sent.at(-1)).toEqual({ channel: "overlay:peek", payload: null });
   expect(surface.hide).toHaveBeenCalled();
-  expect(window.focus).toHaveBeenCalled();
+  // One of the ways in here is the parent's own blur. Taking focus would pull
+  // the app back in front of whatever the user had just switched to — and the
+  // panel is non-focusable, so it has no keyboard to hand back anyway.
+  expect(window.focus).not.toHaveBeenCalled();
+});
+
+test("a hide during the overlay's first load cancels the show it raced", async () => {
+  const { manager, surface, sent } = harness;
+
+  // The first peek of a session is what creates the surface, so this show is
+  // parked until the overlay renderer mounts. The cursor moves on meanwhile.
+  const shown = manager.showPeek(PEEK_RECT, PEEK);
+  manager.hidePeek();
+  manager.handleOverlayReady();
+  await shown;
+
+  expect(surface.showInactive).not.toHaveBeenCalled();
+  expect(sent.filter((entry) => entry.channel === "overlay:peek")).toHaveLength(0);
+});
+
+test("a cancelled show does not stop the next one", async () => {
+  const { manager, surface } = harness;
+  const abandoned = manager.showPeek(PEEK_RECT, PEEK);
+  manager.hidePeek();
+  manager.handleOverlayReady();
+  await abandoned;
+
+  await manager.showPeek(PEEK_RECT, PEEK);
+
+  expect(surface.showInactive).toHaveBeenCalledTimes(1);
 });
 
 test("a menu takes the surface from the panel", async () => {

@@ -115,7 +115,7 @@ test("reports the port of a process under a pane's shell", async () => {
   expect(emitted[0]).toEqual([{ sessionId: "a", ports: [5173] }]);
 });
 
-test("skips sessions that are only sitting at a prompt", async () => {
+test("probes every pane's subtree, without guessing which could be serving", async () => {
   const { scanner, deps } = setup();
   deps.listPaneProcesses.mockResolvedValue([pane("a", 100, "zsh"), pane("b", 200, "node")]);
   deps.readProcessTable.mockResolvedValue("100 1\n200 1\n201 200\n");
@@ -123,9 +123,51 @@ test("skips sessions that are only sitting at a prompt", async () => {
   await scanner.poll();
   await drainBurst();
 
-  // Only the busy session's subtree is handed to lsof — 100 is never probed.
-  expect(deps.readListeners).toHaveBeenCalledWith(expect.arrayContaining([200, 201]));
-  expect(deps.readListeners).not.toHaveBeenCalledWith(expect.arrayContaining([100]));
+  expect(deps.readListeners).toHaveBeenCalledWith(expect.arrayContaining([100, 200, 201]));
+});
+
+test("finds a server that replaced its shell with exec", async () => {
+  const { scanner, emitted, deps } = setup();
+  // `exec node server.js` leaves the pane's own pid holding the port, with no
+  // child process to give it away.
+  deps.listPaneProcesses.mockResolvedValue([pane("a", 100, "node")]);
+  deps.readProcessTable.mockResolvedValue("100 1\n");
+  deps.readListeners.mockResolvedValue("p100\nn127.0.0.1:4000\n");
+
+  await scanner.poll();
+  await drainBurst();
+
+  expect(emitted[0]).toEqual([{ sessionId: "a", ports: [4000] }]);
+});
+
+test("finds a server backgrounded under a shell, which tmux still calls zsh", async () => {
+  const { scanner, emitted, deps } = setup();
+  // `vite &`, or Ctrl-Z then `bg`: the pane's foreground job is the prompt
+  // again, but the server is alive as its child and still holding the port.
+  deps.listPaneProcesses.mockResolvedValue([pane("a", 100, "zsh")]);
+  deps.readProcessTable.mockResolvedValue("100 1\n200 100\n");
+  deps.readListeners.mockResolvedValue("p200\nn127.0.0.1:5173\n");
+
+  await scanner.poll();
+  await drainBurst();
+
+  expect(emitted[0]).toEqual([{ sessionId: "a", ports: [5173] }]);
+});
+
+test("backgrounding a running server does not take its badge away", async () => {
+  const { scanner, emitted, deps } = setup();
+  deps.listPaneProcesses.mockResolvedValue([pane("a", 100, "node")]);
+  deps.readProcessTable.mockResolvedValue("100 1\n200 100\n");
+  deps.readListeners.mockResolvedValue("p200\nn127.0.0.1:5173\n");
+  await scanner.poll();
+  await drainBurst();
+
+  // Ctrl-Z, bg — the command flips back to the shell, the port does not move.
+  deps.listPaneProcesses.mockResolvedValue([pane("a", 100, "zsh")]);
+  await scanner.poll();
+  await drainBurst();
+
+  expect(emitted).toEqual([[{ sessionId: "a", ports: [5173] }]]);
 });
 
 test("scans a split session whole when only one of its panes is busy", async () => {
@@ -161,6 +203,7 @@ test("clears the ports when the server stops", async () => {
   await drainBurst();
 
   deps.listPaneProcesses.mockResolvedValue([pane("a", 100, "zsh")]);
+  deps.readListeners.mockResolvedValue("");
   await scanner.poll();
   await drainBurst();
 
@@ -191,6 +234,23 @@ test("a tmux failure during a poll is not treated as a change", async () => {
   await drainBurst();
 
   expect(deps.readProcessTable).not.toHaveBeenCalled();
+});
+
+test("a burst cancelled mid-flight is retried rather than counted as handled", async () => {
+  const { scanner, deps } = setup();
+  deps.listPaneProcesses.mockResolvedValue([pane("a", 100, "node")]);
+  await scanner.poll();
+
+  // The window blurs while the server is still starting up.
+  scanner.stop();
+  await drainBurst();
+  deps.readProcessTable.mockClear();
+
+  // Refocusing polls again; the same command must still read as news.
+  await scanner.poll();
+  await drainBurst();
+
+  expect(deps.readProcessTable).toHaveBeenCalledTimes(PORT_SCAN_BURST_MS.length);
 });
 
 test("stop() cancels the sweeps a burst had queued", async () => {

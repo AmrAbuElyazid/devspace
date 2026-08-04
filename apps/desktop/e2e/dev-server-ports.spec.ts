@@ -17,10 +17,21 @@ const PORT = 5199;
  * put it in front itself, the same way a user coming back to the app would.
  */
 async function focusWindow(app: ElectronApplication): Promise<void> {
-  await app.evaluate(({ app: electronApp, BrowserWindow }) => {
-    electronApp.focus({ steal: true });
-    BrowserWindow.getAllWindows()[0]?.focus();
-  });
+  // Awaited rather than fire-and-forget: activation is asynchronous, and a
+  // window that has not actually come to the front yet leaves the scanner's
+  // poll timer stopped, which reads as the feature being broken.
+  await expect
+    .poll(
+      () =>
+        app.evaluate(({ app: electronApp, BrowserWindow }) => {
+          electronApp.focus({ steal: true });
+          const window = BrowserWindow.getAllWindows()[0];
+          window?.focus();
+          return window?.isFocused() ?? false;
+        }),
+      { timeout: 10_000 },
+    )
+    .toBe(true);
 }
 
 test.describe("Dev server ports", () => {
