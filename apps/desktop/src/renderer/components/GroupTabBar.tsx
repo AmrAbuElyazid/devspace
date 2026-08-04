@@ -304,7 +304,8 @@ export default memo(function GroupTabBar({
             <HintTooltip
               content="Open sidebar"
               shortcut={resolveDisplayString("toggle-sidebar")}
-              sideOffset={4}
+              side="right"
+              sideOffset={6}
             >
               <button
                 type="button"
@@ -318,7 +319,8 @@ export default memo(function GroupTabBar({
             <HintTooltip
               content="New workspace"
               shortcut={resolveDisplayString("new-workspace")}
-              sideOffset={4}
+              side="right"
+              sideOffset={6}
             >
               <button
                 type="button"
@@ -382,7 +384,12 @@ export default memo(function GroupTabBar({
         title="Drag window"
       />
 
-      <HintTooltip content="New tab" shortcut={resolveDisplayString("new-tab")} sideOffset={4}>
+      <HintTooltip
+        content="New tab"
+        shortcut={resolveDisplayString("new-tab")}
+        side="left"
+        sideOffset={6}
+      >
         <button
           type="button"
           onClick={() => {
@@ -408,7 +415,7 @@ export default memo(function GroupTabBar({
           isFocused && "opacity-100",
         )}
       >
-        <HintTooltip content="Split right" sideOffset={4}>
+        <HintTooltip content="Split right" side="left" sideOffset={6}>
           <button
             type="button"
             aria-label="Split right"
@@ -425,7 +432,7 @@ export default memo(function GroupTabBar({
             <Columns2 size={11} />
           </button>
         </HintTooltip>
-        <HintTooltip content="Split down" sideOffset={4}>
+        <HintTooltip content="Split down" side="left" sideOffset={6}>
           <button
             type="button"
             aria-label="Split down"
@@ -443,7 +450,7 @@ export default memo(function GroupTabBar({
           </button>
         </HintTooltip>
         {hasMultipleGroups && (
-          <HintTooltip content="Close split" sideOffset={4}>
+          <HintTooltip content="Close split" side="left" sideOffset={6}>
             <button
               type="button"
               aria-label="Close split"

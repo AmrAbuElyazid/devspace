@@ -145,7 +145,7 @@ export default function TerminalFindBar({
       <div className="min-w-[68px] text-right text-ui-micro font-mono text-muted-foreground tabular-nums">
         {matchDisplay}
       </div>
-      <HintTooltip content="Previous match" shortcut="Shift+Enter">
+      <HintTooltip dense content="Previous match" shortcut="Shift+Enter">
         <FindBarButton
           onClick={navigateNext}
           disabled={!value || totalMatches <= 0}
@@ -154,7 +154,7 @@ export default function TerminalFindBar({
           <ChevronUp size={13} />
         </FindBarButton>
       </HintTooltip>
-      <HintTooltip content="Next match" shortcut="Enter">
+      <HintTooltip dense content="Next match" shortcut="Enter">
         <FindBarButton
           onClick={navigatePrev}
           disabled={!value || totalMatches <= 0}
@@ -163,7 +163,7 @@ export default function TerminalFindBar({
           <ChevronDown size={13} />
         </FindBarButton>
       </HintTooltip>
-      <HintTooltip content="Close" shortcut="Esc">
+      <HintTooltip dense content="Close" shortcut="Esc">
         <FindBarButton onClick={onClose} ariaLabel="Close find bar">
           <X size={13} />
         </FindBarButton>

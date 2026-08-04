@@ -420,40 +420,10 @@
     background: color-mix(in oklch, var(--background) 62%, transparent);
   }
 
-  /* Status-tinted glass for alerts and inline banners. The tint is a wash
-     over the same ambient glass so an error and a warning differ in hue
-     without differing in material. */
-  .glass-alert {
-    --alert-tint: transparent;
-    background:
-      linear-gradient(
-        color-mix(in oklch, var(--alert-tint) 5%, transparent),
-        color-mix(in oklch, var(--alert-tint) 5%, transparent)
-      ),
-      color-mix(in oklch, var(--background) var(--glass-opacity), transparent);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
-  }
-  .glass-alert[data-variant="error"] {
-    --alert-tint: var(--destructive);
-  }
-  .glass-alert[data-variant="warning"] {
-    --alert-tint: var(--warning);
-  }
-  .glass-alert[data-variant="success"] {
-    --alert-tint: var(--success);
-  }
-  .glass-alert[data-variant="info"] {
-    --alert-tint: var(--info);
-  }
-
   @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
     .glass-dropdown,
     .glass-dialog {
       background: var(--popover) !important;
-    }
-    .glass-alert {
-      background: var(--background) !important;
     }
     .glass-backdrop {
       background: color-mix(in oklch, var(--background) 80%, transparent);
@@ -846,7 +816,6 @@ html.overlay-root #root {
 @media (forced-colors: active) {
   .glass-dropdown,
   .glass-dialog,
-  .glass-alert,
   .glass-backdrop {
     background: Canvas !important;
     -webkit-backdrop-filter: none !important;

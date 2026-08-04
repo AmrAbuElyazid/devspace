@@ -494,7 +494,7 @@ export default function Sidebar() {
         data-state={sidebarOpen ? "open" : "collapsed"}
         data-resizing={isResizing || undefined}
         className={cn(
-          "relative flex flex-col shrink-0 overflow-hidden bg-rail text-foreground",
+          "relative flex flex-col shrink-0 overflow-hidden bg-rail text-foreground surface-grain",
           "border-r border-border",
           "@container/sidebar",
           "transition-[width,opacity] duration-200 ease-out",
@@ -655,7 +655,7 @@ export default function Sidebar() {
               scroll viewport rather than hugging the rows, so the empty space
               below the list is a drop target too. */}
             <div className="flex-1 min-h-0 overflow-hidden">
-              <ScrollArea className="h-full">
+              <ScrollArea className="h-full scroll-fade-top">
                 <div className="flex min-h-full flex-col">
                   <div
                     ref={setMainRootRef}
