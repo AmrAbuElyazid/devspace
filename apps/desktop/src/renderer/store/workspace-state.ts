@@ -9,6 +9,7 @@ import type {
 } from "../types/workspace";
 import type { SidebarContainer, DropSide } from "../types/dnd";
 import type { WorkspaceSidebarInfo } from "./workspace-sidebar-metadata";
+import type { WorkspaceColor } from "../lib/workspace-color";
 
 // ---------------------------------------------------------------------------
 // Store state + actions interface
@@ -53,6 +54,7 @@ export interface WorkspaceState {
    */
   duplicateWorkspace: (id: string) => string | null;
   renameWorkspace: (id: string, name: string) => void;
+  setWorkspaceColor: (id: string, color: WorkspaceColor) => void;
   setActiveWorkspace: (id: string) => void;
   togglePinWorkspace: (id: string) => void;
   pinWorkspace: (id: string) => void;

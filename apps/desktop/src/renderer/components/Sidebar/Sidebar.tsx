@@ -27,6 +27,13 @@ import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { TooltipBoundaryProvider } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
+import { showPointerOverlayMenu, type OverlayMenuItem } from "@/lib/pane-overlay-menu";
+import {
+  isWorkspaceColor,
+  resolveWorkspaceColor,
+  workspaceColorVar,
+  WORKSPACE_COLORS,
+} from "@/lib/workspace-color";
 
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
 import { SidebarProvider, type SidebarContextValue } from "./SidebarContext";
@@ -59,6 +66,7 @@ export default function Sidebar() {
   const renameFolder = useWorkspaceStore((s) => s.renameFolder);
   const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed);
   const togglePinWorkspace = useWorkspaceStore((s) => s.togglePinWorkspace);
+  const setWorkspaceColor = useWorkspaceStore((s) => s.setWorkspaceColor);
   const pinFolder = useWorkspaceStore((s) => s.pinFolder);
   const unpinFolder = useWorkspaceStore((s) => s.unpinFolder);
   const pendingEditId = useWorkspaceStore((s) => s.pendingEditId);
@@ -326,8 +334,28 @@ export default function Sidebar() {
               { id: "new-folder", label: "New Folder..." },
               ...(deletable ? [{ id: "delete", label: "Delete", destructive: true }] : []),
             ];
-      const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY });
+      // Rendered on the floating surface rather than popped as an NSMenu: the
+      // colour chips are the point of this menu, and a native menu cannot draw
+      // them. Single selection only — a colour applies to one workspace.
+      const result =
+        targets.length > 1
+          ? await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY })
+          : await showPointerOverlayMenu(e, items as OverlayMenuItem[], {
+              minWidth: 210,
+              label: "Workspace",
+              swatches: WORKSPACE_COLORS.map((key) => ({
+                id: `color:${key}`,
+                color: workspaceColorVar(key),
+                selected: resolveWorkspaceColor(workspaceId, ws.color) === key,
+                label: `Set colour ${key}`,
+              })),
+            });
       if (!result) return;
+      if (result.startsWith("color:")) {
+        const key = result.slice("color:".length);
+        if (isWorkspaceColor(key)) setWorkspaceColor(workspaceId, key);
+        return;
+      }
       if (result === "rename") startEditingWorkspace(workspaceId);
       else if (result === "duplicate") duplicateWorkspaces(targets);
       else if (result === "pin") togglePinWorkspace(workspaceId);
@@ -344,6 +372,7 @@ export default function Sidebar() {
       duplicateWorkspaces,
       addFolder,
       togglePinWorkspace,
+      setWorkspaceColor,
     ],
   );
 

@@ -156,7 +156,7 @@ export default function OverlayRoot(): ReactElement | null {
 
   if (!menu) return null;
 
-  const { items, minWidth, label } = menu.request;
+  const { items, minWidth, label, swatches } = menu.request;
 
   return (
     // Full-bleed transparent scrim. It is what catches click-outside, and it
@@ -183,6 +183,27 @@ export default function OverlayRoot(): ReactElement | null {
           maxWidth: 360,
         }}
       >
+        {swatches && swatches.length > 0 ? (
+          <>
+            <div role="group" aria-label="Colour" className="flex gap-1.5 px-2 pt-1.5 pb-1">
+              {swatches.map((swatch) => (
+                <button
+                  key={swatch.id}
+                  type="button"
+                  aria-label={swatch.label}
+                  aria-pressed={swatch.selected}
+                  onClick={() => close(swatch.id)}
+                  style={{ backgroundColor: swatch.color }}
+                  className={cn(
+                    "size-[17px] rounded-md transition-transform hover:scale-110",
+                    swatch.selected && "ring-2 ring-offset-2 ring-offset-popover ring-current",
+                  )}
+                />
+              ))}
+            </div>
+            <div className="my-1 h-px bg-border" />
+          </>
+        ) : null}
         {items.map((item, index) => (
           <div key={item.id} className="contents">
             {item.groupLabel && (

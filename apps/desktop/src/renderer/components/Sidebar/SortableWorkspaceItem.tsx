@@ -5,6 +5,7 @@ import { Check } from "lucide-react";
 import { useWorkspaceStore } from "@/store/workspace-store";
 import { useSettingsStore } from "@/store/settings-store";
 import { formatSidebarDirectory } from "@/lib/sidebar-directory";
+import { resolveWorkspaceColor, workspaceColorVar } from "@/lib/workspace-color";
 import { useActiveDrag } from "@/hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "@/hooks/useInsertionIndicator";
 import type { HeldModifier } from "@/hooks/useModifierHeld";
@@ -46,6 +47,10 @@ export function SortableWorkspaceItem({
   onContextMenu,
 }: SortableWorkspaceItemProps) {
   const name = useWorkspaceStore((s) => s.workspaces.find((w) => w.id === workspaceId)?.name ?? "");
+  const storedColor = useWorkspaceStore(
+    (s) => s.workspaces.find((w) => w.id === workspaceId)?.color,
+  );
+  const color = workspaceColorVar(resolveWorkspaceColor(workspaceId, storedColor));
   const info = useWorkspaceStore((s) => s.workspaceSidebarMetadataByWorkspaceId[workspaceId]);
   const density = useSettingsStore((s) => s.sidebarDensity);
   const isCompact = density === "compact";
@@ -128,6 +133,11 @@ export function SortableWorkspaceItem({
       style={{
         marginLeft: depth * 13,
         opacity: isDragging ? 0.4 : undefined,
+        // Tinted with the workspace's own hue rather than one shared amber, so
+        // the active row reads as "this workspace" and not just "selected".
+        ...(isActive && !isSelected
+          ? { backgroundColor: `color-mix(in oklch, ${color} 16%, transparent)` }
+          : {}),
       }}
       data-sortable-id={`ws-${workspaceId}`}
       data-active={isActive || undefined}
@@ -144,7 +154,6 @@ export function SortableWorkspaceItem({
         "chrome-focus no-drag cursor-default select-none transition-colors duration-100",
         isCompact ? "min-h-[26px]" : "min-h-9 py-1",
         "hover:bg-row-hover",
-        isActive && "bg-row-active",
         isSelected && "bg-row-selected ring-1 ring-inset ring-brand-edge",
         isTabDropTarget && "drop-into-folder",
         insertClass,
@@ -155,9 +164,10 @@ export function SortableWorkspaceItem({
           Colours land in the next change; until then every row is neutral. */}
       <span
         aria-hidden
+        style={{ backgroundColor: color }}
         className={cn(
-          "absolute left-0 w-0.5 rounded-full bg-muted-foreground/45 transition-all",
-          isActive ? "inset-y-1 bg-brand" : "inset-y-[7px]",
+          "absolute left-0 rounded-full transition-all",
+          isActive ? "inset-y-1 w-[2.5px] opacity-100" : "inset-y-[7px] w-0.5 opacity-80",
         )}
       />
 

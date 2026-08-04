@@ -31,6 +31,7 @@ type WorkspaceCrudSlice = Pick<
   | "removeWorkspace"
   | "removeWorkspaces"
   | "renameWorkspace"
+  | "setWorkspaceColor"
   | "setActiveWorkspace"
   | "setFocusedGroup"
   | "mergeWorkspaceIntoGroup"
@@ -175,6 +176,12 @@ export function createWorkspaceCrudSlice(
     renameWorkspace(id, name) {
       set((state) => ({
         workspaces: state.workspaces.map((w) => (w.id === id ? { ...w, name } : w)),
+      }));
+    },
+
+    setWorkspaceColor(id, color) {
+      set((state) => ({
+        workspaces: state.workspaces.map((w) => (w.id === id ? { ...w, color } : w)),
       }));
     },
 
