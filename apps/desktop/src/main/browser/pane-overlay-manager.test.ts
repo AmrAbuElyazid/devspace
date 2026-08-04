@@ -13,27 +13,35 @@ function createHarness() {
   const webContents = {
     isDestroyed: () => false,
     send: (channel: string, payload: unknown) => sent.push({ channel, payload }),
-    focus: vi.fn(),
-    close: vi.fn(),
     once: vi.fn(),
   };
-  const view = {
+  const surface = {
     webContents,
-    setBackgroundColor: vi.fn(),
-    setVisible: vi.fn(),
+    isDestroyed: () => false,
+    isVisible: () => true,
+    showInactive: vi.fn(),
+    moveTop: vi.fn(),
+    focus: vi.fn(),
+    hide: vi.fn(),
+    destroy: vi.fn(),
     setBounds: vi.fn(),
   };
-  const contentView = { addChildView: vi.fn(), removeChildView: vi.fn() };
-  const window = { getContentSize: () => [1200, 800], contentView };
+  const window = {
+    isDestroyed: () => false,
+    getContentBounds: () => ({ x: 100, y: 50, width: 1200, height: 800 }),
+    focus: vi.fn(),
+    on: vi.fn(),
+    off: vi.fn(),
+  };
 
   const manager = new PaneOverlayManager({
     getWindow: () => window as never,
-    createView: () => view as never,
+    createSurface: () => surface as never,
     // The real loader is async; readiness is signalled over IPC instead.
     loadOverlay: () => {},
   });
 
-  return { manager, view, webContents, contentView, sent };
+  return { manager, surface, webContents, window, sent };
 }
 
 /** Token of the nth posted menu; throws rather than silently passing undefined. */
@@ -49,15 +57,24 @@ beforeEach(() => {
   harness = createHarness();
 });
 
-test("the overlay view is created transparent and hidden", async () => {
-  const { manager, view } = harness;
+test("the surface is fitted to the parent and raised without stealing focus first", async () => {
+  const { manager, surface, sent } = harness;
 
   void manager.showMenu(REQUEST);
   manager.handleOverlayReady();
   await Promise.resolve();
+  await Promise.resolve();
 
-  // WebContentsView defaults to opaque white; without this it is a solid sheet.
-  expect(view.setBackgroundColor).toHaveBeenCalledWith("#00000000");
+  // Covers the parent's content rect, so renderer coordinates map straight
+  // through to the surface without translation.
+  expect(surface.setBounds).toHaveBeenCalledWith({ x: 100, y: 50, width: 1200, height: 800 });
+  // Shown inactive then raised: a surface shown while another app is frontmost
+  // can otherwise sit below its own parent.
+  expect(surface.showInactive).toHaveBeenCalled();
+  expect(surface.moveTop).toHaveBeenCalled();
+  // A menu owns the keyboard, or Escape and the arrows never reach it.
+  expect(surface.focus).toHaveBeenCalled();
+  expect(sent).toHaveLength(1);
 });
 
 test("a menu is only posted once the overlay reports it is listening", async () => {
@@ -79,7 +96,7 @@ test("a menu is only posted once the overlay reports it is listening", async () 
 });
 
 test("choosing an item resolves and hides the overlay", async () => {
-  const { manager, view, sent } = harness;
+  const { manager, surface, window, sent } = harness;
 
   const pending = manager.showMenu(REQUEST);
   manager.handleOverlayReady();
@@ -90,9 +107,9 @@ test("choosing an item resolves and hides the overlay", async () => {
   manager.resolveMenu(token, "a");
 
   await expect(pending).resolves.toBe("a");
-  expect(view.setVisible).toHaveBeenLastCalledWith(false);
-  // Parked at zero size so it stops swallowing the pane's mouse input.
-  expect(view.setBounds).toHaveBeenLastCalledWith({ x: 0, y: 0, width: 0, height: 0 });
+  expect(surface.hide).toHaveBeenCalled();
+  // Focus goes back to the parent, or it stays inert until clicked.
+  expect(window.focus).toHaveBeenCalled();
 });
 
 test("a dismissal resolves with null", async () => {
@@ -145,8 +162,8 @@ test("a second menu supersedes the first rather than leaving it hanging", async 
   await expect(second).resolves.toBe("a");
 });
 
-test("the overlay is re-added on each open so it stays topmost", async () => {
-  const { manager, contentView, sent } = harness;
+test("the surface is raised on each open so it stays topmost", async () => {
+  const { manager, surface, sent } = harness;
 
   const first = manager.showMenu(REQUEST);
   manager.handleOverlayReady();
@@ -159,8 +176,8 @@ test("the overlay is re-added on each open so it stays topmost", async () => {
   await Promise.resolve();
   await Promise.resolve();
 
-  // Panes opened after the overlay would otherwise stack above it.
-  expect(contentView.addChildView).toHaveBeenCalledTimes(2);
+  // Another app taking focus between opens can drop it behind the parent.
+  expect(surface.moveTop).toHaveBeenCalledTimes(2);
   manager.resolveMenu(tokenAt(sent, -1), null);
   await second;
 });

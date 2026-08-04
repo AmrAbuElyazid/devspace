@@ -1,4 +1,4 @@
-import { app, BrowserWindow, WebContentsView } from "electron";
+import { app, BrowserWindow } from "electron";
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { randomBytes } from "crypto";
@@ -206,8 +206,24 @@ function createWindow(): void {
   terminalManager.init(window);
   const paneOverlayManager = new PaneOverlayManager({
     getWindow: () => (window.isDestroyed() ? null : window),
-    createView: () =>
-      new WebContentsView({
+    // A child window rather than a child view: Ghostty's terminal surface is
+    // attached to the AppKit content view above Electron's whole view tree, so
+    // only a separate window can draw over it.
+    createSurface: () =>
+      new BrowserWindow({
+        parent: window,
+        frame: false,
+        transparent: true,
+        hasShadow: false,
+        roundedCorners: false,
+        resizable: false,
+        movable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        skipTaskbar: true,
+        show: false,
+        backgroundColor: "#00000000",
         webPreferences: {
           preload: join(__dirname, "../preload/index.js"),
           contextIsolation: true,
@@ -215,16 +231,14 @@ function createWindow(): void {
           sandbox: false,
         },
       }),
-    loadOverlay: (view) => {
+    loadOverlay: (surface) => {
       // The overlay sends IPC back, so it has to be on the trusted list.
-      trustIpcWebContents(view.webContents);
+      trustIpcWebContents(surface.webContents);
       const devUrl = getTrustedDevRendererUrl();
       if (devUrl) {
-        void view.webContents.loadURL(`${devUrl}#overlay`);
+        void surface.loadURL(`${devUrl}#overlay`);
       } else {
-        void view.webContents.loadFile(join(__dirname, "../renderer/index.html"), {
-          hash: "overlay",
-        });
+        void surface.loadFile(join(__dirname, "../renderer/index.html"), { hash: "overlay" });
       }
     },
   });
