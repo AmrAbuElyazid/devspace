@@ -81,7 +81,6 @@ export interface BrowserPaneController {
     paneId: string,
     result: { query: string; activeMatch: number; totalMatches: number },
   ): void;
-  showContextMenu(paneId: string, position?: { x: number; y: number }): void;
   requestPermission(
     request: BrowserPermissionRequest,
     resolve: (decision: BrowserPermissionDecision) => void,

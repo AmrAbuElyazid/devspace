@@ -243,7 +243,6 @@ export interface BrowserBridge {
   findInPage: (paneId: string, query: string, options?: BrowserFindInPageOptions) => Promise<void>;
   stopFindInPage: (paneId: string, action?: BrowserStopFindAction) => Promise<void>;
   toggleDevTools: (paneId: string) => Promise<void>;
-  showContextMenu: (paneId: string, position?: { x: number; y: number }) => Promise<void>;
   resolvePermission: (requestToken: string, decision: BrowserPermissionDecision) => Promise<void>;
   listProfiles: (browser: BrowserImportSource) => Promise<BrowserProfileDescriptor[]>;
   importBrowser: (
@@ -274,6 +273,14 @@ export interface ContextMenuItem<T extends string = string> {
   id: T;
   label: string;
   destructive?: boolean;
+  /**
+   * Render the entry greyed out and unclickable. Preferred over dropping the
+   * entry: a menu whose items move position depending on page state is harder
+   * to build muscle memory against than one with a stable shape.
+   */
+  disabled?: boolean;
+  /** Draw a divider above this entry. Ignored on the first entry. */
+  separatorBefore?: boolean;
 }
 
 declare global {

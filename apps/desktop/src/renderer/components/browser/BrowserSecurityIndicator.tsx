@@ -27,7 +27,7 @@ export default function BrowserSecurityIndicator({
         isCertError
           ? "text-destructive border-destructive/40"
           : isSecure
-            ? "text-status-success/90 border-status-success/30"
+            ? "text-success-foreground border-success/30"
             : "text-muted-foreground",
       )}
     >

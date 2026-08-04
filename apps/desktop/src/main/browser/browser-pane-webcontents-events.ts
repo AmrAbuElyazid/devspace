@@ -79,13 +79,21 @@ function normalizeContextMenuText(value: unknown): string | null {
 function getContextMenuTarget(params: {
   linkURL?: unknown;
   selectionText?: unknown;
+  srcURL?: unknown;
+  mediaType?: unknown;
 }): BrowserContextMenuTarget {
+  // Selection wins over everything: text highlighted inside a link means the
+  // user is after the text, not the link.
+  if (normalizeContextMenuText(params.selectionText)) {
+    return "selection";
+  }
+
   if (normalizeContextMenuText(params.linkURL)) {
     return "link";
   }
 
-  if (normalizeContextMenuText(params.selectionText)) {
-    return "selection";
+  if (params.mediaType === "image" && normalizeContextMenuText(params.srcURL)) {
+    return "image";
   }
 
   return "page";
@@ -103,6 +111,12 @@ type BrowserPaneWebContentsListenerDeps = {
   syncNavigationState: (pane: BrowserPaneRecord) => void;
   recordCommittedHistoryVisit: (pane: BrowserPaneRecord, url: string) => void;
   refreshPendingHistoryTitle: (pane: BrowserPaneRecord, title: string) => void;
+  /**
+   * Attempt an automatic reload after a renderer crash. Returns false when the
+   * pane has exhausted its retry budget, which is this module's cue to surface
+   * the failure card instead.
+   */
+  recoverFromCrash: (pane: BrowserPaneRecord) => boolean;
 };
 
 export function registerBrowserPaneWebContentsListeners({
@@ -114,6 +128,7 @@ export function registerBrowserPaneWebContentsListeners({
   syncNavigationState,
   recordCommittedHistoryVisit,
   refreshPendingHistoryTitle,
+  recoverFromCrash,
 }: BrowserPaneWebContentsListenerDeps): void {
   let lastPointerDownAt = 0;
   const webContents = pane.view.webContents as Electron.WebContents &
@@ -327,6 +342,8 @@ export function registerBrowserPaneWebContentsListeners({
     const x = typeof nextParams.x === "number" ? nextParams.x : 0;
     const y = typeof nextParams.y === "number" ? nextParams.y : 0;
     const linkUrl = normalizeContextMenuText(nextParams.linkURL);
+    const imageUrl =
+      nextParams.mediaType === "image" ? normalizeContextMenuText(nextParams.srcURL) : null;
     const selectionText = normalizeContextMenuText(nextParams.selectionText);
     const target = getContextMenuTarget(nextParams);
 
@@ -340,6 +357,7 @@ export function registerBrowserPaneWebContentsListeners({
       target,
       pageUrl: pane.runtimeState.url,
       linkUrl,
+      imageUrl,
       selectionText,
       canGoBack: pane.runtimeState.canGoBack,
       canGoForward: pane.runtimeState.canGoForward,
@@ -402,6 +420,18 @@ export function registerBrowserPaneWebContentsListeners({
   );
 
   webContents.on("render-process-gone", (_event: unknown, details: { reason?: string }) => {
+    // A clean exit is the pane being torn down, not a crash to recover from.
+    if (details.reason === "clean-exit") {
+      return;
+    }
+
+    if (recoverFromCrash(pane)) {
+      // Keep the last known title and favicon: the pane is coming back at the
+      // same URL, and blanking its tab mid-reload reads as a lost pane.
+      applyRuntimePatch(pane.runtimeState.paneId, { isLoading: true, failure: null });
+      return;
+    }
+
     applyRuntimePatch(pane.runtimeState.paneId, {
       title: "Browser pane crashed",
       faviconUrl: null,

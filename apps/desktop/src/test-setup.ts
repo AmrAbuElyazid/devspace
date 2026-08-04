@@ -20,6 +20,30 @@ if (typeof globalThis.localStorage === "undefined") {
   };
 }
 
+// Stub ResizeObserver — jsdom does not implement it, and several renderer
+// modules (native-view-store, the browser pane's device frame) construct one on
+// mount. jsdom never lays anything out, so a recording no-op is the honest
+// stand-in: tests that care about measurement drive it directly instead.
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  } as unknown as typeof ResizeObserver;
+}
+
+// Stub Element.getAnimations — also absent from jsdom. base-ui's ScrollArea
+// polls it from a timer to decide when a scroll animation has settled, which
+// only becomes reachable once ResizeObserver above exists, so the two stubs
+// have to travel together.
+function noAnimations(): Animation[] {
+  return [];
+}
+
+if (typeof Element !== "undefined" && typeof Element.prototype.getAnimations !== "function") {
+  Element.prototype.getAnimations = noAnimations;
+}
+
 const originalEmitWarning = process.emitWarning.bind(process);
 process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
   const message = typeof warning === "string" ? warning : warning.message;

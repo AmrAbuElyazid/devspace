@@ -21,7 +21,17 @@ import {
   subscribeBrowserPane,
 } from "../../lib/browser-pane-session";
 import { useNativeView } from "../../hooks/useNativeView";
+import { useBrowserViewportResize } from "../../hooks/useBrowserViewportResize";
 import { useBrowserStore } from "../../store/browser-store";
+import { useWorkspaceStore } from "../../store/workspace-store";
+import {
+  FILL_VIEWPORT,
+  resolveBrowserViewportLayout,
+  resolveResponsiveViewportSize,
+  type BrowserViewportLayout,
+  type BrowserViewportSetting,
+  type BrowserViewportSize,
+} from "../../lib/browser-viewport";
 import type { BrowserConfig } from "../../types/workspace";
 import type { BrowserPermissionDecision } from "../../../shared/browser";
 import {
@@ -45,7 +55,11 @@ export function useBrowserPaneController({
   isActive,
 }: UseBrowserPaneControllerArgs) {
   const placeholderRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const updatePaneConfig = useWorkspaceStore((s) => s.updatePaneConfig);
+  const [panel, setPanel] = useState<BrowserViewportSize>({ width: 0, height: 0 });
+  const [aspectRatio, setAspectRatio] = useState<number | null>(null);
   const runtimeState = useBrowserStore((s) => s.runtimeByPaneId[paneId]);
   const pendingPermissionRequest = useBrowserStore((s) => s.pendingPermissionRequest);
   const isFindBarOpen = useBrowserStore((s) => s.findBarOpenByPaneId[paneId] ?? false);
@@ -58,6 +72,66 @@ export function useBrowserPaneController({
     () => normalizeBrowserInput(config.url || "about:blank"),
     [config.url],
   );
+
+  // ── Responsive / device mode ────────────────────────────────────────
+  const viewport = config.viewport ?? FILL_VIEWPORT;
+  const commitViewport = useCallback(
+    (next: BrowserViewportSetting) => {
+      updatePaneConfig(paneId, { viewport: next });
+    },
+    [paneId, updatePaneConfig],
+  );
+
+  // Track the pane content box so the device frame can be centered in it and
+  // fit-scaled when the requested size does not fit.
+  useLayoutEffect(() => {
+    const element = contentRef.current;
+    if (!element) return;
+
+    const measure = (): void => {
+      const rect = element.getBoundingClientRect();
+      setPanel((current) => {
+        const width = Math.max(0, Math.round(rect.width));
+        const height = Math.max(0, Math.round(rect.height));
+        return current.width === width && current.height === height ? current : { width, height };
+      });
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  // Scale of the *committed* frame. Drags convert pointer distance to CSS px
+  // through this; deriving it from the live dragging size instead would move
+  // the mapping under the user as the frame crosses the fit-to-panel boundary.
+  const committedRenderScale = useMemo(
+    () => resolveBrowserViewportLayout(panel, viewport, config.zoom ?? 1).zoomFactor,
+    [config.zoom, panel, viewport],
+  );
+
+  const { activeDrag, effectiveViewport, handleResizeKeyDown, handleResizePointerDown } =
+    useBrowserViewportResize({
+      viewport,
+      panel,
+      renderScale: committedRenderScale,
+      aspectRatio,
+      onCommit: commitViewport,
+    });
+
+  const layout: BrowserViewportLayout = useMemo(
+    () => resolveBrowserViewportLayout(panel, effectiveViewport, config.zoom ?? 1),
+    [config.zoom, effectiveViewport, panel],
+  );
+
+  const toggleDeviceMode = useCallback(() => {
+    commitViewport(
+      viewport.kind === "device"
+        ? FILL_VIEWPORT
+        : { kind: "device", ...resolveResponsiveViewportSize(panel, config.zoom ?? 1) },
+    );
+  }, [commitViewport, config.zoom, panel, viewport.kind]);
   const [inputUrl, setInputUrl] = useState(initialUrl);
   const subscribeToPane = useCallback(
     (listener: () => void) => subscribeBrowserPane(paneId, listener),
@@ -172,11 +246,14 @@ export function useBrowserPaneController({
       return;
     }
 
-    const desiredZoom = config.zoom ?? 1;
-    if (Math.abs(runtimeState.currentZoom - desiredZoom) > 0.001) {
-      void window.api.browser.setZoom(paneId, desiredZoom);
+    // The factor pushed to Electron is the user's zoom times the fit-to-panel
+    // scale, which is what keeps the guest laying out at the requested device
+    // width even when the frame had to be shrunk to fit. In fill mode the fit
+    // scale is 1 and this is just the user's zoom.
+    if (Math.abs(runtimeState.currentZoom - layout.zoomFactor) > 0.001) {
+      void window.api.browser.setZoom(paneId, layout.zoomFactor);
     }
-  }, [config.zoom, paneId, runtimeState]);
+  }, [layout.zoomFactor, paneId, runtimeState]);
 
   useEffect(() => {
     if (addressBarFocusToken === 0) {
@@ -306,12 +383,40 @@ export function useBrowserPaneController({
     void window.api.browser.reload(paneId);
   }, [creationFailure, paneId]);
 
+  // ── Zoom ────────────────────────────────────────────────────────────
+  const userZoom = config.zoom ?? 1;
+  const setUserZoom = useCallback(
+    (next: number) => {
+      // Matches the app-level zoom shortcuts' range and step rounding.
+      updatePaneConfig(paneId, { zoom: Math.min(3, Math.max(0.25, Number(next.toFixed(2)))) });
+    },
+    [paneId, updatePaneConfig],
+  );
+  const handleZoomIn = useCallback(() => setUserZoom(userZoom + 0.1), [setUserZoom, userZoom]);
+  const handleZoomOut = useCallback(() => setUserZoom(userZoom - 0.1), [setUserZoom, userZoom]);
+  const handleZoomReset = useCallback(() => setUserZoom(1), [setUserZoom]);
+
   return {
+    activeDrag,
     activePermissionRequest,
+    aspectRatio,
     canGoBack,
     canGoForward,
+    contentRef,
     currentUrl,
+    effectiveViewport,
     failure,
+    handleResizeKeyDown,
+    handleResizePointerDown,
+    handleZoomIn,
+    handleZoomOut,
+    handleZoomReset,
+    layout,
+    panel,
+    setAspectRatio,
+    toggleDeviceMode,
+    userZoom,
+    commitViewport,
     findBarFocusToken,
     findState,
     handleAddressBarSubmit,

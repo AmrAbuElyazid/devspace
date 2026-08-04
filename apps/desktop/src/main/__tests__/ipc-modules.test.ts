@@ -254,9 +254,6 @@ const browserPaneManagerMock = {
   toggleDevTools: (paneId: string) => {
     browserPaneCalls.push(["toggleDevTools", paneId]);
   },
-  showContextMenu: (paneId: string, position?: unknown) => {
-    browserPaneCalls.push(["showContextMenu", paneId, position]);
-  },
   resolvePermission: (requestToken: string, decision: string) => {
     browserPaneCalls.push(["resolvePermission", requestToken, decision]);
   },
@@ -618,14 +615,11 @@ test("browser IPC forwards pane commands and filters pane id lists", async () =>
   ]);
 });
 
-test("browser IPC validates zoom, context menu, profile, and detect access inputs", async () => {
+test("browser IPC validates zoom, profile, and detect access inputs", async () => {
   await callHandler("browser:setZoom", "pane-1", 1.25);
   await callHandler("browser:setZoom", "pane-1", Infinity);
   await callHandler("browser:findInPage", "pane-1", "search", { findNext: true });
   await callHandler("browser:stopFindInPage", "pane-1", "keepSelection");
-  await callHandler("browser:showContextMenu", "pane-1", { x: 10, y: 20 });
-  await callHandler("browser:showContextMenu", "pane-1", { x: "bad", y: 20 });
-  await callHandler("browser:showContextMenu", "pane-1", "not-an-object");
   const profiles = await callHandler("browser:listProfiles", "chrome");
   const invalidProfiles = await callHandler("browser:listProfiles", "firefox");
   const detectAccess = await callHandler("browser:detectAccess", "chrome", "history");
@@ -643,8 +637,6 @@ test("browser IPC validates zoom, context menu, profile, and detect access input
     ["setZoom", "pane-1", 1.25],
     ["findInPage", "pane-1", "search", { findNext: true }],
     ["stopFindInPage", "pane-1", "keepSelection"],
-    ["showContextMenu", "pane-1", { x: 10, y: 20 }],
-    ["showContextMenu", "pane-1", undefined],
   ]);
   expect(browserImportCalls).toEqual([
     ["listProfiles", "chrome"],

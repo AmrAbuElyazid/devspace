@@ -118,26 +118,58 @@ function getFocusedGroupId(ws: WorkspaceRecord): string | undefined {
   return ws.focusedGroupId ?? collectGroupIds(ws.root)[0];
 }
 
-function getBrowserContext(): { paneId: string; currentZoom: number } | null {
+/**
+ * Zoom for a web-backed pane, together with how to apply a new level.
+ *
+ * Browser panes keep their user zoom in pane config rather than reading it
+ * back from the main process. In device mode the factor actually handed to
+ * Electron is the user zoom multiplied by the fit-to-panel scale, so treating
+ * the reported `currentZoom` as the user's setting would fold that scale in
+ * again on every keypress and shrink the page a step at a time. Editor and
+ * t3code panes never fit-scale, so they stay on the simpler runtime round trip.
+ */
+interface WebViewZoomContext {
+  paneId: string;
+  currentZoom: number;
+  applyZoom: (next: number) => void;
+  resetZoom: () => void;
+}
+
+function createBrowserZoomContext(
+  paneId: string,
+  configZoom: number | undefined,
+): WebViewZoomContext {
+  return {
+    paneId,
+    currentZoom: configZoom ?? 1,
+    applyZoom: (next) => useWorkspaceStore.getState().updateBrowserPaneZoom(paneId, next),
+    resetZoom: () => useWorkspaceStore.getState().updateBrowserPaneZoom(paneId, 1),
+  };
+}
+
+function createNativeZoomContext(paneId: string): WebViewZoomContext {
+  return {
+    paneId,
+    currentZoom: useBrowserStore.getState().runtimeByPaneId[paneId]?.currentZoom ?? 1,
+    applyZoom: (next) => void window.api.browser.setZoom(paneId, next),
+    resetZoom: () => void window.api.browser.resetZoom(paneId),
+  };
+}
+
+function getBrowserContext(): WebViewZoomContext | null {
   const store = useWorkspaceStore.getState();
   const browserPane = getActiveFocusedBrowserPane(store);
   if (!browserPane) return null;
-  const currentZoom =
-    useBrowserStore.getState().runtimeByPaneId[browserPane.id]?.currentZoom ??
-    browserPane.config.zoom ??
-    1;
-  return { paneId: browserPane.id, currentZoom };
+  return createBrowserZoomContext(browserPane.id, browserPane.config.zoom);
 }
 
-function getWebViewContext(): { paneId: string; currentZoom: number } | null {
+function getWebViewContext(): WebViewZoomContext | null {
   const store = useWorkspaceStore.getState();
   const pane = getActiveFocusedWebViewPane(store);
   if (!pane) return null;
-  const currentZoom =
-    useBrowserStore.getState().runtimeByPaneId[pane.id]?.currentZoom ??
-    (pane.type === "browser" ? pane.config.zoom : undefined) ??
-    1;
-  return { paneId: pane.id, currentZoom };
+  return pane.type === "browser"
+    ? createBrowserZoomContext(pane.id, pane.config.zoom)
+    : createNativeZoomContext(pane.id);
 }
 
 function getFocusedTerminalSurfaceId(): string | null {
@@ -370,7 +402,7 @@ function dispatchShortcutAction(channel: string, ...args: unknown[]): void {
         void window.api.terminal.sendBindingAction(terminalId, "increase_font_size:1");
       } else {
         const ctx = getWebViewContext();
-        if (ctx) void window.api.browser.setZoom(ctx.paneId, clampZoom(ctx.currentZoom + 0.1));
+        if (ctx) ctx.applyZoom(clampZoom(ctx.currentZoom + 0.1));
       }
       break;
     }
@@ -380,7 +412,7 @@ function dispatchShortcutAction(channel: string, ...args: unknown[]): void {
         void window.api.terminal.sendBindingAction(terminalId, "decrease_font_size:1");
       } else {
         const ctx = getWebViewContext();
-        if (ctx) void window.api.browser.setZoom(ctx.paneId, clampZoom(ctx.currentZoom - 0.1));
+        if (ctx) ctx.applyZoom(clampZoom(ctx.currentZoom - 0.1));
       }
       break;
     }
@@ -390,7 +422,7 @@ function dispatchShortcutAction(channel: string, ...args: unknown[]): void {
         void window.api.terminal.sendBindingAction(terminalId, "reset_font_size");
       } else {
         const ctx = getWebViewContext();
-        if (ctx) void window.api.browser.resetZoom(ctx.paneId);
+        if (ctx) ctx.resetZoom();
       }
       break;
     }
@@ -427,17 +459,17 @@ function dispatchShortcutAction(channel: string, ...args: unknown[]): void {
     }
     case "app:browser-zoom-in": {
       const ctx = getBrowserContext();
-      if (ctx) void window.api.browser.setZoom(ctx.paneId, clampZoom(ctx.currentZoom + 0.1));
+      if (ctx) ctx.applyZoom(clampZoom(ctx.currentZoom + 0.1));
       break;
     }
     case "app:browser-zoom-out": {
       const ctx = getBrowserContext();
-      if (ctx) void window.api.browser.setZoom(ctx.paneId, clampZoom(ctx.currentZoom - 0.1));
+      if (ctx) ctx.applyZoom(clampZoom(ctx.currentZoom - 0.1));
       break;
     }
     case "app:browser-zoom-reset": {
       const ctx = getBrowserContext();
-      if (ctx) void window.api.browser.resetZoom(ctx.paneId);
+      if (ctx) ctx.resetZoom();
       break;
     }
     case "app:browser-devtools": {

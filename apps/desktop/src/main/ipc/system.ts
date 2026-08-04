@@ -290,20 +290,27 @@ export function registerSystemIpc(mainWindow: BrowserWindow, appUpdater?: AppUpd
 
       for (const item of items) {
         if (typeof item !== "object" || item === null) continue;
-        const { id, label, destructive } = item as {
+        const { id, label, destructive, disabled, separatorBefore } = item as {
           id?: string;
           label?: string;
           destructive?: boolean;
+          disabled?: boolean;
+          separatorBefore?: boolean;
         };
         if (typeof id !== "string" || typeof label !== "string") continue;
 
+        // Destructive entries are pushed below a divider once, so the
+        // dangerous end of the menu is always visually separated.
         if (destructive && !hasDestructive) {
           hasDestructive = true;
+          template.push({ type: "separator" });
+        } else if (separatorBefore === true && template.length > 0) {
           template.push({ type: "separator" });
         }
 
         template.push({
           label,
+          ...(disabled === true ? { enabled: false } : {}),
           click: () => resolve(id),
         });
       }

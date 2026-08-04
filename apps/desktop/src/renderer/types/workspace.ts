@@ -1,3 +1,5 @@
+import type { BrowserViewportSetting } from "../lib/browser-viewport";
+
 export type PaneType = "terminal" | "browser" | "editor" | "t3code" | "note";
 
 export interface DirectTerminalConfig {
@@ -26,7 +28,14 @@ export type TerminalConfig =
 
 export interface BrowserConfig {
   url: string;
+  /**
+   * The user's zoom level. Authoritative — the factor handed to Electron also
+   * carries device mode's fit-to-panel scale, so it must not be read back from
+   * runtime state. See `resolveBrowserViewportLayout`.
+   */
   zoom?: number;
+  /** Responsive-design mode. Absent means fill the pane. */
+  viewport?: BrowserViewportSetting;
 }
 
 export interface EditorConfig {

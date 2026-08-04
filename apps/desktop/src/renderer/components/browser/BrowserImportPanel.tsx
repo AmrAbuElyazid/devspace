@@ -263,7 +263,7 @@ export default function BrowserImportPanel() {
                 "flex items-center justify-between gap-3 px-3 py-2 rounded-md border text-ui-xs",
                 importState.status === "error" &&
                   importState.code === "SAFARI_FULL_DISK_ACCESS_REQUIRED"
-                  ? "bg-status-warning/10 border-status-warning/30 text-foreground"
+                  ? "bg-warning/10 border-warning/30 text-warning-foreground"
                   : "bg-surface border-border text-muted-foreground",
               )}
             >
@@ -336,7 +336,7 @@ export default function BrowserImportPanel() {
             <div
               className={cn(
                 "flex items-center justify-between gap-3 px-3 py-2.5 rounded-md border",
-                "bg-status-warning/10 border-status-warning/30 text-ui-sm text-foreground",
+                "bg-warning/10 border-warning/30 text-ui-sm text-warning-foreground",
               )}
             >
               <span>
@@ -442,7 +442,7 @@ function StatusInline({ status, message }: { status: string; message: string }) 
         <LoaderCircle size={12} className="animate-spin flex-shrink-0" />
       ) : null}
       {status === "success" ? (
-        <CheckCircle2 size={12} className="flex-shrink-0 text-status-success" />
+        <CheckCircle2 size={12} className="flex-shrink-0 text-success-foreground" />
       ) : null}
       {status === "error" ? <AlertCircle size={12} className="flex-shrink-0" /> : null}
       <span>{message}</span>

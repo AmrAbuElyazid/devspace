@@ -95,9 +95,9 @@ export function useBrowserBridge(): void {
             updatePaneConfig(paneId, { url });
           },
           persistCommittedNavigation: state.isLoading === false,
-          persistZoomChange: (paneId, zoom) => {
-            updateBrowserPaneZoom(paneId, zoom);
-          },
+          // Zoom is not persisted from runtime state: pane config is the
+          // source of truth for the user's zoom, and the factor the main
+          // process reports includes device mode's fit-to-panel scale.
         });
 
         const pane = useWorkspaceStore.getState().panes[state.paneId];
@@ -141,6 +141,11 @@ export function useBrowserBridge(): void {
           return;
         }
 
+        if (action === "page-copy-address") {
+          await writeClipboardText(request.pageUrl);
+          return;
+        }
+
         if (action === "page-open-external") {
           window.api.shell.openExternal(request.pageUrl);
           return;
@@ -161,15 +166,27 @@ export function useBrowserBridge(): void {
           return;
         }
 
+        if (action === "image-open-external" && request.imageUrl) {
+          window.api.shell.openExternal(request.imageUrl);
+          return;
+        }
+
+        if (action === "image-copy-address" && request.imageUrl) {
+          await writeClipboardText(request.imageUrl);
+          return;
+        }
+
         if (action === "selection-copy" && request.selectionText) {
           await writeClipboardText(request.selectionText);
           return;
         }
 
-        if (
-          action !== "link-open-new-tab" &&
-          !(action === "selection-search-web" && request.selectionText)
-        ) {
+        // Everything below opens a new browser pane in the focused group.
+        const opensNewTab =
+          (action === "link-open-new-tab" && request.linkUrl !== null) ||
+          (action === "image-open-new-tab" && request.imageUrl !== null) ||
+          (action === "selection-search-web" && request.selectionText !== null);
+        if (!opensNewTab) {
           return;
         }
 
@@ -193,9 +210,11 @@ export function useBrowserBridge(): void {
         const targetUrl =
           action === "link-open-new-tab"
             ? request.linkUrl
-            : request.selectionText
-              ? getBrowserContextMenuSearchUrl(request.selectionText)
-              : null;
+            : action === "image-open-new-tab"
+              ? request.imageUrl
+              : request.selectionText
+                ? getBrowserContextMenuSearchUrl(request.selectionText)
+                : null;
         if (!targetUrl) {
           return;
         }

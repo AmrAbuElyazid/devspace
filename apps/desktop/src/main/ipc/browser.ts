@@ -151,21 +151,6 @@ export function registerBrowserIpc(
     browserPaneManager.toggleDevTools(paneId);
   });
 
-  safeHandle("browser:showContextMenu", (_event, paneId: unknown, position?: unknown) => {
-    if (typeof paneId !== "string") return;
-    if (position && (typeof position !== "object" || position === null)) return;
-
-    let nextPosition: { x: number; y: number } | undefined;
-    if (position && typeof position === "object" && position !== null) {
-      const next = position as Partial<{ x: number; y: number }>;
-      if (typeof next.x === "number" && typeof next.y === "number") {
-        nextPosition = { x: next.x, y: next.y };
-      }
-    }
-
-    browserPaneManager.showContextMenu(paneId, nextPosition);
-  });
-
   safeHandle("browser:resolvePermission", (_event, requestToken: unknown, decision: unknown) => {
     if (typeof requestToken !== "string") return;
     if (decision !== "allow-once" && decision !== "allow-for-session" && decision !== "deny") {

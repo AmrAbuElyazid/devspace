@@ -41,7 +41,7 @@ export function PaneStatusCard({
         <div
           className={cn(
             "inline-flex items-center gap-1.5 font-mono text-ui-micro uppercase tracking-[0.12em]",
-            tone === "error" ? "text-destructive" : "text-status-warning",
+            tone === "error" ? "text-destructive" : "text-warning-foreground",
           )}
         >
           <AlertTriangle size={11} />

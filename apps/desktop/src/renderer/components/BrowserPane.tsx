@@ -1,5 +1,16 @@
 import type { ReactElement } from "react";
-import { ArrowLeft, ArrowRight, ExternalLink, RotateCw, Search, X } from "lucide-react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  ExternalLink,
+  Monitor,
+  RotateCw,
+  Search,
+  Smartphone,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react";
 
 import { resolveDisplayString } from "../../shared/shortcuts";
 import { useBrowserPaneController } from "./browser/useBrowserPaneController";
@@ -12,6 +23,9 @@ import BrowserSecurityIndicator from "./browser/BrowserSecurityIndicator";
 import BrowserFindBar from "./browser/BrowserFindBar";
 import BrowserPermissionPrompt from "./browser/BrowserPermissionPrompt";
 import BrowserPaneStatusSurface from "./browser/BrowserPaneStatusSurface";
+import BrowserDeviceToolbar from "./browser/BrowserDeviceToolbar";
+import BrowserViewportResizeHandles from "./browser/BrowserViewportResizeHandles";
+import { BROWSER_DEVICE_TOOLBAR_HEIGHT, BROWSER_VIEWPORT_RAIL_SIZE } from "@/lib/browser-viewport";
 
 interface BrowserPaneProps {
   paneId: string;
@@ -63,11 +77,26 @@ export default function BrowserPane({
   isActive = true,
 }: BrowserPaneProps): ReactElement {
   const {
+    activeDrag,
     activePermissionRequest,
+    aspectRatio,
     canGoBack,
     canGoForward,
+    commitViewport,
+    contentRef,
     currentUrl,
+    effectiveViewport,
     failure,
+    handleResizeKeyDown,
+    handleResizePointerDown,
+    handleZoomIn,
+    handleZoomOut,
+    handleZoomReset,
+    layout,
+    panel,
+    setAspectRatio,
+    toggleDeviceMode,
+    userZoom,
     findBarFocusToken,
     findState,
     handleAddressBarSubmit,
@@ -87,6 +116,21 @@ export default function BrowserPane({
     securityLabel,
     setInputUrl,
   } = useBrowserPaneController({ paneId, workspaceId, config, isFocused, isActive });
+
+  const inDeviceMode = effectiveViewport.kind === "device";
+
+  // Centre the frame inside the area left over once the device toolbar strip
+  // and the drag rails have taken their share. Clamped at the rail so an
+  // oversized frame stays pinned rather than drifting under the chrome.
+  const deviceArea = {
+    width: Math.max(1, panel.width - BROWSER_VIEWPORT_RAIL_SIZE * 2),
+    height: Math.max(1, panel.height - BROWSER_DEVICE_TOOLBAR_HEIGHT - BROWSER_VIEWPORT_RAIL_SIZE),
+  };
+  const frameLeft =
+    BROWSER_VIEWPORT_RAIL_SIZE + Math.max(0, Math.round((deviceArea.width - layout.viewWidth) / 2));
+  const frameTop =
+    BROWSER_DEVICE_TOOLBAR_HEIGHT +
+    Math.max(0, Math.round((deviceArea.height - layout.viewHeight) / 2));
 
   return (
     <div className="flex flex-col h-full w-full bg-background">
@@ -152,6 +196,55 @@ export default function BrowserPane({
           </NavButton>
         </HintTooltip>
 
+        <div className="flex items-center shrink-0" role="group" aria-label="Zoom">
+          <HintTooltip content="Zoom out" shortcut={resolveDisplayString("browser-zoom-out")}>
+            <NavButton onClick={handleZoomOut} disabled={userZoom <= 0.25} ariaLabel="Zoom out">
+              <ZoomOut size={13} />
+            </NavButton>
+          </HintTooltip>
+          <HintTooltip content="Reset zoom" shortcut={resolveDisplayString("browser-zoom-reset")}>
+            <button
+              type="button"
+              onClick={handleZoomReset}
+              aria-label={`Zoom ${Math.round(userZoom * 100)}%, reset`}
+              className={cn(
+                "chrome-focus inline-flex h-7 min-w-11 items-center justify-center rounded-md px-1",
+                "font-mono text-ui-micro tabular-nums transition-colors",
+                // At 100% the readout is noise, so it recedes; any other level
+                // is state the user needs to see at a glance.
+                userZoom === 1
+                  ? "text-muted-foreground/60 hover:bg-row-hover hover:text-foreground"
+                  : "bg-brand-soft text-brand hover:bg-row-hover",
+              )}
+            >
+              {Math.round(userZoom * 100)}%
+            </button>
+          </HintTooltip>
+          <HintTooltip content="Zoom in" shortcut={resolveDisplayString("browser-zoom-in")}>
+            <NavButton onClick={handleZoomIn} disabled={userZoom >= 3} ariaLabel="Zoom in">
+              <ZoomIn size={13} />
+            </NavButton>
+          </HintTooltip>
+        </div>
+
+        <HintTooltip content={inDeviceMode ? "Exit device mode" : "Toggle device mode"}>
+          <button
+            type="button"
+            onClick={toggleDeviceMode}
+            aria-label="Toggle device mode"
+            aria-pressed={inDeviceMode}
+            className={cn(
+              "chrome-focus inline-flex size-7 shrink-0 items-center justify-center rounded-md",
+              "transition-colors",
+              inDeviceMode
+                ? "bg-brand-soft text-brand"
+                : "text-muted-foreground hover:bg-row-hover hover:text-foreground",
+            )}
+          >
+            {inDeviceMode ? <Smartphone size={14} /> : <Monitor size={14} />}
+          </button>
+        </HintTooltip>
+
         <HintTooltip content="Open in external browser">
           <NavButton
             onClick={() => window.api.shell.openExternal(currentUrl)}
@@ -192,16 +285,65 @@ export default function BrowserPane({
         />
       )}
 
-      {/* Native WebContentsView slot */}
-      <div className="relative flex-1 min-h-0">
+      {/* Native WebContentsView slot.
+
+          The view is composited above the renderer, so nothing can be drawn on
+          top of it. Device mode works with that rather than against it: the
+          placeholder — which is what the native-view store measures and the
+          view tracks — is shrunk to the device frame, and every piece of device
+          chrome is laid out in the margin around it. */}
+      <div ref={contentRef} className="relative flex-1 min-h-0 bg-elevated/40">
         {failure && (
           <BrowserPaneStatusSurface failure={failure} onPrimaryAction={handleFailureRetry} />
         )}
+
+        {inDeviceMode && effectiveViewport.kind === "device" && (
+          <BrowserDeviceToolbar
+            setting={effectiveViewport}
+            displaySize={{ width: layout.cssWidth, height: layout.cssHeight }}
+            aspectRatio={aspectRatio}
+            fitScale={layout.fitScale}
+            paneWidth={panel.width}
+            onChange={commitViewport}
+            onAspectRatioChange={setAspectRatio}
+            onExit={toggleDeviceMode}
+          />
+        )}
+
         <div
           ref={placeholderRef}
-          className="absolute inset-0 bg-background data-[hidden=true]:invisible"
+          className={cn(
+            "absolute bg-background data-[hidden=true]:invisible",
+            !layout.fillsPanel && "ring-1 ring-border shadow-overlay",
+          )}
+          style={
+            layout.fillsPanel
+              ? { inset: 0 }
+              : {
+                  left: frameLeft,
+                  top: frameTop,
+                  width: layout.viewWidth,
+                  height: layout.viewHeight,
+                }
+          }
           data-hidden={!isVisible ? "true" : undefined}
         />
+
+        {inDeviceMode && !layout.fillsPanel && (
+          <>
+            <BrowserViewportResizeHandles
+              geometry={{
+                left: frameLeft,
+                top: frameTop,
+                width: layout.viewWidth,
+                height: layout.viewHeight,
+              }}
+              activeDirection={activeDrag?.direction ?? null}
+              onPointerDown={handleResizePointerDown}
+              onKeyDown={handleResizeKeyDown}
+            />
+          </>
+        )}
       </div>
     </div>
   );

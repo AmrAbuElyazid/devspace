@@ -305,8 +305,6 @@ const bridge: DevspaceBridge = {
     stopFindInPage: (paneId, action) =>
       ipcRenderer.invoke("browser:stopFindInPage", paneId, action),
     toggleDevTools: (paneId) => ipcRenderer.invoke("browser:toggleDevTools", paneId),
-    showContextMenu: (paneId, position) =>
-      ipcRenderer.invoke("browser:showContextMenu", paneId, position),
     resolvePermission: (requestToken, decision) =>
       ipcRenderer.invoke("browser:resolvePermission", requestToken, decision),
     listProfiles: (browser) => ipcRenderer.invoke("browser:listProfiles", browser),

@@ -999,7 +999,7 @@ function InstallCliButton() {
 
   if (status === "done") {
     return (
-      <span className="font-mono text-ui-micro text-status-success">
+      <span className="font-mono text-ui-micro text-success-foreground">
         installed at /usr/local/bin/devspace
       </span>
     );

@@ -44,7 +44,7 @@ export interface BrowserFindInPageOptions {
 
 export type BrowserStopFindAction = "clearSelection" | "keepSelection" | "activateSelection";
 export type BrowserPermissionDecision = "allow-once" | "allow-for-session" | "deny";
-export type BrowserContextMenuTarget = "page" | "link" | "selection";
+export type BrowserContextMenuTarget = "page" | "link" | "selection" | "image";
 
 export interface BrowserFailureState {
   kind: "navigation" | "crash";
@@ -73,6 +73,7 @@ export interface BrowserContextMenuRequest {
   target: BrowserContextMenuTarget;
   pageUrl: string;
   linkUrl: string | null;
+  imageUrl: string | null;
   selectionText: string | null;
   canGoBack: boolean;
   canGoForward: boolean;
