@@ -655,7 +655,7 @@ export default function Sidebar() {
               scroll viewport rather than hugging the rows, so the empty space
               below the list is a drop target too. */}
             <div className="flex-1 min-h-0 overflow-hidden">
-              <ScrollArea className="h-full scroll-fade-top">
+              <ScrollArea className="h-full">
                 <div className="flex min-h-full flex-col">
                   <div
                     ref={setMainRootRef}

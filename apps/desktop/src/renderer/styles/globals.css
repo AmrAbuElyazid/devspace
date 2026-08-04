@@ -455,50 +455,6 @@ body {
   background-size: 256px 256px;
 }
 
-/* ─── Scroll fade ─────────────────────────────────────────────────────
-   Fades rows as they pass under a sticky header. A mask on the scroll
-   container fades the content itself, which keeps working when the header
-   and the list share one background — a gradient overlay in the header
-   only works when it has a solid color to fade to. The extra full-black
-   layers preserve the bottom of the list and the scrollbar gutter, which a
-   single top gradient would otherwise fade out too.
-*/
-@utility scroll-fade-top {
-  --scroll-fade-height: 2rem;
-  -webkit-mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0%,
-      oklch(0 0 0 / 10%) 12%,
-      oklch(0 0 0 / 45%) 34%,
-      oklch(0 0 0 / 82%) 62%,
-      black 100%
-    ),
-    linear-gradient(black, black), linear-gradient(black, black);
-  -webkit-mask-position: top, bottom, right;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size:
-    100% var(--scroll-fade-height),
-    100% calc(100% - var(--scroll-fade-height)),
-    8px 100%;
-  mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0%,
-      oklch(0 0 0 / 10%) 12%,
-      oklch(0 0 0 / 45%) 34%,
-      oklch(0 0 0 / 82%) 62%,
-      black 100%
-    ),
-    linear-gradient(black, black), linear-gradient(black, black);
-  mask-position: top, bottom, right;
-  mask-repeat: no-repeat;
-  mask-size:
-    100% var(--scroll-fade-height),
-    100% calc(100% - var(--scroll-fade-height)),
-    8px 100%;
-}
-
 /* ─── Theme swap ──────────────────────────────────────────────────────
    Applied to <html> for one frame around a light/dark switch. Without it
    every element with a color transition runs its own 120ms cross-fade at
