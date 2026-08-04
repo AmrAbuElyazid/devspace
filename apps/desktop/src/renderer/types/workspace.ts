@@ -62,6 +62,13 @@ export type PaneOfType<T extends PaneType> = T extends PaneType
   ? {
       id: string;
       title: string;
+      /**
+       * Set once the user renames the tab by hand, which pins the title
+       * against the live one its content reports. Without it a renamed
+       * browser tab is overwritten by the next page title, and a renamed
+       * terminal by the next OSC title sequence.
+       */
+      titleOverridden?: boolean;
       type: T;
       config: PaneConfigByType[T];
     }

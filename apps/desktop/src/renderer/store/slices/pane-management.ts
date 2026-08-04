@@ -7,7 +7,12 @@ import type { WorkspaceState, StoreGet, StoreSet } from "../workspace-state";
 
 type PaneSlice = Pick<
   WorkspaceState,
-  "addPane" | "removePane" | "updatePaneConfig" | "updateBrowserPaneZoom" | "updatePaneTitle"
+  | "addPane"
+  | "removePane"
+  | "updatePaneConfig"
+  | "updateBrowserPaneZoom"
+  | "updatePaneTitle"
+  | "renamePane"
 >;
 
 export function createPaneManagementSlice(
@@ -109,12 +114,27 @@ export function createPaneManagementSlice(
       });
     },
 
+    /**
+     * Push a title reported by the pane's content — a page title, an OSC
+     * sequence, a note's first line. Yields to a manual rename.
+     */
     updatePaneTitle(paneId, title) {
+      set((state) => {
+        const pane = state.panes[paneId];
+        if (!pane || pane.titleOverridden || pane.title === title) return state;
+        return {
+          panes: { ...state.panes, [paneId]: { ...pane, title } },
+        };
+      });
+    },
+
+    /** Rename from the tab bar. Pins the title against content updates. */
+    renamePane(paneId, title) {
       set((state) => {
         const pane = state.panes[paneId];
         if (!pane) return state;
         return {
-          panes: { ...state.panes, [paneId]: { ...pane, title } },
+          panes: { ...state.panes, [paneId]: { ...pane, title, titleOverridden: true } },
         };
       });
     },

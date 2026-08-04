@@ -180,6 +180,7 @@ export interface WorkspaceState {
   updatePaneConfig: (paneId: string, updates: Partial<PaneConfig>) => void;
   updateBrowserPaneZoom: (paneId: string, zoom: number) => void;
   updatePaneTitle: (paneId: string, title: string) => void;
+  renamePane: (paneId: string, title: string) => void;
 }
 
 // ---------------------------------------------------------------------------

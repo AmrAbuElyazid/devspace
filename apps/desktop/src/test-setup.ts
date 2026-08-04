@@ -44,6 +44,28 @@ if (typeof Element !== "undefined" && typeof Element.prototype.getAnimations !==
   Element.prototype.getAnimations = noAnimations;
 }
 
+// Stub PointerEvent — jsdom only implements MouseEvent, but base-ui drives its
+// menus, selects and popovers off pointer events, so a test that opens one has
+// no way to dispatch the event that would open it.
+// Guarded on MouseEvent too: this file also runs for node-environment tests,
+// where there is no DOM to subclass.
+if (typeof globalThis.PointerEvent === "undefined" && typeof MouseEvent !== "undefined") {
+  class StubPointerEvent extends MouseEvent {
+    readonly pointerId: number;
+    readonly pointerType: string;
+    readonly isPrimary: boolean;
+
+    constructor(type: string, params: PointerEventInit = {}) {
+      super(type, params);
+      this.pointerId = params.pointerId ?? 0;
+      this.pointerType = params.pointerType ?? "mouse";
+      this.isPrimary = params.isPrimary ?? true;
+    }
+  }
+
+  globalThis.PointerEvent = StubPointerEvent as unknown as typeof PointerEvent;
+}
+
 const originalEmitWarning = process.emitWarning.bind(process);
 process.emitWarning = ((warning: string | Error, ...args: unknown[]) => {
   const message = typeof warning === "string" ? warning : warning.message;

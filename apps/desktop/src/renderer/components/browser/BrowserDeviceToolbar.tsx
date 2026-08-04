@@ -48,6 +48,8 @@ interface Props {
   fitScale: number;
   /** Pane width, used to drop labels on narrow panes rather than overflow. */
   paneWidth: number;
+  /** Raised while the preset popup is open, so the pane can yield its view. */
+  onPopupOpenChange: (open: boolean) => void;
   onChange: (next: BrowserViewportSetting) => void;
   onAspectRatioChange: (aspectRatio: number | null) => void;
   onExit: () => void;
@@ -67,6 +69,7 @@ export default function BrowserDeviceToolbar({
   aspectRatio,
   fitScale,
   paneWidth,
+  onPopupOpenChange,
   onChange,
   onAspectRatioChange,
   onExit,
@@ -192,7 +195,12 @@ export default function BrowserDeviceToolbar({
         <span className="shrink-0 text-ui-micro font-medium text-muted-foreground">Device</span>
       )}
 
-      <Select items={SELECT_ITEMS} value={selectedValue} onValueChange={selectPreset}>
+      <Select
+        items={SELECT_ITEMS}
+        value={selectedValue}
+        onValueChange={selectPreset}
+        onOpenChange={onPopupOpenChange}
+      >
         <SelectTrigger
           size="sm"
           aria-label="Device preset"
@@ -272,6 +280,7 @@ export default function BrowserDeviceToolbar({
         // than over the frame because the native browser view composites above
         // the renderer and would hide anything drawn inside the frame rect.
         <HintTooltip
+          dense
           content={`Scaled to fit the pane. The page still lays out at ${displaySize.width}px wide.`}
         >
           <span className="shrink-0 rounded-md bg-elevated px-1.5 py-0.5 font-mono text-ui-micro tabular-nums text-muted-foreground">
@@ -280,7 +289,10 @@ export default function BrowserDeviceToolbar({
         </HintTooltip>
       )}
 
-      <HintTooltip content={aspectRatio === null ? "Lock aspect ratio" : "Unlock aspect ratio"}>
+      <HintTooltip
+        dense
+        content={aspectRatio === null ? "Lock aspect ratio" : "Unlock aspect ratio"}
+      >
         <button
           type="button"
           aria-label={aspectRatio === null ? "Lock aspect ratio" : "Unlock aspect ratio"}
@@ -303,7 +315,7 @@ export default function BrowserDeviceToolbar({
         </button>
       </HintTooltip>
 
-      <HintTooltip content="Rotate">
+      <HintTooltip content="Rotate" dense>
         <button
           type="button"
           aria-label="Rotate viewport"
@@ -318,7 +330,7 @@ export default function BrowserDeviceToolbar({
         </button>
       </HintTooltip>
 
-      <HintTooltip content="Exit device mode">
+      <HintTooltip content="Exit device mode" dense>
         <button
           type="button"
           aria-label="Exit device mode"

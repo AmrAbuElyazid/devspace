@@ -20,6 +20,15 @@ interface HintTooltipProps {
   align?: "start" | "center" | "end";
   /** Disable the tooltip without removing the trigger. */
   disabled?: boolean;
+  /**
+   * Compact placement for pane toolbars, which sit directly above a native
+   * view with only ~36px of chrome above them.
+   *
+   * A tooltip that flips downward there is not merely cramped — it is painted
+   * under an OS-level view and never appears at all. Dropping the arrow and
+   * closing the gap keeps it inside that budget so it always resolves upward.
+   */
+  dense?: boolean;
 }
 
 /**
@@ -35,6 +44,7 @@ export function HintTooltip({
   sideOffset = 6,
   align = "center",
   disabled = false,
+  dense = false,
 }: HintTooltipProps) {
   if (disabled) return <>{children}</>;
 
@@ -44,9 +54,10 @@ export function HintTooltip({
     <Tooltip>
       <TooltipTrigger render={<span className="inline-flex">{children as any}</span>} />
       <TooltipContent
-        side={side}
-        sideOffset={sideOffset}
+        side={dense ? "top" : side}
+        sideOffset={dense ? 2 : sideOffset}
         align={align}
+        showArrow={!dense}
         className="gap-2 px-2 py-1 text-ui-xs"
       >
         <span>{content}</span>

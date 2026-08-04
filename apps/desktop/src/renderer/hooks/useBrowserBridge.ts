@@ -23,6 +23,40 @@ function getDefaultEditorPaneTitle(folderPath?: string): string {
   return `VC: ${folderName}`;
 }
 
+/** Tab width is ~14 characters; past that the ellipsis carries no information. */
+const BROWSER_TITLE_MAX_LENGTH = 60;
+
+/**
+ * Tab label for a browser pane.
+ *
+ * Prefers the page's own title and falls back to the host, so a page that has
+ * not set one — or has not finished loading — still says where it is instead
+ * of sitting on the generic "Browser". Returns null when there is nothing
+ * better to show, leaving the existing title alone.
+ */
+export function getBrowserPaneTitle(runtimeTitle: string, url: string): string | null {
+  const title = runtimeTitle.trim();
+  if (title.length > 0 && title !== "about:blank") {
+    return title.length > BROWSER_TITLE_MAX_LENGTH
+      ? `${title.slice(0, BROWSER_TITLE_MAX_LENGTH - 1).trimEnd()}…`
+      : title;
+  }
+
+  // Chromium reports the raw URL as the title before a page commits one.
+  try {
+    const { hostname, protocol } = new URL(url);
+    if (hostname) {
+      return hostname.replace(/^www\./, "");
+    }
+    // about:blank and friends have no host and no title worth showing.
+    if (protocol === "about:") return null;
+  } catch {
+    // Not a parseable URL — nothing better than what the pane already has.
+  }
+
+  return null;
+}
+
 function getManagedEditorPaneTitle(
   currentTitle: string,
   folderPath: string | undefined,
@@ -101,6 +135,15 @@ export function useBrowserBridge(): void {
         });
 
         const pane = useWorkspaceStore.getState().panes[state.paneId];
+
+        if (pane?.type === "browser") {
+          const nextTitle = getBrowserPaneTitle(state.title, state.url);
+          if (nextTitle) {
+            updatePaneTitle(state.paneId, nextTitle);
+          }
+          return;
+        }
+
         if (pane?.type !== "editor") {
           return;
         }

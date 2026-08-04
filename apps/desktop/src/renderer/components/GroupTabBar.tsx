@@ -66,7 +66,7 @@ const SortableGroupTab = memo(function SortableGroupTab({
   onContextMenu: (event: React.MouseEvent, tabId: string) => void;
 }) {
   const pane = useWorkspaceStore((s) => s.panes[paneId]);
-  const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
+  const renamePane = useWorkspaceStore((s) => s.renamePane);
   const pendingEditId = useWorkspaceStore((s) => s.pendingEditId);
   const pendingEditType = useWorkspaceStore((s) => s.pendingEditType);
   const clearPendingEdit = useWorkspaceStore((s) => s.clearPendingEdit);
@@ -103,9 +103,9 @@ const SortableGroupTab = memo(function SortableGroupTab({
 
   const commitEdit = useCallback(() => {
     const trimmed = editValue.trim();
-    if (trimmed && trimmed !== (pane?.title ?? "")) updatePaneTitle(paneId, trimmed);
+    if (trimmed && trimmed !== (pane?.title ?? "")) renamePane(paneId, trimmed);
     setIsEditing(false);
-  }, [editValue, pane?.title, paneId, updatePaneTitle]);
+  }, [editValue, pane?.title, paneId, renamePane]);
 
   const cancelEdit = useCallback(() => setIsEditing(false), []);
 

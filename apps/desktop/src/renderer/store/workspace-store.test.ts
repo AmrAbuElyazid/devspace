@@ -2114,3 +2114,19 @@ test("removeFolderWithContents on the last folder still leaves a workspace behin
   expect(state.workspaces[0]!.id).not.toBe(onlyId);
   expect(state.activeWorkspaceId).toBe(state.workspaces[0]!.id);
 });
+
+test("a content-reported title yields to a manual rename", () => {
+  const store = useWorkspaceStore.getState();
+  const paneId = store.addPane("browser", { url: "https://example.com" });
+
+  store.updatePaneTitle(paneId, "Example Domain");
+  expect(useWorkspaceStore.getState().panes[paneId]?.title).toBe("Example Domain");
+
+  useWorkspaceStore.getState().renamePane(paneId, "Docs");
+  expect(useWorkspaceStore.getState().panes[paneId]?.title).toBe("Docs");
+
+  // The page navigating must not undo what the user typed.
+  useWorkspaceStore.getState().updatePaneTitle(paneId, "Some Other Page");
+  expect(useWorkspaceStore.getState().panes[paneId]?.title).toBe("Docs");
+  expect(useWorkspaceStore.getState().panes[paneId]?.titleOverridden).toBe(true);
+});

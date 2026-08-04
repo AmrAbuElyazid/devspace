@@ -66,6 +66,7 @@ export function useBrowserPaneController({
   const addressBarFocusToken = useBrowserStore((s) => s.addressBarFocusTokenByPaneId[paneId] ?? 0);
   const findBarFocusToken = useBrowserStore((s) => s.findBarFocusTokenByPaneId[paneId] ?? 0);
   const closeFindBar = useBrowserStore((s) => s.closeFindBar);
+  const openFindBar = useBrowserStore((s) => s.openFindBar);
   const clearPendingPermissionRequest = useBrowserStore((s) => s.clearPendingPermissionRequest);
   const upsertRuntimeState = useBrowserStore((s) => s.upsertRuntimeState);
   const initialUrl = useMemo(
@@ -255,6 +256,35 @@ export function useBrowserPaneController({
     }
   }, [layout.zoomFactor, paneId, runtimeState]);
 
+  // A new browser tab opens on about:blank with nothing to look at, so put the
+  // caret in the address bar and let the user just type. A restored pane
+  // carries its own URL, which is what keeps this from firing on every session
+  // restore; a background tab is skipped so opening one cannot steal focus.
+  const didRequestInitialFocusRef = useRef(false);
+  useEffect(() => {
+    if (didRequestInitialFocusRef.current || paneSession.phase !== "ready") {
+      return;
+    }
+
+    if (initialUrl !== "about:blank") {
+      // Opened at a URL, or restored with one. Nothing to type.
+      didRequestInitialFocusRef.current = true;
+      return;
+    }
+
+    // Wait for focus rather than giving up on it. A pane can reach "ready"
+    // a render before its group is marked focused, and a tab opened in the
+    // background should still get a focused address bar when it is switched
+    // to. The initialUrl guard above closes this off the moment the pane
+    // navigates anywhere, so it cannot fire over a page the user is reading.
+    if (!isFocused || !isActive) {
+      return;
+    }
+
+    didRequestInitialFocusRef.current = true;
+    useBrowserStore.getState().requestAddressBarFocus(paneId);
+  }, [initialUrl, isActive, isFocused, paneId, paneSession.phase]);
+
   useEffect(() => {
     if (addressBarFocusToken === 0) {
       return;
@@ -366,6 +396,10 @@ export function useBrowserPaneController({
     [currentUrl, failure, handleAddressBarSubmit, isVisible, paneId],
   );
 
+  const handleOpenFindBar = useCallback(() => {
+    openFindBar(paneId);
+  }, [openFindBar, paneId]);
+
   const handleCloseFindBar = useCallback(() => {
     closeFindBar(paneId);
     void window.api.browser.stopFindInPage(paneId);
@@ -422,6 +456,7 @@ export function useBrowserPaneController({
     handleAddressBarSubmit,
     handleCloseFindBar,
     handleDismissPermissionPrompt,
+    handleOpenFindBar,
     handleFailureRetry,
     handleKeyDown,
     handlePermissionDecision,

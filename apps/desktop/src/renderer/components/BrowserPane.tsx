@@ -1,9 +1,12 @@
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  Code2,
   ExternalLink,
+  Maximize2,
   Monitor,
+  MoreHorizontal,
   RotateCw,
   Search,
   Smartphone,
@@ -18,6 +21,15 @@ import type { BrowserConfig } from "@/types/workspace";
 import { cn } from "@/lib/utils";
 
 import { HintTooltip } from "@/components/ui/hint-tooltip";
+import { useNativeViewSuppression } from "@/hooks/useNativeViewSuppression";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuShortcut,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import BrowserSecurityIndicator from "./browser/BrowserSecurityIndicator";
 import BrowserFindBar from "./browser/BrowserFindBar";
@@ -89,6 +101,7 @@ export default function BrowserPane({
     failure,
     handleResizeKeyDown,
     handleResizePointerDown,
+    handleOpenFindBar,
     handleZoomIn,
     handleZoomOut,
     handleZoomReset,
@@ -99,7 +112,6 @@ export default function BrowserPane({
     userZoom,
     findBarFocusToken,
     findState,
-    handleAddressBarSubmit,
     handleCloseFindBar,
     handleDismissPermissionPrompt,
     handleFailureRetry,
@@ -116,6 +128,11 @@ export default function BrowserPane({
     securityLabel,
     setInputUrl,
   } = useBrowserPaneController({ paneId, workspaceId, config, isFocused, isActive });
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [devicePopupOpen, setDevicePopupOpen] = useState(false);
+  // Both open downward over the native view, which would otherwise swallow them.
+  useNativeViewSuppression(paneId, menuOpen || devicePopupOpen);
 
   const inDeviceMode = effectiveViewport.kind === "device";
 
@@ -134,9 +151,18 @@ export default function BrowserPane({
 
   return (
     <div className="flex flex-col h-full w-full bg-background">
-      {/* Toolbar */}
-      <div className="flex items-center gap-1 shrink-0 h-9 px-1.5 bg-rail border-b border-border relative z-[2]">
-        <HintTooltip content="Back" shortcut={resolveDisplayString("browser-back")}>
+      {/* Toolbar.
+
+          Shaped like a browser's rather than a control panel's: a nav cluster,
+          one wide address field carrying its own lock glyph, and a single
+          overflow for everything secondary. The previous row put eleven
+          controls at equal weight — three of them zoom — so the address bar,
+          the only thing anyone aims at, was squeezed between them.
+
+          Every tooltip in here opens upward. Downward is the WebContentsView,
+          which composites above the renderer and swallows them whole. */}
+      <div className="flex items-center gap-0.5 shrink-0 h-9 px-1.5 bg-rail border-b border-border relative z-[2]">
+        <HintTooltip content="Back" dense shortcut={resolveDisplayString("browser-back")}>
           <NavButton
             onClick={() => void window.api.browser.back(paneId)}
             disabled={!canGoBack}
@@ -145,7 +171,7 @@ export default function BrowserPane({
             <ArrowLeft size={15} />
           </NavButton>
         </HintTooltip>
-        <HintTooltip content="Forward" shortcut={resolveDisplayString("browser-forward")}>
+        <HintTooltip content="Forward" dense shortcut={resolveDisplayString("browser-forward")}>
           <NavButton
             onClick={() => void window.api.browser.forward(paneId)}
             disabled={!canGoForward}
@@ -156,6 +182,7 @@ export default function BrowserPane({
         </HintTooltip>
         <HintTooltip
           content={isLoading ? "Stop" : "Reload"}
+          dense
           shortcut={resolveDisplayString("browser-reload")}
         >
           <NavButton onClick={handleReloadOrStop} ariaLabel={isLoading ? "Stop" : "Reload"}>
@@ -163,71 +190,55 @@ export default function BrowserPane({
           </NavButton>
         </HintTooltip>
 
-        <BrowserSecurityIndicator isSecure={isSecure} securityLabel={securityLabel} />
-
-        <input
-          ref={inputRef}
-          type="text"
-          value={inputUrl}
-          onChange={(event) => setInputUrl(event.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={() => setInputUrl(currentUrl)}
-          onFocus={() => inputRef.current?.select()}
-          placeholder="Enter URL or search..."
+        {/* Address field. The lock lives inside the field so the two read as
+            one object — the identity of what you are looking at. */}
+        <div
           className={cn(
-            "flex-1 min-w-0 h-7 px-2.5 rounded-md",
-            "bg-surface border border-border/70",
-            "font-mono text-ui-xs text-foreground placeholder:text-muted-foreground/60",
-            "outline-none",
-            "focus:border-brand-edge focus:ring-2 focus:ring-brand-soft",
-            "transition-colors",
+            "group/url flex flex-1 min-w-0 items-center gap-1 h-7 ml-1 pl-1.5 pr-1 rounded-md",
+            "bg-surface border border-border/70 transition-colors",
+            "focus-within:border-brand-edge focus-within:ring-2 focus-within:ring-brand-soft",
           )}
-        />
-
-        <HintTooltip content="Go">
-          <NavButton
-            onMouseDown={(event) => {
-              event.preventDefault();
-              handleAddressBarSubmit(inputRef.current?.value);
-            }}
-            ariaLabel="Go"
-          >
-            <Search size={13} />
-          </NavButton>
-        </HintTooltip>
-
-        <div className="flex items-center shrink-0" role="group" aria-label="Zoom">
-          <HintTooltip content="Zoom out" shortcut={resolveDisplayString("browser-zoom-out")}>
-            <NavButton onClick={handleZoomOut} disabled={userZoom <= 0.25} ariaLabel="Zoom out">
-              <ZoomOut size={13} />
-            </NavButton>
-          </HintTooltip>
-          <HintTooltip content="Reset zoom" shortcut={resolveDisplayString("browser-zoom-reset")}>
-            <button
-              type="button"
-              onClick={handleZoomReset}
-              aria-label={`Zoom ${Math.round(userZoom * 100)}%, reset`}
-              className={cn(
-                "chrome-focus inline-flex h-7 min-w-11 items-center justify-center rounded-md px-1",
-                "font-mono text-ui-micro tabular-nums transition-colors",
-                // At 100% the readout is noise, so it recedes; any other level
-                // is state the user needs to see at a glance.
-                userZoom === 1
-                  ? "text-muted-foreground/60 hover:bg-row-hover hover:text-foreground"
-                  : "bg-brand-soft text-brand hover:bg-row-hover",
-              )}
+        >
+          <BrowserSecurityIndicator isSecure={isSecure} securityLabel={securityLabel} />
+          <input
+            ref={inputRef}
+            type="text"
+            value={inputUrl}
+            onChange={(event) => setInputUrl(event.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={() => setInputUrl(currentUrl)}
+            onFocus={() => inputRef.current?.select()}
+            placeholder="Search or enter address"
+            aria-label="Address and search bar"
+            className={cn(
+              "flex-1 min-w-0 bg-transparent outline-none",
+              "font-mono text-ui-xs text-foreground placeholder:text-muted-foreground/60",
+            )}
+          />
+          {/* Only worth toolbar space when it is not the default. Clicking it
+              resets, which is the only thing anyone wants from a zoom readout. */}
+          {userZoom !== 1 && (
+            <HintTooltip
+              content="Reset zoom"
+              dense
+              shortcut={resolveDisplayString("browser-zoom-reset")}
             >
-              {Math.round(userZoom * 100)}%
-            </button>
-          </HintTooltip>
-          <HintTooltip content="Zoom in" shortcut={resolveDisplayString("browser-zoom-in")}>
-            <NavButton onClick={handleZoomIn} disabled={userZoom >= 3} ariaLabel="Zoom in">
-              <ZoomIn size={13} />
-            </NavButton>
-          </HintTooltip>
+              <button
+                type="button"
+                onClick={handleZoomReset}
+                aria-label={`Zoom ${Math.round(userZoom * 100)} percent, click to reset`}
+                className={cn(
+                  "chrome-focus shrink-0 rounded px-1 py-0.5 bg-brand-soft text-brand",
+                  "font-mono text-ui-micro tabular-nums transition-colors hover:bg-row-hover",
+                )}
+              >
+                {Math.round(userZoom * 100)}%
+              </button>
+            </HintTooltip>
+          )}
         </div>
 
-        <HintTooltip content={inDeviceMode ? "Exit device mode" : "Toggle device mode"}>
+        <HintTooltip content={inDeviceMode ? "Exit device mode" : "Device mode"} dense>
           <button
             type="button"
             onClick={toggleDeviceMode}
@@ -245,14 +256,64 @@ export default function BrowserPane({
           </button>
         </HintTooltip>
 
-        <HintTooltip content="Open in external browser">
-          <NavButton
-            onClick={() => window.api.shell.openExternal(currentUrl)}
-            ariaLabel="Open in external browser"
-          >
-            <ExternalLink size={13} />
-          </NavButton>
-        </HintTooltip>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenuTrigger
+            render={
+              <button
+                type="button"
+                aria-label="Browser menu"
+                className={cn(
+                  "chrome-focus inline-flex size-7 shrink-0 items-center justify-center rounded-md",
+                  "text-muted-foreground transition-colors hover:bg-row-hover hover:text-foreground",
+                  "aria-expanded:bg-row-hover aria-expanded:text-foreground",
+                )}
+              >
+                <MoreHorizontal size={15} />
+              </button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuItem onClick={handleZoomIn} disabled={userZoom >= 3}>
+              <ZoomIn />
+              Zoom in
+              <DropdownMenuShortcut>{resolveDisplayString("browser-zoom-in")}</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleZoomOut} disabled={userZoom <= 0.25}>
+              <ZoomOut />
+              Zoom out
+              <DropdownMenuShortcut>
+                {resolveDisplayString("browser-zoom-out")}
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleZoomReset} disabled={userZoom === 1}>
+              <Maximize2 />
+              Reset zoom
+              <DropdownMenuShortcut>{Math.round(userZoom * 100)}%</DropdownMenuShortcut>
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem onClick={handleOpenFindBar}>
+              <Search />
+              Find in page
+              <DropdownMenuShortcut>{resolveDisplayString("browser-find")}</DropdownMenuShortcut>
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => window.api.shell.openExternal(currentUrl)}>
+              <ExternalLink />
+              Open in external browser
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem onClick={() => void window.api.browser.toggleDevTools(paneId)}>
+              <Code2 />
+              Toggle DevTools
+              <DropdownMenuShortcut>
+                {resolveDisplayString("browser-devtools")}
+              </DropdownMenuShortcut>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {isFindBarOpen && (
@@ -304,6 +365,7 @@ export default function BrowserPane({
             aspectRatio={aspectRatio}
             fitScale={layout.fitScale}
             paneWidth={panel.width}
+            onPopupOpenChange={setDevicePopupOpen}
             onChange={commitViewport}
             onAspectRatioChange={setAspectRatio}
             onExit={toggleDeviceMode}
