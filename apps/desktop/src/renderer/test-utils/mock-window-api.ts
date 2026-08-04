@@ -168,6 +168,7 @@ function createDefaultWindowApi(): DevspaceBridge {
       findInPage: vi.fn(async () => {}),
       stopFindInPage: vi.fn(async () => {}),
       toggleDevTools: vi.fn(async () => {}),
+      resolveFavicon: vi.fn(async () => null),
       resolvePermission: vi.fn(async () => {}),
       listProfiles: vi.fn(async () => []),
       importBrowser: vi.fn(async () => ({

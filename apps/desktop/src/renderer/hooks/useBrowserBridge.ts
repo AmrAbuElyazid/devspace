@@ -141,6 +141,12 @@ export function useBrowserBridge(): void {
           if (nextTitle) {
             updatePaneTitle(state.paneId, nextTitle);
           }
+          // Chromium clears the favicon on every navigation before the next
+          // page reports one. Persisting that blank would flash the tab back
+          // to a globe mid-navigation, so only a real icon is written.
+          if (state.faviconUrl && state.faviconUrl !== pane.config.faviconUrl) {
+            updatePaneConfig(state.paneId, { faviconUrl: state.faviconUrl });
+          }
           return;
         }
 

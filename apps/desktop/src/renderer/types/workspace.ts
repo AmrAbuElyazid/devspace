@@ -36,6 +36,13 @@ export interface BrowserConfig {
   zoom?: number;
   /** Responsive-design mode. Absent means fill the pane. */
   viewport?: BrowserViewportSetting;
+  /**
+   * Source URL of the page's favicon. Persisted rather than kept in runtime
+   * state because a pane evicted past the warm limit — or restored from a
+   * previous session — has no runtime state, and its tab should not fall back
+   * to a generic globe just because its view is not currently alive.
+   */
+  faviconUrl?: string;
 }
 
 export interface EditorConfig {

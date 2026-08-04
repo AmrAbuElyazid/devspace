@@ -243,6 +243,8 @@ export interface BrowserBridge {
   findInPage: (paneId: string, query: string, options?: BrowserFindInPageOptions) => Promise<void>;
   stopFindInPage: (paneId: string, action?: BrowserStopFindAction) => Promise<void>;
   toggleDevTools: (paneId: string) => Promise<void>;
+  /** Fetches a favicon in the main process and returns it as a data URL. */
+  resolveFavicon: (url: string) => Promise<string | null>;
   resolvePermission: (requestToken: string, decision: BrowserPermissionDecision) => Promise<void>;
   listProfiles: (browser: BrowserImportSource) => Promise<BrowserProfileDescriptor[]>;
   importBrowser: (

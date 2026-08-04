@@ -15,6 +15,7 @@ import {
   translateRendererBoundsToContentBounds,
 } from "../browser/browser-view-bounds";
 import { getSafeBrowserUrl, parseNativeViewBounds } from "../validation";
+import { resolveFaviconDataUrl } from "../browser/browser-favicon-service";
 import { safeHandle, safeOn } from "./shared";
 
 function parseBrowserImportMode(mode: unknown): BrowserImportMode | null {
@@ -149,6 +150,12 @@ export function registerBrowserIpc(
   safeHandle("browser:toggleDevTools", (_event, paneId: unknown) => {
     if (typeof paneId !== "string") return;
     browserPaneManager.toggleDevTools(paneId);
+  });
+
+  // Resolved here rather than in the renderer: the renderer's CSP forbids
+  // remote images, and widening it would let any page fetch arbitrary URLs.
+  safeHandle("browser:resolveFavicon", async (_event, url: unknown) => {
+    return resolveFaviconDataUrl(url);
   });
 
   safeHandle("browser:resolvePermission", (_event, requestToken: unknown, decision: unknown) => {

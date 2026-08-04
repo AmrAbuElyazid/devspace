@@ -11,7 +11,7 @@ import { useModifierHeldContext } from "@/App";
 import { resolveDisplayString } from "../../shared/shortcuts";
 import { TITLE_BAR_HEIGHT_COMPACT } from "../../shared/chrome";
 import type { ContextMenuItem } from "../../shared/types";
-import { paneTypeIcons } from "@/lib/pane-type-meta";
+import PaneTabIcon from "@/components/PaneTabIcon";
 import { releaseNativeFocus } from "@/lib/native-pane-focus";
 import { cn } from "@/lib/utils";
 import type { PaneGroup } from "@/types/workspace";
@@ -118,7 +118,6 @@ const SortableGroupTab = memo(function SortableGroupTab({
   }, [removeGroupTab, workspaceId, groupId, tabId]);
 
   const isDropTarget = isOver && !isDragging && isSidebarWorkspaceDrag;
-  const Icon = pane ? paneTypeIcons[pane.type] : paneTypeIcons.terminal;
 
   return (
     <div
@@ -160,11 +159,13 @@ const SortableGroupTab = memo(function SortableGroupTab({
         showInsertAfter && "insert-after-x",
       )}
     >
-      <Icon
-        width={10}
-        height={10}
-        className={cn("shrink-0", isActive ? "text-brand" : "text-muted-foreground")}
-      />
+      {pane ? (
+        <PaneTabIcon
+          pane={pane}
+          size={10}
+          className={isActive ? "text-brand" : "text-muted-foreground"}
+        />
+      ) : null}
       {isEditing ? (
         <input
           ref={inputRef}
