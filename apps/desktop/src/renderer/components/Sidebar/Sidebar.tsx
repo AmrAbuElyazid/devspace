@@ -36,6 +36,7 @@ import {
 
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
 import { clampSidebarWidth } from "@/lib/sidebar-width";
+import { SidebarSectionHeader } from "./SidebarSectionHeader";
 import { SidebarProvider, type SidebarContextValue } from "./SidebarContext";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import { useSidebarSelection } from "./useSidebarSelection";
@@ -561,10 +562,9 @@ export default function Sidebar() {
                 </button>
               </HintTooltip>
             </div>
-            <div className="px-2 pt-1 pb-2"></div>
 
             {/* Search */}
-            <div className="px-2 pb-2">
+            <div className="px-2 pb-1">
               <div
                 className={cn(
                   "no-drag relative flex items-center h-8 rounded-lg gap-2 px-2.5",
@@ -605,11 +605,11 @@ export default function Sidebar() {
             {/* Pinned section */}
             {pinnedSidebarNodes.length > 0 && (
               <>
-                <SectionHeader label="Pinned" />
+                <SidebarSectionHeader label="Pinned" />
                 <div
                   ref={setPinnedRootRef}
                   className={cn(
-                    "relative px-2 pb-2 flex flex-col gap-0.5",
+                    "relative px-2 flex flex-col gap-0.5",
                     isRelevantDrag && isPinnedRootOver && "drop-into-folder",
                     pinnedRootInsertClass,
                   )}
@@ -625,7 +625,7 @@ export default function Sidebar() {
             )}
 
             {/* Workspaces section */}
-            <SectionHeader label="Workspaces" count={workspaces.length}>
+            <SidebarSectionHeader label="Workspaces" count={workspaces.length}>
               <HintTooltip content="New folder" sideOffset={4} align="end">
                 <button
                   type="button"
@@ -659,7 +659,7 @@ export default function Sidebar() {
                   <Plus size={12} strokeWidth={2.2} />
                 </button>
               </HintTooltip>
-            </SectionHeader>
+            </SidebarSectionHeader>
 
             {/* Workspace tree. The droppable stretches to the bottom of the
               scroll viewport rather than hugging the rows, so the empty space
@@ -862,26 +862,4 @@ function describeDeletionBody(scope: DeletionScope | null): string {
   const inside =
     scope.folderCount > 0 ? " Everything inside the selected folders goes with them." : "";
   return `${workspaces} will be permanently removed, shutting down any terminals still running in them.${inside} ${undone}`;
-}
-
-function SectionHeader({
-  label,
-  count,
-  children,
-}: {
-  label: string;
-  count?: number;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="flex h-6 items-center gap-1.5 px-1.5 mt-1 select-none text-muted-foreground">
-      <span className="flex-1 truncate text-ui-xs font-medium tracking-[0.06em] uppercase">
-        {label}
-      </span>
-      {typeof count === "number" ? (
-        <span className="shrink-0 font-mono text-ui-micro tabular-nums opacity-55">{count}</span>
-      ) : null}
-      {children ? <div className="flex shrink-0 items-center gap-0.5">{children}</div> : null}
-    </div>
-  );
 }

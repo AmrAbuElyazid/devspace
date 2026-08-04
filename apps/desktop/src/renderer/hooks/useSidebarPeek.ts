@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 import { titleBarHeightFor } from "../../shared/chrome";
 import type { SidebarPeekConfig } from "../../shared/sidebar-peek";
-import { buildSidebarPeekRows } from "../lib/sidebar-peek-snapshot";
+import { buildSidebarPeekSections } from "../lib/sidebar-peek-snapshot";
 import { useDevServerStore } from "../store/dev-server-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useWorkspaceStore } from "../store/workspace-store";
@@ -17,7 +17,8 @@ function currentConfig(): SidebarPeekConfig {
     snapshot: {
       dark: document.documentElement.classList.contains("dark"),
       compact: settings.sidebarDensity === "compact",
-      rows: buildSidebarPeekRows({
+      width: settings.sidebarWidth,
+      sections: buildSidebarPeekSections({
         pinnedSidebarNodes: workspace.pinnedSidebarNodes,
         sidebarTree: workspace.sidebarTree,
         workspaces: workspace.workspaces,

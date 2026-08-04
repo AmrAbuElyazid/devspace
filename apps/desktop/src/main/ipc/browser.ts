@@ -80,10 +80,6 @@ export function registerBrowserIpc(
     sidebarPeekWatcher?.setConfig(config);
   });
 
-  safeOn("sidebar:peekHeight", (_event, height: unknown) => {
-    paneOverlayManager?.setPeekHeight(height);
-  });
-
   safeOn("sidebar:peekActivate", (_event, workspaceId: unknown) => {
     if (typeof workspaceId !== "string" || workspaceId.length === 0) return;
     sidebarPeekWatcher?.dismiss();

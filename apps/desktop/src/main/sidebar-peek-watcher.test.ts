@@ -12,7 +12,7 @@ function config(overrides: Partial<SidebarPeekConfig> = {}): SidebarPeekConfig {
   return {
     enabled: true,
     titleBarHeight: 38,
-    snapshot: { dark: true, compact: false, rows: [] },
+    snapshot: { dark: true, compact: false, width: 264, sections: [] },
     ...overrides,
   };
 }

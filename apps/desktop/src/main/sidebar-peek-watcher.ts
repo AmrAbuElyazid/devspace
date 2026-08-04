@@ -107,6 +107,7 @@ export class SidebarPeekWatcher {
       cursor: this.deps.getCursorPoint(),
       content,
       titleBarHeight: config.titleBarHeight,
+      width: config.snapshot.width,
     });
 
     if (!shouldOpen) {
@@ -127,7 +128,7 @@ export class SidebarPeekWatcher {
     if (!config || !content) return;
     // Recomputed on every push rather than cached: the window can be moved or
     // resized while the panel is open.
-    this.deps.show(peekPanelRect(content, config.titleBarHeight), config);
+    this.deps.show(peekPanelRect(content, config.titleBarHeight, config.snapshot.width), config);
   }
 
   private close(): void {

@@ -15,6 +15,39 @@ interface ActivePaneContext {
   pane: Pane;
 }
 
+/**
+ * How many renderer fields are currently insisting on the keyboard.
+ *
+ * `hasEditableRendererFocus()` reads `document.activeElement`, which is both
+ * too late and not the truth. Too late because a field is only the active
+ * element a frame after it mounts, and a `window:focus` arriving in that gap —
+ * closing the context menu that started a rename does exactly that — hands the
+ * keyboard to the pane behind it. Not the truth because the pane is an AppKit
+ * view beside the web contents, so it can hold the window's first responder
+ * while the DOM still reports the field as focused: the caret blinks and every
+ * keystroke goes to the terminal.
+ */
+let keyboardClaims = 0;
+
+/**
+ * Hold the keyboard in the renderer until the returned function is called.
+ * Safe to call twice; the second release is a no-op.
+ */
+export function claimRendererKeyboard(): () => void {
+  keyboardClaims += 1;
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    keyboardClaims = Math.max(0, keyboardClaims - 1);
+  };
+}
+
+/** Test seam: drops every outstanding claim. */
+export function resetRendererKeyboardClaims(): void {
+  keyboardClaims = 0;
+}
+
 export function hasEditableRendererFocus(): boolean {
   if (typeof document === "undefined") {
     return false;
@@ -129,7 +162,7 @@ export function focusActiveNativePane(): void {
     return;
   }
 
-  if (hasEditableRendererFocus()) {
+  if (keyboardClaims > 0 || hasEditableRendererFocus()) {
     return;
   }
 

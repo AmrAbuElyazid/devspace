@@ -2,7 +2,6 @@ import {
   SIDEBAR_PEEK_HOT_BAND,
   SIDEBAR_PEEK_INSET,
   SIDEBAR_PEEK_LEAVE_SLOP,
-  SIDEBAR_PEEK_WIDTH,
 } from "../shared/sidebar-peek";
 
 export interface Rect {
@@ -20,16 +19,16 @@ export interface Point {
 /**
  * Where the hover panel sits, in screen coordinates.
  *
- * A floating card rather than a full-height slab: it clears the traffic lights
- * at the top rather than covering them, and it reads as something laid over the
- * workspace instead of something the workspace made room for.
+ * The sidebar's own width and the full height of the workspace, because this
+ * *is* the sidebar — laid over the panes rather than pushing them aside. It
+ * starts below the title bar so the traffic lights stay visible and clickable.
  */
-export function peekPanelRect(content: Rect, titleBarHeight: number): Rect {
+export function peekPanelRect(content: Rect, titleBarHeight: number, width: number): Rect {
   const top = content.y + Math.max(titleBarHeight, SIDEBAR_PEEK_INSET);
   return {
     x: content.x + SIDEBAR_PEEK_INSET,
     y: top,
-    width: SIDEBAR_PEEK_WIDTH,
+    width: Math.round(width),
     height: Math.max(0, content.y + content.height - top - SIDEBAR_PEEK_INSET),
   };
 }
@@ -71,8 +70,9 @@ export function nextPeekVisibility(args: {
   cursor: Point;
   content: Rect;
   titleBarHeight: number;
+  width: number;
 }): boolean {
-  const { open, cursor, content, titleBarHeight } = args;
+  const { open, cursor, content, titleBarHeight, width } = args;
 
   if (!open) return contains(peekHotBand(content, titleBarHeight), cursor);
 
@@ -80,7 +80,7 @@ export function nextPeekVisibility(args: {
   // edge, so the pixels the cursor arrived through are outside the panel and
   // would otherwise close it the moment it opened.
   return (
-    contains(peekPanelRect(content, titleBarHeight), cursor, SIDEBAR_PEEK_LEAVE_SLOP) ||
+    contains(peekPanelRect(content, titleBarHeight, width), cursor, SIDEBAR_PEEK_LEAVE_SLOP) ||
     contains(peekHotBand(content, titleBarHeight), cursor)
   );
 }

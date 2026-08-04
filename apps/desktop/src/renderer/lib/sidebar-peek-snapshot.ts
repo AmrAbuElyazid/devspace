@@ -1,4 +1,4 @@
-import type { SidebarPeekRow } from "../../shared/sidebar-peek";
+import type { SidebarPeekRow, SidebarPeekSection } from "../../shared/sidebar-peek";
 import type { WorkspaceSidebarInfo } from "../store/workspace-sidebar-metadata";
 import type { SidebarNode, Workspace } from "../types/workspace";
 import { resolveWorkspaceColor, workspaceColorVar } from "./workspace-color";
@@ -46,15 +46,27 @@ function flatten(
 }
 
 /**
- * The sidebar flattened into rows the overlay's renderer can draw.
+ * The sidebar flattened into the sections the overlay's renderer can draw.
  *
- * Pinned nodes come first, as they do in the sidebar itself. Everything is
- * resolved here — colours to CSS values, ports and pane counts already merged —
- * because the other side has no store to look anything up in.
+ * Same sections in the same order as the sidebar itself, because the panel is
+ * meant to read as the sidebar rather than as a menu of workspaces. Everything
+ * is resolved here — colours to CSS values, ports and pane counts already
+ * merged — because the other side has no store to look anything up in. An
+ * empty section is dropped, exactly as the sidebar drops it.
  */
-export function buildSidebarPeekRows(source: SidebarPeekSource): SidebarPeekRow[] {
-  const rows: SidebarPeekRow[] = [];
-  flatten(source.pinnedSidebarNodes, 0, source, rows);
-  flatten(source.sidebarTree, 0, source, rows);
-  return rows;
+export function buildSidebarPeekSections(source: SidebarPeekSource): SidebarPeekSection[] {
+  const sections: SidebarPeekSection[] = [];
+
+  const pinned: SidebarPeekRow[] = [];
+  flatten(source.pinnedSidebarNodes, 0, source, pinned);
+  // No count on Pinned, because the sidebar's own header does not show one.
+  if (pinned.length > 0) sections.push({ label: "Pinned", rows: pinned });
+
+  const main: SidebarPeekRow[] = [];
+  flatten(source.sidebarTree, 0, source, main);
+  // Every workspace, not every row — the sidebar counts workspaces, and the
+  // rows here include folder headings and exclude anything collapsed away.
+  sections.push({ label: "Workspaces", count: source.workspaces.length, rows: main });
+
+  return sections;
 }

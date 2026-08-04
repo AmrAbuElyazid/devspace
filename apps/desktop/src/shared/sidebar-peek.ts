@@ -28,10 +28,19 @@ export interface SidebarPeekFolder {
 
 export type SidebarPeekRow = SidebarPeekWorkspace | SidebarPeekFolder;
 
+export interface SidebarPeekSection {
+  label: string;
+  /** Matches whatever the sidebar's own header shows, or absent if it shows none. */
+  count?: number;
+  rows: SidebarPeekRow[];
+}
+
 export interface SidebarPeekSnapshot {
   dark: boolean;
   compact: boolean;
-  rows: SidebarPeekRow[];
+  /** The sidebar's own width, so the panel is the sidebar rather than a popup. */
+  width: number;
+  sections: SidebarPeekSection[];
 }
 
 /** What the main process needs to know to watch for the hover and place the panel. */
@@ -67,11 +76,17 @@ export function isSidebarPeekConfig(value: unknown): value is SidebarPeekConfig 
   const snapshot = config.snapshot;
   if (typeof snapshot !== "object" || snapshot === null) return false;
   if (typeof snapshot.dark !== "boolean" || typeof snapshot.compact !== "boolean") return false;
-  return Array.isArray(snapshot.rows) && snapshot.rows.every(isPeekRow);
+  if (typeof snapshot.width !== "number" || !Number.isFinite(snapshot.width)) return false;
+  if (!Array.isArray(snapshot.sections)) return false;
+  return snapshot.sections.every(
+    (section) =>
+      typeof section === "object" &&
+      section !== null &&
+      typeof (section as SidebarPeekSection).label === "string" &&
+      Array.isArray((section as SidebarPeekSection).rows) &&
+      (section as SidebarPeekSection).rows.every(isPeekRow),
+  );
 }
-
-/** Width of the floating panel, in CSS pixels. */
-export const SIDEBAR_PEEK_WIDTH = 264;
 
 /** Gap between the panel and the window edges. */
 export const SIDEBAR_PEEK_INSET = 8;

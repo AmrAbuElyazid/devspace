@@ -261,7 +261,6 @@ const bridge: DevspaceBridge = {
   sidebarPeek: {
     setConfig: (config) => ipcRenderer.send("sidebar:setPeekConfig", config),
     activate: (workspaceId) => ipcRenderer.send("sidebar:peekActivate", workspaceId),
-    reportHeight: (height) => ipcRenderer.send("sidebar:peekHeight", height),
     onPanel: (callback) => {
       const listener = (_event: unknown, snapshot: SidebarPeekSnapshot | null): void => {
         callback(snapshot);

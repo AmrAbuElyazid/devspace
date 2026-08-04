@@ -1,14 +1,21 @@
+// @vitest-environment jsdom
+
 import { beforeEach, expect, test } from "vitest";
 import {
+  claimRendererKeyboard,
+  focusActiveNativePane,
+  resetRendererKeyboardClaims,
   syncWorkspaceFocusForNativeNotification,
   syncWorkspaceFocusForPane,
 } from "./native-pane-focus";
+import { installMockWindowApi } from "../test-utils/mock-window-api";
 import { useNativeViewStore } from "../store/native-view-store";
 import { useWorkspaceStore } from "../store/workspace-store";
 import { buildPaneOwnersByPaneId } from "../store/pane-ownership";
 import type { Pane, PaneGroup, Workspace } from "../types/workspace";
 
 beforeEach(() => {
+  resetRendererKeyboardClaims();
   const workspaces: Workspace[] = [
     {
       id: "workspace-1",
@@ -128,4 +135,46 @@ test("a focus notification from an off-screen pane is dropped", () => {
   const state = useWorkspaceStore.getState();
   expect(state.activeWorkspaceId).toBe("workspace-1");
   expect(state.paneGroups["group-2"]?.activeTabId).toBe("tab-3");
+});
+
+test("a claimed keyboard keeps the panes' hands off it", () => {
+  useNativeViewStore.setState({
+    views: { "pane-1": "terminal" },
+    visibleTerminals: ["pane-1"],
+    visibleBrowsers: [],
+  });
+  installMockWindowApi();
+
+  // A rename field mounts and claims the keyboard. Closing the context menu
+  // that started it refocuses the window, and the renderer answers that by
+  // focusing whatever pane is active — which is how a rename field ends up
+  // holding the caret while every keystroke goes to the terminal beside it.
+  const release = claimRendererKeyboard();
+  focusActiveNativePane();
+  expect(window.api.terminal.focus).not.toHaveBeenCalled();
+
+  release();
+  focusActiveNativePane();
+  expect(window.api.terminal.focus).toHaveBeenCalled();
+});
+
+test("releasing twice does not drop someone else's claim", () => {
+  useNativeViewStore.setState({
+    views: { "pane-1": "terminal" },
+    visibleTerminals: ["pane-1"],
+    visibleBrowsers: [],
+  });
+  installMockWindowApi();
+
+  const first = claimRendererKeyboard();
+  const second = claimRendererKeyboard();
+  first();
+  first();
+
+  focusActiveNativePane();
+  expect(window.api.terminal.focus).not.toHaveBeenCalled();
+
+  second();
+  focusActiveNativePane();
+  expect(window.api.terminal.focus).toHaveBeenCalled();
 });

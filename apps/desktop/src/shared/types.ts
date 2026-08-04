@@ -204,11 +204,6 @@ export interface DevspaceBridge {
     setConfig: (config: SidebarPeekConfig) => void;
     /** Sent by the overlay renderer when a row in the panel is clicked. */
     activate: (workspaceId: string) => void;
-    /**
-     * Sent by the overlay renderer once the panel is laid out, so the child
-     * window can be trimmed to the card rather than covering the whole column.
-     */
-    reportHeight: (height: number) => void;
     /** Subscribed by the overlay renderer. Null closes the panel. */
     onPanel: (callback: (snapshot: SidebarPeekSnapshot | null) => void) => () => void;
     /** Subscribed by the main renderer, to switch workspace on a panel click. */
