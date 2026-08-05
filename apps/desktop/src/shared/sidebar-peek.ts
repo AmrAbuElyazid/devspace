@@ -88,8 +88,14 @@ export function isSidebarPeekConfig(value: unknown): value is SidebarPeekConfig 
   );
 }
 
-/** Gap between the panel and the window edges. */
-export const SIDEBAR_PEEK_INSET = 8;
+/**
+ * How long the panel takes to slide in or out.
+ *
+ * Shared because the main process has to keep the window up for the length of
+ * the exit — hiding it the moment the cursor leaves would make the panel
+ * vanish rather than slide away.
+ */
+export const SIDEBAR_PEEK_ANIMATION_MS = 160;
 
 /**
  * How far into the window the cursor must come to open the panel.

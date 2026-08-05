@@ -63,7 +63,10 @@ function MenuRow({
 
 export default function OverlayRoot(): ReactElement | null {
   const [menu, setMenu] = useState<ActiveMenu | null>(null);
+  // Kept after it closes so the panel has something to animate out; the window
+  // behind it is hidden once the transition is done.
   const [peek, setPeek] = useState<SidebarPeekSnapshot | null>(null);
+  const [peekOpen, setPeekOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
@@ -91,8 +94,13 @@ export default function OverlayRoot(): ReactElement | null {
 
   useEffect(() => {
     return window.api.sidebarPeek.onPanel((snapshot) => {
-      if (snapshot) document.documentElement.classList.toggle("dark", snapshot.dark);
+      if (!snapshot) {
+        setPeekOpen(false);
+        return;
+      }
+      document.documentElement.classList.toggle("dark", snapshot.dark);
       setPeek(snapshot);
+      setPeekOpen(true);
     });
   }, []);
 
@@ -168,7 +176,11 @@ export default function OverlayRoot(): ReactElement | null {
   // the main process closes the panel before it posts a menu.
   if (!menu) {
     return peek ? (
-      <SidebarPeekPanel snapshot={peek} onActivate={window.api.sidebarPeek.activate} />
+      <SidebarPeekPanel
+        snapshot={peek}
+        open={peekOpen}
+        onActivate={window.api.sidebarPeek.activate}
+      />
     ) : null;
   }
 

@@ -1,8 +1,4 @@
-import {
-  SIDEBAR_PEEK_HOT_BAND,
-  SIDEBAR_PEEK_INSET,
-  SIDEBAR_PEEK_LEAVE_SLOP,
-} from "../shared/sidebar-peek";
+import { SIDEBAR_PEEK_HOT_BAND, SIDEBAR_PEEK_LEAVE_SLOP } from "../shared/sidebar-peek";
 
 export interface Rect {
   x: number;
@@ -19,17 +15,19 @@ export interface Point {
 /**
  * Where the hover panel sits, in screen coordinates.
  *
- * The sidebar's own width and the full height of the workspace, because this
- * *is* the sidebar — laid over the panes rather than pushing them aside. It
- * starts below the title bar so the traffic lights stay visible and clickable.
+ * Exactly where the sidebar would be: the same width, hard against the
+ * window's left edge and running to the bottom of it. No inset, because an
+ * inset is what made this read as a floating card rather than as the sidebar
+ * arriving. The only thing it gives up is the title bar, so the traffic lights
+ * and the tab bar stay visible and clickable behind it.
  */
 export function peekPanelRect(content: Rect, titleBarHeight: number, width: number): Rect {
-  const top = content.y + Math.max(titleBarHeight, SIDEBAR_PEEK_INSET);
+  const top = content.y + titleBarHeight;
   return {
-    x: content.x + SIDEBAR_PEEK_INSET,
+    x: content.x,
     y: top,
     width: Math.round(width),
-    height: Math.max(0, content.y + content.height - top - SIDEBAR_PEEK_INSET),
+    height: Math.max(0, content.y + content.height - top),
   };
 }
 

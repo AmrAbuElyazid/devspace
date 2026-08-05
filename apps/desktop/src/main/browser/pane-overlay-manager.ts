@@ -1,7 +1,7 @@
 import type { BaseWindow, BrowserWindow, Rectangle } from "electron";
 
 import type { OverlayMenuRequest } from "../../shared/overlay";
-import type { SidebarPeekSnapshot } from "../../shared/sidebar-peek";
+import { SIDEBAR_PEEK_ANIMATION_MS, type SidebarPeekSnapshot } from "../../shared/sidebar-peek";
 
 interface PaneOverlayManagerDeps {
   getWindow: () => BaseWindow | null;
@@ -55,6 +55,7 @@ export class PaneOverlayManager {
   private peekRect: Rectangle | null = null;
   private peekSnapshot = "";
   private peekToken = 0;
+  private peekHideTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly deps: PaneOverlayManagerDeps) {}
 
@@ -66,8 +67,10 @@ export class PaneOverlayManager {
     // await settles rather than hanging forever.
     this.settle(null);
     // A menu and the peek panel want the same surface at different sizes, so
-    // the menu — which the user asked for explicitly — takes it.
+    // the menu — which the user asked for explicitly — takes it, including any
+    // exit the panel had not finished.
     this.closePeek();
+    this.clearPeekHideTimer();
 
     const surface = this.ensureSurface();
     await this.ready;
@@ -109,6 +112,9 @@ export class PaneOverlayManager {
     if (!parent) return;
 
     const token = ++this.peekToken;
+    // A pending exit is cancelled rather than waited out: the window is still
+    // up, so the panel just slides back in from wherever it had got to.
+    this.clearPeekHideTimer();
     const surface = this.ensureSurface();
     await this.ready;
     // The very first peek of a session is what creates the surface, so this
@@ -169,18 +175,37 @@ export class PaneOverlayManager {
     this.peekRect = null;
     this.peekSnapshot = "";
     const surface = this.surface;
-    if (surface && !surface.isDestroyed()) {
-      surface.webContents.send("overlay:peek", null);
-      surface.hide();
-    }
+    if (!surface || surface.isDestroyed()) return;
+
+    surface.webContents.send("overlay:peek", null);
+    // The window outlives the message by the length of the panel's exit
+    // transition. Hiding it now would make the panel disappear rather than
+    // slide away, which is the whole point of animating it.
+    this.clearPeekHideTimer();
+    const timer = setTimeout(() => {
+      this.peekHideTimer = null;
+      // Reopened, or a menu took the surface, while the panel was leaving.
+      if (this.peekOpen || this.pending) return;
+      if (!surface.isDestroyed()) surface.hide();
+    }, SIDEBAR_PEEK_ANIMATION_MS);
+    timer.unref?.();
+    this.peekHideTimer = timer;
+
     // Deliberately no `parent.focus()` here. The panel is non-focusable, so it
     // never took the keyboard and has none to hand back — and one of the ways
     // in here is the parent's own blur, where grabbing focus would pull the
     // app back in front of whatever the user just switched to.
   }
 
+  private clearPeekHideTimer(): void {
+    if (!this.peekHideTimer) return;
+    clearTimeout(this.peekHideTimer);
+    this.peekHideTimer = null;
+  }
+
   destroy(): void {
     this.settle(null);
+    this.clearPeekHideTimer();
     this.peekOpen = false;
     this.detachFollow();
 

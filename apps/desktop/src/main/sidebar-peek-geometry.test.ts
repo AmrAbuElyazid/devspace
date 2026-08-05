@@ -5,14 +5,19 @@ import { nextPeekVisibility, peekHotBand, peekPanelRect } from "./sidebar-peek-g
 const CONTENT = { x: 100, y: 200, width: 1200, height: 800 };
 const TITLE_BAR = 38;
 
-test("the panel floats clear of the window edges and the title bar", () => {
+test("the panel sits exactly where the sidebar would, minus the title bar", () => {
   const rect = peekPanelRect(CONTENT, TITLE_BAR, 264);
 
-  expect(rect).toEqual({ x: 108, y: 238, width: 264, height: 754 });
+  expect(rect).toEqual({ x: 100, y: 238, width: 264, height: 762 });
 });
 
-test("the panel still clears the edge when the app draws no title bar", () => {
-  expect(peekPanelRect(CONTENT, 0, 264).y).toBe(CONTENT.y + 8);
+test("with no title bar it runs the full height of the window", () => {
+  expect(peekPanelRect(CONTENT, 0, 264)).toEqual({
+    x: CONTENT.x,
+    y: CONTENT.y,
+    width: 264,
+    height: CONTENT.height,
+  });
 });
 
 test("the hot band starts below the title bar, so the traffic lights stay reachable", () => {
@@ -57,8 +62,7 @@ test("a cursor deeper into the window does not open the panel", () => {
   ).toBe(false);
 });
 
-test("an open panel survives the gap between it and the window edge", () => {
-  // The cursor arrived through x=100..108, which is outside the panel itself.
+test("an open panel survives the cursor sitting on the window's own edge", () => {
   expect(
     nextPeekVisibility({
       open: true,
@@ -74,7 +78,7 @@ test("an open panel tolerates the cursor drifting just past its edge", () => {
   expect(
     nextPeekVisibility({
       open: true,
-      cursor: { x: 108 + 264 + 20, y: 600 },
+      cursor: { x: 100 + 264 + 20, y: 600 },
       content: CONTENT,
       titleBarHeight: TITLE_BAR,
       width: 264,

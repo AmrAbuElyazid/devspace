@@ -63,7 +63,7 @@ test("opens at the panel rect when the cursor reaches the edge", () => {
 
   watcher.tick();
 
-  expect(show).toHaveBeenCalledWith({ x: 8, y: 38, width: 264, height: 754 }, expect.anything());
+  expect(show).toHaveBeenCalledWith({ x: 0, y: 38, width: 264, height: 762 }, expect.anything());
 });
 
 test("closes once, when the cursor leaves", () => {

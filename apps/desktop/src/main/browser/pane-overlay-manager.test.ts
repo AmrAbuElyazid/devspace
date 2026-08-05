@@ -1,6 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 
 import { PaneOverlayManager } from "./pane-overlay-manager";
+import { SIDEBAR_PEEK_ANIMATION_MS } from "../../shared/sidebar-peek";
 import { isOverlayMenuRequest } from "../../shared/overlay";
 
 const REQUEST = {
@@ -240,20 +241,47 @@ test("a moved window re-places the open panel", async () => {
   expect(surface.setBounds).toHaveBeenCalledWith({ ...PEEK_RECT, x: 400 });
 });
 
-test("hiding the panel tells the overlay to drop it, and leaves focus alone", async () => {
-  const { manager, surface, window, sent } = harness;
-  const shown = manager.showPeek(PEEK_RECT, PEEK);
-  manager.handleOverlayReady();
-  await shown;
+test("hiding the panel lets it slide out before the window goes", async () => {
+  vi.useFakeTimers();
+  try {
+    const { manager, surface, window, sent } = harness;
+    const shown = manager.showPeek(PEEK_RECT, PEEK);
+    manager.handleOverlayReady();
+    await shown;
 
-  manager.hidePeek();
+    manager.hidePeek();
 
-  expect(sent.at(-1)).toEqual({ channel: "overlay:peek", payload: null });
-  expect(surface.hide).toHaveBeenCalled();
-  // One of the ways in here is the parent's own blur. Taking focus would pull
-  // the app back in front of whatever the user had just switched to — and the
-  // panel is non-focusable, so it has no keyboard to hand back anyway.
-  expect(window.focus).not.toHaveBeenCalled();
+    expect(sent.at(-1)).toEqual({ channel: "overlay:peek", payload: null });
+    // Still up, or the panel would vanish instead of leaving.
+    expect(surface.hide).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(SIDEBAR_PEEK_ANIMATION_MS + 1);
+    expect(surface.hide).toHaveBeenCalled();
+    // One of the ways in here is the parent's own blur. Taking focus would pull
+    // the app back in front of whatever the user had just switched to — and the
+    // panel is non-focusable, so it has no keyboard to hand back anyway.
+    expect(window.focus).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("coming straight back cancels the exit instead of hiding mid-slide", async () => {
+  vi.useFakeTimers();
+  try {
+    const { manager, surface } = harness;
+    const shown = manager.showPeek(PEEK_RECT, PEEK);
+    manager.handleOverlayReady();
+    await shown;
+
+    manager.hidePeek();
+    await manager.showPeek(PEEK_RECT, PEEK);
+    vi.advanceTimersByTime(SIDEBAR_PEEK_ANIMATION_MS * 4);
+
+    expect(surface.hide).not.toHaveBeenCalled();
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("a hide during the overlay's first load cancels the show it raced", async () => {
