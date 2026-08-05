@@ -1,8 +1,22 @@
 import { _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
 import { readFileSync } from "fs";
+import { createServer } from "net";
 import { join } from "path";
 
 const PROJECT_ROOT = join(__dirname, "../..");
+
+/** An ephemeral port the OS just handed out, which nothing else is holding. */
+function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const address = probe.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      probe.close(() => resolve(port));
+    });
+  });
+}
 
 interface LaunchAppOptions {
   executablePath?: string;
@@ -28,6 +42,10 @@ export async function launchApp(options: LaunchAppOptions = {}): Promise<{
   page: Page;
 }> {
   const executablePath = options.executablePath?.trim();
+  // A port of its own, so a suite run alongside a real Devspace — or a dev
+  // server — does not find the CLI endpoint already taken and quietly go
+  // without one.
+  const cliPort = await findFreePort();
   const app = await electron.launch({
     ...(executablePath
       ? { executablePath, args: options.extraArgs ?? [] }
@@ -36,6 +54,7 @@ export async function launchApp(options: LaunchAppOptions = {}): Promise<{
     env: {
       ...process.env,
       NODE_ENV: executablePath ? "production" : "development",
+      DEVSPACE_CLI_PORT: String(cliPort),
       ...options.env,
     },
   });
@@ -89,10 +108,11 @@ export async function getCliAuthToken(app: ElectronApplication): Promise<{
     return electronApp.getPath("userData");
   });
 
-  // Dev mode uses port 21649 (21549 + 100 offset)
-  const port = 21649;
-  const tokenPath = join(userDataPath, "cli", `token.${port}`);
-  const token = readFileSync(tokenPath, "utf-8");
+  // Asked for rather than assumed. The port is per-launch now, so a hardcoded
+  // one sent these requests to whichever Devspace happened to own it — and the
+  // failure looked like a broken CLI rather than a second instance.
+  const port: number = await app.evaluate(() => Number(process.env.DEVSPACE_CLI_PORT));
+  const token = readFileSync(join(userDataPath, "cli", `token.${port}`), "utf-8");
   return { token, port };
 }
 

@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { request } from "node:http";
-import { createCliHttpServer } from "./cli-server";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createCliHttpServer, writeCliAuthTokenFile } from "./cli-server";
 
 function requestServer(
   port: number,
@@ -133,6 +137,36 @@ describe("cli-server", () => {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
       });
+    }
+  });
+});
+
+describe("writeCliAuthTokenFile", () => {
+  it("leaves exactly one token behind, naming the port that was bound", async () => {
+    const userDataPath = await mkdtemp(join(tmpdir(), "devspace-cli-token-"));
+    try {
+      writeCliAuthTokenFile(userDataPath, 21649, "first");
+      writeCliAuthTokenFile(userDataPath, 51000, "second");
+
+      const tokenDir = join(userDataPath, "cli");
+      // The filename is how the CLI finds the port, so one left over from a
+      // run on a different port advertises a server that is no longer there.
+      expect(readdirSync(tokenDir)).toEqual(["token.51000"]);
+      expect(readFileSync(join(tokenDir, "token.51000"), "utf8")).toBe("second");
+    } finally {
+      await rm(userDataPath, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the token readable only by its owner", async () => {
+    const userDataPath = await mkdtemp(join(tmpdir(), "devspace-cli-token-"));
+    try {
+      writeCliAuthTokenFile(userDataPath, 51000, "secret");
+
+      const mode = statSync(join(userDataPath, "cli", "token.51000")).mode & 0o777;
+      expect(mode).toBe(0o600);
+    } finally {
+      await rm(userDataPath, { recursive: true, force: true });
     }
   });
 });

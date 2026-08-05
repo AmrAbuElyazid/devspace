@@ -305,14 +305,17 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  // Write the auth token to a file so the CLI script can read it.
-  // File permissions restrict access to the current user.
-  // The filename includes the port so dev and production don't collide.
-  writeCliAuthTokenFile(app.getPath("userData"), CLI_PORT, cliAuthToken);
-
   // Start the CLI HTTP server only after the single-instance lock succeeds
   // (whenReady won't fire for the second instance since app.quit() was called).
   cliHttpServer.listen(CLI_PORT, "127.0.0.1", () => {
+    // Written here rather than before the bind, and only once the bind has
+    // actually succeeded. The token file names the port, so an instance that
+    // lost the race for it used to overwrite the file with a token for a
+    // server it does not own — pointing `devspace .` at the other instance
+    // with credentials it will reject. File permissions restrict it to the
+    // current user; the filename includes the port so dev and production do
+    // not collide.
+    writeCliAuthTokenFile(app.getPath("userData"), CLI_PORT, cliAuthToken);
     console.log(`[cli] listening on http://127.0.0.1:${CLI_PORT}`);
   });
 

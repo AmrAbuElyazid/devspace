@@ -29,5 +29,17 @@ export const EDITOR_PARTITION = IS_DEV
 /** Suffix for data directories that need isolation. */
 export const DATA_DIR_SUFFIX = IS_DEV ? "-dev" : "";
 
-/** Port for the CLI HTTP server (`devspace .` talks to this). */
-export const CLI_PORT = 21549 + (IS_DEV ? DEV_PORT_OFFSET : 0);
+/**
+ * Port for the CLI HTTP server (`devspace .` talks to this).
+ *
+ * Overridable because it is otherwise fixed per mode, so anything that runs a
+ * second instance — the e2e suite, most obviously, while a real app is open —
+ * finds it already taken and silently has no CLI.
+ */
+export const CLI_PORT = resolveCliPort();
+
+function resolveCliPort(): number {
+  const override = Number(process.env.DEVSPACE_CLI_PORT);
+  if (Number.isInteger(override) && override > 0 && override <= 65535) return override;
+  return 21549 + (IS_DEV ? DEV_PORT_OFFSET : 0);
+}

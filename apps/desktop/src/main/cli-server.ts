@@ -1,4 +1,4 @@
-import { mkdirSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
 import type { Server } from "node:http";
 import { join } from "node:path";
@@ -46,15 +46,43 @@ export function createCliHttpServer(options: CliServerOptions): Server {
     }
   });
 
-  server.on("error", (error) => {
+  server.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EADDRINUSE") {
+      // Another Devspace already owns the port. Not fatal — the app runs fine
+      // without a CLI endpoint — but silence here is what made this look like
+      // a broken CLI rather than a second instance.
+      console.warn(
+        "[cli] port already in use by another Devspace instance; `devspace .` " +
+          "will reach that one. Set DEVSPACE_CLI_PORT to run a second endpoint.",
+      );
+      return;
+    }
     console.error("[cli] HTTP server error:", error);
   });
 
   return server;
 }
 
+/**
+ * Publish the token for the port this instance actually bound.
+ *
+ * Any other `token.*` in the directory goes with it. The filename is how the
+ * CLI finds the port, so one left behind by a previous run on a different port
+ * advertises a server that is no longer there — and the CLI has no way to tell
+ * which of two files is live.
+ */
 export function writeCliAuthTokenFile(userDataPath: string, port: number, authToken: string): void {
   const tokenDir = join(userDataPath, "cli");
   mkdirSync(tokenDir, { recursive: true });
-  writeFileSync(join(tokenDir, `token.${port}`), authToken, { mode: 0o600 });
+
+  const current = `token.${port}`;
+  try {
+    for (const name of readdirSync(tokenDir)) {
+      if (name.startsWith("token.") && name !== current) rmSync(join(tokenDir, name));
+    }
+  } catch (error) {
+    console.warn("[cli] could not clear stale token files:", error);
+  }
+
+  writeFileSync(join(tokenDir, current), authToken, { mode: 0o600 });
 }
