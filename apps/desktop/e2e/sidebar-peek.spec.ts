@@ -4,7 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 
 import { cleanupManagedTmuxSessions, getStoreState, launchApp } from "./helpers/app";
-import { requireCursorDriver } from "./helpers/cursor";
+import { requireCursorDriver, scrollAt } from "./helpers/cursor";
 
 /** Leading pixel offset out of a computed `translate`, e.g. "-264px 0px". */
 function offsetOf(value: string | undefined): number {
@@ -231,6 +231,77 @@ test("the panel slides in rather than appearing", async () => {
     // Where it came to rest is the part that matters, and it outlives the
     // window being hidden — unlike the transition's own end event.
     expect(offsetOf(await readPanelTranslate(app))).toBeLessThan(-20);
+  } finally {
+    if (running) {
+      await cleanupManagedTmuxSessions(running.page);
+      await running.app.close();
+    }
+    await rm(userDataPath, { recursive: true, force: true });
+  }
+});
+
+test("a list longer than the window scrolls, in a panel that never takes focus", async () => {
+  test.setTimeout(180_000);
+  const moveCursor = await requireCursorDriver();
+  const userDataPath = await mkdtemp(join(tmpdir(), "ds-peek-scroll-"));
+  let running: Awaited<ReturnType<typeof launchApp>> | null = null;
+
+  try {
+    running = await launchApp({ env: { DEVSPACE_USER_DATA_PATH: userDataPath } });
+    const { app, page } = running;
+
+    const bounds = await app.evaluate(({ app: electronApp, BrowserWindow }) => {
+      electronApp.focus({ steal: true });
+      const window = BrowserWindow.getAllWindows()[0];
+      window?.setBounds({ x: 60, y: 60, width: 1000, height: 620 });
+      window?.focus();
+      return window?.getContentBounds() ?? null;
+    });
+    if (!bounds) throw new Error("no window bounds");
+    await page.waitForTimeout(1_000);
+
+    await page.evaluate(() => {
+      const store = (window as unknown as Record<string, unknown>).__DEVSPACE_STORE__ as {
+        getState: () => Record<string, unknown>;
+      };
+      const add = store.getState().addWorkspace as (name: string) => string;
+      for (let i = 0; i < 30; i += 1) add(`ws-${i}`);
+      (store.getState().clearPendingEdit as (() => void) | undefined)?.();
+    });
+    await page.waitForTimeout(2_500);
+
+    await page.evaluate(() => {
+      document.querySelector<HTMLElement>('[aria-label="Toggle sidebar"]')?.click();
+    });
+    await page.waitForTimeout(700);
+    await moveCursor(bounds.x + 600, bounds.y + 300, bounds.x + 3, bounds.y + 300, 14);
+    await page.waitForTimeout(900);
+
+    const overflow = await app.evaluate(async ({ BrowserWindow }) => {
+      const surface = BrowserWindow.getAllWindows().find((w) => w.getParentWindow());
+      if (!surface) return null;
+      return surface.webContents.executeJavaScript(`(() => {
+        const panel = document.querySelector("[data-peek-panel]");
+        return { scroll: panel.scrollHeight, client: panel.clientHeight };
+      })()`) as Promise<{ scroll: number; client: number }>;
+    });
+    expect(overflow?.scroll ?? 0).toBeGreaterThan(overflow?.client ?? 0);
+
+    // The panel is deliberately non-focusable, so that it never takes the
+    // keyboard from a pane. Whether such a window is still handed wheel events
+    // is an AppKit question, and the answer decides whether a long workspace
+    // list is reachable at all.
+    await scrollAt(bounds.x + 100, bounds.y + 300, -3, 8);
+    await page.waitForTimeout(500);
+
+    const scrollTop = await app.evaluate(async ({ BrowserWindow }) => {
+      const surface = BrowserWindow.getAllWindows().find((w) => w.getParentWindow());
+      if (!surface) return 0;
+      return surface.webContents.executeJavaScript(
+        `document.querySelector("[data-peek-panel]").scrollTop`,
+      ) as Promise<number>;
+    });
+    expect(scrollTop).toBeGreaterThan(50);
   } finally {
     if (running) {
       await cleanupManagedTmuxSessions(running.page);

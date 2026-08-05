@@ -9,21 +9,40 @@ const execFileAsync = promisify(execFile);
 
 const SOURCE = join(__dirname, "../fixtures/drag.swift");
 const BINARY = join(tmpdir(), "devspace-e2e-drag");
+const SCROLL_SOURCE = join(__dirname, "../fixtures/scroll.swift");
+const SCROLL_BINARY = join(tmpdir(), "devspace-e2e-scroll");
 
 let built: Promise<void> | null = null;
+let scrollBuilt: Promise<void> | null = null;
 let usable: boolean | null = null;
 
-function isStale(): boolean {
+function isStale(binary: string, source: string): boolean {
   try {
-    return statSync(BINARY).mtimeMs < statSync(SOURCE).mtimeMs;
+    return statSync(binary).mtimeMs < statSync(source).mtimeMs;
   } catch {
     return true;
   }
 }
 
+async function compile(binary: string, source: string): Promise<void> {
+  if (!isStale(binary, source)) return;
+  await execFileAsync("/usr/bin/swiftc", ["-O", "-o", binary, source]);
+}
+
 async function build(): Promise<void> {
-  if (!isStale()) return;
-  await execFileAsync("/usr/bin/swiftc", ["-O", "-o", BINARY, SOURCE]);
+  await compile(BINARY, SOURCE);
+}
+
+/** Scroll the wheel over `(x, y)`; negative lines scroll the content down. */
+export async function scrollAt(x: number, y: number, lines: number, steps = 6): Promise<void> {
+  scrollBuilt ??= compile(SCROLL_BINARY, SCROLL_SOURCE);
+  await scrollBuilt;
+  await execFileAsync(SCROLL_BINARY, [
+    String(Math.round(x)),
+    String(Math.round(y)),
+    String(Math.round(lines)),
+    String(steps),
+  ]);
 }
 
 /**
