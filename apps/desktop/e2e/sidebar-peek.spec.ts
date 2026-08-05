@@ -146,6 +146,18 @@ async function recordPanelTransitions(app: ElectronApplication): Promise<void> {
   });
 }
 
+/** The panel's settled `translate`, read straight out of the overlay document. */
+async function readPanelTranslate(app: ElectronApplication): Promise<string> {
+  return app.evaluate(async ({ BrowserWindow }) => {
+    const surface = BrowserWindow.getAllWindows().find((w) => w.getParentWindow());
+    if (!surface) return "";
+    return surface.webContents.executeJavaScript(`(() => {
+      const panel = document.querySelector("[data-peek-panel]");
+      return panel ? getComputedStyle(panel).translate : "";
+    })()`) as Promise<string>;
+  });
+}
+
 async function readPanelTransitions(app: ElectronApplication): Promise<string[][]> {
   return app.evaluate(async ({ BrowserWindow }) => {
     const surface = BrowserWindow.getAllWindows().find((w) => w.getParentWindow());
@@ -201,6 +213,24 @@ test("the panel slides in rather than appearing", async () => {
     // between sliding in and simply being there.
     expect(offsetOf(slide[0]?.[2])).toBeLessThan(-20);
     expect(offsetOf(slide[1]?.[2])).toBe(0);
+
+    // And back out.
+    await moveCursor(bounds.x + 3, bounds.y + 400, bounds.x + 800, bounds.y + 400, 12);
+    await page.waitForTimeout(700);
+    const afterLeaving = await readPanelTransitions(app);
+
+    const exit = afterLeaving
+      .filter(([, property]) => property === "translate")
+      .slice(slide.length);
+    expect(exit[0]?.[0]).toBe("start");
+    // Near rest rather than exactly at it: `transitionstart` is dispatched
+    // asynchronously, so a frame of the 160ms slide has already been
+    // interpolated by the time a handler can read the style back.
+    expect(offsetOf(exit[0]?.[2])).toBeGreaterThan(-40);
+
+    // Where it came to rest is the part that matters, and it outlives the
+    // window being hidden — unlike the transition's own end event.
+    expect(offsetOf(await readPanelTranslate(app))).toBeLessThan(-20);
   } finally {
     if (running) {
       await cleanupManagedTmuxSessions(running.page);
