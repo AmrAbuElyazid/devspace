@@ -6,6 +6,34 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 - No unreleased notes yet.
 
+## v0.5.0 - 2026-08-05
+
+### Summary
+
+- A sidebar release. Rows are rebuilt around what actually tells two workspaces apart — an identity colour, the tail of the directory, and the port anything under them is serving on — and a collapsed sidebar now comes back on a left-edge hover, drawn over the terminals instead of pushing them aside.
+
+### Highlights
+
+**Sidebar**
+
+- Every workspace carries a 2px identity colour of its own, chosen from an eight-hue palette or assigned automatically, and the active row is tinted with that hue rather than one shared amber. A row is recognisable before its name is read.
+- Rows show the tail of their directory, truncated from the left. The end of a path is what distinguishes two sibling worktrees; the start of it is the same for all of them.
+- A row shows a green dot and `:port` when something under one of its terminals is listening. Ports are found by scoping to each pane's own process subtree, so a chat client's bundled server is never attributed to whatever workspace happens to be open, and by asking the kernel rather than guessing from process names — which misfires on `tail -f` and misses anything not on a list. The scan runs when a pane's foreground command changes; sitting at a prompt costs nothing.
+- Section headers line up with the rows they head. They were twelve pixels out on the left and nine on the right, with five different vertical gaps down the list.
+- Workspaces and folders gained colour, duplication, and their menus; the divider's live width and the width that gets saved no longer disagree, so dragging past 400px stops snapping back twenty pixels on release.
+
+**Hover to reveal**
+
+- With the sidebar collapsed, the window's left edge brings it back over the panes, and moving away puts it away. Terminals stay exactly where they are — nothing is hidden to make room, and nothing reflows.
+- It is the sidebar, not a menu: the same width, the same surface, hard against the same edge, the same sections and rows. It slides in and out rather than appearing.
+- It never takes the keyboard. Clicking a workspace switches to it and leaves the terminal you were typing in still focused.
+
+**Fixes**
+
+- Resizing the sidebar no longer blanks every terminal and browser for the duration of the drag.
+- Renaming from a context menu can now be typed into. The field was focused and the keystrokes still went to the terminal: a pane is a native view beside the web contents and had taken the window's keyboard, which the app had no way to notice.
+- `devspace .` no longer breaks when a second instance is running. The auth token was written before its server had bound a port, so an instance that lost the race advertised its own token for a port another instance owned.
+
 ## v0.4.0 - 2026-08-04
 
 ### Summary
