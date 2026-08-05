@@ -4,6 +4,9 @@ import { join, resolve } from "path";
 import { GhosttyTerminal, type ReservedShortcut, type TerminalBounds } from "ghostty-electron";
 import type { TerminalCreateOptions } from "../shared/types";
 import { resolveDevelopmentPath } from "./dev-paths";
+import { DevServerScanner } from "./dev-server/dev-server-scanner";
+import type { DevServerPorts } from "../shared/dev-server";
+import { readListeners, readProcessTable } from "./dev-server/process-probes";
 import {
   buildExternalTmuxAttachCommand,
   ManagedTmuxManager,
@@ -82,6 +85,7 @@ type TerminalCallback = {
   onSearchEnd?: (surfaceId: string) => void;
   onSearchTotal?: (surfaceId: string, total: number) => void;
   onSearchSelected?: (surfaceId: string, selected: number) => void;
+  onDevServerPortsChanged?: (ports: DevServerPorts[]) => void;
 };
 
 /**
@@ -106,6 +110,7 @@ const MANAGED_PATH_POLL_INTERVAL_MS = 5_000;
 export class TerminalManager {
   private terminal: GhosttyTerminal | null = null;
   private managedTmux: ManagedTmuxManager | null = null;
+  private devServerScanner: DevServerScanner | null = null;
   private readonly surfaceGenerations = new Map<string, number>();
   private callbacks: TerminalCallback = {};
   /** Resolved path to Devspace's ZDOTDIR wrapper for zsh shell integration. */
@@ -145,10 +150,17 @@ export class TerminalManager {
           cwd: process.cwd(),
           moduleDir: __dirname,
         });
-    this.managedTmux = new ManagedTmuxManager({
+    const managedTmux = new ManagedTmuxManager({
       userDataPath: app.getPath("userData"),
       resourcesPath: tmuxResourcesPath,
       isPackaged: app.isPackaged,
+    });
+    this.managedTmux = managedTmux;
+    this.devServerScanner = new DevServerScanner({
+      listPaneProcesses: () => managedTmux.listPaneProcesses(),
+      readProcessTable,
+      readListeners,
+      emit: (ports) => this.callbacks.onDevServerPortsChanged?.(ports),
     });
 
     // Resolve shell integration wrapper path (set up in index.ts).
@@ -169,12 +181,15 @@ export class TerminalManager {
     mainWindow.on("focus", () => {
       this.windowFocused = true;
       this.startPathPolling();
-      // Directories can have moved during however long the window was blurred.
+      // Directories can have moved, and servers can have started or stopped,
+      // during however long the window was blurred.
       void this.refreshManagedPaths();
+      void this.devServerScanner?.poll();
     });
     mainWindow.on("blur", () => {
       this.windowFocused = false;
       this.stopPathPolling();
+      this.devServerScanner?.stop();
     });
 
     // Wire up events to callbacks
@@ -265,6 +280,10 @@ export class TerminalManager {
     this.callbacks.onSearchSelected = callback;
   }
 
+  onDevServerPortsChanged(callback: (ports: DevServerPorts[]) => void): void {
+    this.callbacks.onDevServerPortsChanged = callback;
+  }
+
   async createSurface(surfaceId: string, options?: TerminalCreateOptions): Promise<void> {
     if (!this.terminal) return;
     const generation = (this.surfaceGenerations.get(surfaceId) ?? 0) + 1;
@@ -320,6 +339,7 @@ export class TerminalManager {
       // the whole burst of them on a session restore — would otherwise report
       // nothing for a full interval.
       void this.refreshManagedPaths();
+      void this.devServerScanner?.poll();
     }
 
     measureMainProcessOperation("terminal.createSurface", () => {
@@ -364,13 +384,21 @@ export class TerminalManager {
   private forgetManagedSurface(surfaceId: string): void {
     if (!this.managedSessionIds.delete(surfaceId)) return;
     this.reportedPaths.delete(surfaceId);
-    if (this.managedSessionIds.size === 0) this.stopPathPolling();
+    if (this.managedSessionIds.size !== 0) return;
+    this.stopPathPolling();
+    // Nothing left to poll, so the scanner will never notice the last server
+    // going away on its own. Clear the badges rather than freeze them.
+    this.devServerScanner?.reset();
+    this.callbacks.onDevServerPortsChanged?.([]);
   }
 
   private startPathPolling(): void {
     if (this.pathPollTimer || !this.windowFocused || this.managedSessionIds.size === 0) return;
     this.pathPollTimer = setInterval(() => {
       void this.refreshManagedPaths();
+      // Shares the tick rather than running its own: the scanner's cheap path
+      // is one tmux call, the same kind this timer already exists to make.
+      void this.devServerScanner?.poll();
     }, MANAGED_PATH_POLL_INTERVAL_MS);
     // Background upkeep should never be the reason the process stays alive.
     this.pathPollTimer.unref?.();
@@ -478,6 +506,8 @@ export class TerminalManager {
   destroyAll(): void {
     if (!this.terminal) return;
     this.stopPathPolling();
+    this.devServerScanner?.stop();
+    this.devServerScanner = null;
     this.managedSessionIds.clear();
     this.reportedPaths.clear();
     this.terminal.destroy();

@@ -1,19 +1,21 @@
 import { expect, test } from "vitest";
 import { buildWorkspaceSidebarMetadataByWorkspaceId } from "./workspace-sidebar-metadata";
 
-test("buildWorkspaceSidebarMetadataByWorkspaceId includes pane count, primary dir, and relative time", () => {
-  const now = Date.now();
-  const metadata = buildWorkspaceSidebarMetadataByWorkspaceId(
-    [
-      {
-        id: "workspace-1",
-        name: "Workspace 1",
-        root: { type: "leaf", groupId: "group-1" },
-        focusedGroupId: "group-1",
-        zoomedGroupId: null,
-        lastActiveAt: now - 5 * 60 * 1000,
-      },
-    ],
+function workspace(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "workspace-1",
+    name: "Workspace 1",
+    root: { type: "leaf" as const, groupId: "group-1" },
+    focusedGroupId: "group-1",
+    zoomedGroupId: null,
+    lastActiveAt: Date.now(),
+    ...overrides,
+  };
+}
+
+test("counts panes and takes the first terminal's directory", () => {
+  const info = buildWorkspaceSidebarMetadataByWorkspaceId(
+    [workspace()],
     {
       "pane-1": {
         id: "pane-1",
@@ -40,30 +42,55 @@ test("buildWorkspaceSidebarMetadataByWorkspaceId includes pane count, primary di
     },
   );
 
-  expect(metadata["workspace-1"]).toBe("2 panes · project-a · 5m ago");
+  // The full path, not a basename: the row truncates from the left itself.
+  expect(info["workspace-1"]).toEqual({ paneCount: 2, directory: "/Users/test/project-a" });
 });
 
-test("buildWorkspaceSidebarMetadataByWorkspaceId falls back to time-only metadata", () => {
-  const metadata = buildWorkspaceSidebarMetadataByWorkspaceId(
-    [
-      {
-        id: "workspace-1",
-        name: "Workspace 1",
-        root: { type: "leaf", groupId: "group-1" },
-        focusedGroupId: "group-1",
-        zoomedGroupId: null,
-        lastActiveAt: Date.now(),
-      },
-    ],
-    {},
+test("falls back to an editor folder when there is no terminal", () => {
+  const info = buildWorkspaceSidebarMetadataByWorkspaceId(
+    [workspace()],
     {
-      "group-1": {
-        id: "group-1",
-        activeTabId: "tab-1",
-        tabs: [],
+      "pane-1": {
+        id: "pane-1",
+        type: "editor",
+        title: "Editor",
+        config: { folderPath: "/Users/test/only-editor" },
       },
+    },
+    {
+      "group-1": { id: "group-1", activeTabId: "tab-1", tabs: [{ id: "tab-1", paneId: "pane-1" }] },
     },
   );
 
-  expect(metadata["workspace-1"]).toBe("now");
+  expect(info["workspace-1"]).toEqual({ paneCount: 1, directory: "/Users/test/only-editor" });
+});
+
+test("falls back to the workspace's last terminal cwd when no pane carries one", () => {
+  // A workspace whose panes are all browsers should still say where it lives.
+  const info = buildWorkspaceSidebarMetadataByWorkspaceId(
+    [workspace({ lastTerminalCwd: "/Users/test/remembered" })],
+    {
+      "pane-1": {
+        id: "pane-1",
+        type: "browser",
+        title: "Browser",
+        config: { url: "https://example.com" },
+      },
+    },
+    {
+      "group-1": { id: "group-1", activeTabId: "tab-1", tabs: [{ id: "tab-1", paneId: "pane-1" }] },
+    },
+  );
+
+  expect(info["workspace-1"]).toEqual({ paneCount: 1, directory: "/Users/test/remembered" });
+});
+
+test("an empty workspace reports no panes and no directory", () => {
+  const info = buildWorkspaceSidebarMetadataByWorkspaceId(
+    [workspace()],
+    {},
+    { "group-1": { id: "group-1", activeTabId: "tab-1", tabs: [] } },
+  );
+
+  expect(info["workspace-1"]).toEqual({ paneCount: 0, directory: null });
 });

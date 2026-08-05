@@ -16,6 +16,8 @@ const appMocks = vi.hoisted(() => ({
     ],
     openEditorTab: vi.fn(),
     sidebarTree: [],
+    pinnedSidebarNodes: [],
+    workspaceSidebarMetadataByWorkspaceId: {},
     paneGroups: {},
   },
   settingsState: {
@@ -51,13 +53,22 @@ vi.mock("./store/workspace-store", () => ({
       selector(appMocks.workspaceState),
     {
       getState: () => appMocks.workspaceState,
+      // Stores that watch the workspace graph — the dev-server port mapping and
+      // the sidebar peek — subscribe at import time.
+      subscribe: () => () => {},
     },
   ),
 }));
 
 vi.mock("./store/settings-store", () => ({
-  useSettingsStore: (selector: (state: typeof appMocks.settingsState) => unknown) =>
-    selector(appMocks.settingsState),
+  useSettingsStore: Object.assign(
+    (selector: (state: typeof appMocks.settingsState) => unknown) =>
+      selector(appMocks.settingsState),
+    {
+      getState: () => appMocks.settingsState,
+      subscribe: () => () => {},
+    },
+  ),
 }));
 
 vi.mock("./store/native-view-store", () => ({

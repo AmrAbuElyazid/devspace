@@ -58,6 +58,7 @@ registerIpcHandlers(
     onSearchEnd: () => {},
     onSearchTotal: () => {},
     onSearchSelected: () => {},
+    onDevServerPortsChanged: () => {},
     destroyAll: () => {},
   } as any,
   {

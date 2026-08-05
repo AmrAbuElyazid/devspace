@@ -1,6 +1,6 @@
 import { useRef, useCallback } from "react";
 import { useSortable } from "@dnd-kit/sortable";
-import { Check, ChevronRight, FolderClosed, FolderOpen, Plus } from "lucide-react";
+import { Check, ChevronRight, Plus } from "lucide-react";
 
 import { useActiveDrag } from "@/hooks/useDndOrchestrator";
 import { useInsertionIndicator } from "@/hooks/useInsertionIndicator";
@@ -10,6 +10,16 @@ import { cn } from "@/lib/utils";
 
 import { InlineRenameInput } from "@/components/ui/inline-rename-input";
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
+
+/** Total workspaces under a folder, nested folders included. */
+function countWorkspaces(nodes: SidebarNode[]): number {
+  let total = 0;
+  for (const node of nodes) {
+    total += node.type === "workspace" ? 1 : countWorkspaces(node.children);
+  }
+  return total;
+}
+
 import { useSidebarContext } from "./SidebarContext";
 
 interface SortableFolderItemProps {
@@ -76,8 +86,8 @@ export function SortableFolderItem({
         ? "insert-after"
         : "";
 
+  const workspaceCount = countWorkspaces(folder.children);
   const isExpanded = filteredWorkspaceIds ? true : !folder.collapsed;
-  const FolderIcon = isExpanded ? FolderOpen : FolderClosed;
 
   return (
     <div style={{ opacity: isDragging ? 0.4 : undefined }} className="flex flex-col gap-[2px]">
@@ -87,35 +97,26 @@ export function SortableFolderItem({
         data-selected={isSelected || undefined}
         onClick={onClick}
         onContextMenu={(e) => onContextMenuFolder(e, folder.id)}
-        style={{ marginLeft: depth * 14 }}
+        style={{ marginLeft: depth * 13 }}
         {...attributes}
         {...listeners}
         className={cn(
           // gap-1.5 around a 12px chevron and a 14px folder puts the label at
           // the same x as a workspace label one level in, so a folder and its
           // contents read as one column rather than two.
-          "chrome-row chrome-focus no-drag group/folder gap-1.5 h-8 px-2.5 cursor-default select-none",
-          "text-ui-sm",
+          "group/folder flex items-center gap-1.5 rounded-md px-1.5 h-6 mt-1",
+          "chrome-focus no-drag cursor-default select-none transition-colors duration-100",
+          "text-muted-foreground hover:bg-row-hover hover:text-foreground",
           showDragOver && "drop-into-folder",
           insertClass,
         )}
       >
         <ChevronRight
-          size={12}
-          strokeWidth={2.2}
-          className={cn(
-            "shrink-0 text-muted-foreground transition-transform duration-150",
-            isExpanded && "rotate-90",
-          )}
+          size={10}
+          strokeWidth={2.4}
+          className={cn("shrink-0 transition-transform duration-150", isExpanded && "rotate-90")}
         />
-        {isSelected ? (
-          <Check size={14} strokeWidth={2.4} className="shrink-0 text-brand" />
-        ) : (
-          <FolderIcon
-            size={14}
-            className="shrink-0 text-muted-foreground transition-colors group-hover/folder:text-foreground"
-          />
-        )}
+        {isSelected ? <Check size={12} strokeWidth={2.4} className="shrink-0 text-brand" /> : null}
         {isEditing ? (
           <InlineRenameInput
             initialValue={folder.name}
@@ -128,8 +129,17 @@ export function SortableFolderItem({
             aria-label="Rename folder"
           />
         ) : (
-          <span className="flex-1 truncate font-medium">{folder.name}</span>
+          // Uppercase and small: a folder is a heading over its rows, not a
+          // sibling of them, so it must not compete with the workspace names.
+          <span className="flex-1 truncate text-ui-xs font-medium tracking-[0.06em] uppercase">
+            {folder.name}
+          </span>
         )}
+        {!isEditing && workspaceCount > 0 ? (
+          <span className="shrink-0 font-mono text-ui-micro tabular-nums opacity-55">
+            {workspaceCount}
+          </span>
+        ) : null}
         {!isEditing && (
           <button
             type="button"
@@ -151,7 +161,15 @@ export function SortableFolderItem({
       </div>
 
       {isExpanded && (
-        <>
+        // A hairline down the children's leading edge. Indentation alone stops
+        // being readable past one level; the guide makes the nesting legible
+        // without adding another glyph to every row.
+        <div className="relative">
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-y-0 w-px bg-border"
+            style={{ left: (depth + 1) * 13 - 6 }}
+          />
           <SidebarTreeLevel
             nodes={folder.children}
             container={container}
@@ -160,13 +178,13 @@ export function SortableFolderItem({
           />
           {folder.children.length === 0 && (
             <div
-              style={{ marginLeft: (depth + 1) * 14 }}
+              style={{ marginLeft: (depth + 1) * 13 }}
               className="px-2.5 py-1 text-ui-micro text-muted-foreground select-none"
             >
               Drop workspaces here
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

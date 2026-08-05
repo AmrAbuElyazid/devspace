@@ -24,6 +24,7 @@ const sidebarShellMocks = vi.hoisted(() => ({
   },
   setDroppableNodeRef: vi.fn(),
   contextMenuShow: vi.fn(),
+  overlayShowMenu: vi.fn(),
 }));
 
 vi.mock("../App", () => ({
@@ -161,6 +162,8 @@ beforeEach(() => {
   sidebarShellMocks.setDroppableNodeRef.mockReset();
   sidebarShellMocks.contextMenuShow.mockReset();
   sidebarShellMocks.contextMenuShow.mockResolvedValue(null);
+  sidebarShellMocks.overlayShowMenu.mockReset();
+  sidebarShellMocks.overlayShowMenu.mockResolvedValue(null);
   useWindowChromeStore.setState({ isFullScreen: false, trafficLightGutter: TRAFFIC_LIGHT_GUTTER });
 
   installMockWindowApi({
@@ -172,6 +175,12 @@ beforeEach(() => {
     },
     contextMenu: {
       show: sidebarShellMocks.contextMenuShow,
+    },
+    overlay: {
+      showMenu: sidebarShellMocks.overlayShowMenu,
+      resolveMenu: vi.fn(),
+      notifyReady: vi.fn(),
+      onMenu: vi.fn(() => () => {}),
     },
   });
 
@@ -465,21 +474,25 @@ test("workspace context menu can route rename and pin actions", async () => {
   const workspace = container.querySelector('[data-workspace-id="alpha"]');
   expect(workspace).toBeTruthy();
 
-  sidebarShellMocks.contextMenuShow.mockResolvedValueOnce("rename");
+  sidebarShellMocks.overlayShowMenu.mockResolvedValueOnce("rename");
   await act(async () => {
     workspace?.dispatchEvent(
       new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 20 }),
     );
   });
 
-  expect(sidebarShellMocks.contextMenuShow).toHaveBeenCalledWith(
-    expect.arrayContaining([{ id: "rename", label: "Rename" }]),
-    { x: 10, y: 20 },
+  expect(sidebarShellMocks.overlayShowMenu).toHaveBeenCalledWith(
+    expect.objectContaining({
+      anchor: { x: 10, y: 20, width: 0, height: 0 },
+      items: expect.arrayContaining([{ id: "rename", label: "Rename" }]),
+      // Eight identity colours, one click each.
+      swatches: expect.arrayContaining([expect.objectContaining({ id: "color:violet" })]),
+    }),
   );
   expect(container.innerHTML).toContain('data-workspace-id="alpha"');
   expect(container.innerHTML).toContain('data-editing="true"');
 
-  sidebarShellMocks.contextMenuShow.mockResolvedValueOnce("pin");
+  sidebarShellMocks.overlayShowMenu.mockResolvedValueOnce("pin");
   await act(async () => {
     workspace?.dispatchEvent(
       new MouseEvent("contextmenu", { bubbles: true, clientX: 11, clientY: 21 }),
@@ -493,7 +506,7 @@ test("workspace context menu can create a new folder", async () => {
   const addFolder = vi.fn();
   useWorkspaceStore.setState({ addFolder });
 
-  sidebarShellMocks.contextMenuShow.mockResolvedValueOnce("new-folder");
+  sidebarShellMocks.overlayShowMenu.mockResolvedValueOnce("new-folder");
 
   await act(async () => {
     root?.render(<Sidebar />);
@@ -592,11 +605,21 @@ async function clickRow(
 async function openContextMenu(selector: string): Promise<Array<{ id: string; label: string }>> {
   const row = container.querySelector(selector);
   expect(row).toBeTruthy();
+  // Cleared first so the surface used by *this* open is unambiguous: a single
+  // row renders on the overlay (it carries colour chips), while folders and
+  // multi-selections still pop a native menu.
+  sidebarShellMocks.overlayShowMenu.mockClear();
+  sidebarShellMocks.contextMenuShow.mockClear();
   await act(async () => {
     row?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true }));
   });
-  const call = sidebarShellMocks.contextMenuShow.mock.calls.at(-1);
-  return (call?.[0] ?? []) as Array<{ id: string; label: string }>;
+
+  const overlayCall = sidebarShellMocks.overlayShowMenu.mock.calls.at(-1);
+  if (overlayCall) {
+    return (overlayCall[0]?.items ?? []) as Array<{ id: string; label: string }>;
+  }
+  const nativeCall = sidebarShellMocks.contextMenuShow.mock.calls.at(-1);
+  return (nativeCall?.[0] ?? []) as Array<{ id: string; label: string }>;
 }
 
 test("a plain click opens a workspace and leaves the bulk bar hidden", async () => {
@@ -667,7 +690,10 @@ test("duplicating a single workspace opens the copy; duplicating several does no
   const duplicateWorkspace = vi.fn((id: string) => `${id}-copy`);
   const setActiveWorkspace = vi.fn();
   useWorkspaceStore.setState({ duplicateWorkspace, setActiveWorkspace });
+  // A single row renders on the overlay; a multi-selection still pops a
+  // native menu, so both surfaces have to answer here.
   sidebarShellMocks.contextMenuShow.mockResolvedValue("duplicate");
+  sidebarShellMocks.overlayShowMenu.mockResolvedValue("duplicate");
 
   await act(async () => {
     root?.render(<Sidebar />);

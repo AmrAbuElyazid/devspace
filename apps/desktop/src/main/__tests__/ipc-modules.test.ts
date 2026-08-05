@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import type { DevServerPorts } from "../../shared/dev-server";
 import { mkdtemp, rm, writeFile } from "fs/promises";
 import { join } from "path";
 import { tmpdir } from "os";
@@ -72,6 +73,7 @@ const terminalEventHandlers: Partial<{
   searchEnd: (surfaceId: string) => void;
   searchTotal: (surfaceId: string, total: number) => void;
   searchSelected: (surfaceId: string, selected: number) => void;
+  devServerPorts: (ports: DevServerPorts[]) => void;
 }> = {};
 
 const mainWindowMock = {
@@ -182,6 +184,9 @@ const terminalManagerMock = {
   },
   onSearchSelected: (callback: (surfaceId: string, selected: number) => void) => {
     terminalEventHandlers.searchSelected = callback;
+  },
+  onDevServerPortsChanged: (callback: (ports: DevServerPorts[]) => void) => {
+    terminalEventHandlers.devServerPorts = callback;
   },
 };
 

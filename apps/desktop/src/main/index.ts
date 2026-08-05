@@ -1,4 +1,4 @@
-import { app, BrowserWindow, WebContentsView } from "electron";
+import { app, BrowserWindow, screen } from "electron";
 import { mkdirSync } from "fs";
 import { join } from "path";
 import { randomBytes } from "crypto";
@@ -11,6 +11,7 @@ import { VscodeServerManager } from "./vscode-server";
 import { T3CodeServerManager } from "./t3code-server";
 import { registerIpcHandlers } from "./ipc-handlers";
 import { PaneOverlayManager } from "./browser/pane-overlay-manager";
+import { SidebarPeekWatcher } from "./sidebar-peek-watcher";
 import { trustIpcWebContents } from "./ipc/shared";
 import { BrowserSessionManager } from "./browser/browser-session-manager";
 import { BrowserPaneManager } from "./browser/browser-pane-manager";
@@ -206,8 +207,28 @@ function createWindow(): void {
   terminalManager.init(window);
   const paneOverlayManager = new PaneOverlayManager({
     getWindow: () => (window.isDestroyed() ? null : window),
-    createView: () =>
-      new WebContentsView({
+    // A child window rather than a child view: Ghostty's terminal surface is
+    // attached to the AppKit content view above Electron's whole view tree, so
+    // only a separate window can draw over it.
+    createSurface: () =>
+      new BrowserWindow({
+        parent: window,
+        frame: false,
+        transparent: true,
+        hasShadow: false,
+        roundedCorners: false,
+        resizable: false,
+        movable: false,
+        minimizable: false,
+        maximizable: false,
+        fullscreenable: false,
+        skipTaskbar: true,
+        show: false,
+        // The surface is shown without focus, so without this macOS would spend
+        // the first click activating the window instead of delivering it — a
+        // hover panel the user has to click twice is a broken hover panel.
+        acceptFirstMouse: true,
+        backgroundColor: "#00000000",
         webPreferences: {
           preload: join(__dirname, "../preload/index.js"),
           contextIsolation: true,
@@ -215,21 +236,34 @@ function createWindow(): void {
           sandbox: false,
         },
       }),
-    loadOverlay: (view) => {
+    loadOverlay: (surface) => {
       // The overlay sends IPC back, so it has to be on the trusted list.
-      trustIpcWebContents(view.webContents);
+      trustIpcWebContents(surface.webContents);
       const devUrl = getTrustedDevRendererUrl();
       if (devUrl) {
-        void view.webContents.loadURL(`${devUrl}#overlay`);
+        void surface.loadURL(`${devUrl}#overlay`);
       } else {
-        void view.webContents.loadFile(join(__dirname, "../renderer/index.html"), {
-          hash: "overlay",
-        });
+        void surface.loadFile(join(__dirname, "../renderer/index.html"), { hash: "overlay" });
       }
     },
   });
 
+  // Watches for the cursor reaching the left edge while the sidebar is
+  // collapsed. It has to live out here: the collapsed sidebar leaves the
+  // renderer a couple of pixels of window it can still see mouse events in,
+  // and the native panes swallow the rest.
+  const sidebarPeekWatcher = new SidebarPeekWatcher({
+    getContentBounds: () => (window.isDestroyed() ? null : window.getContentBounds()),
+    getCursorPoint: () => screen.getCursorScreenPoint(),
+    isWindowFocused: () => !window.isDestroyed() && window.isFocused(),
+    show: (rect, config) => void paneOverlayManager.showPeek(rect, config.snapshot),
+    hide: () => paneOverlayManager.hidePeek(),
+  });
+  window.on("focus", () => sidebarPeekWatcher.setWindowFocused(true));
+  window.on("blur", () => sidebarPeekWatcher.setWindowFocused(false));
+
   window.on("closed", () => {
+    sidebarPeekWatcher.dispose();
     paneOverlayManager.destroy();
   });
 
@@ -244,6 +278,7 @@ function createWindow(): void {
     browserSessionManager,
     appUpdater,
     paneOverlayManager,
+    sidebarPeekWatcher,
   );
   installWindowZoomReset(window.webContents);
 
@@ -270,14 +305,17 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
-  // Write the auth token to a file so the CLI script can read it.
-  // File permissions restrict access to the current user.
-  // The filename includes the port so dev and production don't collide.
-  writeCliAuthTokenFile(app.getPath("userData"), CLI_PORT, cliAuthToken);
-
   // Start the CLI HTTP server only after the single-instance lock succeeds
   // (whenReady won't fire for the second instance since app.quit() was called).
   cliHttpServer.listen(CLI_PORT, "127.0.0.1", () => {
+    // Written here rather than before the bind, and only once the bind has
+    // actually succeeded. The token file names the port, so an instance that
+    // lost the race for it used to overwrite the file with a token for a
+    // server it does not own — pointing `devspace .` at the other instance
+    // with credentials it will reject. File permissions restrict it to the
+    // current user; the filename includes the port so dev and production do
+    // not collide.
+    writeCliAuthTokenFile(app.getPath("userData"), CLI_PORT, cliAuthToken);
     console.log(`[cli] listening on http://127.0.0.1:${CLI_PORT}`);
   });
 

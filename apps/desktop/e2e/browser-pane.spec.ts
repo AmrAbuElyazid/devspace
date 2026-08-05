@@ -107,16 +107,17 @@ test("the toolbar menu opens over the page without hiding it", async () => {
     expect(await visibleBrowserViews(page)).toBe(before);
 
     const overlay = await app.evaluate(async ({ BrowserWindow }) => {
-      const win = BrowserWindow.getAllWindows()[0];
-      const view = (win?.contentView.children ?? []).find((candidate) => {
-        const wc = (candidate as unknown as { webContents?: Electron.WebContents }).webContents;
-        return wc && !wc.isDestroyed() && wc.getURL().includes("#overlay");
-      });
-      if (!view) return null;
+      // The overlay is a child *window*, not a child view: only a window draws
+      // above Ghostty's terminal surface.
+      const surface = BrowserWindow.getAllWindows().find((w) => w.getParentWindow() !== null);
+      if (!surface) return null;
 
-      const wc = (view as unknown as { webContents: Electron.WebContents }).webContents;
+      const wc = surface.webContents;
       return {
-        isTopmost: win?.contentView.children[win.contentView.children.length - 1] === view,
+        visible: surface.isVisible(),
+        coversParent:
+          JSON.stringify(surface.getBounds()) ===
+          JSON.stringify(surface.getParentWindow()?.getContentBounds()),
         hasFocus: await wc.executeJavaScript("document.hasFocus()"),
         menus: await wc.executeJavaScript("document.querySelectorAll('[role=menu]').length"),
         items: await wc.executeJavaScript("document.querySelectorAll('[role=menuitem]').length"),
@@ -127,16 +128,13 @@ test("the toolbar menu opens over the page without hiding it", async () => {
     // A menu posted before the overlay subscribed would render nothing at all.
     expect(overlay?.menus).toBe(1);
     expect(overlay?.items).toBeGreaterThan(3);
-    expect(overlay?.isTopmost).toBe(true);
+    expect(overlay?.visible).toBe(true);
+    expect(overlay?.coversParent).toBe(true);
     expect(overlay?.hasFocus).toBe(true);
 
     const dismissed = await app.evaluate(async ({ BrowserWindow }) => {
-      const win = BrowserWindow.getAllWindows()[0];
-      const view = (win?.contentView.children ?? []).find((candidate) => {
-        const wc = (candidate as unknown as { webContents?: Electron.WebContents }).webContents;
-        return wc && !wc.isDestroyed() && wc.getURL().includes("#overlay");
-      });
-      const wc = (view as unknown as { webContents: Electron.WebContents }).webContents;
+      const surface = BrowserWindow.getAllWindows().find((w) => w.getParentWindow() !== null)!;
+      const wc = surface.webContents;
 
       // Keys land in the overlay's own webContents, not the main renderer's.
       wc.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
@@ -145,13 +143,16 @@ test("the toolbar menu opens over the page without hiding it", async () => {
 
       return {
         menus: await wc.executeJavaScript("document.querySelectorAll('[role=menu]').length"),
-        // Must stop covering the pane, or it keeps swallowing its mouse input.
-        visible: (view as unknown as { getVisible: () => boolean }).getVisible(),
+        // Must stop covering the panes, or it keeps swallowing their input.
+        visible: surface.isVisible(),
+        parentRefocused: surface.getParentWindow()?.isFocused() ?? false,
       };
     });
 
     expect(dismissed.menus).toBe(0);
     expect(dismissed.visible).toBe(false);
+    // Focus must come back, or the main window stays inert until clicked.
+    expect(dismissed.parentRefocused).toBe(true);
   } finally {
     await app.close();
     await fixture.close();

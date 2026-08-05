@@ -213,6 +213,19 @@
   --warning-foreground: oklch(0.48 0.12 75);
   --info: oklch(0.62 0.17 240);
   --info-foreground: oklch(0.46 0.16 240);
+  /* ─── Workspace identity ────────────────────────────────────────────
+     Eight hues at one lightness and chroma, so no workspace shouts louder
+     than another. They read as identity, not status — the status colours
+     above stay reserved for meaning. */
+  --w-amber: oklch(0.65 0.15 70);
+  --w-green: oklch(0.6 0.14 150);
+  --w-teal: oklch(0.6 0.11 195);
+  --w-blue: oklch(0.58 0.14 250);
+  --w-violet: oklch(0.58 0.15 295);
+  --w-pink: oklch(0.62 0.15 350);
+  --w-red: oklch(0.58 0.16 25);
+  --w-slate: oklch(0.55 0.03 250);
+
   --overlay-shadow: 0 12px 40px -8px oklch(0 0 0 / 12%), 0 2px 8px -2px oklch(0 0 0 / 6%);
 
   --row-hover: oklch(0.18 0.01 95 / 5%);
@@ -285,6 +298,16 @@
   --warning-foreground: oklch(0.88 0.13 80);
   --info: oklch(0.7 0.17 240);
   --info-foreground: oklch(0.79 0.14 240);
+  /* Lifted against the near-black rail; same hues, same relative weight. */
+  --w-amber: oklch(0.75 0.15 70);
+  --w-green: oklch(0.75 0.15 150);
+  --w-teal: oklch(0.75 0.12 195);
+  --w-blue: oklch(0.72 0.14 250);
+  --w-violet: oklch(0.72 0.15 295);
+  --w-pink: oklch(0.74 0.15 350);
+  --w-red: oklch(0.72 0.16 25);
+  --w-slate: oklch(0.68 0.03 250);
+
   --overlay-shadow: 0 16px 48px -8px oklch(0 0 0 / 50%), 0 2px 8px -2px oklch(0 0 0 / 30%);
 
   --row-hover: oklch(1 0 0 / 6%);
@@ -455,50 +478,6 @@ body {
   background-size: 256px 256px;
 }
 
-/* ─── Scroll fade ─────────────────────────────────────────────────────
-   Fades rows as they pass under a sticky header. A mask on the scroll
-   container fades the content itself, which keeps working when the header
-   and the list share one background — a gradient overlay in the header
-   only works when it has a solid color to fade to. The extra full-black
-   layers preserve the bottom of the list and the scrollbar gutter, which a
-   single top gradient would otherwise fade out too.
-*/
-@utility scroll-fade-top {
-  --scroll-fade-height: 2rem;
-  -webkit-mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0%,
-      oklch(0 0 0 / 10%) 12%,
-      oklch(0 0 0 / 45%) 34%,
-      oklch(0 0 0 / 82%) 62%,
-      black 100%
-    ),
-    linear-gradient(black, black), linear-gradient(black, black);
-  -webkit-mask-position: top, bottom, right;
-  -webkit-mask-repeat: no-repeat;
-  -webkit-mask-size:
-    100% var(--scroll-fade-height),
-    100% calc(100% - var(--scroll-fade-height)),
-    8px 100%;
-  mask-image:
-    linear-gradient(
-      to bottom,
-      transparent 0%,
-      oklch(0 0 0 / 10%) 12%,
-      oklch(0 0 0 / 45%) 34%,
-      oklch(0 0 0 / 82%) 62%,
-      black 100%
-    ),
-    linear-gradient(black, black), linear-gradient(black, black);
-  mask-position: top, bottom, right;
-  mask-repeat: no-repeat;
-  mask-size:
-    100% var(--scroll-fade-height),
-    100% calc(100% - var(--scroll-fade-height)),
-    8px 100%;
-}
-
 /* ─── Theme swap ──────────────────────────────────────────────────────
    Applied to <html> for one frame around a light/dark switch. Without it
    every element with a color transition runs its own 120ms cross-fade at
@@ -523,6 +502,19 @@ html.overlay-root body,
 html.overlay-root #root {
   background: transparent !important;
   background-image: none !important;
+}
+
+/* The overlay is a transparent child *window*, and backdrop-filter cannot
+   sample the parent window's pixels from inside one — there is nothing behind
+   the surface in its own compositing layer to blur. The glass therefore keeps
+   only its translucency, and whatever sits under the window reads straight
+   through the menu. Give these surfaces an opaque background here instead;
+   they are already elevated enough that the blur was decoration, not meaning. */
+html.overlay-root .glass-dropdown,
+html.overlay-root .glass-dialog {
+  background: var(--popover);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* ─── Scrollbars (webkit) ─────────────────────────────────────────── */

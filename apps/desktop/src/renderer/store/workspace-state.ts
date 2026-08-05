@@ -8,6 +8,8 @@ import type {
   SidebarNode,
 } from "../types/workspace";
 import type { SidebarContainer, DropSide } from "../types/dnd";
+import type { WorkspaceSidebarInfo } from "./workspace-sidebar-metadata";
+import type { WorkspaceColor } from "../lib/workspace-color";
 
 // ---------------------------------------------------------------------------
 // Store state + actions interface
@@ -20,8 +22,8 @@ export interface WorkspaceState {
   paneGroups: Record<string, PaneGroup>;
   /** Ephemeral pane -> workspace/group lookup for hot terminal event paths. */
   paneOwnersByPaneId: Record<string, { workspaceId: string; groupId: string }>;
-  /** Precomputed sidebar metadata string per workspace. */
-  workspaceSidebarMetadataByWorkspaceId: Record<string, string>;
+  /** Precomputed pane count and directory per workspace, for the sidebar rows. */
+  workspaceSidebarMetadataByWorkspaceId: Record<string, WorkspaceSidebarInfo>;
   /** Most-recently-used tab order per group. Active tab is normally first. */
   tabHistoryByGroupId: Record<string, string[]>;
   /** Transient traversal session for Ctrl+Tab / Ctrl+Shift+Tab MRU navigation. */
@@ -52,6 +54,7 @@ export interface WorkspaceState {
    */
   duplicateWorkspace: (id: string) => string | null;
   renameWorkspace: (id: string, name: string) => void;
+  setWorkspaceColor: (id: string, color: WorkspaceColor) => void;
   setActiveWorkspace: (id: string) => void;
   togglePinWorkspace: (id: string) => void;
   pinWorkspace: (id: string) => void;

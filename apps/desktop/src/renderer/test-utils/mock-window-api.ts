@@ -88,6 +88,7 @@ function createDefaultWindowApi(): DevspaceBridge {
       onSearchEnd: vi.fn(() => unsubscribe),
       onSearchTotal: vi.fn(() => unsubscribe),
       onSearchSelected: vi.fn(() => unsubscribe),
+      onDevServerPorts: vi.fn(() => unsubscribe),
     },
     window: {
       minimize: vi.fn(),
@@ -123,6 +124,12 @@ function createDefaultWindowApi(): DevspaceBridge {
       resolveMenu: vi.fn(),
       notifyReady: vi.fn(),
       onMenu: vi.fn(() => () => {}),
+    },
+    sidebarPeek: {
+      setConfig: vi.fn(),
+      activate: vi.fn(),
+      onPanel: vi.fn(() => unsubscribe),
+      onActivate: vi.fn(() => unsubscribe),
     },
     contextMenu: {
       show: vi.fn(async () => null) as DevspaceBridge["contextMenu"]["show"],

@@ -4,6 +4,8 @@ import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { OverlayMenuItem, OverlayMenuRequest } from "../../shared/overlay";
+import type { SidebarPeekSnapshot } from "../../shared/sidebar-peek";
+import { SidebarPeekPanel } from "./SidebarPeekPanel";
 
 /** Keeps the menu clear of the window edges. */
 const VIEWPORT_MARGIN = 8;
@@ -61,6 +63,10 @@ function MenuRow({
 
 export default function OverlayRoot(): ReactElement | null {
   const [menu, setMenu] = useState<ActiveMenu | null>(null);
+  // Kept after it closes so the panel has something to animate out; the window
+  // behind it is hidden once the transition is done.
+  const [peek, setPeek] = useState<SidebarPeekSnapshot | null>(null);
+  const [peekOpen, setPeekOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
@@ -84,6 +90,18 @@ export default function OverlayRoot(): ReactElement | null {
     // Only now is it safe for the main process to post a menu here.
     window.api.overlay.notifyReady();
     return dispose;
+  }, []);
+
+  useEffect(() => {
+    return window.api.sidebarPeek.onPanel((snapshot) => {
+      if (!snapshot) {
+        setPeekOpen(false);
+        return;
+      }
+      document.documentElement.classList.toggle("dark", snapshot.dark);
+      setPeek(snapshot);
+      setPeekOpen(true);
+    });
   }, []);
 
   // Measure after paint, then place. The menu's height depends on its content,
@@ -154,9 +172,19 @@ export default function OverlayRoot(): ReactElement | null {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeIndex, close, menu]);
 
-  if (!menu) return null;
+  // Mutually exclusive: the two want the same surface at different sizes, and
+  // the main process closes the panel before it posts a menu.
+  if (!menu) {
+    return peek ? (
+      <SidebarPeekPanel
+        snapshot={peek}
+        open={peekOpen}
+        onActivate={window.api.sidebarPeek.activate}
+      />
+    ) : null;
+  }
 
-  const { items, minWidth, label } = menu.request;
+  const { items, minWidth, label, swatches } = menu.request;
 
   return (
     // Full-bleed transparent scrim. It is what catches click-outside, and it
@@ -183,6 +211,27 @@ export default function OverlayRoot(): ReactElement | null {
           maxWidth: 360,
         }}
       >
+        {swatches && swatches.length > 0 ? (
+          <>
+            <div role="group" aria-label="Colour" className="flex gap-1.5 px-2 pt-1.5 pb-1">
+              {swatches.map((swatch) => (
+                <button
+                  key={swatch.id}
+                  type="button"
+                  aria-label={swatch.label}
+                  aria-pressed={swatch.selected}
+                  onClick={() => close(swatch.id)}
+                  style={{ backgroundColor: swatch.color }}
+                  className={cn(
+                    "size-[17px] rounded-md transition-transform hover:scale-110",
+                    swatch.selected && "ring-2 ring-offset-2 ring-offset-popover ring-current",
+                  )}
+                />
+              ))}
+            </div>
+            <div className="my-1 h-px bg-border" />
+          </>
+        ) : null}
         {items.map((item, index) => (
           <div key={item.id} className="contents">
             {item.groupLabel && (

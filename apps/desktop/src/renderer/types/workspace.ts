@@ -1,4 +1,5 @@
 import type { BrowserViewportSetting } from "../lib/browser-viewport";
+import type { WorkspaceColor } from "../lib/workspace-color";
 
 export type PaneType = "terminal" | "browser" | "editor" | "t3code" | "note";
 
@@ -116,4 +117,9 @@ export interface Workspace {
   lastActiveAt: number;
   /** Last known terminal CWD in this workspace — used as fallback for CWD inheritance. Persisted across restarts. */
   lastTerminalCwd?: string;
+  /**
+   * Identity colour key. Absent means "not chosen", which resolves to a stable
+   * colour derived from the id rather than to a single neutral.
+   */
+  color?: WorkspaceColor;
 }

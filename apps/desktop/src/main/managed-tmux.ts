@@ -93,6 +93,12 @@ export type ManagedTmuxSession = {
   createdAt: number;
 };
 
+export type TmuxPaneProcess = {
+  sessionId: string;
+  pid: number;
+  command: string;
+};
+
 function isExecutable(filePath: string): boolean {
   try {
     accessSync(filePath, constants.X_OK);
@@ -367,6 +373,40 @@ export class ManagedTmuxManager {
       paths.set(sessionId, path);
     }
     return paths;
+  }
+
+  /**
+   * The shell pid and foreground command of every managed pane, in one call.
+   *
+   * `list-panes -a` rather than `list-sessions` because a session the user has
+   * split inside tmux holds several shells, and a dev server may be under any
+   * of them. `pane_pid` is the shell tmux forked, which is the root of the
+   * subtree a port has to be traced back to.
+   */
+  async listPaneProcesses(): Promise<TmuxPaneProcess[]> {
+    await this.ensureReady();
+    const result = await this.run([
+      "list-panes",
+      "-a",
+      "-F",
+      "#{session_name}\t#{pane_pid}\t#{pane_current_command}",
+    ]);
+    if (result.exitCode === 1) return [];
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr.trim() || "Unable to inspect managed terminal processes");
+    }
+
+    const panes: TmuxPaneProcess[] = [];
+    for (const line of result.stdout.split("\n")) {
+      const [name, rawPid, command] = line.split("\t");
+      if (!name?.startsWith("devspace-") || !rawPid) continue;
+      const sessionId = name.slice("devspace-".length);
+      if (!/^[A-Za-z0-9_-]{1,128}$/.test(sessionId)) continue;
+      const pid = Number.parseInt(rawPid, 10);
+      if (!Number.isInteger(pid) || pid <= 0) continue;
+      panes.push({ sessionId, pid, command: command ?? "" });
+    }
+    return panes;
   }
 
   private async ensureSessionOnce(options: EnsureManagedSessionOptions): Promise<void> {

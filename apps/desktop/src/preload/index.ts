@@ -1,3 +1,5 @@
+import type { DevServerPorts } from "../shared/dev-server";
+import type { SidebarPeekSnapshot } from "../shared/sidebar-peek";
 import type { AppUpdateState, DevspaceBridge } from "../shared/types";
 import { DEFAULT_SHORTCUTS } from "../shared/shortcuts";
 import { getElectronBridge } from "./electron-bridge";
@@ -150,6 +152,15 @@ const bridge: DevspaceBridge = {
         ipcRenderer.removeListener("terminal:searchSelected", listener);
       };
     },
+    onDevServerPorts: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, ports: DevServerPorts[]): void => {
+        callback(ports);
+      };
+      ipcRenderer.on("terminal:devServerPorts", listener);
+      return () => {
+        ipcRenderer.removeListener("terminal:devServerPorts", listener);
+      };
+    },
   },
 
   window: {
@@ -245,6 +256,24 @@ const bridge: DevspaceBridge = {
         callback(payload as Parameters<typeof callback>[0]);
       ipcRenderer.on("overlay:menu", listener);
       return () => ipcRenderer.removeListener("overlay:menu", listener);
+    },
+  },
+  sidebarPeek: {
+    setConfig: (config) => ipcRenderer.send("sidebar:setPeekConfig", config),
+    activate: (workspaceId) => ipcRenderer.send("sidebar:peekActivate", workspaceId),
+    onPanel: (callback) => {
+      const listener = (_event: unknown, snapshot: SidebarPeekSnapshot | null): void => {
+        callback(snapshot);
+      };
+      ipcRenderer.on("overlay:peek", listener);
+      return () => ipcRenderer.removeListener("overlay:peek", listener);
+    },
+    onActivate: (callback) => {
+      const listener = (_event: unknown, workspaceId: string): void => {
+        callback(workspaceId);
+      };
+      ipcRenderer.on("sidebar:peekActivate", listener);
+      return () => ipcRenderer.removeListener("sidebar:peekActivate", listener);
     },
   },
   contextMenu: {

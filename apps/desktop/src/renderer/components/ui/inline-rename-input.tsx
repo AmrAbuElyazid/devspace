@@ -1,7 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
 
 import { cn } from "@/lib/utils";
-import { releaseNativeFocus } from "@/lib/native-pane-focus";
+import { claimRendererKeyboard, releaseNativeFocus } from "@/lib/native-pane-focus";
 
 interface InlineRenameInputProps {
   initialValue: string;
@@ -20,7 +20,9 @@ interface InlineRenameInputProps {
  *
  * Behavior:
  *   • Auto-selects on mount (after releasing native pane focus so the input
- *     can actually receive focus inside an Electron WebContentsView host).
+ *     can actually receive focus inside an Electron WebContentsView host), and
+ *     holds a keyboard claim for as long as it is open so nothing hands the
+ *     first responder back to a pane while the user is typing.
  *   • Enter commits, Escape cancels, blur commits.
  *   • Empty / whitespace-only values cancel instead of committing.
  */
@@ -35,13 +37,27 @@ export function InlineRenameInput({
   const ref = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const release = claimRendererKeyboard();
     releaseNativeFocus();
-    requestAnimationFrame(() => {
+
+    // Twice on purpose. The synchronous call makes this the active element
+    // straight away, which is what the DOM-level guards read; the second
+    // re-asserts it after the native blur has actually landed, since until
+    // then the pane still holds the window's first responder and a DOM focus
+    // alone would leave the caret here and the keystrokes over there.
+    const focus = (): void => {
       const el = ref.current;
       if (!el) return;
       el.focus();
       el.select();
-    });
+    };
+    focus();
+    const frame = requestAnimationFrame(focus);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      release();
+    };
   }, []);
 
   function handleKey(event: KeyboardEvent<HTMLInputElement>) {

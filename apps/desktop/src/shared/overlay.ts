@@ -26,6 +26,15 @@ export interface OverlayMenuItem {
   checked?: boolean;
 }
 
+/** A single-click colour choice rendered as a row of chips above the items. */
+export interface OverlaySwatch {
+  id: string;
+  /** Any CSS colour, including a `var(--…)` the overlay document also defines. */
+  color: string;
+  selected?: boolean;
+  label: string;
+}
+
 export interface OverlayMenuRequest {
   /**
    * Trigger rect in renderer viewport coordinates. The renderer fills the
@@ -34,6 +43,12 @@ export interface OverlayMenuRequest {
    */
   anchor: { x: number; y: number; width: number; height: number };
   items: OverlayMenuItem[];
+  /**
+   * Colour chips shown above the items. A submenu or a dialog would both take
+   * more clicks than the choice is worth, and a native menu cannot draw them
+   * at all — which is why this menu is rendered rather than an NSMenu.
+   */
+  swatches?: OverlaySwatch[];
   /** Which edge of the anchor the menu aligns to. Defaults to "start". */
   align?: "start" | "end";
   minWidth?: number;
@@ -54,6 +69,19 @@ export function isOverlayMenuRequest(value: unknown): value is OverlayMenuReques
   if (typeof anchor !== "object" || anchor === null) return false;
   for (const key of ["x", "y", "width", "height"] as const) {
     if (typeof anchor[key] !== "number" || !Number.isFinite(anchor[key])) return false;
+  }
+
+  if (request.swatches !== undefined) {
+    if (!Array.isArray(request.swatches)) return false;
+    const valid = request.swatches.every(
+      (swatch) =>
+        typeof swatch === "object" &&
+        swatch !== null &&
+        typeof (swatch as OverlaySwatch).id === "string" &&
+        typeof (swatch as OverlaySwatch).color === "string" &&
+        typeof (swatch as OverlaySwatch).label === "string",
+    );
+    if (!valid) return false;
   }
 
   if (!Array.isArray(request.items) || request.items.length === 0) return false;

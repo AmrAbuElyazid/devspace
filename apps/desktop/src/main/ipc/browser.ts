@@ -17,6 +17,8 @@ import {
 import { getSafeBrowserUrl, parseNativeViewBounds } from "../validation";
 import { resolveFaviconDataUrl } from "../browser/browser-favicon-service";
 import type { PaneOverlayManager } from "../browser/pane-overlay-manager";
+import type { SidebarPeekWatcher } from "../sidebar-peek-watcher";
+import { isSidebarPeekConfig } from "../../shared/sidebar-peek";
 import { isOverlayMenuRequest } from "../../shared/overlay";
 import { safeHandle, safeOn } from "./shared";
 
@@ -45,13 +47,21 @@ export function registerBrowserIpc(
   browserPaneManager: BrowserPaneController,
   browserImportService?: BrowserImportService,
   paneOverlayManager?: PaneOverlayManager,
+  sidebarPeekWatcher?: SidebarPeekWatcher,
 ): void {
   // Menus drawn above the pane views. The renderer cannot paint over a
   // WebContentsView, so it hands the menu here to be rendered in a transparent
   // view stacked on top instead.
   safeHandle("overlay:showMenu", async (_event, request: unknown) => {
     if (!paneOverlayManager || !isOverlayMenuRequest(request)) return null;
-    return paneOverlayManager.showMenu(request);
+    // A menu and the peek panel share one surface, so the watcher stands down
+    // for as long as the menu is up rather than racing it for the bounds.
+    sidebarPeekWatcher?.suspend();
+    try {
+      return await paneOverlayManager.showMenu(request);
+    } finally {
+      sidebarPeekWatcher?.resume();
+    }
   });
 
   safeOn("overlay:resolveMenu", (_event, token: unknown, id: unknown) => {
@@ -60,6 +70,20 @@ export function registerBrowserIpc(
 
   safeOn("overlay:ready", () => {
     paneOverlayManager?.handleOverlayReady();
+  });
+
+  // The renderer owns whether the peek is wanted and what it should say; the
+  // main process owns when it opens, because only it can see the cursor over a
+  // native pane.
+  safeOn("sidebar:setPeekConfig", (_event, config: unknown) => {
+    if (!isSidebarPeekConfig(config)) return;
+    sidebarPeekWatcher?.setConfig(config);
+  });
+
+  safeOn("sidebar:peekActivate", (_event, workspaceId: unknown) => {
+    if (typeof workspaceId !== "string" || workspaceId.length === 0) return;
+    sidebarPeekWatcher?.dismiss();
+    mainWindow.webContents.send("sidebar:peekActivate", workspaceId);
   });
 
   safeHandle("browser:create", (_event, paneId: unknown, url: unknown) => {

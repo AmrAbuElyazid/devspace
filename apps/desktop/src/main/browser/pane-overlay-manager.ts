@@ -1,12 +1,23 @@
-import type { BaseWindow, WebContentsView } from "electron";
+import type { BaseWindow, BrowserWindow, Rectangle } from "electron";
 
 import type { OverlayMenuRequest } from "../../shared/overlay";
+import { SIDEBAR_PEEK_ANIMATION_MS, type SidebarPeekSnapshot } from "../../shared/sidebar-peek";
 
 interface PaneOverlayManagerDeps {
   getWindow: () => BaseWindow | null;
-  createView: () => WebContentsView;
-  /** Resolves the renderer entry, with the overlay hash appended. */
-  loadOverlay: (view: WebContentsView) => void;
+  /** Creates the transparent child window, parented to the main window. */
+  createSurface: () => BrowserWindow;
+  loadOverlay: (surface: BrowserWindow) => void;
+}
+
+function rectsEqual(left: Rectangle | null, right: Rectangle): boolean {
+  return (
+    left !== null &&
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  );
 }
 
 interface PendingMenu {
@@ -15,53 +26,131 @@ interface PendingMenu {
 }
 
 /**
- * Owns the single transparent view used to draw menus above a pane.
+ * Owns the single transparent surface used to draw popups above the panes.
  *
- * One view is created lazily and reused: instantiating a WebContentsView spins
- * up a renderer process, which is far too much to pay on every menu open. It is
- * parked hidden between uses and only torn down with the window.
+ * This is a child *window*, not a child view, and the difference is the whole
+ * point. A `WebContentsView` is composited above the renderer but below the
+ * terminal: Ghostty attaches its surface to the window's AppKit content view
+ * with a raw `addSubview:`, which lands above Electron's entire view tree, so a
+ * view-based overlay is sliced off at the terminal's edge. A child window sits
+ * above every view in the parent, terminals included.
  *
- * The view covers the window's whole content area rather than being sized to
- * the menu. That is deliberate — a menu wants a click-outside-to-dismiss scrim,
- * and since there is no per-view `setIgnoreMouseEvents` in Electron, a
- * full-bleed view is the only thing that can catch that click. The scrim is
- * fully transparent, so the page stays visible underneath.
+ * One surface is created lazily and reused — instantiating it spins up a
+ * renderer process, far too much to pay per popup. It is parked hidden between
+ * uses and torn down with the parent.
+ *
+ * It covers the parent's whole content rect rather than being sized to the
+ * popup. That is deliberate: a menu wants a click-outside-to-dismiss scrim, and
+ * a full-bleed surface is the only thing that can catch that click. The scrim
+ * is fully transparent, so the panes stay visible underneath.
  */
 export class PaneOverlayManager {
-  private view: WebContentsView | null = null;
+  private surface: BrowserWindow | null = null;
   private ready: Promise<void> | null = null;
   private markReady: (() => void) | null = null;
   private pending: PendingMenu | null = null;
   private nextToken = 1;
+  private followListener: (() => void) | null = null;
+  private peekOpen = false;
+  private peekRect: Rectangle | null = null;
+  private peekSnapshot = "";
+  private peekToken = 0;
+  private peekHideTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly deps: PaneOverlayManagerDeps) {}
 
   async showMenu(request: OverlayMenuRequest): Promise<string | null> {
-    const window = this.deps.getWindow();
-    if (!window) return null;
+    const parent = this.deps.getWindow();
+    if (!parent) return null;
 
     // A second menu supersedes the first; the original caller gets null so its
     // await settles rather than hanging forever.
     this.settle(null);
+    // A menu and the peek panel want the same surface at different sizes, so
+    // the menu — which the user asked for explicitly — takes it, including any
+    // exit the panel had not finished.
+    this.closePeek();
+    this.clearPeekHideTimer();
 
-    const view = this.ensureView();
+    const surface = this.ensureSurface();
     await this.ready;
-    if (view.webContents.isDestroyed()) return null;
+    if (surface.isDestroyed()) return null;
 
-    const [width = 0, height = 0] = window.getContentSize();
-    view.setBounds({ x: 0, y: 0, width, height });
-    // Re-adding an attached child moves it to the top of the stack, which is
-    // what keeps the overlay above panes created after it.
-    window.contentView.addChildView(view);
-    view.setVisible(true);
+    this.syncBounds();
+    // Undoes the peek's non-focusable mode; a menu owns the keyboard.
+    surface.setFocusable(true);
+    surface.showInactive();
+    // Raised after showing: a surface shown while another app was frontmost can
+    // otherwise sit below its own parent.
+    surface.moveTop();
+    // A menu owns the keyboard while it is open — Escape and the arrow keys are
+    // handled in the surface's own document, which never sees them otherwise.
+    surface.focus();
 
     const token = this.nextToken++;
-    view.webContents.send("overlay:menu", { token, request });
-    view.webContents.focus();
+    surface.webContents.send("overlay:menu", { token, request });
 
     return new Promise<string | null>((resolve) => {
       this.pending = { token, resolve };
     });
+  }
+
+  /**
+   * Show the collapsed sidebar's hover panel at `rect`, in screen coordinates.
+   *
+   * Sized to the panel rather than the whole content rect, unlike a menu: the
+   * surface takes every mouse event inside its bounds, and a full-bleed one
+   * would make the panes unclickable for as long as the panel was up.
+   *
+   * Never focused. The panel is a glance, and stealing the keyboard from a
+   * terminal because the pointer drifted into a corner would be indefensible.
+   */
+  async showPeek(rect: Rectangle, snapshot: SidebarPeekSnapshot): Promise<void> {
+    // A menu is modal in spirit; it keeps the surface until it settles.
+    if (this.pending) return;
+    const parent = this.deps.getWindow();
+    if (!parent) return;
+
+    const token = ++this.peekToken;
+    // A pending exit is cancelled rather than waited out: the window is still
+    // up, so the panel just slides back in from wherever it had got to.
+    this.clearPeekHideTimer();
+    const surface = this.ensureSurface();
+    await this.ready;
+    // The very first peek of a session is what creates the surface, so this
+    // await is a whole renderer process starting — hundreds of milliseconds,
+    // during which the cursor has usually moved on. Without the token that
+    // hide is dropped (there is no open panel yet to take down) and the panel
+    // then appears with nothing left that will ever close it.
+    if (surface.isDestroyed() || this.pending || token !== this.peekToken) return;
+
+    // Called on every watcher tick while the panel is up, so that a window move
+    // or a workspace rename lands without another mechanism. Both halves are
+    // deduplicated rather than resent eleven times a second.
+    const serialized = JSON.stringify(snapshot);
+    if (!this.peekOpen || !rectsEqual(this.peekRect, rect)) surface.setBounds(rect);
+    this.peekRect = rect;
+    if (!this.peekOpen || serialized !== this.peekSnapshot) {
+      surface.webContents.send("overlay:peek", snapshot);
+      this.peekSnapshot = serialized;
+    }
+    if (!this.peekOpen) {
+      // Non-focusable, which is what makes this a hover panel rather than a
+      // window: clicking a row neither activates the surface nor blurs the
+      // parent, so the terminal keeps the keyboard and — since the parent's
+      // blur is what stands the watcher down — the panel survives its own
+      // mouse-down long enough to see the click.
+      surface.setFocusable(false);
+      surface.showInactive();
+      // Raised after showing: a surface shown while another app was frontmost
+      // can otherwise sit below its own parent.
+      surface.moveTop();
+      this.peekOpen = true;
+    }
+  }
+
+  hidePeek(): void {
+    this.closePeek();
   }
 
   /** Called from IPC when the overlay has mounted and is listening. */
@@ -77,16 +166,53 @@ export class PaneOverlayManager {
     this.settle(typeof id === "string" ? id : null);
   }
 
+  private closePeek(): void {
+    // Bumped even when nothing is open, so that a show still waiting on the
+    // overlay to mount is cancelled rather than landing after the fact.
+    this.peekToken += 1;
+    if (!this.peekOpen) return;
+    this.peekOpen = false;
+    this.peekRect = null;
+    this.peekSnapshot = "";
+    const surface = this.surface;
+    if (!surface || surface.isDestroyed()) return;
+
+    surface.webContents.send("overlay:peek", null);
+    // The window outlives the message by the length of the panel's exit
+    // transition. Hiding it now would make the panel disappear rather than
+    // slide away, which is the whole point of animating it.
+    this.clearPeekHideTimer();
+    const timer = setTimeout(() => {
+      this.peekHideTimer = null;
+      // Reopened, or a menu took the surface, while the panel was leaving.
+      if (this.peekOpen || this.pending) return;
+      if (!surface.isDestroyed()) surface.hide();
+    }, SIDEBAR_PEEK_ANIMATION_MS);
+    timer.unref?.();
+    this.peekHideTimer = timer;
+
+    // Deliberately no `parent.focus()` here. The panel is non-focusable, so it
+    // never took the keyboard and has none to hand back — and one of the ways
+    // in here is the parent's own blur, where grabbing focus would pull the
+    // app back in front of whatever the user just switched to.
+  }
+
+  private clearPeekHideTimer(): void {
+    if (!this.peekHideTimer) return;
+    clearTimeout(this.peekHideTimer);
+    this.peekHideTimer = null;
+  }
+
   destroy(): void {
     this.settle(null);
-    const view = this.view;
-    this.view = null;
-    this.ready = null;
-    if (!view) return;
+    this.clearPeekHideTimer();
+    this.peekOpen = false;
+    this.detachFollow();
 
-    this.deps.getWindow()?.contentView.removeChildView(view);
-    // WebContents attached to a BaseWindow are not torn down with it.
-    if (!view.webContents.isDestroyed()) view.webContents.close();
+    const surface = this.surface;
+    this.surface = null;
+    this.ready = null;
+    if (surface && !surface.isDestroyed()) surface.destroy();
   }
 
   private settle(id: string | null): void {
@@ -99,24 +225,50 @@ export class PaneOverlayManager {
   }
 
   private hide(): void {
-    const view = this.view;
-    if (!view || view.webContents.isDestroyed()) return;
+    const surface = this.surface;
+    if (!surface || surface.isDestroyed()) return;
 
-    view.setVisible(false);
-    // Parked off-screen as well as hidden: a zero-opacity view that still
-    // covers the pane would keep swallowing the pane's mouse input.
-    view.setBounds({ x: 0, y: 0, width: 0, height: 0 });
+    surface.hide();
+    // Hand the keyboard back, or the parent stays inert until it is clicked.
+    // The renderer's own focus effects then return it to the active pane.
+    const parent = this.deps.getWindow();
+    if (parent && !parent.isDestroyed()) parent.focus();
   }
 
-  private ensureView(): WebContentsView {
-    const existing = this.view;
-    if (existing && !existing.webContents.isDestroyed()) return existing;
+  /**
+   * macOS keeps a child window's offset from its parent across moves, but not
+   * across resizes, so the surface has to be re-fitted while it is open.
+   */
+  private syncBounds(): void {
+    const parent = this.deps.getWindow();
+    const surface = this.surface;
+    if (!parent || parent.isDestroyed() || !surface || surface.isDestroyed()) return;
 
-    const view = this.deps.createView();
-    // WebContentsView defaults to an opaque white background, unlike the
-    // BrowserView it replaced. Without this the "overlay" is a white sheet.
-    view.setBackgroundColor("#00000000");
-    view.setVisible(false);
+    surface.setBounds(parent.getContentBounds());
+  }
+
+  private attachFollow(parent: BaseWindow): void {
+    if (this.followListener) return;
+
+    const onResize = (): void => {
+      // Only a menu is sized to the window; the peek panel is re-placed by its
+      // own watcher, which knows the rect it wants.
+      if (this.pending && this.surface?.isVisible()) this.syncBounds();
+    };
+    parent.on("resize", onResize);
+    this.followListener = () => parent.off("resize", onResize);
+  }
+
+  private detachFollow(): void {
+    this.followListener?.();
+    this.followListener = null;
+  }
+
+  private ensureSurface(): BrowserWindow {
+    const existing = this.surface;
+    if (existing && !existing.isDestroyed()) return existing;
+
+    const surface = this.deps.createSurface();
 
     // Resolved by the overlay itself once React has mounted and subscribed.
     // `did-finish-load` is too early: it fires before effects run, so the first
@@ -124,11 +276,14 @@ export class PaneOverlayManager {
     this.ready = new Promise<void>((resolve) => {
       this.markReady = resolve;
       // Never leave showMenu awaiting a load that failed outright.
-      view.webContents.once("did-fail-load", () => resolve());
+      surface.webContents.once("did-fail-load", () => resolve());
     });
-    this.deps.loadOverlay(view);
+    this.deps.loadOverlay(surface);
 
-    this.view = view;
-    return view;
+    const parent = this.deps.getWindow();
+    if (parent) this.attachFollow(parent);
+
+    this.surface = surface;
+    return surface;
   }
 }

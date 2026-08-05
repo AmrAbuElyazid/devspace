@@ -9,7 +9,6 @@ import { useSettingsStore } from "@/store/settings-store";
 import { useTrafficLightGutter } from "@/store/window-chrome-store";
 import { resolveDisplayString } from "../../../shared/shortcuts";
 import { useActiveDrag, useDropIntent } from "@/hooks/useDndOrchestrator";
-import { acquireNativeViewShield, releaseNativeViewShield } from "@/hooks/useNativeViewDragShield";
 import {
   collectWorkspaceIds,
   findFolder,
@@ -27,16 +26,20 @@ import { HintTooltip } from "@/components/ui/hint-tooltip";
 import { TooltipBoundaryProvider } from "@/components/ui/tooltip";
 import { Kbd } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
+import { showPointerOverlayMenu, type OverlayMenuItem } from "@/lib/pane-overlay-menu";
+import {
+  isWorkspaceColor,
+  resolveWorkspaceColor,
+  workspaceColorVar,
+  WORKSPACE_COLORS,
+} from "@/lib/workspace-color";
 
 import { SidebarTreeLevel } from "./SidebarTreeLevel";
+import { clampSidebarWidth } from "@/lib/sidebar-width";
+import { SidebarSectionHeader } from "./SidebarSectionHeader";
 import { SidebarProvider, type SidebarContextValue } from "./SidebarContext";
-import { QuickLaunchGrid } from "./QuickLaunchGrid";
 import { SidebarUpdateButton } from "./SidebarUpdateButton";
 import { useSidebarSelection } from "./useSidebarSelection";
-
-function clampSidebarWidth(width: number): number {
-  return Math.max(180, Math.min(420, width));
-}
 
 const iconButtonClass = cn(
   "no-drag chrome-focus inline-flex items-center justify-center rounded-md",
@@ -60,6 +63,7 @@ export default function Sidebar() {
   const renameFolder = useWorkspaceStore((s) => s.renameFolder);
   const toggleFolderCollapsed = useWorkspaceStore((s) => s.toggleFolderCollapsed);
   const togglePinWorkspace = useWorkspaceStore((s) => s.togglePinWorkspace);
+  const setWorkspaceColor = useWorkspaceStore((s) => s.setWorkspaceColor);
   const pinFolder = useWorkspaceStore((s) => s.pinFolder);
   const unpinFolder = useWorkspaceStore((s) => s.unpinFolder);
   const pendingEditId = useWorkspaceStore((s) => s.pendingEditId);
@@ -195,7 +199,6 @@ export default function Sidebar() {
       const divider = e.currentTarget;
       const { pointerId } = e;
       divider.setPointerCapture?.(pointerId);
-      acquireNativeViewShield();
 
       resizeRef.current = {
         startX: e.clientX,
@@ -226,7 +229,6 @@ export default function Sidebar() {
         if (divider.hasPointerCapture?.(pointerId)) {
           divider.releasePointerCapture(pointerId);
         }
-        releaseNativeViewShield();
       };
 
       divider.addEventListener("pointermove", onPointerMove);
@@ -327,8 +329,28 @@ export default function Sidebar() {
               { id: "new-folder", label: "New Folder..." },
               ...(deletable ? [{ id: "delete", label: "Delete", destructive: true }] : []),
             ];
-      const result = await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY });
+      // Rendered on the floating surface rather than popped as an NSMenu: the
+      // colour chips are the point of this menu, and a native menu cannot draw
+      // them. Single selection only — a colour applies to one workspace.
+      const result =
+        targets.length > 1
+          ? await window.api.contextMenu.show(items, { x: e.clientX, y: e.clientY })
+          : await showPointerOverlayMenu(e, items as OverlayMenuItem[], {
+              minWidth: 210,
+              label: "Workspace",
+              swatches: WORKSPACE_COLORS.map((key) => ({
+                id: `color:${key}`,
+                color: workspaceColorVar(key),
+                selected: resolveWorkspaceColor(workspaceId, ws.color) === key,
+                label: `Set colour ${key}`,
+              })),
+            });
       if (!result) return;
+      if (result.startsWith("color:")) {
+        const key = result.slice("color:".length);
+        if (isWorkspaceColor(key)) setWorkspaceColor(workspaceId, key);
+        return;
+      }
       if (result === "rename") startEditingWorkspace(workspaceId);
       else if (result === "duplicate") duplicateWorkspaces(targets);
       else if (result === "pin") togglePinWorkspace(workspaceId);
@@ -345,6 +367,7 @@ export default function Sidebar() {
       duplicateWorkspaces,
       addFolder,
       togglePinWorkspace,
+      setWorkspaceColor,
     ],
   );
 
@@ -439,10 +462,6 @@ export default function Sidebar() {
     [addWorkspace, defaultPaneType],
   );
 
-  const requestDelete = useCallback((workspaceId: string) => {
-    setDeleteTargets([workspaceId]);
-  }, []);
-
   const sidebarContextValue = useMemo<SidebarContextValue>(
     () => ({
       editingId,
@@ -461,7 +480,6 @@ export default function Sidebar() {
       activeWorkspaceId,
       selectedKeys,
       toggleFolderCollapsed,
-      onRequestDelete: requestDelete,
     }),
     [
       editingId,
@@ -480,7 +498,6 @@ export default function Sidebar() {
       activeWorkspaceId,
       selectedKeys,
       toggleFolderCollapsed,
-      requestDelete,
     ],
   );
 
@@ -546,15 +563,8 @@ export default function Sidebar() {
               </HintTooltip>
             </div>
 
-            {/* Quick launch. Everything below the header shares one left rhythm:
-              containers inset 8px, so every hover/active rectangle in the
-              column starts at the same x, and their content at 18px. */}
-            <div className="px-2 pt-1 pb-2">
-              <QuickLaunchGrid />
-            </div>
-
             {/* Search */}
-            <div className="px-2 pb-2">
+            <div className="px-2 pb-1">
               <div
                 className={cn(
                   "no-drag relative flex items-center h-8 rounded-lg gap-2 px-2.5",
@@ -595,11 +605,11 @@ export default function Sidebar() {
             {/* Pinned section */}
             {pinnedSidebarNodes.length > 0 && (
               <>
-                <SectionHeader label="Pinned" />
+                <SidebarSectionHeader label="Pinned" />
                 <div
                   ref={setPinnedRootRef}
                   className={cn(
-                    "relative px-2 pb-2 flex flex-col gap-0.5",
+                    "relative px-2 flex flex-col gap-0.5",
                     isRelevantDrag && isPinnedRootOver && "drop-into-folder",
                     pinnedRootInsertClass,
                   )}
@@ -615,7 +625,7 @@ export default function Sidebar() {
             )}
 
             {/* Workspaces section */}
-            <SectionHeader label="Workspaces" count={workspaces.length}>
+            <SidebarSectionHeader label="Workspaces" count={workspaces.length}>
               <HintTooltip content="New folder" sideOffset={4} align="end">
                 <button
                   type="button"
@@ -649,13 +659,13 @@ export default function Sidebar() {
                   <Plus size={12} strokeWidth={2.2} />
                 </button>
               </HintTooltip>
-            </SectionHeader>
+            </SidebarSectionHeader>
 
             {/* Workspace tree. The droppable stretches to the bottom of the
               scroll viewport rather than hugging the rows, so the empty space
               below the list is a drop target too. */}
             <div className="flex-1 min-h-0 overflow-hidden">
-              <ScrollArea className="h-full scroll-fade-top">
+              <ScrollArea className="h-full">
                 <div className="flex min-h-full flex-col">
                   <div
                     ref={setMainRootRef}
@@ -852,30 +862,4 @@ function describeDeletionBody(scope: DeletionScope | null): string {
   const inside =
     scope.folderCount > 0 ? " Everything inside the selected folders goes with them." : "";
   return `${workspaces} will be permanently removed, shutting down any terminals still running in them.${inside} ${undone}`;
-}
-
-function SectionHeader({
-  label,
-  count,
-  children,
-}: {
-  label: string;
-  count?: number;
-  children?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-center justify-between px-4.5 pt-3 pb-1 select-none">
-      <div className="inline-flex items-baseline gap-2">
-        <span className="text-ui-micro font-mono uppercase tracking-[0.16em] text-muted-foreground">
-          {label}
-        </span>
-        {typeof count === "number" ? (
-          <span className="text-ui-micro font-mono tabular-nums text-muted-foreground/60">
-            {count}
-          </span>
-        ) : null}
-      </div>
-      {children ? <div className="flex items-center gap-0.5">{children}</div> : null}
-    </div>
-  );
 }

@@ -142,7 +142,7 @@ export default function SettingsPage() {
             </nav>
 
             <div className="min-h-0 min-w-0 flex-1">
-              <ScrollArea className="h-full scroll-fade-top">
+              <ScrollArea className="h-full">
                 <div className="px-8 py-6">
                   {activeSection === "general" && <GeneralSection />}
                   {activeSection === "appearance" && <AppearanceSection />}

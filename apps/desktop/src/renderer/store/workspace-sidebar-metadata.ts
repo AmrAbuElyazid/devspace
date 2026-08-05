@@ -1,32 +1,29 @@
 import { collectGroupIds } from "../lib/split-tree";
 import type { Pane, PaneGroup, Workspace } from "../types/workspace";
 
-/** Return the last directory name from an absolute path (e.g. "/a/b/c" -> "c"). */
-function lastPathSegment(path: string): string {
-  const cleaned = path.endsWith("/") ? path.slice(0, -1) : path;
-  const idx = cleaned.lastIndexOf("/");
-  return idx >= 0 ? cleaned.slice(idx + 1) : cleaned;
+/**
+ * What a sidebar row shows besides its name.
+ *
+ * Structured rather than a pre-joined string: the row renders the directory on
+ * its own line and the pane count in a fixed slot on the right, and it needs
+ * the full path so it can truncate from the left and keep the meaningful tail.
+ * The old `"3 panes · devspace · 2m ago"` collapsed all of that into one field
+ * that could only ever be ellipsised into uselessness.
+ */
+export interface WorkspaceSidebarInfo {
+  paneCount: number;
+  /** Absolute path of the workspace's primary pane, or null if it has none. */
+  directory: string | null;
 }
 
-function formatRelativeTime(timestamp: number): string {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return "now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-function getWorkspaceSidebarMetadata(
+function getWorkspaceSidebarInfo(
   workspace: Workspace,
   panes: Record<string, Pane>,
   paneGroups: Record<string, PaneGroup>,
-): string {
+): WorkspaceSidebarInfo {
   const groupIds = collectGroupIds(workspace.root);
   let paneCount = 0;
-  let primaryDir = "";
+  let directory: string | null = null;
 
   for (const groupId of groupIds) {
     const group = paneGroups[groupId];
@@ -36,69 +33,59 @@ function getWorkspaceSidebarMetadata(
       const pane = panes[tab.paneId];
       if (!pane) continue;
 
-      paneCount++;
-      if (!primaryDir && pane.type === "terminal") {
-        const cwd = pane.config.cwd;
-        if (cwd) primaryDir = lastPathSegment(cwd);
-      }
-      if (!primaryDir && pane.type === "editor") {
-        const folderPath = pane.config.folderPath;
-        if (folderPath) primaryDir = lastPathSegment(folderPath);
+      paneCount += 1;
+      if (directory) continue;
+
+      // First terminal or editor wins — those are the panes that carry a
+      // meaningful location. A browser's URL is not a directory.
+      if (pane.type === "terminal" && pane.config.cwd) {
+        directory = pane.config.cwd;
+      } else if (pane.type === "editor" && pane.config.folderPath) {
+        directory = pane.config.folderPath;
       }
     }
   }
 
-  const parts: string[] = [];
-  if (paneCount > 0) parts.push(`${paneCount} pane${paneCount > 1 ? "s" : ""}`);
-  if (primaryDir) parts.push(primaryDir);
-  parts.push(formatRelativeTime(workspace.lastActiveAt));
-  return parts.join(" · ");
+  // Falls back to whatever the workspace last recorded, so a workspace whose
+  // panes are all browsers still says where it lives.
+  return { paneCount, directory: directory ?? workspace.lastTerminalCwd ?? null };
 }
 
 export function buildWorkspaceSidebarMetadataByWorkspaceId(
   workspaces: Workspace[],
   panes: Record<string, Pane>,
   paneGroups: Record<string, PaneGroup>,
-): Record<string, string> {
-  const workspaceSidebarMetadataByWorkspaceId: Record<string, string> = {};
+): Record<string, WorkspaceSidebarInfo> {
+  const byId: Record<string, WorkspaceSidebarInfo> = {};
 
   for (const workspace of workspaces) {
-    workspaceSidebarMetadataByWorkspaceId[workspace.id] = getWorkspaceSidebarMetadata(
-      workspace,
-      panes,
-      paneGroups,
-    );
+    byId[workspace.id] = getWorkspaceSidebarInfo(workspace, panes, paneGroups);
   }
 
-  return workspaceSidebarMetadataByWorkspaceId;
+  return byId;
 }
 
 export function updateWorkspaceSidebarMetadataByWorkspaceId(
-  currentMetadataByWorkspaceId: Record<string, string>,
+  currentMetadataByWorkspaceId: Record<string, WorkspaceSidebarInfo>,
   workspaces: Workspace[],
   panes: Record<string, Pane>,
   paneGroups: Record<string, PaneGroup>,
   workspaceIds: string[],
-): Record<string, string> {
+): Record<string, WorkspaceSidebarInfo> {
   if (workspaceIds.length === 0) {
     return currentMetadataByWorkspaceId;
   }
 
-  const nextMetadataByWorkspaceId = { ...currentMetadataByWorkspaceId };
+  const next = { ...currentMetadataByWorkspaceId };
 
   for (const workspaceId of workspaceIds) {
     const workspace = workspaces.find((candidate) => candidate.id === workspaceId);
     if (!workspace) {
-      delete nextMetadataByWorkspaceId[workspaceId];
+      delete next[workspaceId];
       continue;
     }
-
-    nextMetadataByWorkspaceId[workspaceId] = getWorkspaceSidebarMetadata(
-      workspace,
-      panes,
-      paneGroups,
-    );
+    next[workspaceId] = getWorkspaceSidebarInfo(workspace, panes, paneGroups);
   }
 
-  return nextMetadataByWorkspaceId;
+  return next;
 }

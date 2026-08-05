@@ -515,7 +515,9 @@ test("drag end preserves the moved tab when splitting away the last tab in a sou
       "pane-1": { workspaceId: "workspace-1", groupId: "group-1" },
       "pane-2": { workspaceId: "workspace-1", groupId: "group-2" },
     },
-    workspaceSidebarMetadataByWorkspaceId: { "workspace-1": "" },
+    workspaceSidebarMetadataByWorkspaceId: {
+      "workspace-1": { paneCount: 2, directory: null },
+    },
     tabHistoryByGroupId: { "group-1": ["tab-1"], "group-2": ["tab-2"] },
     recentTabTraversalByGroupId: {},
     pinnedSidebarNodes: [],
