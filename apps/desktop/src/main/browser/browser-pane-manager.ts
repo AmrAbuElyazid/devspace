@@ -6,6 +6,7 @@ import type {
   BrowserPermissionDecision,
   BrowserRuntimeState,
   BrowserStopFindAction,
+  NativePaneFocusReason,
 } from "../../shared/browser";
 import type {
   BrowserPaneController,
@@ -194,7 +195,22 @@ export class BrowserPaneManager implements BrowserPaneController {
     });
   }
 
-  focusPane(paneId: string): void {
+  /**
+   * Hand the keyboard to a pane's web contents.
+   *
+   * `webContents.focus()` is not a pane-local operation on macOS: Electron
+   * routes it through the owning window's `Focus(true)`, which activates the
+   * app and orders the window front. A pane that came back on screen by itself
+   * — a dev server restarting, a view rebuilt after eviction — therefore must
+   * not be focused while the user is in another app, or Devspace snatches the
+   * screen back from whatever they were doing. The user gets the pane focused
+   * anyway the moment they return, via the `window:focus` handler.
+   */
+  focusPane(paneId: string, reason: NativePaneFocusReason = "user"): void {
+    if (reason === "reactive" && this.deps.isWindowFocused?.() === false) {
+      return;
+    }
+
     this.panes.withPane(paneId, (pane) => {
       focusPaneWebContents(pane);
     });

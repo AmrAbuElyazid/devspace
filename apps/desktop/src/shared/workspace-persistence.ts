@@ -36,6 +36,59 @@ interface PersistedNoteConfig {
   noteId: string;
 }
 
+/**
+ * The config keys each pane type is allowed to persist.
+ *
+ * A backstop, not bookkeeping. Pane config is written to the state file
+ * verbatim, so anything the renderer happens to hang off a pane goes to disk
+ * with it — which is how the VS Code connection token, part of an editor
+ * pane's URL, ended up being persisted. Unknown keys are dropped on the way
+ * in and on the way out rather than rejected, because rejecting would throw
+ * away a whole session's state over one stray field.
+ */
+const PERSISTED_PANE_CONFIG_KEYS: Record<string, readonly string[]> = {
+  terminal: ["cwd", "backend", "sessionId", "sessionName", "socketPath"],
+  browser: ["url", "zoom", "viewport", "faviconUrl"],
+  editor: ["folderPath"],
+  t3code: [],
+  note: ["noteId"],
+};
+
+/** Returns `config` with only the keys `type` is allowed to persist. */
+function sanitizePersistedPaneConfig(type: string, config: unknown): unknown {
+  const allowed = PERSISTED_PANE_CONFIG_KEYS[type];
+  if (!allowed || typeof config !== "object" || config === null || Array.isArray(config)) {
+    return config;
+  }
+
+  const entries = Object.entries(config as Record<string, unknown>);
+  if (entries.every(([key]) => allowed.includes(key))) {
+    return config;
+  }
+
+  return Object.fromEntries(entries.filter(([key]) => allowed.includes(key)));
+}
+
+/** Returns `pane` with any config key its type does not persist removed. */
+export function sanitizePersistedPane<T extends { type: string; config: unknown }>(pane: T): T {
+  const config = sanitizePersistedPaneConfig(pane.type, pane.config);
+  return config === pane.config ? pane : { ...pane, config };
+}
+
+/** Returns `panes` with every entry sanitized, preserving identity when clean. */
+export function sanitizePersistedPanes<T extends { type: string; config: unknown }>(
+  panes: Record<string, T>,
+): Record<string, T> {
+  let changed = false;
+  const next: Record<string, T> = {};
+  for (const [id, pane] of Object.entries(panes)) {
+    const sanitized = sanitizePersistedPane(pane);
+    if (sanitized !== pane) changed = true;
+    next[id] = sanitized;
+  }
+  return changed ? next : panes;
+}
+
 export type PersistedPane =
   | { id: string; title: string; type: "terminal"; config: PersistedTerminalConfig }
   | { id: string; title: string; type: "browser"; config: PersistedBrowserConfig }

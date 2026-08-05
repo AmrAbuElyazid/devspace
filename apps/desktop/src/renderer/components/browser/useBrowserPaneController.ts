@@ -320,7 +320,11 @@ export function useBrowserPaneController({
       return;
     }
 
-    focusBrowserNativePane(paneId);
+    // Reactive: the pane coming back on screen is as often the page reloading
+    // itself — a dev server restarting under an agent's edits clears the
+    // failure that had hidden the view — as it is the user selecting the tab.
+    // Only the user gets to pull the window forward.
+    focusBrowserNativePane(paneId, "reactive");
   }, [failure, isFindBarOpen, isFocused, isVisible, paneId]);
 
   const currentUrl = runtimeState?.url ?? initialUrl;

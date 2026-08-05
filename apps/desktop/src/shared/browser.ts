@@ -43,6 +43,26 @@ export interface BrowserFindInPageOptions {
 }
 
 export type BrowserStopFindAction = "clearSelection" | "keepSelection" | "activateSelection";
+
+/**
+ * Why a native pane was asked for the keyboard.
+ *
+ * On macOS this is not a detail. Electron's `webContents.focus()` calls
+ * `NativeWindow::Focus(true)` for the owning window, which runs
+ * `activateIgnoringOtherApps:` and `makeKeyAndOrderFront:` — so focusing a
+ * pane activates Devspace and pulls its window in front of whatever the user
+ * is actually looking at. (A `WebContentsView` counts: it is given an owner
+ * window as soon as it is added to one.)
+ *
+ * - `user`: the user did something — clicked a tab, submitted the address bar,
+ *   pressed a Devspace shortcut. Coming to the front is what they asked for.
+ * - `reactive`: the app noticed a pane come back on screen by itself — a dev
+ *   server restarting, a view recreated after an eviction, a VS Code pane
+ *   finishing its start. Never allowed to activate the app; it is dropped
+ *   while the window is not focused, and the pane picks the keyboard back up
+ *   from the `window:focus` handler when the user returns on their own.
+ */
+export type NativePaneFocusReason = "user" | "reactive";
 export type BrowserPermissionDecision = "allow-once" | "allow-for-session" | "deny";
 export type BrowserContextMenuTarget = "page" | "link" | "selection" | "image";
 

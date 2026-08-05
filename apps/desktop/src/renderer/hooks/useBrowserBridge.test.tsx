@@ -505,3 +505,96 @@ test("keeps the default folder title when VS Code reports only its product name"
 
   expect(browserBridgeMocks.updatePaneTitle).not.toHaveBeenCalled();
 });
+
+test("an editor pane's URL is never persisted into its config", async () => {
+  // The URL of a VS Code pane carries `?tkn=<connection token>`, and pane
+  // config is written to the workspace state file verbatim. Persisting it
+  // would leave a live credential on disk — the same reason editor panes are
+  // kept out of browser history.
+  browserBridgeMocks.workspaceState.panes = {
+    "pane-1": {
+      id: "pane-1",
+      type: "editor",
+      title: "VC: project",
+      config: { folderPath: "/tmp/project" },
+    },
+  };
+
+  const handler = browserBridgeMocks.stateChangeHandler;
+  if (!handler) {
+    throw new Error("expected useBrowserBridge to register a state change handler");
+  }
+
+  const editorUrl = "http://127.0.0.1:18562/devspace-vscode?tkn=secret&folder=%2Ftmp%2Fproject";
+  await act(async () => {
+    handler({
+      paneId: "pane-1",
+      url: editorUrl,
+      title: "project - Visual Studio Code",
+      faviconUrl: null,
+      isLoading: false,
+      canGoBack: false,
+      canGoForward: false,
+      isSecure: false,
+      securityLabel: null,
+      currentZoom: 1,
+      find: null,
+      failure: null,
+    });
+  });
+
+  // The store decides *when* a committed navigation is worth persisting; the
+  // bridge decides *whether* this pane's URL may be persisted at all. Drive
+  // the callback it handed over to check the second half.
+  const options = browserBridgeMocks.handleRuntimeStateChange.mock.calls.at(-1)?.[1] as {
+    persistUrlChange: (paneId: string, url: string) => void;
+  };
+  options.persistUrlChange("pane-1", editorUrl);
+
+  expect(browserBridgeMocks.updatePaneConfig).not.toHaveBeenCalledWith(
+    "pane-1",
+    expect.objectContaining({ url: expect.anything() }),
+  );
+});
+
+test("a browser pane's URL is still persisted into its config", async () => {
+  browserBridgeMocks.workspaceState.panes = {
+    "pane-1": {
+      id: "pane-1",
+      type: "browser",
+      title: "Example",
+      config: { url: "https://example.com/" },
+    },
+  };
+
+  const handler = browserBridgeMocks.stateChangeHandler;
+  if (!handler) {
+    throw new Error("expected useBrowserBridge to register a state change handler");
+  }
+
+  await act(async () => {
+    handler({
+      paneId: "pane-1",
+      url: "https://example.com/next",
+      title: "Example",
+      faviconUrl: null,
+      isLoading: false,
+      canGoBack: false,
+      canGoForward: false,
+      isSecure: true,
+      securityLabel: "Secure connection",
+      currentZoom: 1,
+      find: null,
+      failure: null,
+    });
+  });
+
+  const options = browserBridgeMocks.handleRuntimeStateChange.mock.calls.at(-1)?.[1] as {
+    persistUrlChange: (paneId: string, url: string) => void;
+  };
+  options.persistUrlChange("pane-1", "https://example.com/next");
+
+  expect(browserBridgeMocks.updatePaneConfig).toHaveBeenCalledWith("pane-1", {
+    url: "https://example.com/next",
+  });
+});

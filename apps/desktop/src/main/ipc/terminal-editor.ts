@@ -186,7 +186,9 @@ export function registerTerminalAndEditorIpc(
   safeOn("terminal:blur", (event) => {
     terminalManager.blurSurfaces();
     mainWindow.webContents.send("window:nativeModifierChanged", null);
-    event.sender.focus();
+    // Handing the keyboard back to the web contents raises and activates the
+    // window on macOS, so it is only safe while the window already has focus.
+    if (mainWindow.isFocused()) event.sender.focus();
   });
 
   safeHandle("terminal:sendBindingAction", (_event, surfaceId: unknown, action: unknown) => {

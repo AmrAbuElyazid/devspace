@@ -340,3 +340,21 @@ test("the panel does not reopen over a menu that is still up", async () => {
   manager.resolveMenu(tokenAt(sent, -1), null);
   await menu;
 });
+
+test("closing a menu the parent never had focus for leaves the app in the background", async () => {
+  // The user opened a menu, then switched apps while it was up. Handing focus
+  // back on close would run the parent window's Focus(true) — activating
+  // Devspace and raising it over whatever they had moved on to.
+  const { manager, window, sent } = harness;
+  (window as unknown as { isFocused: () => boolean }).isFocused = () => false;
+
+  const pending = manager.showMenu(REQUEST);
+  manager.handleOverlayReady();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  manager.resolveMenu(tokenAt(sent, 0), null);
+  await expect(pending).resolves.toBe(null);
+
+  expect(window.focus).not.toHaveBeenCalled();
+});

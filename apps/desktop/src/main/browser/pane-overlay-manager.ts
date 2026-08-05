@@ -10,6 +10,12 @@ interface PaneOverlayManagerDeps {
   loadOverlay: (surface: BrowserWindow) => void;
 }
 
+/** Tolerant read: the window is assumed focused when it cannot say otherwise. */
+function isWindowFocused(window: BaseWindow): boolean {
+  const isFocused = (window as { isFocused?: () => boolean }).isFocused;
+  return typeof isFocused === "function" ? isFocused.call(window) : true;
+}
+
 function rectsEqual(left: Rectangle | null, right: Rectangle): boolean {
   return (
     left !== null &&
@@ -56,6 +62,13 @@ export class PaneOverlayManager {
   private peekSnapshot = "";
   private peekToken = 0;
   private peekHideTimer: NodeJS.Timeout | null = null;
+  /**
+   * Whether the parent had the keyboard when the menu took it. Closing hands
+   * it back only if so: `focus()` activates the app and orders the window
+   * front on macOS, and a menu that outlives the user switching away must not
+   * drag Devspace back over whatever they moved on to.
+   */
+  private parentWasFocusedOnShow = false;
 
   constructor(private readonly deps: PaneOverlayManagerDeps) {}
 
@@ -77,6 +90,7 @@ export class PaneOverlayManager {
     if (surface.isDestroyed()) return null;
 
     this.syncBounds();
+    this.parentWasFocusedOnShow = isWindowFocused(parent);
     // Undoes the peek's non-focusable mode; a menu owns the keyboard.
     surface.setFocusable(true);
     surface.showInactive();
@@ -231,6 +245,10 @@ export class PaneOverlayManager {
     surface.hide();
     // Hand the keyboard back, or the parent stays inert until it is clicked.
     // The renderer's own focus effects then return it to the active pane.
+    // Only when the menu took it from the parent in the first place: if the
+    // user switched apps while it was open, focusing here would yank Devspace
+    // back in front of them.
+    if (!this.parentWasFocusedOnShow) return;
     const parent = this.deps.getWindow();
     if (parent && !parent.isDestroyed()) parent.focus();
   }

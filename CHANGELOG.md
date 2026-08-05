@@ -4,7 +4,11 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 ## Unreleased
 
-- No unreleased notes yet.
+### Fixed
+
+- Panes no longer pull Devspace in front of other apps when they come back on screen by themselves. Focusing a pane's web contents activates the app and raises its window on macOS, and nothing checked whether Devspace was frontmost first — so a dev server restarting under an agent's edits, or a VS Code pane finishing its first-run download, yanked the app over whatever you had switched to. Focus requests the app makes on its own are now refused while the window is in the background, and the pane is focused when you come back instead.
+- The first-run VS Code download no longer stalls or restarts from scratch. `code serve-web` was spawned with a stdout pipe nothing read, which blocks the CLI once it fills, and the 30s startup budget killed the download it was waiting on. Both pipes are drained, and the wait now gives up on silence rather than on elapsed time.
+- A VS Code pane's connection token is no longer written to the workspace state file. Editor pane URLs carry a live credential and were being persisted with the rest of the pane's config; existing state files are cleaned when they are next opened.
 
 ## v0.5.0 - 2026-08-05
 

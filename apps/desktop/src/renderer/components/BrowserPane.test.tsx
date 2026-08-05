@@ -292,7 +292,7 @@ test("creates the browser pane and renders the current security label", async ()
   expect(browserPaneMocks.browserCreate).toHaveBeenCalledWith("pane-1", "https://example.com/");
   expect(browserPaneMocks.browserGetRuntimeState).not.toHaveBeenCalled();
   expect(container.querySelector('[aria-label="Secure connection"]')).toBeTruthy();
-  expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
+  expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1", "reactive");
 });
 
 test("reuses an existing browser pane across unmount and remount", async () => {
@@ -409,7 +409,7 @@ test("focuses the native browser view when it becomes visible", async () => {
     );
   });
 
-  expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
+  expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1", "reactive");
 });
 
 test("focuses the native browser view when an already-visible pane becomes focused", async () => {
@@ -438,7 +438,73 @@ test("focuses the native browser view when an already-visible pane becomes focus
   });
 
   expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledTimes(1);
-  expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
+  expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1", "reactive");
+});
+
+/**
+ * Drives one dev-server restart the way the main process reports it: the load
+ * fails (the server went away mid-edit), which hides the native view behind
+ * the failure card, and the page then reloads itself when the server is back,
+ * which clears the failure and puts the view on screen again.
+ */
+async function runDevServerRestartCycle(
+  render: () => void,
+  setFailure: (failure: { kind: "navigation"; detail: string; url: string } | null) => void,
+): Promise<void> {
+  // did-fail-load: ERR_CONNECTION_REFUSED while the server is restarting.
+  setFailure({
+    kind: "navigation",
+    detail: "ERR_CONNECTION_REFUSED",
+    url: "https://example.com/",
+  });
+  await act(async () => {
+    render();
+  });
+
+  // did-start-loading: the page reloads once the server answers again.
+  setFailure(null);
+  await act(async () => {
+    render();
+  });
+}
+
+test("a dev server restart asks for focus reactively, never as a user gesture", async () => {
+  // The reload churn an agent's edits produce: the pane hides on the failed
+  // load and comes back on the retry, entirely on its own. Focusing a web
+  // contents activates the app and raises its window on macOS, so this focus
+  // has to be marked reactive — main then refuses it while the user is in
+  // another app, which is the "Devspace keeps stealing focus" report.
+  let nativeVisible = true;
+  browserPaneMocks.useNativeView.mockImplementation((args: unknown) => {
+    const enabled = (args as { enabled?: boolean }).enabled ?? true;
+    return { isVisible: nativeVisible && enabled };
+  });
+
+  const runtime = browserPaneMocks.browserStoreState.runtimeByPaneId["pane-1"] as {
+    failure: unknown;
+  };
+  const render = (): void => {
+    root?.render(
+      <BrowserPane
+        paneId="pane-1"
+        workspaceId="workspace-1"
+        config={{ url: "https://example.com/" }}
+        isFocused={true}
+      />,
+    );
+  };
+
+  await act(async () => {
+    render();
+  });
+  browserPaneMocks.browserSetFocus.mockClear();
+
+  await runDevServerRestartCycle(render, (failure) => {
+    runtime.failure = failure;
+  });
+
+  expect(browserPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1", "reactive");
+  nativeVisible = false;
 });
 
 test("does not focus the native browser view when its group is not focused", async () => {

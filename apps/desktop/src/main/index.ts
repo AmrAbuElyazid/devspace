@@ -171,6 +171,7 @@ function createWindow(): void {
     getSession: (kind) =>
       kind === "editor" ? editorSessionManager.getSession() : browserSessionManager.getSession(),
     historyService: browserHistoryService,
+    isWindowFocused: () => !window.isDestroyed() && window.isFocused(),
   });
 
   browserSessionManager.installHandlers({

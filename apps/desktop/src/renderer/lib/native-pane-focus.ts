@@ -7,6 +7,7 @@ import {
 } from "../store/native-view-store";
 import { useSettingsStore } from "../store/settings-store";
 import { useTerminalStore } from "../store/terminal-store";
+import type { NativePaneFocusReason } from "../../shared/browser";
 import type { Pane, PaneGroup, Workspace } from "../types/workspace";
 
 interface ActivePaneContext {
@@ -132,28 +133,52 @@ export function getFocusedActiveNativePane(): Pane | null {
   return context.pane;
 }
 
-export function focusTerminalNativePane(paneId: string): void {
+/**
+ * Whether the renderer will allow a pane that asked for the keyboard on its
+ * own — rather than because the user did something — to take it.
+ *
+ * Deliberately not a window-focus check. `document.hasFocus()` is false
+ * whenever a pane's web contents holds focus, which is most of the time the
+ * app is in use, so gating on it here would drop legitimate restores. Whether
+ * the window is frontmost is main's call (`BrowserPaneManager.focusPane`),
+ * which reads it from the window itself; this only adds what the renderer
+ * alone knows — that some field on this side is mid-edit and wants to keep
+ * the keys.
+ */
+function canTakeReactiveNativeFocus(): boolean {
+  return keyboardClaims === 0 && !hasEditableRendererFocus();
+}
+
+export function focusTerminalNativePane(
+  paneId: string,
+  reason: NativePaneFocusReason = "user",
+): void {
+  if (reason === "reactive" && !canTakeReactiveNativeFocus()) return;
   recordNativeFocusRequest("terminal");
   void window.api.terminal.focus(paneId);
 }
 
-export function focusBrowserNativePane(paneId: string): void {
+export function focusBrowserNativePane(
+  paneId: string,
+  reason: NativePaneFocusReason = "user",
+): void {
+  if (reason === "reactive" && !canTakeReactiveNativeFocus()) return;
   recordNativeFocusRequest("browser");
-  void window.api.browser.setFocus(paneId);
+  void window.api.browser.setFocus(paneId, reason);
 }
 
-function focusPane(pane: Pane): void {
+function focusPane(pane: Pane, reason: NativePaneFocusReason): void {
   if (pane.type === "terminal") {
-    focusTerminalNativePane(pane.id);
+    focusTerminalNativePane(pane.id, reason);
     return;
   }
 
   if (pane.type === "browser" || pane.type === "editor" || pane.type === "t3code") {
-    focusBrowserNativePane(pane.id);
+    focusBrowserNativePane(pane.id, reason);
   }
 }
 
-export function focusActiveNativePane(): void {
+export function focusActiveNativePane(reason: NativePaneFocusReason = "user"): void {
   if (useSettingsStore.getState().isOverlayActive()) {
     return;
   }
@@ -183,7 +208,7 @@ export function focusActiveNativePane(): void {
     return;
   }
 
-  focusPane(pane);
+  focusPane(pane, reason);
 }
 
 export function syncWorkspaceFocusForPane(paneId: string): void {
