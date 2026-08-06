@@ -131,3 +131,50 @@ describe("block gutter", () => {
     expect(dragHandles()).toHaveLength(1);
   });
 });
+
+describe("block menu", () => {
+  test("Turn into opens a submenu outside the parent menu's clipping box", async () => {
+    // The parent menu scrolls (`overflow-y-auto`). An unportalled submenu
+    // renders inside it and is clipped, so "Turn into" looked inert.
+    render([{ children: [{ text: "Block" }], type: "p" }] as Value);
+
+    act(() => (dragHandles()[0] as HTMLButtonElement).click());
+
+    const parent = document.querySelector<HTMLElement>('[data-slot="dropdown-menu-content"]');
+    expect(parent).not.toBeNull();
+
+    const subTrigger = document.querySelector<HTMLElement>(
+      '[data-slot="dropdown-menu-sub-trigger"]',
+    );
+    expect(subTrigger).not.toBeNull();
+
+    await act(async () => {
+      subTrigger!.dispatchEvent(new MouseEvent("pointermove", { bubbles: true }));
+      subTrigger!.click();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+
+    const sub = document.querySelector<HTMLElement>('[data-slot="dropdown-menu-sub-content"]');
+    expect(sub).not.toBeNull();
+    expect(sub!.textContent).toContain("Heading 1");
+    expect(parent!.contains(sub!)).toBe(false);
+  });
+
+  test("the menu offers every turn-into option", async () => {
+    render([{ children: [{ text: "Block" }], type: "p" }] as Value);
+
+    act(() => (dragHandles()[0] as HTMLButtonElement).click());
+    const subTrigger = document.querySelector<HTMLElement>(
+      '[data-slot="dropdown-menu-sub-trigger"]',
+    )!;
+    await act(async () => {
+      subTrigger.click();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+    });
+
+    const sub = document.querySelector<HTMLElement>('[data-slot="dropdown-menu-sub-content"]')!;
+    for (const label of ["Text", "Heading 1", "Bulleted list", "Quote", "Callout", "Code"]) {
+      expect(sub.textContent).toContain(label);
+    }
+  });
+});
