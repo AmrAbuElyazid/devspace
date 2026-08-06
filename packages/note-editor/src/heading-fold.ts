@@ -32,6 +32,26 @@ export function hiddenBlockIndices(value: Value, foldedIndices: ReadonlySet<numb
   return hidden;
 }
 
+let cachedValue: Value | null = null;
+let cachedFolded: readonly number[] | null = null;
+let cachedResult = new Set<number>();
+
+/**
+ * Single-entry memo of `hiddenBlockIndices`.
+ *
+ * Every block wrapper asks the same question with the same arguments during a
+ * render pass, so computing it per block made folding O(blocks²). React renders
+ * a tree synchronously, so one slot is all the cache needs.
+ */
+export function hiddenBlockIndicesFor(value: Value, folded: readonly number[]): Set<number> {
+  if (value === cachedValue && folded === cachedFolded) return cachedResult;
+
+  cachedValue = value;
+  cachedFolded = folded;
+  cachedResult = hiddenBlockIndices(value, new Set(folded));
+  return cachedResult;
+}
+
 /**
  * Drop folds that no longer point at a heading.
  *

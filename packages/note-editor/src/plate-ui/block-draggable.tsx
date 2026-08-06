@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
 
 import type { Path, TElement } from "platejs";
 
@@ -15,10 +15,10 @@ import {
   TypeIcon,
 } from "lucide-react";
 import { KEYS, PathApi } from "platejs";
-import { type PlateEditor, useEditorRef, usePluginOption } from "platejs/react";
+import { type PlateEditor, useEditorRef, usePath, usePluginOption } from "platejs/react";
 
 import { cn } from "../lib/cn";
-import { hiddenBlockIndices } from "../heading-fold";
+import { hiddenBlockIndicesFor } from "../heading-fold";
 import { serializeNoteMarkdown } from "../markdown/serialize";
 import { headingLevel } from "../note-outline";
 import { HeadingFoldPlugin } from "../plugins/heading-fold-kit";
@@ -78,7 +78,10 @@ function DraggableBlock({ children, element }: { children: ReactNode; element: T
     preview: { disable: true },
   });
 
-  const path = editor.api.findPath(element);
+  // `usePath` reads the path from context. `editor.api.findPath` scans the
+  // document, and running that in every block's render made the editor O(n²) —
+  // a 1200-block note never finished mounting.
+  const path = usePath();
   // Only top level blocks get a gutter. A paragraph nested in a table cell or a
   // callout has no room for one — it would render on top of the container's own
   // padding — and dragging it out of its parent is not a meaningful move.
@@ -88,10 +91,7 @@ function DraggableBlock({ children, element }: { children: ReactNode; element: T
   const showGutter = isTopLevel && !hasOpenCombobox;
 
   const folded = usePluginOption(HeadingFoldPlugin, "folded");
-  const hidden = useMemo(
-    () => hiddenBlockIndices(editor.children, new Set(folded)),
-    [editor.children, folded],
-  );
+  const hidden = hiddenBlockIndicesFor(editor.children, folded);
   // Hidden rather than unrendered: Slate needs the node in the DOM to keep its
   // paths and selection consistent.
   const isCollapsed = index !== null && hidden.has(index);
