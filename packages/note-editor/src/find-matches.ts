@@ -40,6 +40,32 @@ export function findMatches(value: Descendant[], search: string): TRange[] {
   return ranges;
 }
 
+/**
+ * Matches inside a single element, for the decoration pass.
+ *
+ * Shares `collect` with `findMatches` so the highlights and the match list are
+ * the same computation rather than two that have to agree.
+ */
+export function matchesInElement(node: Descendant, path: Path, search: string): TRange[] {
+  if (!search || !ElementApi.isElement(node)) return [];
+  if (!node.children.every((child) => TextApi.isText(child))) return [];
+
+  const ranges: TRange[] = [];
+  collect(node.children as { text: string }[], path, search.toLowerCase(), search.length, ranges);
+  return ranges;
+}
+
+/** Whether two ranges cover exactly the same span. */
+export function isSameRange(a: TRange | null, b: TRange | null): boolean {
+  if (!a || !b) return false;
+  return (
+    a.anchor.offset === b.anchor.offset &&
+    a.focus.offset === b.focus.offset &&
+    a.anchor.path.join() === b.anchor.path.join() &&
+    a.focus.path.join() === b.focus.path.join()
+  );
+}
+
 function collect(
   texts: { text: string }[],
   path: Path,

@@ -238,6 +238,13 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
 
   useEffect(() => () => clearPaneState(paneId), [clearPaneState, paneId]);
 
+  // The find bar owns the keyboard while it is open. Without this the editor
+  // still considers itself focused, keeps syncing its selection to the DOM, and
+  // pulls the caret back out of the find input mid-query.
+  useEffect(() => {
+    if (findBarOpen) controllerRef.current?.blur();
+  }, [findBarOpen]);
+
   // Plate does not emit a change on mount, so without this the footer reads
   // "0 words" and the outline claims the note has no headings until the user
   // types. It also establishes the baseline that keeps opening a note from
@@ -420,6 +427,10 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
   }, []);
 
   const editorSearch = useMemo(() => (findBarOpen ? query : ""), [findBarOpen, query]);
+  const activeMatch = useMemo(
+    () => (findBarOpen ? (matches[matchIndex] ?? null) : null),
+    [findBarOpen, matchIndex, matches],
+  );
 
   if (loadState === "loading") {
     return (
@@ -461,6 +472,7 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
             initialValue={initialValue}
             onChange={handleChange}
             onFoldedIndicesChange={setFoldedIndices}
+            activeMatch={activeMatch}
             search={editorSearch}
             uploadImage={uploadImage}
           />

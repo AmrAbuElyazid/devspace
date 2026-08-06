@@ -16,8 +16,9 @@ import { cn } from "../lib/cn";
  * the viewport, so a narrow split tightens up while a wide one still gets a
  * comfortable measure.
  *
- * The left inset never drops below `pl-9`: the block gutter is positioned at
- * `right-full` of each block and would be clipped by anything smaller.
+ * The left inset never drops below `pl-11`: block wrappers reach 44px back to
+ * cover the gutter strip, and `overflow-x-hidden` clips anything narrower — at
+ * `pl-9` the fold chevron was sliced in half in a narrow pane.
  */
 export function EditorContainer({
   className,
@@ -45,7 +46,7 @@ const editorClass = cn(
   "relative w-full cursor-text overflow-x-hidden break-words whitespace-pre-wrap",
   "focus-visible:outline-none",
   // Room for the block gutter at every width; breathing room once there is any.
-  "mx-auto py-3 pr-3 pl-9",
+  "mx-auto py-3 pr-3 pl-11",
   "@lg/note:py-4 @lg/note:pr-8 @lg/note:pl-12",
   "@3xl/note:max-w-[74ch] @3xl/note:pr-14 @3xl/note:pl-14",
   // Enough runway to click below the last block and land at the end of the note.

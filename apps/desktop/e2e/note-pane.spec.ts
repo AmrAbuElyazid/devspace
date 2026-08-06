@@ -227,27 +227,30 @@ test("a note ending in a code block can still be typed under", async () => {
   await expect(editor().locator("pre")).not.toContainText("after the code");
 });
 
-test("a block can be dragged by its handle", async () => {
+test("any block can be dragged by its handle, not just the first", async () => {
   await openNotePane();
-
   await editor().click();
-  await page.keyboard.type("first");
-  await page.keyboard.press("Enter");
-  await page.keyboard.type("second");
+  for (let line = 1; line <= 5; line++) {
+    await page.keyboard.type(`line ${line}`);
+    if (line < 5) await page.keyboard.press("Enter");
+  }
 
   const blocks = () => editor().locator(":scope > div");
-  await expect(blocks().first()).toContainText("first");
+  const order = async () => (await editor().innerText()).split("\n").filter(Boolean).join("|");
+  await expect.poll(order).toBe("line 1|line 2|line 3|line 4|line 5");
 
-  // Hover the first block to reveal its gutter, then drag it past the second.
-  const first = blocks().first();
-  await first.hover();
-  const handle = first.locator('button[aria-label="Drag to move, click to open block menu"]');
+  // Deliberately not the first block. An earlier version of this test only ever
+  // dragged block 0, which is the one case that would still pass if the drag
+  // resolved the wrong source.
+  const source = blocks().nth(1);
+  await source.hover();
+  const handle = source.locator('button[aria-label="Drag to move, click to open block menu"]');
   await expect(handle).toBeVisible();
 
-  await handle.dragTo(blocks().nth(1), { targetPosition: { x: 20, y: 18 } });
+  await handle.dragTo(blocks().nth(3), { targetPosition: { x: 80, y: 16 } });
 
-  await expect(blocks().first()).toContainText("second");
-  await expect(blocks().nth(1)).toContainText("first");
+  // "line 2" moved down past "line 4"; everything else kept its order.
+  await expect.poll(order).toBe("line 1|line 3|line 4|line 2|line 5");
 });
 
 test("a pasted image is stored beside the note and actually renders", async () => {
@@ -330,13 +333,21 @@ test("typing in the find bar searches instead of editing the note", async () => 
   const findInput = page.getByPlaceholder("Find in note");
   await expect(findInput).toBeFocused();
 
-  // One character at a time, which is what exposed it.
-  await findInput.pressSequentially("Deploy", { delay: 30 });
+  // Real key events to whatever holds focus, one character at a time — which is
+  // what exposed this. `pressSequentially` re-focuses its locator between keys
+  // and would paper over exactly the bug under test.
+  for (const character of "Deploy") {
+    await page.keyboard.type(character);
+    await page.waitForTimeout(20);
+  }
 
   await expect(findInput).toHaveValue("Deploy");
   await expect(findInput).toBeFocused();
   expect(await editor().innerText()).toBe(before);
   await expect(page.locator(".note-pane").getByText("1 / 1")).toBeVisible();
+
+  // The current match reads differently from the rest without being selected.
+  await expect(editor().locator("mark[data-note-search-active]")).toHaveCount(1);
 
   await findInput.press("Escape");
 });

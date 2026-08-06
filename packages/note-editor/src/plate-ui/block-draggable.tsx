@@ -119,7 +119,7 @@ function DraggableBlock({ children, element }: { children: ReactNode; element: T
       {showGutter && (
         <div
           className={cn(
-            "absolute top-0 left-0 z-10 flex h-[1lh] w-11 items-center justify-end gap-px pr-1.5",
+            "absolute top-0 left-0 z-10 flex min-h-[1lh] w-11 items-center justify-end gap-0.5 pr-1.5",
             "opacity-0 transition-opacity duration-100",
             "group-hover/block:opacity-100 group-focus-within/block:opacity-100",
             // A folded heading keeps its gutter up: the chevron is the only
@@ -152,11 +152,16 @@ function DraggableBlock({ children, element }: { children: ReactNode; element: T
 }
 
 const gutterButtonClass = cn(
-  "flex size-5 shrink-0 items-center justify-center rounded-md",
+  "flex size-6 shrink-0 items-center justify-center rounded-md",
   "border border-transparent bg-transparent text-muted-foreground/60",
   "transition-[background-color,border-color,color] duration-100",
   "hover:border-border hover:bg-surface hover:text-foreground",
   "focus-visible:outline-2 focus-visible:outline-brand focus-visible:outline-offset-[-1px]",
+  // The icon must never be the event target. A press that lands on the glyph
+  // rather than the button starts a drag from the SVG, which the browser is
+  // free to treat as an image drag instead of this element's — the difference
+  // between hitting a grip dot and the gap beside it.
+  "[&_svg]:pointer-events-none",
 );
 
 function GutterButton({

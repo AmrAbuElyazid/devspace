@@ -25,7 +25,6 @@
     "@platejs/code-block": "^52.3.16",
     "@platejs/combobox": "^52.3.10",
     "@platejs/dnd": "^52.3.10",
-    "@platejs/find-replace": "^52.3.10",
     "@platejs/floating": "^52.3.10",
     "@platejs/indent": "^52.3.10",
     "@platejs/link": "^52.3.17",

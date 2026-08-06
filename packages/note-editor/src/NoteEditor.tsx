@@ -21,7 +21,7 @@ import { findMatches } from "./find-matches";
 import { serializeNoteMarkdown } from "./markdown/serialize";
 import { pruneFolds } from "./heading-fold";
 import { createNoteEditorPlugins } from "./plugins/note-editor-kit";
-import { FindReplacePlugin } from "@platejs/find-replace";
+import { NoteSearchPlugin } from "./plugins/find-replace-kit";
 import { HeadingFoldPlugin } from "./plugins/heading-fold-kit";
 import { ImageUploadPlugin, type UploadImage } from "./plugins/media-kit";
 import { Editor, EditorContainer } from "./plate-ui/editor";
@@ -44,6 +44,16 @@ export type NoteEditorValue = Value;
  * leaking into the app.
  */
 export interface NoteEditorController {
+  /**
+   * Hands focus away from the document.
+   *
+   * Slate keeps syncing `editor.selection` to the DOM for as long as it
+   * believes it is focused, and applying a DOM selection inside a
+   * contenteditable focuses it implicitly. Opening the find bar therefore has
+   * to tell the editor it has lost focus, or the caret races back into the note
+   * and swallows the query.
+   */
+  blur: () => void;
   focus: () => void;
   /** The markdown the editor would persist right now. */
   markdown: () => string;
@@ -52,11 +62,12 @@ export interface NoteEditorController {
   replaceAll: (query: string, replacement: string) => number;
   replaceMatch: (range: TRange, replacement: string) => void;
   /**
-   * Scrolls a match into view without taking focus.
+   * Scrolls a match into view without selecting it or taking focus.
    *
-   * Focus has to stay wherever the caller put it — the find bar calls this on
-   * every keystroke, and pulling focus into the document would send the next
-   * character into the note, on top of the selected match.
+   * Selecting would make Slate sync the DOM selection, which moves focus into
+   * the editor — the find bar calls this while the user is still typing, so the
+   * next character would land in the note. Which match is current is shown by a
+   * decoration instead.
    */
   revealMatch: (range: TRange) => void;
   scrollToBlock: (index: number) => void;
@@ -70,6 +81,8 @@ export interface NoteEditorProps {
   initialValue: Value | string;
   onChange: (ctx: NoteEditorChangeContext) => void;
   onFoldedIndicesChange?: (indices: number[]) => void;
+  /** The match to mark as current, so it reads differently from the rest. */
+  activeMatch?: TRange | null;
   /** Highlights every occurrence; the pane's find bar drives it. */
   search?: string;
   uploadImage?: UploadImage;
@@ -100,22 +113,29 @@ function isRendered(editor: PlateEditor): boolean {
  * but does not re-run Slate's `decorate`, so the matches were counted correctly
  * while none of them were ever painted.
  */
-function SearchHighlightSync({ search }: { search: string }) {
+function SearchHighlightSync({
+  activeMatch,
+  search,
+}: {
+  activeMatch: TRange | null;
+  search: string;
+}) {
   const editor = useEditorRef();
   const redecorate = useRedecorate();
 
-  // Written during render, not in an effect: Plate reads this option while
-  // Slate builds its decorations, and that happens before effects run. This
-  // component is the first child of `<Plate>`, so its render precedes the
-  // editable's in the same pass.
-  editor.setOption(FindReplacePlugin, "search", search);
+  // Written during render, not in an effect: Plate reads these while Slate
+  // builds its decorations, and that happens before effects run. This component
+  // is the first child of `<Plate>`, so its render precedes the editable's in
+  // the same pass.
+  editor.setOption(NoteSearchPlugin, "query", search);
+  editor.setOption(NoteSearchPlugin, "activeRange", activeMatch);
 
-  // Setting the option is not enough on its own — decorations are memoised, so
+  // Setting the options is not enough on its own — decorations are memoised, so
   // a later change (including clearing the query) would leave the previous
   // highlights painted. This invalidates them.
   useEffect(() => {
     redecorate();
-  }, [redecorate, search]);
+  }, [activeMatch, redecorate, search]);
 
   return null;
 }
@@ -164,6 +184,7 @@ function focusAtSelectionOrEnd(editor: PlateEditor): void {
 }
 
 export function NoteEditor({
+  activeMatch = null,
   autoFocus = false,
   controllerRef,
   initialValue,
@@ -237,6 +258,7 @@ export function NoteEditor({
   useImperativeHandle(
     controllerRef,
     (): NoteEditorController => ({
+      blur: () => editor.tf.blur(),
       focus: () => focusAtSelectionOrEnd(editor),
       markdown: () => serializeNoteMarkdown(editor),
       matches: (query) => findMatches(editor.children, query),
@@ -256,8 +278,7 @@ export function NoteEditor({
         editor.tf.insertText(replacement, { at: range });
       },
       revealMatch: (range) => {
-        // Deliberately no `focus()` — see the interface comment.
-        editor.tf.select(range);
+        // Deliberately neither selects nor focuses — see the interface comment.
         scrollIntoView(editor, range.anchor.path.slice(0, -1));
       },
       scrollToBlock: (index) => {
@@ -291,16 +312,27 @@ export function NoteEditor({
     wasAutoFocusRef.current = autoFocus;
     if (!shouldAutoFocus) return;
 
-    requestAnimationFrame(() => {
+    const frame = requestAnimationFrame(() => {
       if (!isRendered(editor)) return;
+
+      // Autofocus is a courtesy for when nothing else is focused. It runs a
+      // frame late, and by then the user may have moved on — opening a pane and
+      // immediately pressing the find shortcut put the caret back in the
+      // document, so the rest of the query was typed into the note.
+      const active = document.activeElement;
+      const editable = editor.api.toDOMNode(editor) as HTMLElement | undefined;
+      if (active && active !== document.body && !editable?.contains(active)) return;
+
       focusAtSelectionOrEnd(editor);
     });
+
+    return () => cancelAnimationFrame(frame);
   }, [autoFocus, editor]);
 
   return (
     <TooltipProvider>
       <Plate editor={editor} onChange={handleChange}>
-        <SearchHighlightSync search={search} />
+        <SearchHighlightSync search={search} activeMatch={activeMatch} />
         <FoldSync onChange={onFoldedIndicesChange} />
         <EditorContainer className="note-editor-shell">
           <Editor className="note-editor-content" onMouseDown={handleEditorMouseDown} />

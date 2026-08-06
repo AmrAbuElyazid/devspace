@@ -4,7 +4,9 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { cn } from "../lib/cn";
 
 function TooltipProvider({
-  delayDuration = 0,
+  // Not 0: an instantly-appearing tooltip lands under the cursor that summoned
+  // it, and a press meant for the drag handle hits the tooltip instead.
+  delayDuration = 400,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   return (
@@ -26,7 +28,7 @@ function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimiti
 
 function TooltipContent({
   className,
-  sideOffset = 0,
+  sideOffset = 6,
   children,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content>) {
@@ -36,7 +38,7 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "glass-dropdown z-50 w-fit rounded-md px-2 py-0.5 text-ui-xs text-balance",
+          "glass-dropdown pointer-events-none z-50 w-fit rounded-md px-2 py-0.5 text-ui-xs text-balance",
           "text-popover-foreground",
           "animate-in fade-in-0 zoom-in-95",
           "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
