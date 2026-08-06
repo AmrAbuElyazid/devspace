@@ -36,10 +36,13 @@ export function createElectronIpcMock(
     },
     dialog: {
       showOpenDialog: async () => ({ canceled: true, filePaths: [] }),
+      showSaveDialog: async () => ({ canceled: true, filePath: undefined }),
       ...overrides.dialog,
     },
     shell: {
       openExternal: (_url?: string) => {},
+      openPath: async (_path?: string) => "",
+      showItemInFolder: (_path?: string) => {},
       ...overrides.shell,
     },
     nativeTheme: overrides.nativeTheme ?? { themeSource: "system" },

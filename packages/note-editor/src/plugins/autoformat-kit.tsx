@@ -170,8 +170,11 @@ const autoformatLists: AutoformatRule[] = [
       });
     },
   },
+  // Both spellings. `- [ ] ` is how a task is written in markdown everywhere
+  // else, and typing it used to leave a bullet with a literal "[ ]" in it,
+  // because `- ` made the bullet and only the space-less `[] ` was matched.
   {
-    match: ["[] "],
+    match: ["[] ", "[ ] "],
     mode: "block",
     type: "list",
     format: (editor) => {
@@ -185,7 +188,7 @@ const autoformatLists: AutoformatRule[] = [
     },
   },
   {
-    match: ["[x] "],
+    match: ["[x] ", "[X] "],
     mode: "block",
     type: "list",
     format: (editor) => {

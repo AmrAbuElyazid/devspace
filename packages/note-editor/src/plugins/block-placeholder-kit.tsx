@@ -7,7 +7,7 @@ export const BlockPlaceholderKit = [
   BlockPlaceholderPlugin.configure({
     options: {
       className:
-        "before:pointer-events-none before:absolute before:select-none before:text-[var(--foreground-muted)] before:content-[attr(placeholder)]",
+        "before:pointer-events-none before:absolute before:select-none before:text-muted-foreground/60 before:content-[attr(placeholder)]",
       placeholders: {
         [KEYS.p]: "Start writing",
       },

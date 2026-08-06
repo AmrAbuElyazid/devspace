@@ -23,6 +23,7 @@ import { installDynamicAppMenu } from "./app-menu";
 import { AppUpdater } from "./app-updater";
 import { IS_DEV, CLI_PORT, EDITOR_PARTITION } from "./dev-mode";
 import { ShortcutStore } from "./shortcut-store";
+import { installNoteAssetProtocol, registerNoteAssetScheme } from "./note-asset-protocol";
 
 // Keep the same userData path as before the monorepo conversion.
 // Without this, Electron derives the path from package.json "name" (@devspace/desktop)
@@ -47,6 +48,10 @@ if (overriddenUserDataPath) {
 
 // Sync shell environment before app is ready (macOS GUI apps don't inherit login shell env)
 syncShellEnvironment();
+
+// Privileged schemes have to be declared before the app is ready; the handler
+// itself is installed in whenReady below.
+registerNoteAssetScheme();
 
 // ---------------------------------------------------------------------------
 // CLI HTTP server — `devspace .` sends a request here
@@ -306,6 +311,8 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  installNoteAssetProtocol();
+
   // Start the CLI HTTP server only after the single-instance lock succeeds
   // (whenReady won't fire for the second instance since app.quit() was called).
   cliHttpServer.listen(CLI_PORT, "127.0.0.1", () => {

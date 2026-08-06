@@ -50,8 +50,10 @@ function TodoMarker(props: PlateElementProps) {
 
   return (
     <div contentEditable={false}>
+      {/* `top-[0.28lh]` centres the box on the first line at any font size —
+          the scaffold's fixed `top-1` drifted off a heading-sized to-do. */}
       <Checkbox
-        className={cn("-left-6 absolute top-1", readOnly && "pointer-events-none")}
+        className={cn("absolute top-[0.28lh] -left-[1.35em]", readOnly && "pointer-events-none")}
         {...checkboxProps}
       />
     </div>

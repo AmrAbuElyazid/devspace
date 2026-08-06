@@ -1,7 +1,5 @@
 "use client";
 
-import * as React from "react";
-
 import type { PlateLeafProps } from "platejs/react";
 import { PlateLeaf } from "platejs/react";
 
@@ -10,7 +8,7 @@ export function CodeLeaf(props: PlateLeafProps) {
     <PlateLeaf
       {...props}
       as="code"
-      className="whitespace-pre-wrap rounded-md bg-muted px-[0.3em] py-[0.2em] font-mono text-sm"
+      className="rounded-[4px] border border-border bg-elevated px-[0.35em] py-[0.1em] whitespace-pre-wrap text-foreground"
     >
       {props.children}
     </PlateLeaf>

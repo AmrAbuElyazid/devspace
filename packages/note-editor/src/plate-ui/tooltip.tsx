@@ -4,7 +4,9 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { cn } from "../lib/cn";
 
 function TooltipProvider({
-  delayDuration = 0,
+  // Not 0: an instantly-appearing tooltip lands under the cursor that summoned
+  // it, and a press meant for the drag handle hits the tooltip instead.
+  delayDuration = 400,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
   return (
@@ -26,7 +28,7 @@ function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimiti
 
 function TooltipContent({
   className,
-  sideOffset = 0,
+  sideOffset = 6,
   children,
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Content>) {
@@ -36,10 +38,8 @@ function TooltipContent({
         data-slot="tooltip-content"
         sideOffset={sideOffset}
         className={cn(
-          "z-50 w-fit rounded-md px-2.5 py-1 text-[11px] text-balance",
-          "bg-[var(--popover)] text-[var(--popover-foreground)]",
-          "border border-[var(--border)]",
-          "shadow-[0_4px_12px_rgba(0,0,0,0.15)]",
+          "glass-dropdown pointer-events-none z-50 w-fit rounded-md px-2 py-0.5 text-ui-xs text-balance",
+          "text-popover-foreground",
           "animate-in fade-in-0 zoom-in-95",
           "data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           "data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95",

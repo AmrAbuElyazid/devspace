@@ -19,6 +19,7 @@ vi.mock("platejs", () => ({
     italic: "italic",
     underline: "underline",
     strikethrough: "strikethrough",
+    highlight: "highlight",
     code: "code",
   },
 }));
@@ -81,7 +82,8 @@ test("FloatingToolbarButtons renders the expected toolbar button set", async () 
     root?.render(<FloatingToolbarButtons />);
   });
 
-  expect(floatingToolbarMocks.toolbarGroups).toBe(1);
+  // Turn into / marks / link, so the separators land between them.
+  expect(floatingToolbarMocks.toolbarGroups).toBe(3);
   expect(floatingToolbarMocks.turnIntoButtons).toBe(1);
   expect(floatingToolbarMocks.linkButtons).toHaveLength(1);
   expect(floatingToolbarMocks.markButtons.map((props) => props.nodeType)).toEqual([
@@ -89,13 +91,17 @@ test("FloatingToolbarButtons renders the expected toolbar button set", async () 
     "italic",
     "underline",
     "strikethrough",
+    "highlight",
     "code",
   ]);
+  // These have to match the hotkeys registered in basic-marks-kit — the
+  // scaffold advertised ⌘⇧M for strikethrough, which is bound to nothing.
   expect(floatingToolbarMocks.markButtons.map((props) => props.tooltip)).toEqual([
-    "Bold (⌘+B)",
-    "Italic (⌘+I)",
-    "Underline (⌘+U)",
-    "Strikethrough (⌘+⇧+M)",
-    "Code (⌘+E)",
+    "Bold ⌘B",
+    "Italic ⌘I",
+    "Underline ⌘U",
+    "Strikethrough ⌘⇧X",
+    "Highlight ⌘⇧H",
+    "Code ⌘E",
   ]);
 });

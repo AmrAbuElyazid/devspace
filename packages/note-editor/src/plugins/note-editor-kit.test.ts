@@ -1,9 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 const noteEditorKitMocks = vi.hoisted(() => ({
-  createSlatePlugin: vi.fn(
-    (config: { key: string; extendEditor: (args: { editor: unknown }) => unknown }) => config,
-  ),
+  trailingBlockPlugin: { key: "trailingBlock" },
   kits: {
     autoformat: ["autoformat"],
     basicNodes: ["basic-nodes-a", "basic-nodes-b"],
@@ -12,23 +10,42 @@ const noteEditorKitMocks = vi.hoisted(() => ({
     callout: ["callout"],
     codeBlock: ["code-block"],
     dnd: ["dnd"],
+    findReplace: ["find-replace"],
     floatingToolbar: ["floating-toolbar"],
+    headingFold: ["heading-fold"],
     indent: ["indent"],
     link: ["link"],
     list: ["list"],
+    markdown: ["markdown"],
+    math: ["math"],
+    media: ["media"],
     slash: ["slash"],
     table: ["table"],
   },
-  markdownPlugin: { key: "markdown" },
 }));
 
 vi.mock("platejs", () => ({
-  createSlatePlugin: noteEditorKitMocks.createSlatePlugin,
-  KEYS: { p: "p" },
+  TrailingBlockPlugin: noteEditorKitMocks.trailingBlockPlugin,
 }));
 
-vi.mock("@platejs/markdown", () => ({
-  MarkdownPlugin: noteEditorKitMocks.markdownPlugin,
+vi.mock("./markdown-kit", () => ({
+  MarkdownKit: noteEditorKitMocks.kits.markdown,
+}));
+
+vi.mock("./math-kit", () => ({
+  MathKit: noteEditorKitMocks.kits.math,
+}));
+
+vi.mock("./media-kit", () => ({
+  MediaKit: noteEditorKitMocks.kits.media,
+}));
+
+vi.mock("./find-replace-kit", () => ({
+  FindReplaceKit: noteEditorKitMocks.kits.findReplace,
+}));
+
+vi.mock("./heading-fold-kit", () => ({
+  HeadingFoldKit: noteEditorKitMocks.kits.headingFold,
 }));
 
 vi.mock("./autoformat-kit", () => ({
@@ -96,55 +113,19 @@ describe("createNoteEditorPlugins", () => {
       ...noteEditorKitMocks.kits.codeBlock,
       ...noteEditorKitMocks.kits.callout,
       ...noteEditorKitMocks.kits.table,
+      ...noteEditorKitMocks.kits.math,
+      ...noteEditorKitMocks.kits.media,
       ...noteEditorKitMocks.kits.indent,
       ...noteEditorKitMocks.kits.autoformat,
       ...noteEditorKitMocks.kits.slash,
       ...noteEditorKitMocks.kits.floatingToolbar,
       ...noteEditorKitMocks.kits.blockSelection,
       ...noteEditorKitMocks.kits.blockPlaceholder,
+      ...noteEditorKitMocks.kits.headingFold,
       ...noteEditorKitMocks.kits.dnd,
-      noteEditorKitMocks.markdownPlugin,
-      expect.objectContaining({ key: "ensure-paragraph" }),
+      ...noteEditorKitMocks.kits.findReplace,
+      ...noteEditorKitMocks.kits.markdown,
+      noteEditorKitMocks.trailingBlockPlugin,
     ]);
-    expect(noteEditorKitMocks.createSlatePlugin).toHaveBeenCalledWith(
-      expect.objectContaining({ key: "ensure-paragraph" }),
-    );
-  });
-
-  test("ensure-paragraph inserts a paragraph when the root becomes empty", () => {
-    const plugins = createNoteEditorPlugins();
-    const ensureParagraphPlugin = plugins.at(-1) as unknown as {
-      extendEditor: (args: { editor: typeof editor }) => typeof editor;
-    };
-    const insertNodes = vi.fn();
-    const originalNormalizeNode = vi.fn();
-    const editor = {
-      normalizeNode: originalNormalizeNode,
-      tf: { insertNodes },
-    };
-
-    ensureParagraphPlugin.extendEditor({ editor }).normalizeNode([{ children: [] }, []]);
-
-    expect(insertNodes).toHaveBeenCalledWith({ type: "p", children: [{ text: "" }] }, { at: [0] });
-    expect(originalNormalizeNode).not.toHaveBeenCalled();
-  });
-
-  test("ensure-paragraph falls back to the original normalizer for non-empty roots", () => {
-    const plugins = createNoteEditorPlugins();
-    const ensureParagraphPlugin = plugins.at(-1) as unknown as {
-      extendEditor: (args: { editor: typeof editor }) => typeof editor;
-    };
-    const insertNodes = vi.fn();
-    const originalNormalizeNode = vi.fn();
-    const editor = {
-      normalizeNode: originalNormalizeNode,
-      tf: { insertNodes },
-    };
-    const entry = [{ children: [{ text: "Existing" }] }, []] as const;
-
-    ensureParagraphPlugin.extendEditor({ editor }).normalizeNode(entry, { operation: "normalize" });
-
-    expect(insertNodes).not.toHaveBeenCalled();
-    expect(originalNormalizeNode).toHaveBeenCalledWith(entry, { operation: "normalize" });
   });
 });

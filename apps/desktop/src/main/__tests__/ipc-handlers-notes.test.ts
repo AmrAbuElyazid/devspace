@@ -269,3 +269,103 @@ describe("notes:list", () => {
     expect(result).toEqual(["note-a"]);
   });
 });
+
+// ---------------------------------------------------------------------------
+// notes:saveAsset
+// ---------------------------------------------------------------------------
+/** Four bytes of PNG magic — enough to be distinct binary content. */
+function png(): ArrayBuffer {
+  return new Uint8Array([137, 80, 78, 71]).buffer;
+}
+
+describe("notes:saveAsset", () => {
+  const assetsDir = join(notesDir, "assets");
+
+  test("writes the bytes and returns a note-asset URL", async () => {
+    const result = (await callHandler("notes:saveAsset", png(), "png")) as { url: string };
+
+    expect(result.url).toMatch(/^devspace-note-asset:\/\/[a-f0-9]{32}\.png$/);
+    const fileName = result.url.replace("devspace-note-asset://", "");
+    expect(existsSync(join(assetsDir, fileName))).toBe(true);
+  });
+
+  test("is content addressed, so the same image is only stored once", async () => {
+    const first = (await callHandler("notes:saveAsset", png(), "png")) as { url: string };
+    const second = (await callHandler("notes:saveAsset", png(), "png")) as { url: string };
+
+    expect(second.url).toBe(first.url);
+    const { readdir } = await import("fs/promises");
+    expect(await readdir(assetsDir)).toHaveLength(1);
+  });
+
+  test("rejects an extension that is not an image", async () => {
+    expect(await callHandler("notes:saveAsset", png(), "exe")).toEqual({
+      error: "Unsupported image type",
+    });
+    // Path separators can't smuggle a directory into the filename.
+    expect(await callHandler("notes:saveAsset", png(), "../../evil")).toEqual({
+      error: "Unsupported image type",
+    });
+  });
+
+  test("rejects non-binary payloads", async () => {
+    expect(await callHandler("notes:saveAsset", "not bytes", "png")).toEqual({
+      error: "Asset must be binary data",
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// notes:reveal / notes:openExternal / notes:exportTo
+// ---------------------------------------------------------------------------
+describe("note file actions", () => {
+  test("reveal rejects an invalid note id", async () => {
+    expect(await callHandler("notes:reveal", "../escape")).toEqual({ error: "Invalid note ID" });
+  });
+
+  test("reveal reports a note that has never been written", async () => {
+    expect(await callHandler("notes:reveal", "ghost")).toEqual({
+      error: "This note has not been saved yet",
+    });
+  });
+
+  test("reveal succeeds for a saved note", async () => {
+    await callHandler("notes:save", "real-note", "# Real");
+    expect(await callHandler("notes:reveal", "real-note")).toBeUndefined();
+  });
+
+  test("openExternal reports a note that has never been written", async () => {
+    expect(await callHandler("notes:openExternal", "ghost")).toEqual({
+      error: "This note has not been saved yet",
+    });
+  });
+
+  test("exportTo reports cancellation rather than failing", async () => {
+    await callHandler("notes:save", "export-me", "# Export");
+    expect(await callHandler("notes:exportTo", "export-me", "Export me")).toEqual({
+      canceled: true,
+    });
+  });
+
+  test("exportTo rejects an invalid note id", async () => {
+    expect(await callHandler("notes:exportTo", "../escape", "name")).toEqual({
+      error: "Invalid note ID",
+    });
+  });
+});
+
+describe("notes:saveAsset with a partial view", () => {
+  test("stores only the bytes the view covers", async () => {
+    // A TypedArray can be a window onto a larger buffer. Writing `.buffer`
+    // wholesale would persist unrelated adjacent bytes and hash the wrong
+    // content.
+    const backing = new Uint8Array([0, 0, 137, 80, 78, 71, 0, 0]);
+    const view = new Uint8Array(backing.buffer, 2, 4);
+
+    const result = (await callHandler("notes:saveAsset", view, "png")) as { url: string };
+    const fileName = result.url.replace("devspace-note-asset://", "");
+    const written = await readFile(join(notesDir, "assets", fileName));
+
+    expect([...written]).toEqual([137, 80, 78, 71]);
+  });
+});

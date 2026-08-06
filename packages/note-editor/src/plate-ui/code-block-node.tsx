@@ -31,40 +31,41 @@ export function CodeBlockElement(props: PlateElementProps<TCodeBlockElement>) {
   const { editor, element } = props;
 
   return (
-    <PlateElement
-      className="py-1 **:[.hljs-addition]:bg-[#f0fff4] **:[.hljs-addition]:text-[#22863a] dark:**:[.hljs-addition]:bg-[#3c5743] dark:**:[.hljs-addition]:text-[#ceead5] **:[.hljs-attr,.hljs-attribute,.hljs-literal,.hljs-meta,.hljs-number,.hljs-operator,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-id,.hljs-variable]:text-[#005cc5] dark:**:[.hljs-attr,.hljs-attribute,.hljs-literal,.hljs-meta,.hljs-number,.hljs-operator,.hljs-selector-attr,.hljs-selector-class,.hljs-selector-id,.hljs-variable]:text-[#6596cf] **:[.hljs-built\\_in,.hljs-symbol]:text-[#e36209] dark:**:[.hljs-built\\_in,.hljs-symbol]:text-[#c3854e] **:[.hljs-bullet]:text-[#735c0f] **:[.hljs-comment,.hljs-code,.hljs-formula]:text-[#6a737d] dark:**:[.hljs-comment,.hljs-code,.hljs-formula]:text-[#6a737d] **:[.hljs-deletion]:bg-[#ffeef0] **:[.hljs-deletion]:text-[#b31d28] dark:**:[.hljs-deletion]:bg-[#473235] dark:**:[.hljs-deletion]:text-[#e7c7cb] **:[.hljs-emphasis]:italic **:[.hljs-keyword,.hljs-doctag,.hljs-template-tag,.hljs-template-variable,.hljs-type,.hljs-variable.language\\_]:text-[#d73a49] dark:**:[.hljs-keyword,.hljs-doctag,.hljs-template-tag,.hljs-template-variable,.hljs-type,.hljs-variable.language\\_]:text-[#ee6960] **:[.hljs-name,.hljs-quote,.hljs-selector-tag,.hljs-selector-pseudo]:text-[#22863a] dark:**:[.hljs-name,.hljs-quote,.hljs-selector-tag,.hljs-selector-pseudo]:text-[#36a84f] **:[.hljs-regexp,.hljs-string,.hljs-meta_.hljs-string]:text-[#032f62] dark:**:[.hljs-regexp,.hljs-string,.hljs-meta_.hljs-string]:text-[#3593ff] **:[.hljs-section]:font-bold **:[.hljs-section]:text-[#005cc5] dark:**:[.hljs-section]:text-[#61a5f2] **:[.hljs-strong]:font-bold **:[.hljs-title,.hljs-title.class\\_,.hljs-title.class\\_.inherited\\_\\_,.hljs-title.function\\_]:text-[#6f42c1] dark:**:[.hljs-title,.hljs-title.class\\_,.hljs-title.class\\_.inherited\\_\\_,.hljs-title.function\\_]:text-[#a77bfa]"
-      {...props}
-    >
-      <div className="relative rounded-md bg-muted/50">
-        <pre className="overflow-x-auto p-8 pr-4 font-mono text-sm leading-[normal] [tab-size:2] print:break-inside-avoid">
-          <code>{props.children}</code>
-        </pre>
+    <PlateElement className="note-code-block group/code my-1.5" {...props}>
+      <pre>
+        <code>{props.children}</code>
+      </pre>
 
-        <div
-          className="absolute top-1 right-1 z-10 flex select-none gap-0.5"
-          contentEditable={false}
-        >
-          {isLangSupported(element.lang) && (
-            <Button
-              size="icon"
-              variant="ghost"
-              className="size-6 text-xs"
-              onClick={() => formatCodeBlock(editor, { element })}
-              title="Format code"
-            >
-              <BracesIcon className="!size-3.5 text-muted-foreground" />
-            </Button>
-          )}
-
-          <CodeBlockCombobox />
-
-          <CopyButton
+      {/* The controls sit over the code, so they stay out of the way until the
+          block is hovered or something inside it has focus. */}
+      <div
+        className={cn(
+          "absolute top-1 right-1 z-10 flex select-none items-center gap-0.5",
+          "opacity-0 transition-opacity duration-100",
+          "group-hover/code:opacity-100 group-focus-within/code:opacity-100",
+        )}
+        contentEditable={false}
+      >
+        {isLangSupported(element.lang) && (
+          <Button
             size="icon"
             variant="ghost"
-            className="size-6 gap-1 text-muted-foreground text-xs"
-            value={() => NodeApi.string(element)}
-          />
-        </div>
+            className="size-6"
+            onClick={() => formatCodeBlock(editor, { element })}
+            title="Format code"
+          >
+            <BracesIcon className="!size-3.5 text-muted-foreground" />
+          </Button>
+        )}
+
+        <CodeBlockCombobox />
+
+        <CopyButton
+          size="icon"
+          variant="ghost"
+          className="size-6 text-muted-foreground"
+          value={() => NodeApi.string(element)}
+        />
       </div>
     </PlateElement>
   );
@@ -144,9 +145,9 @@ function CopyButton({
   const [hasCopied, setHasCopied] = React.useState(false);
 
   React.useEffect(() => {
-    setTimeout(() => {
-      setHasCopied(false);
-    }, 2000);
+    if (!hasCopied) return;
+    const timer = setTimeout(() => setHasCopied(false), 2000);
+    return () => clearTimeout(timer);
   }, [hasCopied]);
 
   return (
@@ -245,7 +246,7 @@ const languages: { label: string; value: string }[] = [
   { label: "Reason", value: "reasonml" },
   { label: "Ruby", value: "ruby" },
   { label: "Rust", value: "rust" },
-  { label: "Sass", value: "scss" },
+  { label: "Sass", value: "sass" },
   { label: "Scala", value: "scala" },
   { label: "Scheme", value: "scheme" },
   { label: "SCSS", value: "scss" },
@@ -259,7 +260,6 @@ const languages: { label: string; value: string }[] = [
   { label: "VB.Net", value: "vbnet" },
   { label: "Verilog", value: "verilog" },
   { label: "VHDL", value: "vhdl" },
-  { label: "Visual Basic", value: "vbnet" },
   { label: "WebAssembly", value: "wasm" },
   { label: "XML", value: "xml" },
   { label: "YAML", value: "yaml" },

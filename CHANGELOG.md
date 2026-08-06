@@ -4,7 +4,27 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 ## Unreleased
 
-- No unreleased notes yet.
+### Fixed
+
+- Notes no longer stop saving. The markdown layer was registered without GFM, so serializing a note threw the moment it contained a table, strikethrough, underline, highlight, keyboard key or callout — all of which the toolbar and the slash menu could insert. The pane then discarded its cached markdown and never wrote to disk again for the rest of its life, losing every keystroke after the one that broke it. Reading was equally lossy: a markdown table came back as a paragraph of pipes, and `- [ ]` lost its checkbox.
+- Hover and selection states in the note editor do something again. Three custom properties the editor read were defined nowhere, and an invalid `var()` is dropped silently — so the slash menu had no hover and no keyboard-selection highlight, the floating toolbar had no hover, and the placeholder rendered at full brightness instead of muted.
+- Blocks can be dragged. The drag handle was also its menu's trigger, and the dropdown opened on `pointerdown` and cancelled the gesture; the gutter sat outside the block's hover box, so the strip you had to cross to reach it was dead space; the press landed on the icon rather than the button; and Plate's drag scroller covered the top 100px of the window with an invisible overlay that swallowed any drop onto the first two blocks of a note.
+- A note ending in a code block, table or image can be typed under. Nothing followed the last block, so clicking below it put the caret inside the block with no way out.
+- Pasted images render. The bytes and the markdown were always correct; the renderer's content-security policy blocked the scheme they are served over, so every image fell back to a placeholder.
+- Opening a note no longer rewrites it. Loading normalizes the document, which counted as a change and scheduled a save of a file the user had only looked at.
+- Empty paragraphs no longer write a zero-width space into the file — invisible in the editor, real bytes in `grep`, diffs and other editors.
+- The "Turn into" submenu opens outside the menu that summoned it, rather than being clipped inside its scroll box.
+- Callouts are stored as GFM alerts instead of MDX carrying a freshly minted id on every keystroke, which made a note's file churn on disk forever.
+- `- [ ] ` produces a checkbox. Only the space-less `[] ` did, so the spelling everyone actually types left a bullet containing a literal `[ ]`.
+
+### Added
+
+- The note editor gains a block gutter with drag, insert and fold; a grouped slash menu; find and replace on the existing find shortcut; a footer with save status, word and character counts and reading time; an outline panel; collapsible headings; a language picker and copy button on code blocks; callout kinds; table row and column controls; images by paste or drop; math; and reveal, open-externally, export and switch-note actions.
+
+### Changed
+
+- Notes are laid out for a pane rather than a page: 13px body text, tighter block rhythm, and padding driven by container queries against the pane's own width. Code highlighting is built from the workspace palette, so it follows light and dark.
+- Inline math needs `$$x$$` rather than `$x$`. Developer notes are full of `$PATH`, `$1` and prices, and single-dollar parsing turns "costs $5 and saves $3" into an equation.
 
 ## v0.5.1 - 2026-08-06
 
