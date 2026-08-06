@@ -81,7 +81,24 @@ test("focuses the native t3code view when an already-visible pane becomes focuse
   });
 
   expect(t3CodePaneMocks.browserSetFocus).toHaveBeenCalledTimes(1);
-  expect(t3CodePaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
+  expect(t3CodePaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1", "reactive");
+});
+
+test("a pane that comes back on its own asks for focus reactively", async () => {
+  // The view is rebuilt after an eviction and reaches "running" with nobody
+  // having asked for it. Marking that reactive is what lets main refuse to
+  // activate the app for it.
+  t3CodePaneMocks.useNativeView.mockImplementation((args: unknown) => ({
+    isVisible: Boolean((args as { enabled?: boolean }).enabled),
+  }));
+
+  await act(async () => {
+    root?.render(<T3CodePane paneId="pane-1" isFocused={true} />);
+  });
+  await flushAsyncEffects();
+  await flushAsyncEffects();
+
+  expect(t3CodePaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1", "reactive");
 });
 
 test("surfaces a pending T3 start failure after the pane remounts", async () => {

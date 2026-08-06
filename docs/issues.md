@@ -205,3 +205,27 @@ Keep this separate from `docs/roadmap.md`. If an issue grows into a larger archi
 - Commits:
   - `341b245` `fix: stabilize drag interactions`
   - `93530e7` `fix: keep pane activation synced with native focus`
+
+### 21. Panes That Reload Themselves Pull Devspace In Front Of Other Apps
+
+- Status: fixed
+- Priority: high
+- Type: focus/window-management bug
+- Resolution: `webContents.focus()` is not pane-local on macOS — Electron routes it through the owning window's `Focus(true)`, which runs `activateIgnoringOtherApps:` and `makeKeyAndOrderFront:`, so focusing a pane activates the app and raises the window. Nothing in the chain checked whether Devspace was frontmost, so any pane that came back on screen on its own asked for the keyboard and dragged the app over whatever the user had switched to: a browser pane hidden by a failed load and re-shown when the dev server returned (an agent editing code produces one of these per restart), and an editor or T3 pane reaching "running" after its server finished starting. Issue 9 had hardened the inbound `browser:focused` echo; this is the outbound request, which was never guarded. Focus requests now carry a reason — `user` for a gesture, `reactive` for the app noticing a pane return — and main drops reactive ones while the window is not focused, leaving the existing `window:focus` handler to restore the pane when the user comes back on their own. The same raise was closed off in `window:focusContent`, `terminal:blur`, and the overlay surface's hand-back, which only returns focus to the parent if the parent had it when the menu opened.
+- Relevant files: `apps/desktop/src/main/browser/browser-pane-manager.ts`, `apps/desktop/src/main/ipc/browser.ts`, `apps/desktop/src/main/ipc/system.ts`, `apps/desktop/src/main/ipc/terminal-editor.ts`, `apps/desktop/src/main/browser/pane-overlay-manager.ts`, `apps/desktop/src/renderer/lib/native-pane-focus.ts`, `apps/desktop/src/renderer/hooks/useEmbeddedWebPane.ts`, `apps/desktop/src/renderer/components/browser/useBrowserPaneController.ts`, `apps/desktop/src/shared/browser.ts`
+
+### 22. First-Run VS Code Download Could Stall Or Be Killed Mid-Download
+
+- Status: fixed
+- Priority: high
+- Type: editor integration bug
+- Resolution: `code serve-web` was spawned with a pipe on stdout that nothing ever read. An unconsumed pipe fills at 64KB and then blocks the writer indefinitely, and the first-run download — which reports its progress on stdout — is what fills it. Both pipes are now drained. The startup wait was also a flat 30s wall-clock budget whose expiry killed the process group, so a download slower than that was destroyed and restarted from nothing on every retry. It is now an idle timeout: the CLI narrates the download, so the wait only gives up after 60s with no output and no listener, or shortly after the process exits without one.
+- Relevant files: `apps/desktop/src/main/vscode-server.ts`
+
+### 23. An Editor Pane's Connection Token Was Persisted To Disk
+
+- Status: fixed
+- Priority: high
+- Type: security bug
+- Resolution: every committed navigation was written back into pane config, for every pane type. An editor pane's URL carries `?tkn=<connection token>`, pane config is persisted verbatim, and the state-file validator only checked the keys it knew about — so a live VS Code credential was being written to the workspace state file. The renderer now persists a URL only for browser panes, which is the only type that owns one, and main strips config keys a pane type does not persist on save, on patch, and on load, so an already-written file is cleaned the next time it is opened. Editor panes were already excluded from browser history for the same reason.
+- Relevant files: `apps/desktop/src/renderer/hooks/useBrowserBridge.ts`, `apps/desktop/src/shared/workspace-persistence.ts`, `apps/desktop/src/main/ipc/workspace-state.ts`

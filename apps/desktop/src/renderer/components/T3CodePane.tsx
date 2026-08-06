@@ -1,24 +1,7 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-  type ReactElement,
-} from "react";
-import { focusBrowserNativePane, hasEditableRendererFocus } from "@/lib/native-pane-focus";
-import { useNativeView } from "@/hooks/useNativeView";
-import {
-  discardEmbeddedToolViewIfCurrent,
-  getEmbeddedToolViewSnapshot,
-  markEmbeddedToolViewActive,
-  markEmbeddedToolViewCreated,
-  markEmbeddedToolViewDestroyed,
-  markEmbeddedToolViewFailed,
-  markEmbeddedToolViewInactive,
-  markEmbeddedToolViewReady,
-  subscribeEmbeddedToolView,
-} from "@/lib/embedded-tool-view-session";
+import { useCallback, type ReactElement } from "react";
+
+import { useEmbeddedWebPane, type EmbeddedWebPaneStartResult } from "@/hooks/useEmbeddedWebPane";
+import { markEmbeddedToolViewDestroyed } from "@/lib/embedded-tool-view-session";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -34,147 +17,32 @@ interface T3CodePaneProps {
   isActive?: boolean;
 }
 
-type T3CodeState =
-  | { status: "starting" }
-  | { status: "running" }
-  | { status: "error"; message: string }
-  | { status: "unavailable" };
-
 export default function T3CodePane({
   paneId,
   isFocused,
   isActive = true,
 }: T3CodePaneProps): ReactElement {
-  const placeholderRef = useRef<HTMLDivElement>(null);
-  const wasVisibleRef = useRef(false);
-  const wasFocusedRef = useRef(false);
-  const subscribeToView = useCallback(
-    (listener: () => void) => subscribeEmbeddedToolView(paneId, listener),
-    [paneId],
-  );
-  const readViewSession = useCallback(() => getEmbeddedToolViewSnapshot(paneId), [paneId]);
-  const viewSession = useSyncExternalStore(subscribeToView, readViewSession, readViewSession);
+  // Availability is answered as part of starting rather than in a separate
+  // probe phase: the CLI lookup is cheap and this keeps it to one round trip.
+  const start = useCallback(async (): Promise<EmbeddedWebPaneStartResult> => {
+    const available = await window.api.t3code.isAvailable();
+    if (!available) return { unavailable: true };
 
-  const [state, setState] = useState<T3CodeState>(() => {
-    if (viewSession.phase === "ready") return { status: "running" };
-    if (viewSession.phase === "error") {
-      return { status: "error", message: viewSession.error ?? "T3 Code failed to start" };
-    }
-    return { status: "starting" };
-  });
-
-  const { isVisible } = useNativeView({
-    id: paneId,
-    type: "browser",
-    ref: placeholderRef,
-    enabled: state.status === "running" && viewSession.phase === "ready",
-  });
-
-  useEffect(() => {
-    if (viewSession.phase === "ready" && state.status !== "running") {
-      setState({ status: "running" });
-      return;
-    }
-    if (viewSession.phase === "error" && state.status !== "error") {
-      setState({ status: "error", message: viewSession.error ?? "T3 Code failed to start" });
-      return;
-    }
-    if (viewSession.phase === "missing" && state.status === "running") {
-      setState({ status: "starting" });
-    }
-  }, [state.status, viewSession.error, viewSession.phase]);
-
-  useEffect(() => {
-    const wasVisible = wasVisibleRef.current;
-    const wasFocused = wasFocusedRef.current;
-    wasVisibleRef.current = isVisible;
-    wasFocusedRef.current = isFocused;
-    if (!isVisible || state.status !== "running" || hasEditableRendererFocus() || !isFocused) {
-      return;
-    }
-    if (wasVisible && wasFocused) return;
-    focusBrowserNativePane(paneId);
-  }, [isFocused, isVisible, paneId, state.status]);
-
-  useEffect(() => {
-    return () => {
-      markEmbeddedToolViewInactive(paneId);
-    };
+    const result = await window.api.t3code.start(paneId);
+    if ("cancelled" in result) return { cancelled: true };
+    if ("error" in result) return { error: result.error };
+    return { started: true };
   }, [paneId]);
 
-  useEffect(() => {
-    if (!isActive) {
-      markEmbeddedToolViewInactive(paneId);
-      return;
-    }
+  const { status, errorMessage, isVisible, placeholderRef, retry } = useEmbeddedWebPane({
+    paneId,
+    isFocused,
+    isActive,
+    defaultErrorMessage: "T3 Code failed to start",
+    start,
+  });
 
-    markEmbeddedToolViewActive(paneId);
-  }, [isActive, paneId, viewSession.phase]);
-
-  useEffect(() => {
-    // Evicting an inactive view flips this pane back to "starting", so without
-    // this guard the pane immediately rebuilds the view the warm-view budget
-    // just reclaimed, only for the next eviction pass to reclaim it again. The
-    // restart is deferred until the pane is actually on screen.
-    if (!isActive) return;
-    if (state.status !== "starting") return;
-    if (viewSession.phase === "ready") {
-      setState({ status: "running" });
-      return;
-    }
-    if (viewSession.phase === "pending") return;
-    if (viewSession.phase === "error") {
-      setState({ status: "error", message: viewSession.error ?? "T3 Code failed to start" });
-      return;
-    }
-    let cancelled = false;
-    const generation = markEmbeddedToolViewCreated(paneId, () => {
-      void window.api.browser.destroy(paneId);
-    });
-    void (async () => {
-      try {
-        const available = await window.api.t3code.isAvailable();
-        if (!available) {
-          markEmbeddedToolViewDestroyed(paneId);
-          if (!cancelled) setState({ status: "unavailable" });
-          return;
-        }
-        const result = await window.api.t3code.start(paneId);
-        if ("cancelled" in result) {
-          // Superseded in main. Not a failure — drop the pending record so the
-          // pane can start over rather than stranding on "pending".
-          discardEmbeddedToolViewIfCurrent(paneId, generation);
-          return;
-        }
-        if ("error" in result) {
-          markEmbeddedToolViewFailed(paneId, generation, result.error);
-          if (!cancelled) setState({ status: "error", message: result.error });
-          return;
-        }
-        markEmbeddedToolViewReady(paneId, generation);
-        if (cancelled) return;
-        setState({ status: "running" });
-      } catch (error) {
-        // A rejected invoke leaves the session in "pending", and this effect
-        // returns early on "pending", so nothing would ever retry it — the pane
-        // would spin forever. Record the failure so the error UI (and its retry)
-        // can take over.
-        const message = error instanceof Error ? error.message : String(error);
-        markEmbeddedToolViewFailed(paneId, generation, message);
-        if (!cancelled) setState({ status: "error", message });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isActive, paneId, state.status, viewSession.error, viewSession.phase]);
-
-  const handleRetry = useCallback(() => {
-    markEmbeddedToolViewDestroyed(paneId);
-    setState({ status: "starting" });
-  }, [paneId]);
-
-  if (state.status === "unavailable") {
+  if (status === "unavailable") {
     return (
       <PaneStatusCard eyebrow="T3 Code unavailable" title="CLI not found" tone="warning">
         <p className="text-ui-sm text-muted-foreground leading-relaxed">
@@ -188,20 +56,20 @@ export default function T3CodePane({
     );
   }
 
-  if (state.status === "error") {
+  if (status === "error") {
     return (
       <PaneStatusCard eyebrow="T3 Code error" title="Failed to start" tone="error">
         <p className="text-ui-sm text-muted-foreground leading-relaxed self-stretch">
-          {state.message}
+          {errorMessage}
         </p>
-        <Button size="sm" onClick={handleRetry}>
+        <Button size="sm" onClick={retry}>
           Retry
         </Button>
       </PaneStatusCard>
     );
   }
 
-  if (state.status === "starting") {
+  if (status === "checking" || status === "starting") {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center gap-2 bg-background">
         <Spinner className="size-4 text-muted-foreground" />

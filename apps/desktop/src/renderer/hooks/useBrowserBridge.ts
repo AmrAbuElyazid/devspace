@@ -124,8 +124,16 @@ export function useBrowserBridge(): void {
   useEffect(() => {
     return subscribeToBrowserEvents({
       onStateChange: (state) => {
+        const pane = useWorkspaceStore.getState().panes[state.paneId];
+
         handleRuntimeStateChange(state, {
+          // Only a browser pane owns its URL. An editor pane's URL carries the
+          // VS Code connection token, and pane config is written to the
+          // workspace state file verbatim — persisting it would put a live
+          // credential on disk. The same reasoning keeps editor panes out of
+          // browser history; see recordCommittedHistoryVisit.
           persistUrlChange: (paneId, url) => {
+            if (pane?.type !== "browser") return;
             updatePaneConfig(paneId, { url });
           },
           persistCommittedNavigation: state.isLoading === false,
@@ -133,8 +141,6 @@ export function useBrowserBridge(): void {
           // source of truth for the user's zoom, and the factor the main
           // process reports includes device mode's fit-to-panel scale.
         });
-
-        const pane = useWorkspaceStore.getState().panes[state.paneId];
 
         if (pane?.type === "browser") {
           const nextTitle = getBrowserPaneTitle(state.title, state.url);

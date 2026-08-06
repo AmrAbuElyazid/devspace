@@ -3,6 +3,8 @@ import { safeHandle, safeOn } from "./shared";
 import { WorkspacePersistenceStore } from "../workspace-persistence-store";
 import {
   applyPersistedWorkspacePatch,
+  sanitizePersistedPane,
+  sanitizePersistedPanes,
   type PersistedWorkspacePatch,
   type PersistedWorkspaceState,
 } from "../../shared/workspace-persistence";
@@ -482,6 +484,30 @@ function getPatchedStateSize(
   return nextSize;
 }
 
+/**
+ * Drop pane-config keys that the pane's type does not persist.
+ *
+ * The last line before the disk. Pane config is written verbatim, so a key the
+ * renderer never meant to persist is persisted anyway — which is how the VS
+ * Code connection token, carried in an editor pane's URL, was reaching the
+ * state file. Identity is preserved when there is nothing to strip, so the
+ * incremental save path still sees an unchanged snapshot.
+ */
+function sanitizeWorkspaceState(snapshot: PersistedWorkspaceState): PersistedWorkspaceState {
+  const panes = sanitizePersistedPanes(snapshot.panes);
+  return panes === snapshot.panes ? snapshot : { ...snapshot, panes };
+}
+
+function sanitizeWorkspacePatch(patch: PersistedWorkspacePatch): PersistedWorkspacePatch {
+  const panes = patch.panes;
+  if (!panes?.upsert.length) return patch;
+
+  const sanitized = panes.upsert.map(sanitizePersistedPane);
+  if (sanitized.every((pane, index) => pane === panes.upsert[index])) return patch;
+
+  return { ...patch, panes: { ...panes, upsert: sanitized } };
+}
+
 let validatedSnapshot: PersistedWorkspaceState | null = null;
 let validatedSnapshotSize = 0;
 
@@ -501,8 +527,9 @@ function handleSaveSync(
   }
 
   try {
-    persistenceStore.save(snapshot);
-    rememberValidatedSnapshot(snapshot);
+    const sanitized = sanitizeWorkspaceState(snapshot);
+    persistenceStore.save(sanitized);
+    rememberValidatedSnapshot(sanitized);
     event.returnValue = { ok: true };
   } catch (error) {
     event.returnValue = {
@@ -548,8 +575,16 @@ export function registerWorkspaceStateIpc(): void {
       validatedSnapshotSize = 0;
       throw new Error("Invalid persisted workspace state");
     }
-    rememberValidatedSnapshot(snapshot);
-    return snapshot;
+
+    const sanitized = sanitizeWorkspaceState(snapshot);
+    if (sanitized !== snapshot) {
+      // Written by a build that persisted more than it should have. Rewrite it
+      // now rather than leaving the stale keys on disk until the pane that
+      // owns them happens to change again.
+      store.save(sanitized);
+    }
+    rememberValidatedSnapshot(sanitized);
+    return sanitized;
   });
 
   safeHandle("workspaceState:save", async (_event, snapshot: unknown) => {
@@ -557,15 +592,18 @@ export function registerWorkspaceStateIpc(): void {
       throw new Error("Invalid workspace state");
     }
 
-    store.save(snapshot);
-    rememberValidatedSnapshot(snapshot);
+    const sanitized = sanitizeWorkspaceState(snapshot);
+    store.save(sanitized);
+    rememberValidatedSnapshot(sanitized);
   });
 
-  safeHandle("workspaceState:patch", async (_event, patch: unknown) => {
-    if (!isValidPersistedWorkspacePatch(patch)) {
+  safeHandle("workspaceState:patch", async (_event, rawPatch: unknown) => {
+    if (!isValidPersistedWorkspacePatch(rawPatch)) {
       throw new Error("Invalid workspace state patch");
     }
 
+    // Before the size accounting and the apply, so both see what will be written.
+    const patch = sanitizeWorkspacePatch(rawPatch);
     const current = store.getCurrentSnapshot();
     if (!current) return { needsFullSave: true } as const;
     if (validatedSnapshot !== current) {

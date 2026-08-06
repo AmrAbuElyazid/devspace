@@ -1462,3 +1462,82 @@ test("history capture avoids stale titles and refreshes when the real title arri
   expect(historyCalls[1]?.title).toBe("Fresh page title");
   expect(historyCalls[1]?.visitedAt).toBe(historyCalls[0]?.visitedAt);
 });
+
+test("a reactive focus request is dropped while the window is in the background", () => {
+  // `webContents.focus()` is not pane-local on macOS: Electron routes it
+  // through the owning window's Focus(true), which activates the app and
+  // orders the window front. A pane that came back on screen by itself must
+  // not be able to do that from behind another app.
+  const focusCalls: string[] = [];
+  let windowFocused = false;
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          loadURL: () => Promise.resolve(),
+          focus: () => focusCalls.push("focus"),
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+    isWindowFocused: () => windowFocused,
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+
+  manager.focusPane("pane-1", "reactive");
+  expect(focusCalls).toEqual([]);
+
+  // The user is looking at the app: recovery should put the keyboard back.
+  windowFocused = true;
+  manager.focusPane("pane-1", "reactive");
+  expect(focusCalls).toEqual(["focus"]);
+});
+
+test("a user focus request is honoured even from the background", () => {
+  // Clicking a row in the collapsed sidebar's hover panel, for instance: the
+  // panel is a non-focusable child window, so the parent is not key when the
+  // click lands, and coming to the front is exactly what was asked for.
+  const focusCalls: string[] = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          loadURL: () => Promise.resolve(),
+          focus: () => focusCalls.push("focus"),
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+    isWindowFocused: () => false,
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  manager.focusPane("pane-1", "user");
+
+  expect(focusCalls).toEqual(["focus"]);
+});
+
+test("focus defaults to a user request when no reason is given", () => {
+  const focusCalls: string[] = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          loadURL: () => Promise.resolve(),
+          focus: () => focusCalls.push("focus"),
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+    isWindowFocused: () => false,
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  manager.focusPane("pane-1");
+
+  expect(focusCalls).toEqual(["focus"]);
+});

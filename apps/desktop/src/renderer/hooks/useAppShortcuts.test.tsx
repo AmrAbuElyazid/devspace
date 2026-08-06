@@ -192,7 +192,7 @@ test("leader hides the active native pane until the next shortcut action", async
 
   expect(useNativeViewStore.getState().temporarilyHiddenPaneId).toBeNull();
   expect(useSettingsStore.getState().sidebarOpen).toBe(false);
-  expect(window.api.browser.setFocus).toHaveBeenCalledWith("browser-1");
+  expect(window.api.browser.setFocus).toHaveBeenCalledWith("browser-1", "user");
 });
 
 test("escape cancels leader capture and restores native focus", async () => {
@@ -212,7 +212,7 @@ test("escape cancels leader capture and restores native focus", async () => {
   });
 
   expect(useNativeViewStore.getState().temporarilyHiddenPaneId).toBeNull();
-  expect(window.api.browser.setFocus).toHaveBeenCalledWith("browser-1");
+  expect(window.api.browser.setFocus).toHaveBeenCalledWith("browser-1", "user");
 });
 
 test("leader capture restores the native pane after the configured idle timeout", async () => {
@@ -241,7 +241,7 @@ test("leader capture restores the native pane after the configured idle timeout"
   });
 
   expect(useNativeViewStore.getState().temporarilyHiddenPaneId).toBeNull();
-  expect(window.api.browser.setFocus).toHaveBeenCalledWith("browser-1");
+  expect(window.api.browser.setFocus).toHaveBeenCalledWith("browser-1", "user");
 });
 
 test("leader capture keeps the pane hidden until the full timeout after a non-shortcut key", async () => {
@@ -274,5 +274,5 @@ test("leader capture keeps the pane hidden until the full timeout after a non-sh
   });
 
   expect(useNativeViewStore.getState().temporarilyHiddenPaneId).toBeNull();
-  expect(window.api.browser.setFocus).toHaveBeenCalledWith("browser-1");
+  expect(window.api.browser.setFocus).toHaveBeenCalledWith("browser-1", "user");
 });

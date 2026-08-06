@@ -7,6 +7,7 @@ import type {
   BrowserPermissionDecision,
   BrowserRuntimeState,
   BrowserStopFindAction,
+  NativePaneFocusReason,
 } from "../../shared/browser";
 import type { ShortcutAction, ShortcutIpcChannel, StoredShortcut } from "../../shared/shortcuts";
 import type { BrowserHistoryRecorder } from "./browser-history-service";
@@ -28,6 +29,13 @@ export type BrowserPaneManagerDeps = {
   getAppShortcutBindings?: () => BrowserShortcutBinding[];
   getSession?: (kind?: BrowserPaneKind) => Session;
   historyService?: BrowserHistoryRecorder;
+  /**
+   * Whether the app's window currently has focus. Reactive focus requests are
+   * dropped while it does not, because focusing a pane's web contents raises
+   * and activates the window on macOS. Absent means "assume focused", which
+   * keeps callers that do not own a window (tests) on the old behaviour.
+   */
+  isWindowFocused?: () => boolean;
 };
 
 export interface BrowserPaneRecord {
@@ -71,7 +79,7 @@ export interface BrowserPaneController {
   reload(paneId: string): void;
   stop(paneId: string): void;
   setBounds(paneId: string, bounds: BrowserBounds): void;
-  focusPane(paneId: string): void;
+  focusPane(paneId: string, reason?: NativePaneFocusReason): void;
   setZoom(paneId: string, zoom: number): void;
   resetZoom(paneId: string): void;
   findInPage(paneId: string, query: string, options?: BrowserFindInPageOptions): void;

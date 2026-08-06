@@ -104,7 +104,28 @@ test("focuses the native editor view when an already-visible pane becomes focuse
   });
 
   expect(editorPaneMocks.browserSetFocus).toHaveBeenCalledTimes(1);
-  expect(editorPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1");
+  expect(editorPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1", "reactive");
+});
+
+test("a pane that starts on its own asks for focus reactively, not as a user gesture", async () => {
+  // The first-run repro: `code serve-web` downloads the server, the pane
+  // reaches "running" minutes later, and the user has long since switched to
+  // another app. Nobody asked for this focus, so it has to be marked reactive —
+  // that is what lets main drop it instead of activating Devspace and raising
+  // its window over whatever they moved on to.
+  editorPaneMocks.useNativeView.mockImplementation((args: unknown) => ({
+    isVisible: Boolean((args as { enabled?: boolean }).enabled),
+  }));
+
+  await act(async () => {
+    root?.render(
+      <EditorPane paneId="pane-1" config={{ folderPath: "/tmp/project" }} isFocused={true} />,
+    );
+  });
+  await flushAsyncEffects();
+  await flushAsyncEffects();
+
+  expect(editorPaneMocks.browserSetFocus).toHaveBeenCalledWith("pane-1", "reactive");
 });
 
 test("surfaces a pending start failure after the pane remounts", async () => {

@@ -24,6 +24,9 @@ const tempDirs: string[] = [];
 
 let isMaximized = false;
 let isFullScreen = false;
+/** Handing the keyboard back to the web contents raises the window on macOS,
+ *  so the handlers that do it only run while the window already has focus. */
+let isWindowFocused = true;
 let nextOpenDialogResult: { canceled: boolean; filePaths: string[] } = {
   canceled: true,
   filePaths: [],
@@ -101,6 +104,7 @@ const mainWindowMock = {
   },
   isMaximized: () => isMaximized,
   isFullScreen: () => isFullScreen,
+  isFocused: () => isWindowFocused,
   unmaximize: () => {
     windowCalls.push(["unmaximize"]);
   },
@@ -241,8 +245,8 @@ const browserPaneManagerMock = {
   setBounds: (paneId: string, bounds: unknown) => {
     browserPaneCalls.push(["setBounds", paneId, bounds]);
   },
-  focusPane: (paneId: string) => {
-    browserPaneCalls.push(["focusPane", paneId]);
+  focusPane: (paneId: string, reason?: string) => {
+    browserPaneCalls.push(["focusPane", paneId, reason]);
   },
   setZoom: (paneId: string, zoom: number) => {
     browserPaneCalls.push(["setZoom", paneId, zoom]);
@@ -386,6 +390,7 @@ beforeEach(() => {
   shellCalls.length = 0;
   isMaximized = false;
   isFullScreen = false;
+  isWindowFocused = true;
   nextOpenDialogResult = { canceled: true, filePaths: [] };
   builtMenuTemplate = [];
   lastPopupOptions = undefined;
@@ -493,6 +498,27 @@ test("terminal blur restores renderer focus and forwards native terminal events"
     ["terminal:searchTotal", "surface-1", 3],
   ]);
   expect(focus).toHaveBeenCalledTimes(1);
+});
+
+test("terminal blur leaves the keyboard alone while the window is in the background", () => {
+  // `event.sender.focus()` runs the owning window's Focus(true) on macOS, which
+  // activates the app and orders the window front. Blurring a terminal because
+  // some renderer state changed must not do that behind the user's back.
+  isWindowFocused = false;
+  const focus = vi.fn();
+
+  emitToChannel("terminal:blur", { sender: { focus } });
+
+  expect(terminalCalls).toEqual([["blurSurfaces"]]);
+  expect(focus).not.toHaveBeenCalled();
+});
+
+test("window:focusContent is dropped while the window is in the background", () => {
+  isWindowFocused = false;
+
+  emitToChannel("window:focusContent", {});
+
+  expect(windowCalls).not.toContainEqual(["focusContent"]);
 });
 
 test("editor IPC replaces changed sessions and recreates evicted views idempotently", async () => {
@@ -616,7 +642,23 @@ test("browser IPC forwards pane commands and filters pane id lists", async () =>
     ["toggleDevTools", "pane-1"],
     ["destroyPane", "pane-1"],
     ["setVisiblePanes", ["pane-1", "pane-2"]],
-    ["focusPane", "pane-1"],
+    ["focusPane", "pane-1", "user"],
+  ]);
+});
+
+test("browser:setFocus carries the reason through to the pane manager", () => {
+  // The reason is what lets main tell a pane the user selected from a pane
+  // that came back on its own — only the first may raise the window.
+  emitToChannel("browser:setFocus", {}, "pane-1", "reactive");
+  emitToChannel("browser:setFocus", {}, "pane-2", "user");
+  // Anything unrecognised is treated as a user gesture, so a caller that
+  // forgets the argument keeps the behaviour that always worked.
+  emitToChannel("browser:setFocus", {}, "pane-3", "nonsense");
+
+  expect(browserPaneCalls).toEqual([
+    ["focusPane", "pane-1", "reactive"],
+    ["focusPane", "pane-2", "user"],
+    ["focusPane", "pane-3", "user"],
   ]);
 });
 

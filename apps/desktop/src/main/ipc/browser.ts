@@ -159,9 +159,12 @@ export function registerBrowserIpc(
     browserPaneManager.setBounds(paneId, translatedBounds);
   });
 
-  safeOn("browser:setFocus", (_event, paneId: unknown) => {
+  safeOn("browser:setFocus", (_event, paneId: unknown, reason: unknown) => {
     if (typeof paneId !== "string") return;
-    browserPaneManager.focusPane(paneId);
+    // Anything that is not explicitly reactive is treated as a user gesture,
+    // so an older renderer (or a caller that forgets the argument) keeps the
+    // behaviour that always worked rather than silently losing focus.
+    browserPaneManager.focusPane(paneId, reason === "reactive" ? "reactive" : "user");
   });
 
   safeHandle("browser:setZoom", (_event, paneId: unknown, zoom: unknown) => {

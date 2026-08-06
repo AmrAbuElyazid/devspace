@@ -156,28 +156,76 @@ export function resolveVscodeCli(configuredCli?: string): EditorCliStatus {
   return cliFromPath ? { path: cliFromPath, source: "path" } : { path: null, reason: "not-found" };
 }
 
-/** Wait for a listener PID to appear on the fixed port. */
-function waitForPid(
-  getPid: () => number | null,
-  timeoutMs = 30_000,
-  intervalMs = 200,
-): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const deadline = Date.now() + timeoutMs;
-    const check = (): void => {
-      if (Date.now() > deadline) {
-        reject(new Error(`VS Code server listener did not appear within ${timeoutMs}ms`));
-        return;
-      }
+/**
+ * How long `serve-web` may go without saying anything, and without a listener
+ * appearing, before it is treated as stuck.
+ *
+ * Deliberately not a wall-clock budget for startup. The first run downloads
+ * the VS Code server before it binds the port, which is minutes on a slow
+ * link — but it narrates the download the whole way, so silence is the signal
+ * that something is wrong, not elapsed time. A fixed 30s budget used to expire
+ * mid-download and then kill the process, so the retry started the download
+ * again from nothing.
+ */
+const MANAGED_SERVER_IDLE_TIMEOUT_MS = 60_000;
 
+/**
+ * How long to keep looking for the listener after the spawned process exits.
+ * The CLI is a wrapper: it can hand off to the server process and exit while
+ * that server is still coming up, so an exit is a hint, not a verdict.
+ */
+const MANAGED_SERVER_EXIT_GRACE_MS = 2_000;
+
+interface WaitForManagedListenerOptions {
+  /** The verified listener PID on the fixed port, or null while there is none. */
+  getPid: () => number | null;
+  /** Epoch ms of the last byte the CLI wrote to stdout or stderr. */
+  getLastOutputAt: () => number;
+  /** Epoch ms the spawned process exited, or null while it is alive. */
+  getExitedAt: () => number | null;
+  idleTimeoutMs?: number;
+  intervalMs?: number;
+}
+
+/** Wait for a listener PID to appear on the fixed port. */
+export function waitForManagedListener({
+  getPid,
+  getLastOutputAt,
+  getExitedAt,
+  idleTimeoutMs = MANAGED_SERVER_IDLE_TIMEOUT_MS,
+  intervalMs = 200,
+}: WaitForManagedListenerOptions): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+
+    const check = (): void => {
       const pid = getPid();
       if (pid !== null) {
         resolve(pid);
         return;
       }
 
+      const exitedAt = getExitedAt();
+      if (exitedAt !== null && Date.now() - exitedAt > MANAGED_SERVER_EXIT_GRACE_MS) {
+        reject(new Error("VS Code server process exited before it started listening"));
+        return;
+      }
+
+      const lastProgressAt = Math.max(startedAt, getLastOutputAt());
+      if (exitedAt === null && Date.now() - lastProgressAt > idleTimeoutMs) {
+        reject(
+          new Error(
+            `VS Code server produced no output and no listener for ${Math.round(
+              idleTimeoutMs / 1000,
+            )}s`,
+          ),
+        );
+        return;
+      }
+
       setTimeout(check, intervalMs);
     };
+
     check();
   });
 }
@@ -322,17 +370,30 @@ export class VscodeServerManager {
       },
     );
 
-    child.stderr?.on("data", (data: Buffer) => {
+    let lastOutputAt = Date.now();
+    let exitedAt: number | null = null;
+
+    const noteOutput = (data: Buffer): void => {
+      lastOutputAt = Date.now();
       const msg = data.toString().trim();
       if (msg) console.log(`[vscode-server:${VSCODE_PORT}] ${msg}`);
-    });
+    };
+
+    // Both pipes have to be read, not just stderr. An unconsumed pipe fills at
+    // 64KB and then blocks the writer forever — and the first-run download,
+    // which reports its progress on stdout, is exactly what fills it. Reading
+    // stdout also gives the startup wait its liveness signal.
+    child.stdout?.on("data", noteOutput);
+    child.stderr?.on("data", noteOutput);
 
     child.on("error", (err) => {
+      exitedAt = Date.now();
       console.error(`[vscode-server:${VSCODE_PORT}] process error:`, err);
       this.handleProcessExitOrError();
     });
 
     child.on("exit", (code) => {
+      exitedAt = Date.now();
       console.log(`[vscode-server:${VSCODE_PORT}] exited with code ${code}`);
       this.handleProcessExitOrError();
     });
@@ -341,7 +402,11 @@ export class VscodeServerManager {
     this.ownedProcessGroupId = child.pid ?? null;
 
     try {
-      const listenerPid = await waitForPid(() => this.resolveManagedListeningPid());
+      const listenerPid = await waitForManagedListener({
+        getPid: () => this.resolveManagedListeningPid(),
+        getLastOutputAt: () => lastOutputAt,
+        getExitedAt: () => exitedAt,
+      });
       this.writePidFile(listenerPid);
     } catch (err) {
       await this.stopManagedServer();

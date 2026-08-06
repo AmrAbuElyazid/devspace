@@ -60,6 +60,10 @@ export function registerSystemIpc(mainWindow: BrowserWindow, appUpdater?: AppUpd
   });
 
   safeOn("window:focusContent", () => {
+    // Same raise-the-window side effect as focusing a pane, so it is only ever
+    // moving focus *within* a window the user is already looking at. Asking
+    // for it while they are elsewhere would pull the app to the front.
+    if (!mainWindow.isFocused()) return;
     mainWindow.webContents.focus();
   });
 

@@ -54,7 +54,7 @@ vi.mock("net", () => ({ createServer: netMocks.createServer }));
 vi.mock("os", () => ({ homedir: () => "/Users/test" }));
 vi.mock("./dev-mode", () => ({ VSCODE_PORT: 18562, DATA_DIR_SUFFIX: "" }));
 
-import { resolveVscodeCli, VscodeServerManager } from "./vscode-server";
+import { resolveVscodeCli, VscodeServerManager, waitForManagedListener } from "./vscode-server";
 
 let consoleLogSpy: ReturnType<typeof vi.spyOn>;
 let consoleWarnSpy: ReturnType<typeof vi.spyOn>;
@@ -74,6 +74,7 @@ function createMockChildProcess() {
   const onceListeners = new Map<string, (...args: unknown[]) => void>();
 
   const child = {
+    stdout: { on: vi.fn() },
     stderr: { on: vi.fn() },
     on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
       listeners.set(event, handler);
@@ -231,6 +232,12 @@ describe("resolveVscodeCli", () => {
     expect(parsed.pathname).toBe("/devspace-vscode");
     expect(parsed.searchParams.get("tkn")).toBe("stable-token");
     expect(parsed.searchParams.get("folder")).toBe("/tmp/project");
+
+    // Both pipes are read. stdio asks for a pipe on each, and an unread pipe
+    // fills at 64KB and then blocks the CLI on its next write — which the
+    // first-run download, reporting progress on stdout, reaches on its own.
+    expect(child.stdout.on).toHaveBeenCalledWith("data", expect.any(Function));
+    expect(child.stderr.on).toHaveBeenCalledWith("data", expect.any(Function));
   });
 
   test("adopts a matching legacy listener even without a pid file", async () => {
@@ -530,5 +537,97 @@ describe("resolveVscodeCli", () => {
 
     expect(processKillSpy).not.toHaveBeenCalledWith(8888, expect.anything());
     expect(fsMocks.unlinkSync).toHaveBeenCalledWith(pidFilePath);
+  });
+});
+
+describe("waitForManagedListener", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test("keeps waiting through a long first-run download as long as the CLI is talking", async () => {
+    // `code serve-web` downloads the server before it binds the port. On a slow
+    // link that is minutes — far past any fixed startup budget — but it reports
+    // progress the whole way, so the wait is driven by silence, not elapsed time.
+    let listenerPid: number | null = null;
+    let lastOutputAt = Date.now();
+
+    const pending = waitForManagedListener({
+      getPid: () => listenerPid,
+      getLastOutputAt: () => lastOutputAt,
+      getExitedAt: () => null,
+      idleTimeoutMs: 60_000,
+    });
+
+    // Five minutes of download, narrated every 30s.
+    for (let elapsed = 0; elapsed < 5 * 60_000; elapsed += 30_000) {
+      await vi.advanceTimersByTimeAsync(30_000);
+      lastOutputAt = Date.now();
+    }
+
+    listenerPid = 4242;
+    await vi.advanceTimersByTimeAsync(200);
+
+    await expect(pending).resolves.toBe(4242);
+  });
+
+  test("gives up once the CLI goes silent with no listener", async () => {
+    const lastOutputAt = Date.now();
+    const pending = waitForManagedListener({
+      getPid: () => null,
+      getLastOutputAt: () => lastOutputAt,
+      getExitedAt: () => null,
+      idleTimeoutMs: 60_000,
+    });
+    const settled = pending.catch((error: unknown) => error);
+
+    // Past the deadline, plus a poll interval for the check that trips on it.
+    await vi.advanceTimersByTimeAsync(60_000 + 400);
+
+    await expect(settled).resolves.toMatchObject({
+      message: expect.stringContaining("no output and no listener"),
+    });
+  });
+
+  test("fails fast when the process exits without ever listening", async () => {
+    // Rather than sitting out the whole idle timeout on a CLI that is gone.
+    const exitedAt = Date.now();
+    const pending = waitForManagedListener({
+      getPid: () => null,
+      getLastOutputAt: () => exitedAt,
+      getExitedAt: () => exitedAt,
+      idleTimeoutMs: 60_000,
+    });
+    const settled = pending.catch((error: unknown) => error);
+
+    await vi.advanceTimersByTimeAsync(3_000);
+
+    await expect(settled).resolves.toMatchObject({
+      message: expect.stringContaining("exited before it started listening"),
+    });
+  });
+
+  test("still adopts a listener the wrapper left behind when it exited", async () => {
+    // The CLI hands off to the server process and exits; the listener it
+    // started is seconds behind it. That is a normal start, not a failure.
+    let listenerPid: number | null = null;
+    const exitedAt = Date.now();
+
+    const pending = waitForManagedListener({
+      getPid: () => listenerPid,
+      getLastOutputAt: () => exitedAt,
+      getExitedAt: () => exitedAt,
+      idleTimeoutMs: 60_000,
+    });
+
+    await vi.advanceTimersByTimeAsync(400);
+    listenerPid = 777;
+    await vi.advanceTimersByTimeAsync(400);
+
+    await expect(pending).resolves.toBe(777);
   });
 });

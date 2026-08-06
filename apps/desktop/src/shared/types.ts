@@ -13,6 +13,7 @@ import type {
   BrowserRuntimeState,
   BrowserStopFindAction,
   ClearBrowsingDataTarget,
+  NativePaneFocusReason,
 } from "./browser";
 import type { DevServerPorts } from "./dev-server";
 import type { OverlayMenuRequest } from "./overlay";
@@ -273,7 +274,7 @@ export interface BrowserBridge {
   reload: (paneId: string) => Promise<void>;
   stop: (paneId: string) => Promise<void>;
   setBounds: (paneId: string, bounds: BrowserBounds) => void;
-  setFocus: (paneId: string) => void;
+  setFocus: (paneId: string, reason?: NativePaneFocusReason) => void;
   setZoom: (paneId: string, zoom: number) => Promise<void>;
   resetZoom: (paneId: string) => Promise<void>;
   findInPage: (paneId: string, query: string, options?: BrowserFindInPageOptions) => Promise<void>;
