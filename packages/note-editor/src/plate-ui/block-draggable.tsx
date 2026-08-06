@@ -33,7 +33,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 import { turnIntoItems } from "./turn-into-items";
 
 /**
@@ -164,31 +163,32 @@ const gutterButtonClass = cn(
   "[&_svg]:pointer-events-none",
 );
 
+/**
+ * No tooltip, deliberately.
+ *
+ * These controls sit in a 44px strip that only appears on hover, and a tooltip
+ * over them is noise on top of noise. It is also a hazard on the drag handle:
+ * Radix's tooltip trigger closes on `pointerdown`, and that state update
+ * re-renders the button in the window between mousedown and dragstart, which is
+ * where react-dnd is attaching its drag source. The `aria-label` still names
+ * each control for assistive tech.
+ */
 function GutterButton({
   children,
   label,
-  shortcut,
   ...props
-}: React.ComponentPropsWithRef<"button"> & { label: string; shortcut?: string }) {
+}: React.ComponentPropsWithRef<"button"> & { label: string }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          contentEditable={false}
-          tabIndex={-1}
-          {...props}
-          className={cn(gutterButtonClass, props.className)}
-        >
-          {children}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent side="top">
-        {label}
-        {shortcut ? <span className="ml-1.5 text-muted-foreground">{shortcut}</span> : null}
-      </TooltipContent>
-    </Tooltip>
+    <button
+      type="button"
+      aria-label={label}
+      contentEditable={false}
+      tabIndex={-1}
+      {...props}
+      className={cn(gutterButtonClass, props.className)}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -316,28 +316,20 @@ function BlockMenu({
           <span aria-hidden className="pointer-events-none absolute inset-0 block" />
         </DropdownMenuTrigger>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              ref={composedRef}
-              type="button"
-              aria-label="Drag to move, click to open block menu"
-              aria-haspopup="menu"
-              aria-expanded={open}
-              contentEditable={false}
-              data-plate-prevent-deselect
-              tabIndex={-1}
-              onClick={() => onOpenChange(!open)}
-              className={cn(gutterButtonClass, "cursor-grab active:cursor-grabbing")}
-            >
-              <GripVertical size={14} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="top">
-            Drag to move
-            <span className="ml-1.5 text-muted-foreground">click for menu</span>
-          </TooltipContent>
-        </Tooltip>
+        <button
+          ref={composedRef}
+          type="button"
+          aria-label="Drag to move, click to open block menu"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          contentEditable={false}
+          data-plate-prevent-deselect
+          tabIndex={-1}
+          onClick={() => onOpenChange(!open)}
+          className={cn(gutterButtonClass, "cursor-grab active:cursor-grabbing")}
+        >
+          <GripVertical size={14} />
+        </button>
       </span>
 
       <DropdownMenuContent
