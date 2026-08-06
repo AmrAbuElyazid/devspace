@@ -4,11 +4,29 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 ## Unreleased
 
-### Fixed
+- No unreleased notes yet.
 
-- Panes no longer pull Devspace in front of other apps when they come back on screen by themselves. Focusing a pane's web contents activates the app and raises its window on macOS, and nothing checked whether Devspace was frontmost first — so a dev server restarting under an agent's edits, or a VS Code pane finishing its first-run download, yanked the app over whatever you had switched to. Focus requests the app makes on its own are now refused while the window is in the background, and the pane is focused when you come back instead.
-- The first-run VS Code download no longer stalls or restarts from scratch. `code serve-web` was spawned with a stdout pipe nothing read, which blocks the CLI once it fills, and the 30s startup budget killed the download it was waiting on. Both pipes are drained, and the wait now gives up on silence rather than on elapsed time.
-- A VS Code pane's connection token is no longer written to the workspace state file. Editor pane URLs carry a live credential and were being persisted with the rest of the pane's config; existing state files are cleaned when they are next opened.
+## v0.5.1 - 2026-08-06
+
+### Summary
+
+- A focus release. Panes that come back on screen by themselves — a dev server restarting under an agent's edits, a VS Code pane finishing its start — no longer pull Devspace in front of whatever you had switched to. Two first-run VS Code bugs and one persisted credential were fixed on the way.
+
+### Highlights
+
+**Focus**
+
+- Devspace stays where you put it. Focusing a pane's web contents is not a pane-local operation on macOS: it activates the app and raises its window, and nothing checked whether Devspace was frontmost first. So every dev-server restart, and every VS Code pane that finished starting while you were elsewhere, yanked the screen back. Focus the app asks for on its own is now refused while the window is in the background; the pane gets the keyboard when you return to it instead.
+- The same raise is closed off in the paths that hand the keyboard back to the window — releasing a terminal, closing a pane menu. A menu only returns focus to the parent if the parent had it when the menu opened.
+
+**Embedded VS Code**
+
+- The first-run download no longer stalls. `code serve-web` was spawned with a stdout pipe nothing ever read, and an unconsumed pipe blocks the writer once it fills — which the download, reporting its progress on stdout, does on its own.
+- A slow first-run download is no longer killed and restarted from nothing. The flat 30s startup budget expired mid-download and tore down the process group it was waiting on. The wait now gives up on silence rather than elapsed time.
+
+**Fixes**
+
+- A VS Code pane's connection token is no longer written to the workspace state file. Editor pane URLs carry a live credential, and every committed navigation was being persisted with the rest of the pane's config. State files that already hold one are cleaned when they are next opened.
 
 ## v0.5.0 - 2026-08-05
 
