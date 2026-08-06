@@ -13,6 +13,7 @@ import {
   Plate,
   useEditorRef,
   usePlateEditor,
+  usePluginOption,
   useRedecorate,
 } from "platejs/react";
 
@@ -44,21 +45,28 @@ export type NoteEditorValue = Value;
  */
 export interface NoteEditorController {
   focus: () => void;
+  /** The markdown the editor would persist right now. */
+  markdown: () => string;
   /** Ranges of every match, in document order. */
   matches: (query: string) => TRange[];
   replaceAll: (query: string, replacement: string) => number;
   replaceMatch: (range: TRange, replacement: string) => void;
+  /**
+   * Scrolls a match into view without taking focus.
+   *
+   * Focus has to stay wherever the caller put it — the find bar calls this on
+   * every keystroke, and pulling focus into the document would send the next
+   * character into the note, on top of the selected match.
+   */
+  revealMatch: (range: TRange) => void;
   scrollToBlock: (index: number) => void;
-  /** Selects and reveals a match so the caret marks the current one. */
-  selectMatch: (range: TRange) => void;
   toggleFold: (index: number) => void;
+  value: () => Value;
 }
 
 export interface NoteEditorProps {
   autoFocus?: boolean;
   controllerRef?: Ref<NoteEditorController | null>;
-  /** Folded heading indices, so the pane can persist or reset them. */
-  foldedIndices?: number[];
   initialValue: Value | string;
   onChange: (ctx: NoteEditorChangeContext) => void;
   onFoldedIndicesChange?: (indices: number[]) => void;
@@ -112,6 +120,39 @@ function SearchHighlightSync({ search }: { search: string }) {
   return null;
 }
 
+/**
+ * Reports folded state to the pane, whichever control changed it.
+ *
+ * Deliberately one-way. The gutter chevron writes the plugin option directly,
+ * so the pane's copy went stale and the outline's chevrons inverted — a row
+ * labelled "Collapse" would expand. Feeding the pane's state back in as a prop
+ * fixes that but creates a loop: the prop sets the option, the option fires
+ * this, which sets the prop. The plugin option is the single source of truth
+ * and the pane mirrors it for display.
+ */
+function FoldSync({ onChange }: { onChange: ((indices: number[]) => void) | undefined }) {
+  const folded = usePluginOption(HeadingFoldPlugin, "folded");
+
+  useEffect(() => {
+    onChange?.(folded);
+  }, [folded, onChange]);
+
+  return null;
+}
+
+/** `scrollIntoView` is missing on text nodes, and absent entirely in jsdom. */
+function scrollIntoView(
+  editor: PlateEditor,
+  path: number[],
+  block: ScrollLogicalPosition = "nearest",
+) {
+  const entry = editor.api.node(path);
+  if (!entry) return;
+
+  const node = editor.api.toDOMNode(entry[0] as never) as HTMLElement | undefined;
+  node?.scrollIntoView?.({ block });
+}
+
 function focusAtSelectionOrEnd(editor: PlateEditor): void {
   editor.tf.focus();
 
@@ -125,7 +166,6 @@ function focusAtSelectionOrEnd(editor: PlateEditor): void {
 export function NoteEditor({
   autoFocus = false,
   controllerRef,
-  foldedIndices,
   initialValue,
   onChange,
   onFoldedIndicesChange,
@@ -149,10 +189,6 @@ export function NoteEditor({
   useEffect(() => {
     editor.setOption(ImageUploadPlugin, "uploadImage", uploadImage ?? null);
   }, [editor, uploadImage]);
-
-  useEffect(() => {
-    if (foldedIndices) editor.setOption(HeadingFoldPlugin, "folded", foldedIndices);
-  }, [editor, foldedIndices]);
 
   const handleChange = useCallback(
     ({ value, editor: changed }: { value: Value; editor: PlateEditor | null }) => {
@@ -202,6 +238,7 @@ export function NoteEditor({
     controllerRef,
     (): NoteEditorController => ({
       focus: () => focusAtSelectionOrEnd(editor),
+      markdown: () => serializeNoteMarkdown(editor),
       matches: (query) => findMatches(editor.children, query),
       replaceAll: (query, replacement) => {
         const ranges = findMatches(editor.children, query);
@@ -218,27 +255,25 @@ export function NoteEditor({
       replaceMatch: (range, replacement) => {
         editor.tf.insertText(replacement, { at: range });
       },
-      scrollToBlock: (index) => {
-        const node = editor.api.toDOMNode(editor.children[index]!);
-        node?.scrollIntoView({ block: "start", behavior: "smooth" });
-      },
-      selectMatch: (range) => {
+      revealMatch: (range) => {
+        // Deliberately no `focus()` — see the interface comment.
         editor.tf.select(range);
-        editor.tf.focus();
-        editor.api
-          .toDOMNode(editor.api.node(range.anchor.path.slice(0, -1))?.[0] as never)
-          ?.scrollIntoView({ block: "nearest" });
+        scrollIntoView(editor, range.anchor.path.slice(0, -1));
+      },
+      scrollToBlock: (index) => {
+        scrollIntoView(editor, [index], "start");
       },
       toggleFold: (index) => {
         const folded = editor.getOption(HeadingFoldPlugin, "folded");
-        const next = folded.includes(index)
-          ? folded.filter((entry) => entry !== index)
-          : [...folded, index];
-        editor.setOption(HeadingFoldPlugin, "folded", next);
-        onFoldedIndicesChange?.(next);
+        editor.setOption(
+          HeadingFoldPlugin,
+          "folded",
+          folded.includes(index) ? folded.filter((entry) => entry !== index) : [...folded, index],
+        );
       },
+      value: () => editor.children as Value,
     }),
-    [editor, onFoldedIndicesChange],
+    [editor],
   );
 
   const handleEditorMouseDown = useCallback(
@@ -266,6 +301,7 @@ export function NoteEditor({
     <TooltipProvider>
       <Plate editor={editor} onChange={handleChange}>
         <SearchHighlightSync search={search} />
+        <FoldSync onChange={onFoldedIndicesChange} />
         <EditorContainer className="note-editor-shell">
           <Editor className="note-editor-content" onMouseDown={handleEditorMouseDown} />
         </EditorContainer>

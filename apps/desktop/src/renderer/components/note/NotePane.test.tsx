@@ -10,6 +10,19 @@ import type { NoteEditorChangeContext } from "@devspace/note-editor";
 
 const notePaneMocks = vi.hoisted(() => ({
   onChange: undefined as ((ctx: NoteEditorChangeContext) => void) | undefined,
+  controller: {
+    focus: vi.fn(),
+    markdown: vi.fn(() => "# On disk"),
+    matches: vi.fn(() => []),
+    replaceAll: vi.fn(() => 0),
+    replaceMatch: vi.fn(),
+    revealMatch: vi.fn(),
+    scrollToBlock: vi.fn(),
+    toggleFold: vi.fn(),
+    value: vi.fn(() => [{ children: [{ text: "On disk" }], type: "h1" }]),
+  },
+  noteOutline: vi.fn(() => []),
+  noteStats: vi.fn(() => ({ characters: 0, readingMinutes: 0, words: 0 })),
   autoFocusValues: [] as boolean[],
   initialValues: [] as Array<unknown>,
   updatePaneTitle: vi.fn(),
@@ -28,21 +41,24 @@ const notePaneMocks = vi.hoisted(() => ({
 vi.mock("@devspace/note-editor", () => ({
   NoteEditor: ({
     autoFocus,
+    controllerRef,
     initialValue,
     onChange,
   }: {
     autoFocus?: boolean;
+    controllerRef?: { current: unknown };
     initialValue: unknown;
     onChange: (ctx: NoteEditorChangeContext) => void;
   }) => {
     notePaneMocks.autoFocusValues.push(autoFocus === true);
     notePaneMocks.initialValues.push(initialValue);
     notePaneMocks.onChange = onChange;
+    if (controllerRef) controllerRef.current = notePaneMocks.controller;
     return <div data-testid="note-editor" />;
   },
   extractNoteTitle: notePaneMocks.extractNoteTitle,
-  noteOutline: vi.fn(() => []),
-  noteStats: vi.fn(() => ({ characters: 0, readingMinutes: 0, words: 0 })),
+  noteOutline: notePaneMocks.noteOutline,
+  noteStats: notePaneMocks.noteStats,
 }));
 
 vi.mock("@devspace/note-editor/styles.css", () => ({}));
@@ -74,6 +90,7 @@ beforeEach(() => {
   notePaneMocks.initialValues = [];
   notePaneMocks.updatePaneTitle.mockReset();
   notePaneMocks.extractNoteTitle.mockClear();
+  notePaneMocks.controller.markdown.mockReturnValue("# On disk");
 });
 
 afterEach(async () => {
@@ -315,4 +332,117 @@ test("passes focus state through to the note editor", async () => {
 
   expect(notePaneMocks.autoFocusValues).toContain(false);
   expect(notePaneMocks.autoFocusValues).toContain(true);
+});
+
+test("opening a note does not rewrite the file", async () => {
+  // Loading normalizes the document — a trailing paragraph, canonical table
+  // pipes — which produces a change. Saving that change rewrote a file the user
+  // never touched, which matters for notes tracked in git or edited elsewhere.
+  const api = installMockWindowApi({
+    notes: { read: vi.fn(async () => "# On disk") },
+  });
+  const { default: NotePane } = await import("./NotePane");
+
+  await act(async () => {
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
+  });
+  await flushEffects();
+
+  await act(async () => {
+    notePaneMocks.onChange?.({
+      editor: {} as NoteEditorChangeContext["editor"],
+      markdown: "# On disk",
+      serializationError: null,
+      value: [{ type: "h1", children: [{ text: "On disk" }] }],
+    });
+  });
+  await act(async () => {
+    vi.advanceTimersByTime(600);
+  });
+
+  expect(api.notes.save).not.toHaveBeenCalled();
+});
+
+test("a real edit after opening still saves", async () => {
+  const api = installMockWindowApi({
+    notes: { read: vi.fn(async () => "# On disk") },
+  });
+  const { default: NotePane } = await import("./NotePane");
+
+  await act(async () => {
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
+  });
+  await flushEffects();
+
+  await act(async () => {
+    notePaneMocks.onChange?.({
+      editor: {} as NoteEditorChangeContext["editor"],
+      markdown: "# On disk edited",
+      serializationError: null,
+      value: [{ type: "h1", children: [{ text: "On disk edited" }] }],
+    });
+  });
+  await act(async () => {
+    vi.advanceTimersByTime(600);
+  });
+  await flushEffects();
+
+  expect(api.notes.save).toHaveBeenCalledWith("note-1", "# On disk edited");
+});
+
+test("counts and outline are populated before the first keystroke", async () => {
+  installMockWindowApi({ notes: { read: vi.fn(async () => "# On disk") } });
+  const { default: NotePane } = await import("./NotePane");
+
+  await act(async () => {
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
+  });
+  await flushEffects();
+
+  // Plate emits no change on mount, so the pane has to ask the editor for the
+  // value rather than waiting for one.
+  expect(notePaneMocks.controller.value).toHaveBeenCalled();
+  expect(notePaneMocks.noteStats).toHaveBeenCalledWith([
+    { children: [{ text: "On disk" }], type: "h1" },
+  ]);
+  expect(notePaneMocks.noteOutline).toHaveBeenCalled();
+});
+
+test("a failed serialization leaves the pending write of the last good markdown armed", async () => {
+  // Clearing the timer and then bailing out dropped an already-serializable
+  // version that was 500ms from disk.
+  const api = installMockWindowApi();
+  const { default: NotePane } = await import("./NotePane");
+
+  await act(async () => {
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
+  });
+  await flushEffects();
+
+  await act(async () => {
+    notePaneMocks.onChange?.({
+      editor: {} as NoteEditorChangeContext["editor"],
+      markdown: "# Good",
+      serializationError: null,
+      value: [{ type: "p", children: [{ text: "Good" }] }],
+    });
+  });
+
+  // Fails well inside the debounce window.
+  await act(async () => {
+    vi.advanceTimersByTime(100);
+    notePaneMocks.onChange?.({
+      editor: {} as NoteEditorChangeContext["editor"],
+      markdown: null,
+      serializationError: "serialize failed",
+      value: [{ type: "p", children: [{ text: "Bad" }] }],
+    });
+  });
+
+  await act(async () => {
+    vi.advanceTimersByTime(600);
+  });
+  await flushEffects();
+
+  expect(api.notes.save).toHaveBeenCalledWith("note-1", "# Good");
 });

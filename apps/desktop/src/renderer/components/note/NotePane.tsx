@@ -85,6 +85,15 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
    * subsequent keystroke was lost silently.
    */
   const latestMarkdown = useRef<string | null>(null);
+  /**
+   * What the file already contains, as the editor would write it.
+   *
+   * Seeded on open from the editor's own serialization so that merely opening a
+   * note never rewrites it: loading normalizes the document (a trailing
+   * paragraph, canonical table pipes), which produced a change, which scheduled
+   * a save of a file the user had not touched.
+   */
+  const persistedMarkdown = useRef<string | null>(null);
   const lastTitle = useRef<string>("Note");
 
   const updatePaneTitle = useWorkspaceStore((s) => s.updatePaneTitle);
@@ -111,6 +120,7 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
       }
 
       pendingNoteSaveErrors.delete(config.noteId);
+      persistedMarkdown.current = latestMarkdown.current;
       if (allowStateUpdate) {
         setSaveError(null);
         setSaveStatus("saved");
@@ -161,6 +171,7 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
     saveScope.current += 1;
     latestSaveRequest.current = 0;
     latestMarkdown.current = null;
+    persistedMarkdown.current = null;
     lastTitle.current = "Note";
     setInitialValue(DEFAULT_VALUE);
     setSaveError(pendingNoteSaveErrors.get(config.noteId) ?? null);
@@ -173,12 +184,13 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
         const raw = await window.api.notes.read(config.noteId);
         if (cancelled) return;
 
+        const title = (raw && extractTitleFromMarkdown(raw)) || "Untitled note";
+        lastTitle.current = title;
+        // Unconditionally, so switching to a fresh note drops the old title
+        // instead of leaving it on the tab until the first keystroke.
+        updatePaneTitle(paneId, title);
+
         if (raw && raw.trim().length > 0) {
-          const title = extractTitleFromMarkdown(raw);
-          if (title) {
-            lastTitle.current = title;
-            updatePaneTitle(paneId, title);
-          }
           // Markdown, deserialized by the editor's own MarkdownPlugin so the
           // parse rules match what we write back out.
           setInitialValue(raw);
@@ -226,6 +238,34 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
 
   useEffect(() => () => clearPaneState(paneId), [clearPaneState, paneId]);
 
+  // Plate does not emit a change on mount, so without this the footer reads
+  // "0 words" and the outline claims the note has no headings until the user
+  // types. It also establishes the baseline that keeps opening a note from
+  // rewriting it.
+  useEffect(() => {
+    if (loadState !== "ready") return;
+    const controller = controllerRef.current;
+    if (!controller) return;
+
+    persistedMarkdown.current = controller.markdown();
+    latestMarkdown.current = persistedMarkdown.current;
+    setStats(noteStats(controller.value()));
+    setOutline(noteOutline(controller.value()));
+    setSaveStatus("saved");
+  }, [loadState, config.noteId]);
+
+  // Declared above `handleChange`, which recomputes matches on every edit.
+  const refreshMatches = useCallback((nextQuery: string): NoteMatch[] => {
+    const found = controllerRef.current?.matches(nextQuery) ?? [];
+    setMatches(found);
+    // Keep the caller's position where it still exists rather than snapping
+    // back to the first match on every keystroke.
+    setMatchIndex((current) =>
+      found.length === 0 ? -1 : Math.min(Math.max(current, 0), found.length - 1),
+    );
+    return found;
+  }, []);
+
   const handleChange = useCallback(
     ({ value, editor, markdown, serializationError }: NoteEditorChangeContext) => {
       if (!editor) return;
@@ -239,17 +279,30 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
       setStats(noteStats(value));
       setOutline(noteOutline(value));
 
-      if (saveTimer.current) {
-        clearTimeout(saveTimer.current);
-        saveTimer.current = null;
-      }
+      // Match offsets are positions in the old document; every edit invalidates
+      // them. Replacing against a stale range rewrites whatever now sits at
+      // those offsets, which corrupts text that was never searched for.
+      if (query) refreshMatches(query);
 
       if (serializationError || markdown === null) {
-        // Report it, but keep the last good markdown: a transient failure must
-        // not turn into permanent data loss for the rest of the session.
+        // Report it, but keep the last good markdown and leave any pending
+        // write armed: a transient failure must not turn into permanent data
+        // loss, nor cancel the write of the last version that did serialize.
         setSaveError(serializationError ?? "Failed to serialize note content");
         setSaveStatus("failed");
         return;
+      }
+
+      // Nothing to write: opening a note normalizes it, and that must not touch
+      // the file.
+      if (markdown === persistedMarkdown.current) {
+        latestMarkdown.current = markdown;
+        return;
+      }
+
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
       }
 
       latestMarkdown.current = markdown;
@@ -257,22 +310,17 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
       setSaveStatus("unsaved");
       scheduleSave();
     },
-    [paneId, updatePaneTitle, scheduleSave],
+    [paneId, query, refreshMatches, updatePaneTitle, scheduleSave],
   );
 
   // ── Find ────────────────────────────────────────────────────────────
 
-  const refreshMatches = useCallback((nextQuery: string) => {
-    const found = controllerRef.current?.matches(nextQuery) ?? [];
-    setMatches(found);
-    setMatchIndex(found.length > 0 ? 0 : -1);
-    if (found[0]) controllerRef.current?.selectMatch(found[0]);
-  }, []);
-
   const handleQueryChange = useCallback(
     (nextQuery: string) => {
       setQuery(nextQuery);
-      refreshMatches(nextQuery);
+      const found = refreshMatches(nextQuery);
+      // Reveal, never focus: the user is still typing in the find input.
+      if (found[0]) controllerRef.current?.revealMatch(found[0]);
     },
     [refreshMatches],
   );
@@ -283,7 +331,7 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
       const next = (matchIndex + direction + matches.length) % matches.length;
       setMatchIndex(next);
       const target = matches[next];
-      if (target) controllerRef.current?.selectMatch(target);
+      if (target) controllerRef.current?.revealMatch(target);
     },
     [matchIndex, matches],
   );
@@ -292,22 +340,20 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
     (replacement: string) => {
       const target = matches[matchIndex];
       if (!target) return;
+      // `handleChange` recomputes the matches once the edit lands.
       controllerRef.current?.replaceMatch(target, replacement);
-      // Offsets after the replacement have all moved.
-      refreshMatches(query);
     },
-    [matchIndex, matches, query, refreshMatches],
+    [matchIndex, matches],
   );
 
   const handleReplaceAll = useCallback(
     (replacement: string) => {
       const count = controllerRef.current?.replaceAll(query, replacement) ?? 0;
-      refreshMatches(query);
       if (count > 0) {
         addToast(`Replaced ${count} ${count === 1 ? "match" : "matches"}.`, "success");
       }
     },
-    [query, refreshMatches],
+    [query],
   );
 
   const handleCloseFind = useCallback(() => {
@@ -412,7 +458,6 @@ export default function NotePane({ paneId, config, isFocused }: NotePaneProps) {
           <NoteEditor
             autoFocus={isFocused}
             controllerRef={controllerRef}
-            foldedIndices={foldedIndices}
             initialValue={initialValue}
             onChange={handleChange}
             onFoldedIndicesChange={setFoldedIndices}

@@ -313,6 +313,63 @@ test("find highlights every match, and clears them again", async () => {
   await findInput.press("Escape");
 });
 
+test("typing in the find bar searches instead of editing the note", async () => {
+  // Revealing a match used to focus the editor, so the second character of a
+  // query was delivered to the document on top of the selected match: the find
+  // bar was unusable past one keystroke and silently rewrote the note.
+  await openNotePane();
+  await editor().click();
+  await page.keyboard.type("Deploy is gated on CI.");
+  const before = await editor().innerText();
+
+  await app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows().find((w) => !w.getParentWindow());
+    window?.webContents.send("app:browser-find");
+  });
+
+  const findInput = page.getByPlaceholder("Find in note");
+  await expect(findInput).toBeFocused();
+
+  // One character at a time, which is what exposed it.
+  await findInput.pressSequentially("Deploy", { delay: 30 });
+
+  await expect(findInput).toHaveValue("Deploy");
+  await expect(findInput).toBeFocused();
+  expect(await editor().innerText()).toBe(before);
+  await expect(page.locator(".note-pane").getByText("1 / 1")).toBeVisible();
+
+  await findInput.press("Escape");
+});
+
+test("replace targets the match after the document has changed", async () => {
+  // Match offsets are positions in the old document. Replacing against a stale
+  // range rewrote whatever had moved into those offsets.
+  await openNotePane();
+  await editor().click();
+  await page.keyboard.type("aaa foo bbb foo");
+
+  await app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows().find((w) => !w.getParentWindow());
+    window?.webContents.send("app:browser-find");
+  });
+  const findInput = page.getByPlaceholder("Find in note");
+  await findInput.fill("foo");
+  await expect(page.locator(".note-pane").getByText("1 / 2")).toBeVisible();
+
+  // Shift every offset by editing the document while the query is live.
+  await editor().click();
+  await page.keyboard.press("ControlOrMeta+ArrowLeft");
+  await page.keyboard.type("XX ");
+  await expect(editor()).toContainText("XX aaa foo bbb foo");
+
+  await page.locator('[aria-label="Show replace"]').click();
+  await page.getByPlaceholder("Replace with").fill("ZZZ");
+  await page.locator('[aria-label="Replace all matches"]').click();
+
+  await expect(editor()).toContainText("XX aaa ZZZ bbb ZZZ");
+  await expect(editor()).not.toContainText("foo");
+});
+
 test("a second note pane opens, and switching back keeps the first alive", async () => {
   await openNotePane();
   await editor().click();

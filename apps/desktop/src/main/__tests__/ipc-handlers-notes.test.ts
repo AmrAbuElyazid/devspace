@@ -353,3 +353,19 @@ describe("note file actions", () => {
     });
   });
 });
+
+describe("notes:saveAsset with a partial view", () => {
+  test("stores only the bytes the view covers", async () => {
+    // A TypedArray can be a window onto a larger buffer. Writing `.buffer`
+    // wholesale would persist unrelated adjacent bytes and hash the wrong
+    // content.
+    const backing = new Uint8Array([0, 0, 137, 80, 78, 71, 0, 0]);
+    const view = new Uint8Array(backing.buffer, 2, 4);
+
+    const result = (await callHandler("notes:saveAsset", view, "png")) as { url: string };
+    const fileName = result.url.replace("devspace-note-asset://", "");
+    const written = await readFile(join(notesDir, "assets", fileName));
+
+    expect([...written]).toEqual([137, 80, 78, 71]);
+  });
+});

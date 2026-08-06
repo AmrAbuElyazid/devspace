@@ -301,9 +301,12 @@ export function registerSystemIpc(mainWindow: BrowserWindow, appUpdater?: AppUpd
       return { error: "Unsupported image type" };
     }
 
-    const buffer = Buffer.from(
-      bytes instanceof ArrayBuffer ? bytes : (bytes.buffer as ArrayBuffer),
-    );
+    // A TypedArray view can be a window onto a larger buffer, so its offset and
+    // length have to be honoured — taking `.buffer` alone would hash and write
+    // whatever else happens to share the allocation.
+    const buffer = ArrayBuffer.isView(bytes)
+      ? Buffer.from(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength)
+      : Buffer.from(bytes);
     if (buffer.byteLength > MAX_NOTE_ASSET_BYTES) {
       return { error: "Image is too large" };
     }

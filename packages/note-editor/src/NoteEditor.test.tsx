@@ -176,3 +176,55 @@ test("clearing the query removes the highlights", async () => {
   await settle();
   expect(container.querySelectorAll("[data-slate-editor] mark")).toHaveLength(0);
 });
+
+test("revealing a match leaves focus where the caller put it", async () => {
+  // The find bar calls this on every keystroke. Pulling focus into the document
+  // would send the next character into the note, on top of the selected match —
+  // the find input became unusable after one character and silently edited the
+  // note with the rest.
+  const controllerRef = createRef<NoteEditorController>();
+  const outside = document.createElement("input");
+  document.body.append(outside);
+
+  act(() => {
+    root.render(
+      <NoteEditor
+        initialValue="Deploy is gated on CI."
+        onChange={() => {}}
+        controllerRef={controllerRef}
+      />,
+    );
+  });
+  await settle();
+
+  outside.focus();
+  expect(document.activeElement).toBe(outside);
+
+  act(() => {
+    controllerRef.current?.revealMatch(controllerRef.current.matches("Deploy")[0]!);
+  });
+  await settle();
+
+  expect(document.activeElement).toBe(outside);
+  outside.remove();
+});
+
+test("reports the value and markdown before any edit", async () => {
+  // Plate emits no change on mount, so the pane has to be able to ask. Without
+  // it the footer read "0 words" and the outline claimed no headings.
+  const controllerRef = createRef<NoteEditorController>();
+
+  act(() => {
+    root.render(
+      <NoteEditor
+        initialValue={"# Title\n\nSome text here"}
+        onChange={() => {}}
+        controllerRef={controllerRef}
+      />,
+    );
+  });
+  await settle();
+
+  expect(controllerRef.current?.markdown()).toContain("# Title");
+  expect(controllerRef.current?.value()?.[0]).toMatchObject({ type: "h1" });
+});
