@@ -241,6 +241,11 @@ const bridge: DevspaceBridge = {
     save: (noteId, content) => ipcRenderer.invoke("notes:save", noteId, content),
     saveSync: (noteId, content) => ipcRenderer.sendSync("notes:saveSync", noteId, content),
     list: () => ipcRenderer.invoke("notes:list"),
+    saveAsset: (bytes, extension) => ipcRenderer.invoke("notes:saveAsset", bytes, extension),
+    reveal: (noteId) => ipcRenderer.invoke("notes:reveal", noteId),
+    openExternal: (noteId) => ipcRenderer.invoke("notes:openExternal", noteId),
+    exportTo: (noteId, suggestedName) =>
+      ipcRenderer.invoke("notes:exportTo", noteId, suggestedName),
   },
 
   shell: {

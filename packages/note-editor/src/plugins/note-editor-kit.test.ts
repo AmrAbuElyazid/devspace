@@ -12,14 +12,18 @@ const noteEditorKitMocks = vi.hoisted(() => ({
     callout: ["callout"],
     codeBlock: ["code-block"],
     dnd: ["dnd"],
+    findReplace: ["find-replace"],
     floatingToolbar: ["floating-toolbar"],
+    headingFold: ["heading-fold"],
     indent: ["indent"],
     link: ["link"],
     list: ["list"],
+    markdown: ["markdown"],
+    math: ["math"],
+    media: ["media"],
     slash: ["slash"],
     table: ["table"],
   },
-  markdownPlugin: { key: "markdown" },
 }));
 
 vi.mock("platejs", () => ({
@@ -27,8 +31,24 @@ vi.mock("platejs", () => ({
   KEYS: { p: "p" },
 }));
 
-vi.mock("@platejs/markdown", () => ({
-  MarkdownPlugin: noteEditorKitMocks.markdownPlugin,
+vi.mock("./markdown-kit", () => ({
+  MarkdownKit: noteEditorKitMocks.kits.markdown,
+}));
+
+vi.mock("./math-kit", () => ({
+  MathKit: noteEditorKitMocks.kits.math,
+}));
+
+vi.mock("./media-kit", () => ({
+  MediaKit: noteEditorKitMocks.kits.media,
+}));
+
+vi.mock("./find-replace-kit", () => ({
+  FindReplaceKit: noteEditorKitMocks.kits.findReplace,
+}));
+
+vi.mock("./heading-fold-kit", () => ({
+  HeadingFoldKit: noteEditorKitMocks.kits.headingFold,
 }));
 
 vi.mock("./autoformat-kit", () => ({
@@ -96,14 +116,18 @@ describe("createNoteEditorPlugins", () => {
       ...noteEditorKitMocks.kits.codeBlock,
       ...noteEditorKitMocks.kits.callout,
       ...noteEditorKitMocks.kits.table,
+      ...noteEditorKitMocks.kits.math,
+      ...noteEditorKitMocks.kits.media,
       ...noteEditorKitMocks.kits.indent,
       ...noteEditorKitMocks.kits.autoformat,
       ...noteEditorKitMocks.kits.slash,
       ...noteEditorKitMocks.kits.floatingToolbar,
       ...noteEditorKitMocks.kits.blockSelection,
       ...noteEditorKitMocks.kits.blockPlaceholder,
+      ...noteEditorKitMocks.kits.headingFold,
       ...noteEditorKitMocks.kits.dnd,
-      noteEditorKitMocks.markdownPlugin,
+      ...noteEditorKitMocks.kits.findReplace,
+      ...noteEditorKitMocks.kits.markdown,
       expect.objectContaining({ key: "ensure-paragraph" }),
     ]);
     expect(noteEditorKitMocks.createSlatePlugin).toHaveBeenCalledWith(

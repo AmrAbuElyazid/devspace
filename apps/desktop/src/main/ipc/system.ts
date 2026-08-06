@@ -1,5 +1,6 @@
 import { app, dialog, Menu, nativeTheme, shell } from "electron";
 import { execFileSync } from "child_process";
+import { createHash } from "crypto";
 import {
   existsSync,
   mkdirSync,
@@ -18,11 +19,22 @@ import {
   getMainProcessPerformanceSnapshot,
   resetMainProcessPerformanceCounters,
 } from "../performance-monitor";
+import { NOTE_ASSET_SCHEME } from "../note-asset-protocol";
 import { getSafeExternalUrl } from "../validation";
 import { getTrafficLightPosition } from "../window-chrome";
 import { safeHandle, safeOn } from "./shared";
 
 const MAX_NOTE_CONTENT_BYTES = 5 * 1024 * 1024;
+const MAX_NOTE_ASSET_BYTES = 25 * 1024 * 1024;
+
+/** Strip anything that would change which directory a save dialog writes to. */
+function sanitizeFileName(value: string): string {
+  return value
+    .replace(/[/\\:*?"<>|]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
 
 /** Escape a string for embedding in an AppleScript double-quoted literal. */
 function escapeAppleScriptString(value: string): string {
@@ -165,7 +177,9 @@ export function registerSystemIpc(mainWindow: BrowserWindow, appUpdater?: AppUpd
   });
 
   const notesDir = join(app.getPath("userData"), "notes");
+  const noteAssetsDir = join(notesDir, "assets");
   const safeNoteId = /^[\w-]+$/;
+  const safeAssetExtension = /^(png|jpg|jpeg|gif|webp|avif|svg)$/i;
   const noteSaveVersions = new Map<string, number>();
 
   const nextNoteSaveVersion = (noteId: string): number => {
@@ -276,6 +290,88 @@ export function registerSystemIpc(mainWindow: BrowserWindow, appUpdater?: AppUpd
       return files.filter((file) => file.endsWith(".md")).map((file) => file.replace(/\.md$/, ""));
     } catch {
       return [];
+    }
+  });
+
+  safeHandle("notes:saveAsset", async (_event, bytes: unknown, extension: unknown) => {
+    if (!(bytes instanceof ArrayBuffer) && !ArrayBuffer.isView(bytes)) {
+      return { error: "Asset must be binary data" };
+    }
+    if (typeof extension !== "string" || !safeAssetExtension.test(extension)) {
+      return { error: "Unsupported image type" };
+    }
+
+    const buffer = Buffer.from(
+      bytes instanceof ArrayBuffer ? bytes : (bytes.buffer as ArrayBuffer),
+    );
+    if (buffer.byteLength > MAX_NOTE_ASSET_BYTES) {
+      return { error: "Image is too large" };
+    }
+
+    // Content-addressed: pasting the same screenshot into five notes stores it
+    // once, and re-pasting after an undo doesn't leave an orphan behind.
+    const digest = createHash("sha256").update(buffer).digest("hex").slice(0, 32);
+    const fileName = `${digest}.${extension}`;
+
+    try {
+      await mkdir(noteAssetsDir, { recursive: true });
+      const filePath = join(noteAssetsDir, fileName);
+      if (!existsSync(filePath)) {
+        await writeFile(filePath, buffer);
+      }
+      return { url: `${NOTE_ASSET_SCHEME}://${fileName}` };
+    } catch (err) {
+      console.error("[notes:saveAsset] Failed to store asset:", err);
+      return {
+        error: `Failed to store image: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  });
+
+  safeHandle("notes:reveal", async (_event, noteId: unknown) => {
+    if (typeof noteId !== "string" || !safeNoteId.test(noteId)) return { error: "Invalid note ID" };
+
+    const filePath = join(notesDir, `${noteId}.md`);
+    if (!existsSync(filePath)) return { error: "This note has not been saved yet" };
+
+    shell.showItemInFolder(filePath);
+  });
+
+  safeHandle("notes:openExternal", async (_event, noteId: unknown) => {
+    if (typeof noteId !== "string" || !safeNoteId.test(noteId)) return { error: "Invalid note ID" };
+
+    const filePath = join(notesDir, `${noteId}.md`);
+    if (!existsSync(filePath)) return { error: "This note has not been saved yet" };
+
+    const failure = await shell.openPath(filePath);
+    if (failure) return { error: failure };
+  });
+
+  safeHandle("notes:exportTo", async (_event, noteId: unknown, suggestedName: unknown) => {
+    if (typeof noteId !== "string" || !safeNoteId.test(noteId)) return { error: "Invalid note ID" };
+    if (typeof suggestedName !== "string") return { error: "Invalid file name" };
+
+    const filePath = join(notesDir, `${noteId}.md`);
+
+    let contents: string;
+    try {
+      contents = await readFile(filePath, "utf-8");
+    } catch (err) {
+      if (isMissingFileError(err)) return { error: "This note has not been saved yet" };
+      throw err;
+    }
+
+    const result = await dialog.showSaveDialog({
+      defaultPath: `${sanitizeFileName(suggestedName) || "note"}.md`,
+      filters: [{ extensions: ["md"], name: "Markdown" }],
+    });
+    if (result.canceled || !result.filePath) return { canceled: true as const };
+
+    try {
+      await writeFile(result.filePath, contents, "utf-8");
+      return { path: result.filePath };
+    } catch (err) {
+      return { error: `Failed to export: ${err instanceof Error ? err.message : String(err)}` };
     }
   });
 

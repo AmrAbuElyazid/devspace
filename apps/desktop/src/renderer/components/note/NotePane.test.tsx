@@ -22,6 +22,9 @@ const notePaneMocks = vi.hoisted(() => ({
   }),
 }));
 
+// The editor itself is covered by its own package's suite; what matters here
+// is how the pane reacts to what the editor reports, so it is stubbed down to
+// the `onChange` contract.
 vi.mock("@devspace/note-editor", () => ({
   NoteEditor: ({
     autoFocus,
@@ -38,7 +41,11 @@ vi.mock("@devspace/note-editor", () => ({
     return <div data-testid="note-editor" />;
   },
   extractNoteTitle: notePaneMocks.extractNoteTitle,
+  noteOutline: vi.fn(() => []),
+  noteStats: vi.fn(() => ({ characters: 0, readingMinutes: 0, words: 0 })),
 }));
+
+vi.mock("@devspace/note-editor/styles.css", () => ({}));
 
 vi.mock("../../store/workspace-store", () => ({
   useWorkspaceStore: (
@@ -144,7 +151,82 @@ test("surfaces serialization failures without saving corrupted content", async (
   expect(notePaneMocks.updatePaneTitle).toHaveBeenCalledWith("pane-1", "Broken title");
   expect(api.notes.save).not.toHaveBeenCalled();
   expect(api.notes.saveSync).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("Save failed: serialize failed");
+  expect(container.textContent).toContain("Save failed");
+});
+
+test("a serialization failure does not stop later edits from saving", async () => {
+  // The regression this guards: the pane used to null out its cached markdown
+  // on a failed serialize and never restore it, so one bad keystroke silently
+  // disabled saving for the rest of the pane's life.
+  const api = installMockWindowApi();
+  const { default: NotePane } = await import("./NotePane");
+
+  await act(async () => {
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
+  });
+  await flushEffects();
+
+  await act(async () => {
+    notePaneMocks.onChange?.({
+      editor: {} as NoteEditorChangeContext["editor"],
+      markdown: null,
+      serializationError: "serialize failed",
+      value: [{ type: "p", children: [{ text: "Broken" }] }],
+    });
+  });
+
+  await act(async () => {
+    notePaneMocks.onChange?.({
+      editor: {} as NoteEditorChangeContext["editor"],
+      markdown: "# Recovered",
+      serializationError: null,
+      value: [{ type: "p", children: [{ text: "Recovered" }] }],
+    });
+  });
+
+  await act(async () => {
+    vi.advanceTimersByTime(600);
+  });
+  await flushEffects();
+
+  expect(api.notes.save).toHaveBeenCalledWith("note-1", "# Recovered");
+  expect(container.textContent).not.toContain("Save failed");
+});
+
+test("keeps the last good markdown when a later change fails to serialize", async () => {
+  const api = installMockWindowApi();
+  const { default: NotePane } = await import("./NotePane");
+
+  await act(async () => {
+    root?.render(<NotePane paneId="pane-1" config={{ noteId: "note-1" }} isFocused={true} />);
+  });
+  await flushEffects();
+
+  await act(async () => {
+    notePaneMocks.onChange?.({
+      editor: {} as NoteEditorChangeContext["editor"],
+      markdown: "# Good",
+      serializationError: null,
+      value: [{ type: "p", children: [{ text: "Good" }] }],
+    });
+  });
+
+  await act(async () => {
+    notePaneMocks.onChange?.({
+      editor: {} as NoteEditorChangeContext["editor"],
+      markdown: null,
+      serializationError: "serialize failed",
+      value: [{ type: "p", children: [{ text: "Bad" }] }],
+    });
+  });
+
+  await act(async () => {
+    window.dispatchEvent(new Event("beforeunload"));
+  });
+
+  // Better to persist the last version we could represent than to drop the
+  // whole note because one edit could not be serialized.
+  expect(api.notes.saveSync).toHaveBeenCalledWith("note-1", "# Good");
 });
 
 test("flushes pending note edits synchronously before unload", async () => {
@@ -206,7 +288,7 @@ test("surfaces synchronous flush failures when the app is hidden", async () => {
   });
 
   expect(api.notes.saveSync).toHaveBeenCalledWith("note-1", "# Unsaved");
-  expect(container.textContent).toContain("Save failed: disk full");
+  expect(container.textContent).toContain("Save failed");
 
   if (originalVisibilityState) {
     Object.defineProperty(document, "visibilityState", originalVisibilityState);

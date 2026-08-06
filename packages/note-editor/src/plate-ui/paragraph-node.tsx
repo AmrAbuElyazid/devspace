@@ -1,16 +1,9 @@
 "use client";
 
-import * as React from "react";
-
 import type { PlateElementProps } from "platejs/react";
 import { PlateElement } from "platejs/react";
 
-import { cn } from "../lib/cn";
-
+/** Spacing comes from the `.note-prose` rhythm, not from the node. */
 export function ParagraphElement(props: PlateElementProps) {
-  return (
-    <PlateElement {...props} className={cn("m-0 px-0 py-1")}>
-      {props.children}
-    </PlateElement>
-  );
+  return <PlateElement {...props}>{props.children}</PlateElement>;
 }

@@ -57,6 +57,8 @@ async function loadIndexModule(options: LoadIndexOptions = {}) {
   const windowInstances: MockWindow[] = [];
   const setApplicationMenu = vi.fn();
   const buildFromTemplate = vi.fn((template) => ({ template }));
+  const registerSchemesAsPrivileged = vi.fn();
+  const registerNoteAssetProtocolHandle = vi.fn();
   const mkdirSync = vi.fn();
   const writeFileSync = vi.fn();
   const listen = vi.fn((_port: number, _host: string, onListening?: () => void) => {
@@ -222,6 +224,10 @@ async function loadIndexModule(options: LoadIndexOptions = {}) {
     Menu: {
       buildFromTemplate,
       setApplicationMenu,
+    },
+    protocol: {
+      handle: registerNoteAssetProtocolHandle,
+      registerSchemesAsPrivileged: registerSchemesAsPrivileged,
     },
   }));
   vi.doMock("http", () => ({

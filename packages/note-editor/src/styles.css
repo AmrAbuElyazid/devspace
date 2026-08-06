@@ -1,28 +1,265 @@
-/* Devspace note editor — styles consumed by the renderer.
-   Tokens (--background, --foreground, --brand-soft, --foreground-muted)
-   are provided by the host app's globals.css. */
+/* Devspace note editor.
+ *
+ * Prose typography lives here rather than in per-node Tailwind classes because
+ * it is a system, not a set of independent decisions: the heading scale, the
+ * block rhythm and the code palette only work if they are read together. The
+ * interactive chrome — gutter buttons, menus, toolbars — stays in Tailwind at
+ * the component, where it sits next to its behaviour.
+ *
+ * Every token used here is defined by the host app's globals.css; that
+ * relationship is enforced by styles-contract.test.ts.
+ */
 
 .note-pane {
   -webkit-app-region: no-drag;
 }
 
-.note-editor-shell {
-  flex: 1;
-  min-height: 0;
-}
+/* ─── Prose ──────────────────────────────────────────────────────────
+   13px matches the app's chrome so a note doesn't read as a foreign
+   document, but prose needs more leading than a sidebar row does.
+*/
 
-.note-editor-content {
-  min-height: 100%;
+.note-prose {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--foreground);
   caret-color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
 }
 
-.note-editor-content [data-slate-placeholder] {
+/* Every block is wrapped by the drag-gutter HOC, so the editor's direct
+   children are wrapper divs and the blocks themselves sit one level down.
+   Selectors here are deliberately descendant, not child: an earlier version
+   used `>` throughout and silently matched nothing, which is why headings
+   rendered at body size. */
+.note-prose > * {
+  margin-block: 0;
+}
+
+/* One rhythm rule instead of per-node margins, so no two block types can
+   drift apart. Adjacent blocks share a single gap. */
+.note-prose > * + * {
+  margin-block-start: 0.35rem;
+}
+
+.note-prose :is(h1, h2, h3, h4, h5, h6) {
+  margin-block: 0;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.012em;
+  scroll-margin-block-start: 1rem;
+}
+
+/* Space above a heading, collapsed through the wrapper div. */
+.note-prose > * + * :is(h1, h2, h3, h4, h5, h6) {
+  margin-block-start: 1.1em;
+}
+
+.note-prose h1 {
+  font-size: 1.6em;
+  letter-spacing: -0.02em;
+}
+.note-prose h2 {
+  font-size: 1.3em;
+}
+.note-prose h3 {
+  font-size: 1.12em;
+}
+.note-prose h4 {
+  font-size: 1em;
+}
+.note-prose h5,
+.note-prose h6 {
+  font-size: 1em;
   color: var(--muted-foreground);
+}
+
+/* The first block should sit at the top of the pane, not under a margin. */
+.note-prose > :first-child,
+.note-prose > :first-child :is(h1, h2, h3, h4, h5, h6) {
+  margin-block-start: 0;
+}
+
+.note-prose ::selection {
+  background: var(--brand-soft);
+  color: var(--foreground);
+}
+
+.note-prose [data-slate-placeholder] {
+  color: var(--muted-foreground);
+  opacity: 0.6 !important;
   pointer-events: none;
 }
 
-.note-editor-content ::selection,
-.note-editor-content *::selection {
-  background: var(--brand-soft);
-  color: var(--foreground);
+/* ─── Inline ─────────────────────────────────────────────────────── */
+
+.note-prose a {
+  color: var(--brand);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--brand) 45%, transparent);
+  text-underline-offset: 2px;
+  transition: text-decoration-color 120ms ease;
+}
+.note-prose a:hover {
+  text-decoration-color: var(--brand);
+}
+
+.note-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* ─── Blocks ─────────────────────────────────────────────────────── */
+
+.note-prose blockquote {
+  padding-inline-start: 0.85em;
+  border-inline-start: 2px solid var(--brand-edge);
+  color: color-mix(in oklch, var(--foreground) 85%, transparent);
+}
+
+.note-prose hr {
+  height: 1px;
+  border: 0;
+  background: var(--border);
+}
+
+.note-prose ul,
+.note-prose ol {
+  margin: 0;
+  padding: 0;
+}
+
+.note-prose li {
+  margin: 0;
+}
+
+/* Lists are indent-based: the marker is drawn by the list-style, and the
+   text hangs off it. `list-inside` would wrap the second line under the
+   marker, which reads as broken at this density. */
+.note-prose li::marker {
+  color: var(--muted-foreground);
+}
+
+.note-prose table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.95em;
+}
+
+.note-prose th,
+.note-prose td {
+  border: 1px solid var(--border);
+  padding: 0.3em 0.55em;
+  text-align: start;
+  vertical-align: top;
+}
+
+.note-prose th {
+  background: var(--surface);
+  font-weight: 600;
+}
+
+/* ─── Code blocks ────────────────────────────────────────────────────
+   highlight.js classes mapped onto the app's workspace-identity hues.
+   Those eight are already tuned to one lightness per theme and lift
+   correctly against the dark rail, so the palette follows light/dark for
+   free — where the scaffold hard-coded GitHub's hex values and stayed
+   light-mode-only in practice.
+*/
+
+.note-code-block {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.note-code-block pre {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+
+.note-code-block code {
+  font-size: inherit;
+}
+
+.note-prose .hljs-comment,
+.note-prose .hljs-quote {
+  color: var(--muted-foreground);
+  font-style: italic;
+}
+
+.note-prose .hljs-keyword,
+.note-prose .hljs-selector-tag,
+.note-prose .hljs-doctag,
+.note-prose .hljs-template-tag,
+.note-prose .hljs-variable.language_ {
+  color: var(--w-violet);
+}
+
+.note-prose .hljs-string,
+.note-prose .hljs-regexp,
+.note-prose .hljs-addition,
+.note-prose .hljs-meta .hljs-string {
+  color: var(--w-green);
+}
+
+.note-prose .hljs-number,
+.note-prose .hljs-literal,
+.note-prose .hljs-symbol,
+.note-prose .hljs-bullet {
+  color: var(--w-amber);
+}
+
+.note-prose .hljs-title,
+.note-prose .hljs-title.function_,
+.note-prose .hljs-section {
+  color: var(--w-blue);
+}
+
+.note-prose .hljs-type,
+.note-prose .hljs-class .hljs-title,
+.note-prose .hljs-title.class_,
+.note-prose .hljs-built_in {
+  color: var(--w-teal);
+}
+
+.note-prose .hljs-attr,
+.note-prose .hljs-attribute,
+.note-prose .hljs-variable,
+.note-prose .hljs-template-variable,
+.note-prose .hljs-selector-attr,
+.note-prose .hljs-selector-class,
+.note-prose .hljs-selector-id {
+  color: var(--w-pink);
+}
+
+.note-prose .hljs-name,
+.note-prose .hljs-tag,
+.note-prose .hljs-deletion {
+  color: var(--w-red);
+}
+
+.note-prose .hljs-meta,
+.note-prose .hljs-punctuation {
+  color: var(--muted-foreground);
+}
+
+.note-prose .hljs-emphasis {
+  font-style: italic;
+}
+.note-prose .hljs-strong {
+  font-weight: 600;
+}
+
+/* ─── Drag state ─────────────────────────────────────────────────── */
+
+.note-prose [data-block-dragging="true"] {
+  cursor: grabbing;
 }

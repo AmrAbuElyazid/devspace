@@ -3,14 +3,13 @@
 import * as React from "react";
 
 import * as ToolbarPrimitive from "@radix-ui/react-toolbar";
-import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { type VariantProps, cva } from "class-variance-authority";
 import { ChevronDown } from "lucide-react";
 
 import { cn } from "../lib/cn";
 import { DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuSeparator } from "./dropdown-menu";
 import { Separator } from "./separator";
-import { Tooltip, TooltipTrigger } from "./tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 export function Toolbar({
   className,
@@ -61,7 +60,7 @@ export function ToolbarSeparator({
 }
 
 const toolbarButtonVariants = cva(
-  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium text-sm outline-none transition-[color,box-shadow] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] focus-visible:border-[var(--ring)] focus-visible:ring-[3px] focus-visible:ring-[var(--ring)]/50 disabled:pointer-events-none disabled:opacity-50 aria-checked:bg-[var(--secondary)] aria-checked:text-[var(--secondary-foreground)] [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium text-ui-sm outline-none transition-[background-color,color] hover:bg-row-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand-soft disabled:pointer-events-none disabled:opacity-50 aria-checked:bg-row-active aria-checked:text-foreground [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     defaultVariants: {
       size: "default",
@@ -69,9 +68,9 @@ const toolbarButtonVariants = cva(
     },
     variants: {
       size: {
-        default: "h-9 min-w-9 px-2",
-        lg: "h-10 min-w-10 px-2.5",
-        sm: "h-8 min-w-8 px-1.5",
+        default: "h-7 min-w-7 px-2",
+        lg: "h-8 min-w-8 px-2.5",
+        sm: "h-7 min-w-7 px-1.5",
       },
       variant: {
         default: "bg-transparent",
@@ -93,9 +92,9 @@ const dropdownArrowVariants = cva(
     },
     variants: {
       size: {
-        default: "h-9 w-6",
-        lg: "h-10 w-8",
-        sm: "h-8 w-4",
+        default: "h-7 w-5",
+        lg: "h-8 w-6",
+        sm: "h-7 w-4",
       },
       variant: {
         default:
@@ -287,32 +286,6 @@ function withTooltip<T extends React.ElementType>(Component: T) {
   };
 }
 
-function TooltipContent({
-  children,
-  className,
-  sideOffset = 4,
-  ...props
-}: React.ComponentProps<typeof TooltipPrimitive.Content>) {
-  return (
-    <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Content
-        className={cn(
-          "z-50 w-fit rounded-md px-2.5 py-1 text-[11px] text-balance",
-          "bg-[var(--popover)] text-[var(--popover-foreground)]",
-          "border border-[var(--border)]",
-          "shadow-[0_4px_12px_rgba(0,0,0,0.15)]",
-          className,
-        )}
-        data-slot="tooltip-content"
-        sideOffset={sideOffset}
-        {...props}
-      >
-        {children}
-      </TooltipPrimitive.Content>
-    </TooltipPrimitive.Portal>
-  );
-}
-
 export function ToolbarMenuGroup({
   children,
   className,
@@ -337,7 +310,7 @@ export function ToolbarMenuGroup({
         )}
       >
         {label && (
-          <DropdownMenuLabel className="select-none font-semibold text-muted-foreground text-xs">
+          <DropdownMenuLabel className="px-2 py-1 text-ui-micro font-medium tracking-[0.08em] text-muted-foreground/70 uppercase select-none">
             {label}
           </DropdownMenuLabel>
         )}

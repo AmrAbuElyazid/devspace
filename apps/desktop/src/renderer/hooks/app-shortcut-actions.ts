@@ -1,6 +1,7 @@
 import { useWorkspaceStore, collectGroupIds } from "../store/workspace-store";
 import { DEFAULT_LEADER_TIMEOUT_MS, useSettingsStore } from "../store/settings-store";
 import { useBrowserStore } from "../store/browser-store";
+import { useNoteStore } from "../store/note-store";
 import { useTerminalStore } from "../store/terminal-store";
 import {
   getActiveFocusedBrowserPane,
@@ -13,6 +14,7 @@ import {
   releaseNativeFocus,
 } from "../lib/native-pane-focus";
 import { useNativeViewStore } from "../store/native-view-store";
+import type { PaneType } from "../types/workspace";
 
 let leaderCapturePaneId: string | null = null;
 let leaderCaptureRestoreTimer: number | null = null;
@@ -172,7 +174,8 @@ function getWebViewContext(): WebViewZoomContext | null {
     : createNativeZoomContext(pane.id);
 }
 
-function getFocusedTerminalSurfaceId(): string | null {
+/** The active pane of the focused group, when it is of the given type. */
+function getFocusedPaneIdOfType(type: PaneType): string | null {
   const ctx = getActiveWorkspace();
   if (!ctx) return null;
   const groupId = getFocusedGroupId(ctx.ws);
@@ -182,8 +185,12 @@ function getFocusedTerminalSurfaceId(): string | null {
   const activeTab = group.tabs.find((tab) => tab.id === group.activeTabId);
   if (!activeTab) return null;
   const pane = ctx.store.panes[activeTab.paneId];
-  if (!pane || pane.type !== "terminal") return null;
+  if (!pane || pane.type !== type) return null;
   return activeTab.paneId;
+}
+
+function getFocusedTerminalSurfaceId(): string | null {
+  return getFocusedPaneIdOfType("terminal");
 }
 
 function focusPaneInDirection(direction: "left" | "right" | "up" | "down"): void {
@@ -448,13 +455,21 @@ function dispatchShortcutAction(channel: string, ...args: unknown[]): void {
       break;
     }
     case "app:browser-find": {
+      // One shortcut, routed to whichever pane type currently has focus.
       const ctx = getBrowserContext();
       if (ctx) {
         useBrowserStore.getState().requestFindBarFocus(ctx.paneId);
-      } else {
-        const surfaceId = getFocusedTerminalSurfaceId();
-        if (surfaceId) useTerminalStore.getState().requestFindBarFocus(surfaceId);
+        break;
       }
+
+      const surfaceId = getFocusedTerminalSurfaceId();
+      if (surfaceId) {
+        useTerminalStore.getState().requestFindBarFocus(surfaceId);
+        break;
+      }
+
+      const notePaneId = getFocusedPaneIdOfType("note");
+      if (notePaneId) useNoteStore.getState().requestFindBarFocus(notePaneId);
       break;
     }
     case "app:browser-zoom-in": {

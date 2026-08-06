@@ -1,126 +1,107 @@
 // @vitest-environment jsdom
 
+/**
+ * The block gutter is the editor's only affordance for moving, duplicating or
+ * deleting a block, so these assertions run against a real Plate editor rather
+ * than a mocked one — the previous version stubbed `platejs` down to `KEYS` and
+ * therefore could not have caught a gutter that renders but does nothing.
+ */
+
 import { act } from "react";
-import type { ComponentType, ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+
+import type { Value } from "platejs";
+import { Plate, usePlateEditor } from "platejs/react";
+
+import { createNoteEditorPlugins } from "../plugins/note-editor-kit";
+import { Editor, EditorContainer } from "./editor";
+import { TooltipProvider } from "./tooltip";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const blockDraggableMocks = vi.hoisted(() => ({
-  dragRef: vi.fn(),
-  useDndNode: vi.fn(() => ({
-    isDragging: false,
-    dragRef: blockDraggableMocks.dragRef,
-  })),
-  useDropLine: vi.fn(() => ({ dropLine: "" })),
-}));
-
-vi.mock("@platejs/dnd", () => ({
-  useDndNode: blockDraggableMocks.useDndNode,
-  useDropLine: blockDraggableMocks.useDropLine,
-}));
-
-vi.mock("platejs", () => ({
-  KEYS: {
-    p: "p",
-    codeLine: "codeLine",
-    column: "column",
-    slashInput: "slash_input",
-    td: "td",
-    th: "th",
-    tr: "tr",
-  },
-}));
-
 let container: HTMLDivElement;
-let root: Root | null;
+let root: Root;
 
 beforeEach(() => {
   container = document.createElement("div");
-  document.body.appendChild(container);
+  document.body.append(container);
   root = createRoot(container);
-  blockDraggableMocks.dragRef.mockReset();
-  blockDraggableMocks.useDndNode.mockClear();
-  blockDraggableMocks.useDropLine.mockReset();
-  blockDraggableMocks.useDropLine.mockReturnValue({ dropLine: "" });
 });
 
-afterEach(async () => {
-  if (root) {
-    await act(async () => {
-      root?.unmount();
-      root = null;
-    });
-  }
+afterEach(() => {
+  act(() => root.unmount());
   container.remove();
 });
 
-test("renders a drag handle for non-empty blocks and disables the native preview", async () => {
-  const { BlockDraggable } = await import("./block-draggable");
-  const Wrapper = BlockDraggable({
-    element: { type: "p", children: [{ text: "Hello" }] } as never,
-  }) as ComponentType<{ children: ReactNode }>;
+function Harness({ value }: { value: Value }) {
+  const editor = usePlateEditor({ plugins: createNoteEditorPlugins(), value });
 
-  await act(async () => {
-    root?.render(
-      <Wrapper>
-        <p>Hello</p>
-      </Wrapper>,
-    );
-  });
-
-  expect(blockDraggableMocks.useDndNode).toHaveBeenCalledWith(
-    expect.objectContaining({
-      preview: { disable: true },
-    }),
+  return (
+    <TooltipProvider>
+      <Plate editor={editor}>
+        <EditorContainer>
+          <Editor />
+        </EditorContainer>
+      </Plate>
+    </TooltipProvider>
   );
-  expect(container.querySelector('button[aria-label="Drag block"]')).toBeTruthy();
-});
+}
 
-test("does not render a drag handle for the empty default paragraph", async () => {
-  const { BlockDraggable } = await import("./block-draggable");
-  const Wrapper = BlockDraggable({
-    element: { type: "p", children: [{ text: "   " }] } as never,
-  }) as ComponentType<{ children: ReactNode }>;
+function render(value: Value) {
+  act(() => {
+    root.render(<Harness value={value} />);
+  });
+}
 
-  await act(async () => {
-    root?.render(
-      <Wrapper>
-        <p />
-      </Wrapper>,
-    );
+const dragHandles = () =>
+  container.querySelectorAll('button[aria-label="Drag to move, click to open block menu"]');
+const insertButtons = () => container.querySelectorAll('button[aria-label="Insert block below"]');
+
+describe("block gutter", () => {
+  test("gives every top level block a drag handle and an insert button", () => {
+    render([
+      { children: [{ text: "First" }], type: "p" },
+      { children: [{ text: "Second" }], type: "h2" },
+    ] as Value);
+
+    expect(dragHandles()).toHaveLength(2);
+    expect(insertButtons()).toHaveLength(2);
   });
 
-  expect(container.querySelector('button[aria-label="Drag block"]')).toBeNull();
-});
+  test("gives an empty paragraph a gutter too", () => {
+    // The old implementation hid the handle whenever a paragraph was blank,
+    // which left an empty block with no way to be moved or deleted.
+    render([{ children: [{ text: "" }], type: "p" }] as Value);
 
-test("does not wrap slash input elements with a draggable handle", async () => {
-  const { BlockDraggable } = await import("./block-draggable");
-
-  expect(
-    BlockDraggable({
-      element: { type: "slash_input", children: [] } as never,
-    }),
-  ).toBeNull();
-});
-
-test("does not render a paragraph drag handle while slash input is active", async () => {
-  const { BlockDraggable } = await import("./block-draggable");
-  const Wrapper = BlockDraggable({
-    element: {
-      type: "p",
-      children: [{ type: "slash_input", children: [{ text: "" }] }],
-    } as never,
-  }) as ComponentType<{ children: ReactNode }>;
-
-  await act(async () => {
-    root?.render(
-      <Wrapper>
-        <span>/</span>
-      </Wrapper>,
-    );
+    expect(dragHandles()).toHaveLength(1);
   });
 
-  expect(container.querySelector('button[aria-label="Drag block"]')).toBeNull();
+  test("suppresses the gutter while a slash combobox is open in the block", () => {
+    render([
+      {
+        children: [{ children: [{ text: "" }], type: "slash_input" }],
+        type: "p",
+      },
+    ] as Value);
+
+    expect(dragHandles()).toHaveLength(0);
+  });
+
+  test("does not wrap table parts, which move with their table", () => {
+    render([
+      {
+        children: [
+          {
+            children: [{ children: [{ children: [{ text: "a" }], type: "p" }], type: "td" }],
+            type: "tr",
+          },
+        ],
+        type: "table",
+      },
+    ] as Value);
+
+    // One handle for the table itself, none for the row or cell.
+    expect(dragHandles()).toHaveLength(1);
+  });
 });

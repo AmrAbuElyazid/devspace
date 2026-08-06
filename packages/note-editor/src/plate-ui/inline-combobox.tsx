@@ -256,10 +256,8 @@ const InlineComboboxContent: typeof ComboboxPopover = ({ className, ...props }) 
     <Portal>
       <ComboboxPopover
         className={cn(
-          "z-500 max-h-[288px] w-[320px] overflow-y-auto rounded-xl border border-[var(--border)]",
-          "bg-[var(--popover)] text-[var(--popover-foreground)]",
-          "p-1.5 shadow-[0_12px_40px_rgba(0,0,0,0.28),0_2px_10px_rgba(0,0,0,0.12)]",
-          "backdrop-blur-sm",
+          "glass-dropdown scrollbar-thin z-500 max-h-[300px] w-[264px] overflow-y-auto rounded-lg",
+          "p-1 text-popover-foreground",
           className,
         )}
         onKeyDownCapture={handleKeyDown}
@@ -270,7 +268,7 @@ const InlineComboboxContent: typeof ComboboxPopover = ({ className, ...props }) 
 };
 
 const comboboxItemVariants = cva(
-  "relative flex h-9 select-none items-center gap-2 rounded-lg px-3 text-sm outline-none [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "relative flex h-7 items-center gap-2 rounded-md px-2 text-ui select-none outline-none [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
   {
     defaultVariants: {
       interactive: true,
@@ -278,7 +276,9 @@ const comboboxItemVariants = cva(
     variants: {
       interactive: {
         false: "",
-        true: "cursor-pointer transition-colors hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] data-[active-item=true]:bg-[var(--surface-hover)] data-[active-item=true]:text-[var(--foreground)] aria-selected:bg-[var(--surface-hover)] aria-selected:text-[var(--foreground)]",
+        // The active item is the one Enter commits, so it takes the brand tint
+        // the rest of the app uses for "current row"; plain hover stays neutral.
+        true: "cursor-pointer transition-colors hover:bg-row-hover hover:text-foreground data-[active-item=true]:bg-row-active data-[active-item=true]:text-foreground aria-selected:bg-row-active aria-selected:text-foreground",
       },
     },
   },
@@ -374,7 +374,7 @@ function InlineComboboxGroupLabel({
     <ComboboxGroupLabel
       {...props}
       className={cn(
-        "mt-2 mb-2 px-3 font-medium text-[10px] tracking-[0.08em] text-[var(--foreground-faint)] uppercase first:mt-0",
+        "mt-2 mb-1.5 px-2.5 font-medium text-ui-micro tracking-[0.08em] text-muted-foreground/70 uppercase first:mt-0",
         className,
       )}
     />

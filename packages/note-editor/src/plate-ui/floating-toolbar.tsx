@@ -26,13 +26,15 @@ export function FloatingToolbar({
 }) {
   const editorId = useEditorId();
   const focusedEditorId = useEventEditorValue("focus");
+  // The link toolbar owns the same anchor, so the two must not both be up.
+  // The scaffold also consulted `KEYS.aiChat`, a plugin this editor never
+  // registers — the lookup just returned undefined on every render.
   const isFloatingLinkOpen = !!usePluginOption({ key: KEYS.link }, "mode");
-  const isAIChatOpen = usePluginOption({ key: KEYS.aiChat }, "open");
 
   const floatingToolbarState = useFloatingToolbarState({
     editorId,
     focusedEditorId,
-    hideToolbar: isFloatingLinkOpen || isAIChatOpen,
+    hideToolbar: isFloatingLinkOpen,
     ...state,
     floatingOptions: {
       middleware: [
@@ -65,10 +67,8 @@ export function FloatingToolbar({
         {...rootProps}
         ref={ref}
         className={cn(
-          "scrollbar-hide absolute z-50 overflow-x-auto whitespace-nowrap rounded-lg p-1 opacity-100 print:hidden",
-          "bg-[var(--popover)] border border-[var(--border)]",
-          "shadow-[0_4px_16px_rgba(0,0,0,0.18),0_1px_3px_rgba(0,0,0,0.1)]",
-          "max-w-[80vw]",
+          "scrollbar-none glass-dropdown absolute z-50 overflow-x-auto rounded-lg p-1 whitespace-nowrap print:hidden",
+          "max-w-[80vw] text-popover-foreground",
           className,
         )}
       >

@@ -179,6 +179,24 @@ export interface DevspaceBridge {
     save: (noteId: string, content: string) => Promise<void | { error: string }>;
     saveSync: (noteId: string, content: string) => void | { error: string };
     list: () => Promise<string[]>;
+    /**
+     * Stores pasted or dropped image bytes beside the notes and returns a
+     * `devspace-note-asset://` URL. Keeping assets out of the markdown means a
+     * note stays a note rather than a base64 blob.
+     */
+    saveAsset: (
+      bytes: ArrayBuffer,
+      extension: string,
+    ) => Promise<{ url: string } | { error: string }>;
+    /** Reveals the note's .md file in Finder. */
+    reveal: (noteId: string) => Promise<void | { error: string }>;
+    /** Opens the note's .md file in the system's default markdown editor. */
+    openExternal: (noteId: string) => Promise<void | { error: string }>;
+    /** Prompts for a destination and writes the note there. */
+    exportTo: (
+      noteId: string,
+      suggestedName: string,
+    ) => Promise<{ path: string } | { canceled: true } | { error: string }>;
   };
   shell: {
     openExternal: (url: string) => void;

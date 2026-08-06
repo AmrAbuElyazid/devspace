@@ -115,6 +115,10 @@ function createDefaultWindowApi(): DevspaceBridge {
       save: vi.fn(async () => {}),
       saveSync: vi.fn(() => {}),
       list: vi.fn(async () => []),
+      saveAsset: vi.fn(async () => ({ url: "devspace-note-asset://test.png" })),
+      reveal: vi.fn(async () => {}),
+      openExternal: vi.fn(async () => {}),
+      exportTo: vi.fn(async () => ({ canceled: true as const })),
     },
     shell: {
       openExternal: vi.fn(),
