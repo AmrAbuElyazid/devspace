@@ -97,11 +97,20 @@ function DraggableBlock({ children, element }: { children: ReactNode; element: T
   // paths and selection consistent.
   const isCollapsed = index !== null && hidden.has(index);
 
+  const isHeading = index !== null && headingLevel(element) !== null;
+  const isFolded = index !== null && folded.includes(index);
+
   return (
     <div
       ref={nodeRef}
       className={cn(
         "group/block relative min-w-0 rounded-sm transition-opacity duration-100",
+        // The wrapper reaches back over the gutter strip rather than leaving it
+        // outside its box. Hover is what reveals the gutter, and an element
+        // outside the hovered box cannot trigger it — the strip used to be dead
+        // space, so the handle appeared and vanished seemingly at random.
+        // `GUTTER_WIDTH` must stay within the editor's own left padding.
+        "-ml-11 pl-11",
         isCollapsed && "hidden",
       )}
       data-block-dragging={isDragging || undefined}
@@ -110,24 +119,22 @@ function DraggableBlock({ children, element }: { children: ReactNode; element: T
       {showGutter && (
         <div
           className={cn(
-            "absolute top-0 right-full z-10 flex h-[1lh] items-center gap-px pr-1",
-            // The gutter has to stay clickable while the menu is open, or the
-            // dropdown closes the instant the pointer leaves the block.
-            "pointer-events-none opacity-0 transition-opacity duration-100",
-            "group-hover/block:pointer-events-auto group-hover/block:opacity-100",
-            "group-focus-within/block:pointer-events-auto group-focus-within/block:opacity-100",
+            "absolute top-0 left-0 z-10 flex h-[1lh] w-11 items-center justify-end gap-px pr-1.5",
+            "opacity-0 transition-opacity duration-100",
+            "group-hover/block:opacity-100 group-focus-within/block:opacity-100",
             // A folded heading keeps its gutter up: the chevron is the only
-            // signal that content is hidden below it.
-            (menuOpen || (index !== null && folded.includes(index))) &&
-              "pointer-events-auto opacity-100",
+            // signal that content is hidden below it. The open menu keeps it up
+            // so the dropdown does not close the moment the pointer moves away.
+            (menuOpen || isFolded) && "opacity-100",
           )}
           contentEditable={false}
           data-plate-prevent-deselect
         >
-          {index !== null && headingLevel(element) !== null && (
-            <FoldButton index={index} folded={folded.includes(index)} />
+          {isHeading ? (
+            <FoldButton index={index} folded={isFolded} />
+          ) : (
+            <InsertBlockButton element={element} />
           )}
-          <InsertBlockButton element={element} />
           <BlockMenu
             element={element}
             dragRef={dragRef as unknown as React.Ref<HTMLButtonElement>}
@@ -284,29 +291,49 @@ function BlockMenu({
     [editor, selectBlock],
   );
 
+  const insertBelow = useCallback(() => {
+    const path = getPath();
+    if (!path) return;
+    const at = PathApi.next(path);
+    editor.tf.insertNodes({ children: [{ text: "" }], type: KEYS.p }, { at, select: true });
+    editor.tf.focus();
+  }, [editor, getPath]);
+
   return (
     <DropdownMenu open={open} onOpenChange={onOpenChange} modal={false}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
+      {/* The handle has to do two jobs, and Radix's trigger opens on
+          `pointerdown` and calls `preventDefault()` while doing so — which
+          cancels the native drag before it starts. So the trigger is a separate,
+          inert element that exists only to give the menu something to position
+          against, and the handle opens the menu from `click` instead. */}
+      <span className="relative">
+        <DropdownMenuTrigger asChild>
+          <span aria-hidden className="pointer-events-none absolute inset-0 block" />
+        </DropdownMenuTrigger>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
             <button
               ref={composedRef}
               type="button"
               aria-label="Drag to move, click to open block menu"
+              aria-haspopup="menu"
+              aria-expanded={open}
               contentEditable={false}
               data-plate-prevent-deselect
               tabIndex={-1}
+              onClick={() => onOpenChange(!open)}
               className={cn(gutterButtonClass, "cursor-grab active:cursor-grabbing")}
             >
               <GripVertical size={14} />
             </button>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent side="top">
-          Drag to move
-          <span className="ml-1.5 text-muted-foreground">click for menu</span>
-        </TooltipContent>
-      </Tooltip>
+          </TooltipTrigger>
+          <TooltipContent side="top">
+            Drag to move
+            <span className="ml-1.5 text-muted-foreground">click for menu</span>
+          </TooltipContent>
+        </Tooltip>
+      </span>
 
       <DropdownMenuContent
         align="start"
@@ -336,6 +363,11 @@ function BlockMenu({
             ))}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+
+        <DropdownMenuItem onSelect={insertBelow}>
+          <PlusIcon />
+          Insert below
+        </DropdownMenuItem>
 
         <DropdownMenuItem onSelect={duplicate}>
           <CopyIcon />

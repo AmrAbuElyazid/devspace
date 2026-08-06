@@ -101,6 +101,10 @@ export function NoteEditor({
 
   const editor = usePlateEditor({
     plugins: createNoteEditorPlugins(),
+    // Normalize on load, not just on the first edit. A note read from disk that
+    // ends in a code block would otherwise open with no paragraph after it and
+    // no way to add one.
+    shouldNormalizeEditor: true,
     value:
       typeof initialValue === "string"
         ? (e) => e.getApi(MarkdownPlugin).markdown.deserialize(initialValue)

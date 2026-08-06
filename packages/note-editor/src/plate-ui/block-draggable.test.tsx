@@ -57,16 +57,42 @@ function render(value: Value) {
 const dragHandles = () =>
   container.querySelectorAll('button[aria-label="Drag to move, click to open block menu"]');
 const insertButtons = () => container.querySelectorAll('button[aria-label="Insert block below"]');
+const foldButtons = () => container.querySelectorAll('button[aria-label^="Collapse "]');
 
 describe("block gutter", () => {
-  test("gives every top level block a drag handle and an insert button", () => {
+  test("gives every top level block a drag handle", () => {
     render([
       { children: [{ text: "First" }], type: "p" },
-      { children: [{ text: "Second" }], type: "h2" },
+      { children: [{ text: "Second" }], type: "p" },
     ] as Value);
 
     expect(dragHandles()).toHaveLength(2);
     expect(insertButtons()).toHaveLength(2);
+  });
+
+  test("a heading trades the insert button for a fold chevron", () => {
+    // The gutter only has room for two controls, and folding is the one that
+    // has nowhere else to live — insert stays reachable from the block menu.
+    render([{ children: [{ text: "Section" }], type: "h2" }] as Value);
+
+    expect(foldButtons()).toHaveLength(1);
+    expect(insertButtons()).toHaveLength(0);
+    expect(dragHandles()).toHaveLength(1);
+  });
+
+  test("the drag handle stays draggable and opens the menu on click", () => {
+    // Radix opens a dropdown on pointerdown and calls preventDefault while
+    // doing so, which cancelled the native drag before it could start. The
+    // handle now opens the menu from click, and the dropdown's own trigger is a
+    // separate inert element, so both interactions survive.
+    render([{ children: [{ text: "Block" }], type: "p" }] as Value);
+
+    const handle = dragHandles()[0]! as HTMLButtonElement;
+    expect(handle.draggable).toBe(true);
+
+    act(() => handle.click());
+
+    expect(document.querySelector('[role="menu"]')).not.toBeNull();
   });
 
   test("gives an empty paragraph a gutter too", () => {

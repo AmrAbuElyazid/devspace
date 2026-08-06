@@ -12,8 +12,7 @@
  * block whose plugin was never registered.
  */
 
-import type { NodeEntry } from "platejs";
-import { createSlatePlugin, KEYS } from "platejs";
+import { TrailingBlockPlugin } from "platejs";
 
 import { AutoformatKit } from "./autoformat-kit";
 import { BasicNodesKit } from "./basic-nodes-kit";
@@ -56,26 +55,11 @@ export function createNoteEditorPlugins() {
     ...FindReplaceKit,
     ...MarkdownKit,
 
-    createSlatePlugin({
-      key: "ensure-paragraph",
-      extendEditor: ({ editor }) => {
-        const { normalizeNode } = editor;
-        Object.assign(editor, {
-          normalizeNode(entry: NodeEntry, options?: unknown) {
-            const [node, path] = entry;
-            if (
-              path.length === 0 &&
-              "children" in node &&
-              (node.children as unknown[]).length === 0
-            ) {
-              editor.tf.insertNodes({ type: KEYS.p, children: [{ text: "" }] }, { at: [0] });
-              return;
-            }
-            (normalizeNode as (entry: NodeEntry, options?: unknown) => void)(entry, options);
-          },
-        });
-        return editor;
-      },
-    }),
+    // Guarantees a paragraph after the last block. Without it a note ending in
+    // a code block, table or callout has nowhere to put the caret: clicking
+    // below lands inside the block and there is no way to start a new one.
+    // This also covers the empty-document case, so it replaces the
+    // `ensure-paragraph` normalizer that used to live here.
+    TrailingBlockPlugin,
   ];
 }

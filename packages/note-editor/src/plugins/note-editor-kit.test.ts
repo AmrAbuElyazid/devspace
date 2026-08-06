@@ -1,9 +1,7 @@
 import { describe, expect, test, vi } from "vitest";
 
 const noteEditorKitMocks = vi.hoisted(() => ({
-  createSlatePlugin: vi.fn(
-    (config: { key: string; extendEditor: (args: { editor: unknown }) => unknown }) => config,
-  ),
+  trailingBlockPlugin: { key: "trailingBlock" },
   kits: {
     autoformat: ["autoformat"],
     basicNodes: ["basic-nodes-a", "basic-nodes-b"],
@@ -27,8 +25,7 @@ const noteEditorKitMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("platejs", () => ({
-  createSlatePlugin: noteEditorKitMocks.createSlatePlugin,
-  KEYS: { p: "p" },
+  TrailingBlockPlugin: noteEditorKitMocks.trailingBlockPlugin,
 }));
 
 vi.mock("./markdown-kit", () => ({
@@ -128,47 +125,7 @@ describe("createNoteEditorPlugins", () => {
       ...noteEditorKitMocks.kits.dnd,
       ...noteEditorKitMocks.kits.findReplace,
       ...noteEditorKitMocks.kits.markdown,
-      expect.objectContaining({ key: "ensure-paragraph" }),
+      noteEditorKitMocks.trailingBlockPlugin,
     ]);
-    expect(noteEditorKitMocks.createSlatePlugin).toHaveBeenCalledWith(
-      expect.objectContaining({ key: "ensure-paragraph" }),
-    );
-  });
-
-  test("ensure-paragraph inserts a paragraph when the root becomes empty", () => {
-    const plugins = createNoteEditorPlugins();
-    const ensureParagraphPlugin = plugins.at(-1) as unknown as {
-      extendEditor: (args: { editor: typeof editor }) => typeof editor;
-    };
-    const insertNodes = vi.fn();
-    const originalNormalizeNode = vi.fn();
-    const editor = {
-      normalizeNode: originalNormalizeNode,
-      tf: { insertNodes },
-    };
-
-    ensureParagraphPlugin.extendEditor({ editor }).normalizeNode([{ children: [] }, []]);
-
-    expect(insertNodes).toHaveBeenCalledWith({ type: "p", children: [{ text: "" }] }, { at: [0] });
-    expect(originalNormalizeNode).not.toHaveBeenCalled();
-  });
-
-  test("ensure-paragraph falls back to the original normalizer for non-empty roots", () => {
-    const plugins = createNoteEditorPlugins();
-    const ensureParagraphPlugin = plugins.at(-1) as unknown as {
-      extendEditor: (args: { editor: typeof editor }) => typeof editor;
-    };
-    const insertNodes = vi.fn();
-    const originalNormalizeNode = vi.fn();
-    const editor = {
-      normalizeNode: originalNormalizeNode,
-      tf: { insertNodes },
-    };
-    const entry = [{ children: [{ text: "Existing" }] }, []] as const;
-
-    ensureParagraphPlugin.extendEditor({ editor }).normalizeNode(entry, { operation: "normalize" });
-
-    expect(insertNodes).not.toHaveBeenCalled();
-    expect(originalNormalizeNode).toHaveBeenCalledWith(entry, { operation: "normalize" });
   });
 });

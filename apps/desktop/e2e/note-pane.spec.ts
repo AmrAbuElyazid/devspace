@@ -63,6 +63,23 @@ async function waitForNoteOnDisk(contains: string): Promise<string> {
   return readFile(join(notesDir, await firstNoteFile(notesDir)), "utf-8");
 }
 
+async function openNotePane(): Promise<void> {
+  await page.evaluate(() => {
+    const store = (window as unknown as Record<string, unknown>).__DEVSPACE_STORE__ as {
+      getState: () => {
+        activeWorkspaceId: string;
+        workspaces: { id: string; focusedGroupId?: string }[];
+        addGroupTab: (workspaceId: string, groupId: string, defaultType: string) => void;
+      };
+    };
+    const state = store.getState();
+    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId)!;
+    state.addGroupTab(ws.id, ws.focusedGroupId!, "note");
+  });
+
+  await expect(editor()).toBeVisible({ timeout: 20_000 });
+}
+
 test.beforeAll(async () => {
   userDataDir = await mkdtemp(join(tmpdir(), "devspace-note-e2e-"));
   ({ app, page } = await launchApp({ env: { DEVSPACE_USER_DATA_PATH: userDataDir } }));
@@ -77,20 +94,7 @@ test("a note pane edits, saves and reloads round-trippable markdown", async () =
   test.setTimeout(120_000);
 
   await test.step("opens and renders", async () => {
-    await page.evaluate(() => {
-      const store = (window as unknown as Record<string, unknown>).__DEVSPACE_STORE__ as {
-        getState: () => {
-          activeWorkspaceId: string;
-          workspaces: { id: string; focusedGroupId?: string }[];
-          addGroupTab: (workspaceId: string, groupId: string, defaultType: string) => void;
-        };
-      };
-      const state = store.getState();
-      const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId)!;
-      state.addGroupTab(ws.id, ws.focusedGroupId!, "note");
-    });
-
-    await expect(editor()).toBeVisible({ timeout: 20_000 });
+    await openNotePane();
     await expect(page.getByText("Note editor failed to load")).toHaveCount(0);
   });
 
@@ -193,6 +197,49 @@ test("a note pane edits, saves and reloads round-trippable markdown", async () =
     // And nothing was rewritten just by opening it.
     expect(await readFile(join(userDataDir, "notes", noteFile), "utf-8")).toBe(markdown);
   });
+});
+
+test("a note ending in a code block can still be typed under", async () => {
+  // A code block was a dead end: clicking below it put the caret inside the
+  // code, so the note could not be continued.
+  await openNotePane();
+
+  await editor().click();
+  await page.keyboard.type("```");
+  await page.keyboard.type("const a = 1;");
+  await expect(editor().locator("pre")).toBeVisible();
+
+  // Click the empty space under the last block, the way a user would.
+  const box = (await editor().boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height - 20);
+  await page.keyboard.type("after the code");
+
+  await expect(editor()).toContainText("after the code");
+  // And the text landed outside the code block, not inside it.
+  await expect(editor().locator("pre")).not.toContainText("after the code");
+});
+
+test("a block can be dragged by its handle", async () => {
+  await openNotePane();
+
+  await editor().click();
+  await page.keyboard.type("first");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("second");
+
+  const blocks = () => editor().locator(":scope > div");
+  await expect(blocks().first()).toContainText("first");
+
+  // Hover the first block to reveal its gutter, then drag it past the second.
+  const first = blocks().first();
+  await first.hover();
+  const handle = first.locator('button[aria-label="Drag to move, click to open block menu"]');
+  await expect(handle).toBeVisible();
+
+  await handle.dragTo(blocks().nth(1), { targetPosition: { x: 20, y: 18 } });
+
+  await expect(blocks().first()).toContainText("second");
+  await expect(blocks().nth(1)).toContainText("first");
 });
 
 test("a second note pane opens, and switching back keeps the first alive", async () => {
