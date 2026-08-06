@@ -5,7 +5,6 @@ import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Path, TElement } from "platejs";
 
 import { useDndNode, useDropLine } from "@platejs/dnd";
-import { MarkdownPlugin } from "@platejs/markdown";
 import { useComposedRef } from "@udecode/cn";
 import {
   ChevronRightIcon,
@@ -20,6 +19,7 @@ import { type PlateEditor, useEditorRef, usePluginOption } from "platejs/react";
 
 import { cn } from "../lib/cn";
 import { hiddenBlockIndices } from "../heading-fold";
+import { serializeNoteMarkdown } from "../markdown/serialize";
 import { headingLevel } from "../note-outline";
 import { HeadingFoldPlugin } from "../plugins/heading-fold-kit";
 import { setBlockType } from "../transforms";
@@ -268,7 +268,7 @@ function BlockMenu({
 
   const copyAsMarkdown = useCallback(() => {
     try {
-      const markdown = editor.getApi(MarkdownPlugin).markdown.serialize({ value: [element] });
+      const markdown = serializeNoteMarkdown(editor, { value: [element] });
       void navigator.clipboard?.writeText(markdown);
     } catch (error) {
       console.error("[note-editor] Failed to copy block as markdown:", error);

@@ -140,3 +140,39 @@ test("autofocuses once it has a layout box", async () => {
   const editable = container.querySelector("[data-slate-editor]");
   expect(document.activeElement).toBe(editable);
 });
+
+test("paints every match the find bar reports", async () => {
+  // The counter is computed independently of the highlight plugin, so it stayed
+  // correct while nothing was painted: setting a plugin option does not re-run
+  // Slate's decorate on its own.
+  const controllerRef = createRef<NoteEditorController>();
+
+  act(() => {
+    root.render(
+      <NoteEditor
+        initialValue="alpha beta alpha gamma alpha"
+        onChange={() => {}}
+        controllerRef={controllerRef}
+        search="alpha"
+      />,
+    );
+  });
+  await settle();
+
+  expect(container.querySelectorAll("[data-slate-editor] mark")).toHaveLength(3);
+  expect(controllerRef.current?.matches("alpha")).toHaveLength(3);
+});
+
+test("clearing the query removes the highlights", async () => {
+  act(() => {
+    root.render(<NoteEditor initialValue="alpha beta" onChange={() => {}} search="alpha" />);
+  });
+  await settle();
+  expect(container.querySelectorAll("[data-slate-editor] mark")).toHaveLength(1);
+
+  act(() => {
+    root.render(<NoteEditor initialValue="alpha beta" onChange={() => {}} search="" />);
+  });
+  await settle();
+  expect(container.querySelectorAll("[data-slate-editor] mark")).toHaveLength(0);
+});

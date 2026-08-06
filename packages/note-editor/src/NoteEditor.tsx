@@ -8,9 +8,16 @@ import {
 } from "react";
 import type { TRange, Value } from "platejs";
 import { MarkdownPlugin } from "@platejs/markdown";
-import { type PlateEditor, Plate, usePlateEditor } from "platejs/react";
+import {
+  type PlateEditor,
+  Plate,
+  useEditorRef,
+  usePlateEditor,
+  useRedecorate,
+} from "platejs/react";
 
 import { findMatches } from "./find-matches";
+import { serializeNoteMarkdown } from "./markdown/serialize";
 import { pruneFolds } from "./heading-fold";
 import { createNoteEditorPlugins } from "./plugins/note-editor-kit";
 import { FindReplacePlugin } from "@platejs/find-replace";
@@ -77,6 +84,34 @@ function isRendered(editor: PlateEditor): boolean {
   }
 }
 
+/**
+ * Pushes the find bar's query into the highlight plugin.
+ *
+ * Lives inside `<Plate>` because `useRedecorate` needs the editor store, and the
+ * redecorate is not optional: setting a plugin option updates the option store
+ * but does not re-run Slate's `decorate`, so the matches were counted correctly
+ * while none of them were ever painted.
+ */
+function SearchHighlightSync({ search }: { search: string }) {
+  const editor = useEditorRef();
+  const redecorate = useRedecorate();
+
+  // Written during render, not in an effect: Plate reads this option while
+  // Slate builds its decorations, and that happens before effects run. This
+  // component is the first child of `<Plate>`, so its render precedes the
+  // editable's in the same pass.
+  editor.setOption(FindReplacePlugin, "search", search);
+
+  // Setting the option is not enough on its own — decorations are memoised, so
+  // a later change (including clearing the query) would leave the previous
+  // highlights painted. This invalidates them.
+  useEffect(() => {
+    redecorate();
+  }, [redecorate, search]);
+
+  return null;
+}
+
 function focusAtSelectionOrEnd(editor: PlateEditor): void {
   editor.tf.focus();
 
@@ -110,12 +145,6 @@ export function NoteEditor({
         ? (e) => e.getApi(MarkdownPlugin).markdown.deserialize(initialValue)
         : initialValue,
   });
-
-  // Options rather than props: the plugins read them from the editor store, so
-  // this is the seam between the pane's UI state and the document.
-  useEffect(() => {
-    editor.setOption(FindReplacePlugin, "search", search);
-  }, [editor, search]);
 
   useEffect(() => {
     editor.setOption(ImageUploadPlugin, "uploadImage", uploadImage ?? null);
@@ -152,7 +181,7 @@ export function NoteEditor({
       try {
         onChange({
           editor: changed,
-          markdown: changed.getApi(MarkdownPlugin).markdown.serialize(),
+          markdown: serializeNoteMarkdown(changed),
           serializationError: null,
           value,
         });
@@ -236,6 +265,7 @@ export function NoteEditor({
   return (
     <TooltipProvider>
       <Plate editor={editor} onChange={handleChange}>
+        <SearchHighlightSync search={search} />
         <EditorContainer className="note-editor-shell">
           <Editor className="note-editor-content" onMouseDown={handleEditorMouseDown} />
         </EditorContainer>

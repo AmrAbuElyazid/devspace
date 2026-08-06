@@ -37,6 +37,14 @@ function footer() {
   return page.locator(".note-pane:visible").getByText(/\d+ words/);
 }
 
+/** Contents of every note file, for assertions that don't care which one. */
+async function allNotes(): Promise<string> {
+  const notesDir = join(userDataDir, "notes");
+  const files = (await readdir(notesDir)).filter((entry) => entry.endsWith(".md"));
+  const bodies = await Promise.all(files.map((f) => readFile(join(notesDir, f), "utf-8")));
+  return bodies.join("\n");
+}
+
 async function firstNoteFile(notesDir: string): Promise<string> {
   const file = (await readdir(notesDir)).find((entry) => entry.endsWith(".md"));
   if (!file) throw new Error(`No note written to ${notesDir}`);
@@ -242,28 +250,81 @@ test("a block can be dragged by its handle", async () => {
   await expect(blocks().nth(1)).toContainText("first");
 });
 
-test("a second note pane opens, and switching back keeps the first alive", async () => {
-  const firstTab = page.locator('[data-sortable-id^="gtab-"]').filter({ hasText: "Sprint notes" });
+test("a pasted image is stored beside the note and actually renders", async () => {
+  await openNotePane();
+  await editor().click();
 
   await page.evaluate(() => {
-    const store = (window as unknown as Record<string, unknown>).__DEVSPACE_STORE__ as {
-      getState: () => {
-        activeWorkspaceId: string;
-        workspaces: { id: string; focusedGroupId?: string }[];
-        addGroupTab: (workspaceId: string, groupId: string, defaultType: string) => void;
-      };
-    };
-    const state = store.getState();
-    const ws = state.workspaces.find((w) => w.id === state.activeWorkspaceId)!;
-    state.addGroupTab(ws.id, ws.focusedGroupId!, "note");
+    // A 1x1 transparent PNG.
+    const bytes = Uint8Array.from(
+      atob(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      ),
+      (c) => c.charCodeAt(0),
+    );
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([bytes], "dot.png", { type: "image/png" }));
+    document
+      .querySelector(".note-pane [data-slate-editor]")!
+      .dispatchEvent(
+        new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: transfer }),
+      );
   });
 
-  // The new, empty note.
-  await expect(editor()).toBeVisible({ timeout: 20_000 });
+  const image = editor().locator("img");
+  await expect(image).toBeVisible({ timeout: 10_000 });
+  await expect(image).toHaveAttribute("src", /^devspace-note-asset:\/\//);
+
+  // Rendering is the part that broke: the bytes reached disk and the markdown
+  // was written, but the renderer's CSP blocked the scheme, so every note image
+  // fell back to the "missing image" placeholder.
+  expect(await image.evaluate((node) => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(
+    0,
+  );
+
+  // Several notes exist by now, so match against all of them rather than
+  // guessing which file belongs to this pane.
+  await expect
+    .poll(allNotes, { timeout: 15_000 })
+    .toMatch(/!\[\]\(devspace-note-asset:\/\/[a-f0-9]+\.png\)/);
+});
+
+test("find highlights every match, and clears them again", async () => {
+  await openNotePane();
+  await editor().click();
+  await page.keyboard.type("alpha beta alpha gamma alpha");
+
+  await app.evaluate(({ BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows().find((w) => !w.getParentWindow());
+    window?.webContents.send("app:browser-find");
+  });
+
+  const findInput = page.getByPlaceholder("Find in note");
+  await findInput.fill("alpha");
+
+  await expect(page.locator(".note-pane").getByText("1 / 3")).toBeVisible();
+  // The counter and the highlighting come from different code paths, so the
+  // count stayed right while nothing was painted.
+  await expect(editor().locator("mark")).toHaveCount(3);
+
+  await findInput.fill("");
+  await expect(editor().locator("mark")).toHaveCount(0);
+
+  await findInput.press("Escape");
+});
+
+test("a second note pane opens, and switching back keeps the first alive", async () => {
+  await openNotePane();
+  await editor().click();
+  await page.keyboard.type("pane one");
+  const firstTab = page.locator('[data-sortable-id^="gtab-"]').filter({ hasText: "pane one" });
+  await expect(firstTab).toBeVisible();
+
+  await openNotePane();
   await expect(page.getByText("Note editor failed to load")).toHaveCount(0);
   await editor().click();
-  await page.keyboard.type("Second note");
-  await expect(editor()).toContainText("Second note");
+  await page.keyboard.type("pane two");
+  await expect(editor()).toContainText("pane two");
 
   // Both panes are mounted at once — the inactive layer is hidden, not
   // unmounted — which is the case react-dnd's single HTML5 backend has to
@@ -273,6 +334,6 @@ test("a second note pane opens, and switching back keeps the first alive", async
   ).toBeGreaterThanOrEqual(2);
 
   await firstTab.click();
-  await expect(editor()).toContainText("Sprint notes", { timeout: 10_000 });
+  await expect(editor()).toContainText("pane one", { timeout: 10_000 });
   await expect(page.getByText("Note editor failed to load")).toHaveCount(0);
 });

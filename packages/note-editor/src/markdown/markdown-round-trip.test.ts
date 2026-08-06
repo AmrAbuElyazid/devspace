@@ -16,16 +16,16 @@ import { createSlateEditor, type Value } from "platejs";
 import { describe, expect, test } from "vitest";
 
 import { createNoteEditorPlugins } from "../plugins/note-editor-kit";
+import { serializeNoteMarkdown } from "./serialize";
 
-function markdownApi(value: Value = [{ children: [{ text: "" }], type: "p" }]) {
-  return createSlateEditor({
-    plugins: createNoteEditorPlugins() as never,
-    value,
-  }).getApi(MarkdownPlugin).markdown;
+function editorWith(value: Value = [{ children: [{ text: "" }], type: "p" }]) {
+  return createSlateEditor({ plugins: createNoteEditorPlugins() as never, value });
 }
 
-const serialize = (value: Value): string => markdownApi(value).serialize();
-const deserialize = (markdown: string): Value => markdownApi().deserialize(markdown) as Value;
+/** The exact path NotePane writes with, so these assertions describe the file. */
+const serialize = (value: Value): string => serializeNoteMarkdown(editorWith(value));
+const deserialize = (markdown: string): Value =>
+  editorWith().getApi(MarkdownPlugin).markdown.deserialize(markdown) as Value;
 
 /** Node ids are minted per instance and are not part of the storage contract. */
 function stripIds(value: unknown): unknown {
@@ -387,5 +387,40 @@ describe("the whole document", () => {
       $$
       "
     `);
+  });
+});
+
+describe("what reaches the file", () => {
+  const ZERO_WIDTH_SPACE = "​";
+
+  test("empty paragraphs do not leave invisible characters behind", () => {
+    // Plate writes a U+200B for each empty paragraph by default. The
+    // trailing-block rule guarantees one after every non-paragraph last block,
+    // so without this every note ending in an image or code block would carry a
+    // zero-width space that grep and other editors show but nobody typed.
+    const value = [
+      { children: [text("")], type: "p" },
+      { caption: [text("")], children: [text("")], type: "img", url: "a.png" },
+      { children: [text("")], type: "p" },
+    ] as Value;
+
+    const markdown = serialize(value);
+
+    expect(markdown).not.toContain(ZERO_WIDTH_SPACE);
+    expect(markdown.trim()).toBe("![](a.png)");
+  });
+
+  test("a trailing empty paragraph becomes a blank line, not a hidden character", () => {
+    // The trailing-block rule appends one of these to every note that ends in a
+    // code block, table or image, so this is the common case, not an edge one.
+    const value = [
+      { children: [text("Body")], type: "p" },
+      { children: [text("")], type: "p" },
+    ] as Value;
+
+    const markdown = serialize(value);
+
+    expect(markdown).not.toContain(ZERO_WIDTH_SPACE);
+    expect(markdown.trim()).toBe("Body");
   });
 });
