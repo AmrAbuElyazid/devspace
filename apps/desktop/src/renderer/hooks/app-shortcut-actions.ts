@@ -8,6 +8,7 @@ import {
   getActiveFocusedWebViewPane,
   getSplitShortcutTargetGroupId,
 } from "../lib/browser-shortcuts";
+import { clampBrowserZoom } from "../lib/browser-zoom";
 import {
   focusActiveNativePane,
   getFocusedActiveNativePane,
@@ -100,10 +101,6 @@ export function resetAppShortcutCaptureState(): void {
   clearLeaderCaptureRestoreTimer();
   leaderCapturePaneId = null;
   useNativeViewStore.getState().setTemporarilyHiddenPaneId(null);
-}
-
-function clampZoom(zoom: number): number {
-  return Math.min(3, Math.max(0.25, Number(zoom.toFixed(2))));
 }
 
 type WorkspaceStore = ReturnType<typeof useWorkspaceStore.getState>;
@@ -409,7 +406,7 @@ function dispatchShortcutAction(channel: string, ...args: unknown[]): void {
         void window.api.terminal.sendBindingAction(terminalId, "increase_font_size:1");
       } else {
         const ctx = getWebViewContext();
-        if (ctx) ctx.applyZoom(clampZoom(ctx.currentZoom + 0.1));
+        if (ctx) ctx.applyZoom(clampBrowserZoom(ctx.currentZoom + 0.1));
       }
       break;
     }
@@ -419,7 +416,7 @@ function dispatchShortcutAction(channel: string, ...args: unknown[]): void {
         void window.api.terminal.sendBindingAction(terminalId, "decrease_font_size:1");
       } else {
         const ctx = getWebViewContext();
-        if (ctx) ctx.applyZoom(clampZoom(ctx.currentZoom - 0.1));
+        if (ctx) ctx.applyZoom(clampBrowserZoom(ctx.currentZoom - 0.1));
       }
       break;
     }
@@ -474,12 +471,12 @@ function dispatchShortcutAction(channel: string, ...args: unknown[]): void {
     }
     case "app:browser-zoom-in": {
       const ctx = getBrowserContext();
-      if (ctx) ctx.applyZoom(clampZoom(ctx.currentZoom + 0.1));
+      if (ctx) ctx.applyZoom(clampBrowserZoom(ctx.currentZoom + 0.1));
       break;
     }
     case "app:browser-zoom-out": {
       const ctx = getBrowserContext();
-      if (ctx) ctx.applyZoom(clampZoom(ctx.currentZoom - 0.1));
+      if (ctx) ctx.applyZoom(clampBrowserZoom(ctx.currentZoom - 0.1));
       break;
     }
     case "app:browser-zoom-reset": {

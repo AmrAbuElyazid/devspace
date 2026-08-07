@@ -109,6 +109,9 @@ type BrowserPaneWebContentsListenerDeps = {
     result: { query: string; activeMatch: number; totalMatches: number },
   ) => void;
   syncNavigationState: (pane: BrowserPaneRecord) => void;
+  goBack: (pane: BrowserPaneRecord) => void;
+  goForward: (pane: BrowserPaneRecord) => void;
+  enableVisualZoom: (pane: BrowserPaneRecord) => void;
   recordCommittedHistoryVisit: (pane: BrowserPaneRecord, url: string) => void;
   refreshPendingHistoryTitle: (pane: BrowserPaneRecord, title: string) => void;
   /**
@@ -126,6 +129,9 @@ export function registerBrowserPaneWebContentsListeners({
   applyRuntimePatch,
   applyFindResult,
   syncNavigationState,
+  goBack,
+  goForward,
+  enableVisualZoom,
   recordCommittedHistoryVisit,
   refreshPendingHistoryTitle,
   recoverFromCrash,
@@ -156,6 +162,8 @@ export function registerBrowserPaneWebContentsListeners({
     });
   }
 
+  enableVisualZoom(pane);
+
   if (typeof webContents?.on !== "function") {
     return;
   }
@@ -178,11 +186,27 @@ export function registerBrowserPaneWebContentsListeners({
   });
 
   webContents.on("before-mouse-event", (_event: unknown, mouseInput: unknown) => {
-    const type =
-      typeof mouseInput === "object" && mouseInput !== null && "type" in mouseInput
-        ? mouseInput.type
-        : undefined;
+    const input =
+      typeof mouseInput === "object" && mouseInput !== null
+        ? (mouseInput as { type?: unknown; button?: unknown })
+        : {};
+    const type = input.type;
+
     if (type === "mouseUp") {
+      // The thumb buttons on a mouse. Chromium hands them to the page and then
+      // leaves the navigation itself to the embedder — that half is Chrome's
+      // own browser UI, which Electron does not come with, so it lands here.
+      // On release rather than press, matching where Chromium puts it, and for
+      // browser panes only: an editor pane's history belongs to the IDE, not to
+      // a page. The page still sees the event, exactly as it does in Chrome.
+      if (pane.kind === "browser") {
+        if (input.button === "back") {
+          goBack(pane);
+        } else if (input.button === "forward") {
+          goForward(pane);
+        }
+      }
+
       // A WebContentsView sits above the renderer and consumes the events in
       // its bounds, so a drag released over one never reaches dnd-kit and gets
       // stuck. The drag shield normally hides these views for the duration of a
@@ -298,6 +322,10 @@ export function registerBrowserPaneWebContentsListeners({
   });
 
   webContents.on("did-navigate", (_event: unknown, url: string) => {
+    // Re-applied per navigation, the same reason the window's own zoom reset
+    // is: these limits belong to the page that was loaded when they were set,
+    // and the next document starts again without them.
+    enableVisualZoom(pane);
     syncNavigationState(pane);
     recordCommittedHistoryVisit(pane, url);
     applyRuntimePatch(pane.runtimeState.paneId, {

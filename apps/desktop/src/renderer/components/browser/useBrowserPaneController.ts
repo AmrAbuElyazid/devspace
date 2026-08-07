@@ -33,6 +33,7 @@ import {
   type BrowserViewportSetting,
   type BrowserViewportSize,
 } from "../../lib/browser-viewport";
+import { clampBrowserZoom } from "../../lib/browser-zoom";
 import type { BrowserConfig } from "../../types/workspace";
 import type { BrowserPermissionDecision } from "../../../shared/browser";
 import {
@@ -429,7 +430,7 @@ export function useBrowserPaneController({
   const setUserZoom = useCallback(
     (next: number) => {
       // Matches the app-level zoom shortcuts' range and step rounding.
-      updatePaneConfig(paneId, { zoom: Math.min(3, Math.max(0.25, Number(next.toFixed(2)))) });
+      updatePaneConfig(paneId, { zoom: clampBrowserZoom(next) });
     },
     [paneId, updatePaneConfig],
   );

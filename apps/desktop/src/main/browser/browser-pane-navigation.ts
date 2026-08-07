@@ -1,5 +1,8 @@
 import type { BrowserPaneManagerDeps, BrowserPaneRecord } from "./browser-types";
 
+/** Matches the pane's page-zoom ceiling, so both kinds of zoom stop together. */
+const MAX_PANE_VISUAL_ZOOM = 3;
+
 export type PendingHistoryVisit = {
   url: string;
   visitedAt: number;
@@ -68,6 +71,48 @@ export function focusPaneWebContents(pane: BrowserPaneRecord): void {
   if (typeof focus === "function") {
     focus.call(pane.view.webContents);
   }
+}
+
+/**
+ * Pinch-to-zoom, the magnifying kind: it scales what is already on screen and
+ * lets the page be panned around, rather than re-laying it out the way ⌘+ does.
+ *
+ * Electron ships with it switched off, which is why a trackpad pinch did
+ * nothing at all in a pane. The ceiling matches the pane's page-zoom ceiling;
+ * the floor is 1 because there is nothing below the layout viewport to reveal.
+ */
+export function enablePaneVisualZoom(pane: BrowserPaneRecord): void {
+  const setVisualZoomLevelLimits = pane.view.webContents?.setVisualZoomLevelLimits;
+  if (typeof setVisualZoomLevelLimits === "function") {
+    void setVisualZoomLevelLimits.call(pane.view.webContents, 1, MAX_PANE_VISUAL_ZOOM);
+  }
+}
+
+/**
+ * Return a pinched page to life size.
+ *
+ * Chromium clamps the current scale into whatever limits it is given, so
+ * pinning the ceiling to 1 for a moment is what actually drops the zoom — there
+ * is no API that resets page scale directly. The restore has to wait for that
+ * clamp to land: issued together, the ceiling is back up before anything has
+ * been clamped and the page stays exactly as magnified as it was.
+ */
+export function resetPaneVisualZoom(pane: BrowserPaneRecord): void {
+  const webContents = pane.view.webContents;
+  const setVisualZoomLevelLimits = webContents?.setVisualZoomLevelLimits;
+  if (typeof setVisualZoomLevelLimits !== "function") {
+    return;
+  }
+
+  void Promise.resolve(setVisualZoomLevelLimits.call(webContents, 1, 1))
+    .then(() => {
+      // The pane can be closed while the clamp is in flight.
+      if (webContents.isDestroyed?.()) return;
+      return setVisualZoomLevelLimits.call(webContents, 1, MAX_PANE_VISUAL_ZOOM);
+    })
+    .catch(() => {
+      // A pane torn down mid-reset has no zoom left to restore.
+    });
 }
 
 export function setPaneZoomFactor(pane: BrowserPaneRecord, zoom: number): void {

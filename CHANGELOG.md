@@ -4,7 +4,10 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 ## Unreleased
 
-- No unreleased notes yet.
+**Browser pane input**
+
+- Pinch to zoom works, and it is the magnifying kind: it scales what is already drawn and lets the page be panned around, rather than laying it out again the way ⌘+ does. Electron ships this switched off, which is why a trackpad pinch did nothing at all in a pane. It stops at 3x, the same ceiling as the pane's page zoom, and "Reset zoom" now returns a pinched page to life size as well as clearing the page zoom.
+- The back and forward buttons on a mouse navigate the pane's history. Mouse software on macOS — Logi Options, SensibleSideButtons — does not send those as buttons 4 and 5; it converts them into the system's "swipe between pages" gesture, which is what makes them work in Safari and Finder and what left a listener for mouse buttons alone seeing nothing. Both routes are handled, so a mouse that does send the raw buttons works too.
 
 ## v0.6.0 - 2026-08-06
 

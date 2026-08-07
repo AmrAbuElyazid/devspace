@@ -271,3 +271,63 @@ test("a new blank pane focuses its address bar and titles itself on navigation",
     await fixture.close();
   }
 });
+
+test("a pinch magnifies the page without changing its zoom", async () => {
+  const fixture = await startFixtureServer();
+  const { app, page } = await launchApp();
+
+  try {
+    await page.waitForTimeout(1500);
+    const paneId = await openBrowserPane(page, fixture.url);
+    await page.waitForTimeout(2500);
+
+    // Electron ships pinch-to-zoom disabled, and nothing short of a real
+    // gesture proves it has been turned back on: a synthetic ctrl+wheel does
+    // not drive it, so this asks Chromium itself to synthesize the pinch.
+    const pinched = await app.evaluate(async ({ webContents }) => {
+      const guest = webContents
+        .getAllWebContents()
+        .find((contents) => contents.getURL().startsWith("http://127.0.0.1"))!;
+
+      guest.debugger.attach("1.3");
+      await guest.debugger.sendCommand("Input.synthesizePinchGesture", {
+        x: 100,
+        y: 100,
+        // Past the ceiling on purpose: landing exactly on it is what shows the
+        // limits are the ones this app set rather than a Chromium default.
+        scaleFactor: 5,
+        relativeSpeed: 800,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 800));
+
+      return {
+        scale: (await guest.executeJavaScript("window.visualViewport.scale")) as number,
+        // Magnifying must not touch page zoom: that is the ⌘+ kind, which
+        // re-lays the page out instead of scaling what is already drawn.
+        pageZoom: guest.getZoomFactor(),
+      };
+    });
+
+    expect(pinched.scale).toBeCloseTo(3, 1);
+    expect(pinched.pageZoom).toBe(1);
+
+    await page.evaluate((id) => {
+      void window.api.browser.resetZoom(id);
+    }, paneId);
+    await page.waitForTimeout(1200);
+
+    const reset = await app.evaluate(({ webContents }) => {
+      const guest = webContents
+        .getAllWebContents()
+        .find((contents) => contents.getURL().startsWith("http://127.0.0.1"))!;
+      return guest.executeJavaScript("window.visualViewport.scale") as Promise<number>;
+    });
+
+    // Reset has to undo the magnification too, or the page stays blown up with
+    // the zoom badge insisting it is at 100%.
+    expect(reset).toBe(1);
+  } finally {
+    await app.close();
+    await fixture.close();
+  }
+});
