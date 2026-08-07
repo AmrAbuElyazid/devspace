@@ -28,6 +28,7 @@ import {
   goForwardInPane,
   navigatePaneToUrl,
   reloadPane,
+  resetPaneVisualZoom,
   setPaneZoomFactor,
   stopPane,
 } from "./browser-pane-navigation";
@@ -225,6 +226,14 @@ export class BrowserPaneManager implements BrowserPaneController {
 
   resetZoom(paneId: string): void {
     this.setZoom(paneId, 1);
+
+    // A pinch is not page zoom and survives setting the zoom factor back to 1,
+    // so "reset zoom" has to undo both or it leaves the page still magnified.
+    this.panes.withPane(paneId, (pane) => {
+      if (pane.kind === "browser") {
+        resetPaneVisualZoom(pane);
+      }
+    });
   }
 
   findInPage(paneId: string, query: string, options?: BrowserFindInPageOptions): void {

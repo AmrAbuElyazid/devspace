@@ -143,6 +143,107 @@ test("createPane uses explicit hardened webPreferences for browser views", () =>
   });
 });
 
+test("pinch-to-zoom is switched on for browser panes and re-armed per navigation", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const limits: Array<[number, number]> = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          setVisualZoomLevelLimits: (minimum: number, maximum: number) => {
+            limits.push([minimum, maximum]);
+            return Promise.resolve();
+          },
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+
+  // Electron ships visual zoom disabled, so without this a trackpad pinch does
+  // nothing whatsoever.
+  expect(limits).toEqual([[1, 3]]);
+
+  listeners.get("did-navigate")?.({}, "https://example.com/next");
+
+  // The limits belong to the document that was loaded when they were set.
+  expect(limits).toEqual([
+    [1, 3],
+    [1, 3],
+  ]);
+});
+
+test("resetting the zoom also drops a pinched page back to life size", async () => {
+  const limits: Array<[number, number]> = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          loadURL: () => Promise.resolve(),
+          setZoomFactor: () => Promise.resolve(),
+          setVisualZoomLevelLimits: (minimum: number, maximum: number) => {
+            limits.push([minimum, maximum]);
+            return Promise.resolve();
+          },
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+  limits.length = 0;
+  manager.resetZoom("pane-1");
+
+  // Pinning the ceiling to 1 is what forces the current scale down.
+  expect(limits).toEqual([[1, 1]]);
+
+  // The restore only goes out once that clamp has landed. Issued together the
+  // two race, the ceiling is back up before anything is clamped, and the page
+  // stays magnified — which is exactly the bug this ordering fixes.
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(limits).toEqual([
+    [1, 1],
+    [1, 3],
+  ]);
+});
+
+test("pinch-to-zoom is left switched off for editor panes", () => {
+  const limits: Array<[number, number]> = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          loadURL: () => Promise.resolve(),
+          setZoomFactor: () => Promise.resolve(),
+          setVisualZoomLevelLimits: (minimum: number, maximum: number) => {
+            limits.push([minimum, maximum]);
+            return Promise.resolve();
+          },
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  });
+
+  manager.createPane("pane-1", "https://example.com", "editor");
+  manager.resetZoom("pane-1");
+
+  // An editor pane is a full IDE with its own ideas about gestures.
+  expect(limits).toEqual([]);
+});
+
 test("hidePane preserves runtime state and visibility bookkeeping", () => {
   const manager = makeManager();
 
@@ -253,6 +354,73 @@ test("clicks inside an already focused webcontents immediately sync pane focus",
   listeners.get("focus")?.();
 
   expect(rendererMessages).toEqual([{ channel: "browser:focused", payload: "pane-1" }]);
+});
+
+test("the mouse back and forward buttons navigate a browser pane's history", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const navigations: string[] = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          navigationHistory: {
+            goBack: () => navigations.push("back"),
+            goForward: () => navigations.push("forward"),
+          },
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  });
+
+  manager.createPane("pane-1", "https://example.com");
+
+  // Pressing must not navigate; Chromium acts on the release, and so does the
+  // page that also sees the event.
+  listeners.get("before-mouse-event")?.({}, { type: "mouseDown", button: "back" });
+  expect(navigations).toEqual([]);
+
+  listeners.get("before-mouse-event")?.({}, { type: "mouseUp", button: "back" });
+  listeners.get("before-mouse-event")?.({}, { type: "mouseUp", button: "forward" });
+  listeners.get("before-mouse-event")?.({}, { type: "mouseUp", button: "left" });
+
+  expect(navigations).toEqual(["back", "forward"]);
+});
+
+test("the mouse back and forward buttons leave an editor pane's history alone", () => {
+  const listeners = new Map<string, (...args: unknown[]) => void>();
+  const navigations: string[] = [];
+  const manager = new BrowserPaneManager({
+    createView: () =>
+      ({
+        webContents: {
+          on: (event: string, listener: (...args: unknown[]) => void) => {
+            listeners.set(event, listener);
+          },
+          loadURL: () => Promise.resolve(),
+          navigationHistory: {
+            goBack: () => navigations.push("back"),
+            goForward: () => navigations.push("forward"),
+          },
+        },
+      }) as never,
+    addChildView: () => {},
+    removeChildView: () => {},
+    sendToRenderer: () => {},
+  });
+
+  manager.createPane("pane-1", "https://example.com", "editor");
+
+  listeners.get("before-mouse-event")?.({}, { type: "mouseUp", button: "back" });
+  listeners.get("before-mouse-event")?.({}, { type: "mouseUp", button: "forward" });
+
+  // The history behind an editor pane is the IDE's own, not a page's.
+  expect(navigations).toEqual([]);
 });
 
 test("blur clears pending pointer-driven focus forwarding", () => {

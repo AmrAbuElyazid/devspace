@@ -268,6 +268,32 @@ function createWindow(): void {
   window.on("focus", () => sidebarPeekWatcher.setWindowFocused(true));
   window.on("blur", () => sidebarPeekWatcher.setWindowFocused(false));
 
+  // Back and forward from a mouse's thumb buttons.
+  //
+  // Mouse software on macOS — Logi Options, SensibleSideButtons — does not
+  // send those buttons as buttons 4 and 5. It converts them into the system's
+  // "swipe between pages" gesture, which is what makes them work in Safari and
+  // Finder and what makes a listener for mouse buttons alone see nothing at
+  // all. The raw buttons are handled separately, on the pane's own web
+  // contents, for mice that do send them.
+  //
+  // Routed through the renderer rather than acted on here because the window
+  // has no idea which pane is focused, and this is the same channel the Back
+  // and Forward menu items already use.
+  //
+  // The directions read backwards against the "swipe right to go back" gesture
+  // they stand in for. Electron names them after AppKit's deltaX, which
+  // describes where the content is pushed rather than which way the fingers —
+  // or the thumb button standing in for them — went. Verified against a real
+  // mouse; do not "correct" it to match the gesture's name.
+  window.on("swipe", (_event, direction) => {
+    if (direction === "left") {
+      window.webContents.send("app:browser-back");
+    } else if (direction === "right") {
+      window.webContents.send("app:browser-forward");
+    }
+  });
+
   window.on("closed", () => {
     sidebarPeekWatcher.dispose();
     paneOverlayManager.destroy();

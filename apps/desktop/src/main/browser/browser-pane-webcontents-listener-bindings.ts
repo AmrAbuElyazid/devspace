@@ -1,5 +1,10 @@
 import type { BrowserPaneHistoryTracker } from "./browser-pane-history-tracker";
-import { syncPaneNavigationState } from "./browser-pane-navigation";
+import {
+  enablePaneVisualZoom,
+  goBackInPane,
+  goForwardInPane,
+  syncPaneNavigationState,
+} from "./browser-pane-navigation";
 import { registerBrowserPaneWebContentsListeners } from "./browser-pane-webcontents-events";
 import type {
   BrowserPaneManagerDeps,
@@ -35,6 +40,15 @@ export function registerManagedBrowserPaneWebContentsListeners({
     applyFindResult,
     recoverFromCrash,
     syncNavigationState: syncPaneNavigationState,
+    goBack: goBackInPane,
+    goForward: goForwardInPane,
+    // Browser panes only: an editor pane is a full IDE with its own ideas about
+    // gestures, and magnifying its chrome is not one of them.
+    enableVisualZoom: (nextPane) => {
+      if (nextPane.kind === "browser") {
+        enablePaneVisualZoom(nextPane);
+      }
+    },
     recordCommittedHistoryVisit: (nextPane, url) => {
       historyTracker.recordCommittedVisit(nextPane, url);
     },

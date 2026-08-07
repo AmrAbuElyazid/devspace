@@ -24,6 +24,7 @@ import BrowserPaneStatusSurface from "./browser/BrowserPaneStatusSurface";
 import BrowserDeviceToolbar from "./browser/BrowserDeviceToolbar";
 import BrowserViewportResizeHandles from "./browser/BrowserViewportResizeHandles";
 import { BROWSER_DEVICE_TOOLBAR_HEIGHT, BROWSER_VIEWPORT_RAIL_SIZE } from "@/lib/browser-viewport";
+import { MAX_BROWSER_ZOOM, MIN_BROWSER_ZOOM } from "@/lib/browser-zoom";
 
 interface BrowserPaneProps {
   paneId: string;
@@ -129,13 +130,13 @@ export default function BrowserPane({
             id: "zoom-in",
             label: "Zoom in",
             shortcut: resolveDisplayString("browser-zoom-in"),
-            disabled: userZoom >= 3,
+            disabled: userZoom >= MAX_BROWSER_ZOOM,
           },
           {
             id: "zoom-out",
             label: "Zoom out",
             shortcut: resolveDisplayString("browser-zoom-out"),
-            disabled: userZoom <= 0.25,
+            disabled: userZoom <= MIN_BROWSER_ZOOM,
           },
           {
             id: "zoom-reset",
