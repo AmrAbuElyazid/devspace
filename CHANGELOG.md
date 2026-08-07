@@ -4,10 +4,24 @@ This project keeps a lightweight, human-written changelog for tagged releases.
 
 ## Unreleased
 
-**Browser pane input**
+- No unreleased notes yet.
 
-- Pinch to zoom works, and it is the magnifying kind: it scales what is already drawn and lets the page be panned around, rather than laying it out again the way ⌘+ does. Electron ships this switched off, which is why a trackpad pinch did nothing at all in a pane. It stops at 3x, the same ceiling as the pane's page zoom, and "Reset zoom" now returns a pinched page to life size as well as clearing the page zoom.
-- The back and forward buttons on a mouse navigate the pane's history. Mouse software on macOS — Logi Options, SensibleSideButtons — does not send those as buttons 4 and 5; it converts them into the system's "swipe between pages" gesture, which is what makes them work in Safari and Finder and what left a listener for mouse buttons alone seeing nothing. Both routes are handled, so a mouse that does send the raw buttons works too.
+## v0.6.1 - 2026-08-07
+
+### Summary
+
+- A browser pane input release. Pinching the trackpad and pressing a mouse's thumb buttons both did nothing, for the same underlying reason: the gesture reaches the page, but the half that acts on it belongs to the browser UI wrapped around the web contents — which an Electron app does not inherit.
+
+### Highlights
+
+**Pinch to zoom**
+
+- Pinching a browser pane magnifies it. Electron ships visual zoom switched off, so the gesture had nowhere to go. This is the magnifying kind rather than the ⌘+ kind: it scales what is already drawn and lets the page be panned around instead of laying it out again, and it leaves the page's own zoom alone. It stops at 3x, the same ceiling the zoom buttons use.
+- Reset zoom returns a pinched page to life size as well as clearing the page zoom, so the badge and the page cannot disagree about what you are looking at.
+
+**Mouse back and forward**
+
+- The back and forward buttons on a mouse navigate a browser pane's history. They never arrive as buttons 4 and 5 on macOS: mouse software such as Logi Options and SensibleSideButtons converts them into the system's "swipe between pages" gesture, which is what makes them work in Safari and Finder and what left anything watching for mouse buttons seeing nothing at all. Both routes are handled, so a mouse that does send the raw buttons works too.
 
 ## v0.6.0 - 2026-08-06
 
